@@ -8,6 +8,11 @@ vi.mock("@/ui/info-hint", () => ({ HintSection: ({ children }: PropsWithChildren
 vi.mock("../account/ui/account-context", () => ({ useAccount: () => ({ status: "signedOut" }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, values?: { p0: string }) => en.replace("{p0}", values?.p0 ?? "{p0}") }));
 vi.mock("./diagnostic-copy", () => ({ useDiagnosticResultText: () => (value: string) => value }));
+vi.mock("./diagnostic-sharing", () => ({
+  subscribeDiagnosticSharing: () => () => undefined,
+  diagnosticReceiptsShown: () => true,
+  setDiagnosticReceiptsShown: async () => undefined,
+}));
 vi.mock("./diagnostics-runtime", () => ({
   useDiagnosticPrefs: (select: (state: unknown) => unknown) => select({ consent: { mode: "ask" }, hydrate: async () => {}, setMode: async () => {} }),
   clearCrashMarker: vi.fn(), lastCrashLog: () => null, feedbackClient: () => ({ signedIn: false, client: null }), feedbackContext: vi.fn(), sendDiagnostics: fixture.logs,

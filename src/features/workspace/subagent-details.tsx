@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import {
-  Badge,
+  StatusText,
   Body,
   Disclosure,
   FormActions,
@@ -276,7 +276,7 @@ export function SubagentDetails({
                   field={<Body selectable>{opening.machineName}</Body>}
                   actions={
                     interrupted ? (
-                      <Badge label={agentStateLabel("interrupted", copy)} tone="warning" />
+                      <StatusText label={agentStateLabel("interrupted", copy)} tone="warning" />
                     ) : block.approval && !block.approval.decided ? (
                       <Status value="awaiting-approval" />
                     ) : running ? (

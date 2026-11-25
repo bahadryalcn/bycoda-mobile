@@ -22,6 +22,7 @@ vi.mock("@/state/queries",()=>({useHostClient:()=>({machine:{id:"machine",enviro
 vi.mock("@/ui/copy",()=>({useCopy:()=>(_tr:string,en:string,params?:Record<string,string|number>)=>en.replace(/\{(\w+)\}/g,(key,name:string)=>String(params?.[name]??key))}));
 vi.mock("@/ui/confirm",()=>({confirmAction:(_title:string,_body:string,_label:string,confirm:()=>void)=>state.confirms.push(confirm)}));
 vi.mock("@/ui/sheet-guard",()=>({useSheetGuard:({onClose}:{onClose:()=>void})=>({requestClose:onClose,requestCloseThen:(action:()=>void)=>action()})}));
+vi.mock("@/ui/info-hint",()=>({InfoHint:({text}:{text:string})=>createElement("button",{"aria-label":text})}));
 vi.mock("@/ui/message-text",()=>({MessageText:({text}:{text:string})=>createElement("p",null,text)}));
 vi.mock("./provider-pr-review",()=>({ProviderPrReview:()=>null}));
 vi.mock("../pull-requests/ui/metadata",()=>({PullRequestMetadata:()=>null}));
@@ -42,7 +43,7 @@ vi.mock("@/ui/primitives",()=>{
     IconButton:Button,
     ScreenList:({header,data,renderItem}: {header:unknown;data:unknown[];renderItem:(row:{item:unknown})=>unknown})=>
       createElement("section",{"data-conversation-list":true},header as never,...data.map((item,index)=>createElement("div",{key:index},renderItem({item}) as never))),
-    Badge:({label}:{label:string})=>createElement("span",null,label),
+    Badge:({label}:{label:string})=>createElement("span",null,label), StatusText: ({ label }: { label: string }) => createElement("span", null, label),
     Screen:({children,refresh}:PropsWithChildren<{refresh:()=>void}>)=>createElement("main",null,createElement(Button,{label:"Refresh",onPress:refresh}),children),
     Sheet:({children,visible,title,onClose}:PropsWithChildren<{visible:boolean;title:string;onClose:()=>void}>)=>visible?createElement("aside",{"aria-label":title},children,createElement(Button,{label:"Close composer",onPress:onClose})):null,
     Notice:({message}:{message:string})=>createElement("p",null,message),

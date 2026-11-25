@@ -61,7 +61,9 @@ vi.mock("@/ui/screen-list", () => ({
     actions,
     data,
     renderItem,
+    ListEmptyComponent,
   }: {
+    ListEmptyComponent?: ReactNode;
     header: ReactNode;
     actions: ReactNode;
     data: unknown[];
@@ -72,6 +74,7 @@ vi.mock("@/ui/screen-list", () => ({
       null,
       actions,
       header,
+      data.length ? null : ListEmptyComponent,
       data.map((item, i) =>
         createElement("div", { key: i }, renderItem({ item })),
       ),
@@ -111,7 +114,7 @@ vi.mock("@/ui/primitives", async () => {
       }),
       error ? createElement("span", { "data-field-error": true }, error) : null,
     );
-  return {
+  return { RowIcon: () => null,
     ErrorText: ({ error }: any) => error ? createElement("p", null, String(error.message ?? error)) : null,
     ScreenList,
     Body: ({ children }: PropsWithChildren) =>

@@ -62,20 +62,32 @@ export function ProfileEditor({
       extraDirty={scope !== (opening.projectId ? "project" : "host")}
       extraFields={
         <>
-          <SelectField
-            label={copy("Kapsam", "Scope")}
-            hint={copy("Ekipler bu profilin kendi kopyasını tutar. Profili değiştirmek var olan ekipleri değiştirmez.", "Crews retain their own copy of this profile. Editing it does not change existing crews.")}
-            value={scope}
-            onChange={setScope}
-            disabled={!supported || save.isPending || !!opening.updatedAt}
-            options={[
-              { value: "project", label: copy("Bu proje", "This project") },
-              {
-                value: "host",
-                label: copy("Bu bilgisayardaki tüm projeler", "All projects on this computer"),
-              },
-            ]}
-          />
+          {opening.updatedAt ? (
+            <Body muted>
+              {scope === "project"
+                ? copy("Kapsam: Bu proje. ", "Scope: This project. ")
+                : copy("Kapsam: Bu bilgisayardaki tüm projeler. ", "Scope: All projects on this computer. ")}
+              {copy(
+                "Ekipler bu profilin kendi kopyasını tutar; profili değiştirmek var olan ekipleri değiştirmez.",
+                "Crews retain their own copy of this profile; editing it does not change existing crews.",
+              )}
+            </Body>
+          ) : (
+            <SelectField
+              label={copy("Kapsam", "Scope")}
+              hint={copy("Ekipler bu profilin kendi kopyasını tutar. Profili değiştirmek var olan ekipleri değiştirmez.", "Crews retain their own copy of this profile. Editing it does not change existing crews.")}
+              value={scope}
+              onChange={setScope}
+              disabled={!supported || save.isPending}
+              options={[
+                { value: "project", label: copy("Bu proje", "This project") },
+                {
+                  value: "host",
+                  label: copy("Bu bilgisayardaki tüm projeler", "All projects on this computer"),
+                },
+              ]}
+            />
+          )}
         </>
       }
     />

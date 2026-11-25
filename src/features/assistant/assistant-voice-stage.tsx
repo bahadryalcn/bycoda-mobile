@@ -20,11 +20,11 @@ function assistantStageTones(state: AssistantOrbState, colors: MobileColors) {
 }
 
 /**
- * The PanelUI orb shape that says what the call is doing. Idle, muted and error hold the same still
- * sphere the assistant's home shows, so a stopped call reads as a pause rather than a new screen.
+ * The PanelUI orb shape follows the call. A muted live call uses a slow rotation.
  */
 export function assistantStageOrb(state: AssistantOrbState): { shape: ThinkingOrbState; paused: boolean; speed: number } {
   if (state === "listening") return { shape: "listening", paused: false, speed: 1 };
+  if (state === "muted") return { shape: "listening", paused: false, speed: 0.4 };
   if (state === "thinking") return { shape: "working", paused: false, speed: 1 };
   if (state === "speaking") return { shape: "composing", paused: false, speed: 1.15 };
   return { shape: "listening", paused: true, speed: 1 };

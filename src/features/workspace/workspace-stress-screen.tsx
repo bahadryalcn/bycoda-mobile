@@ -43,7 +43,7 @@ export function WorkspaceStressScreen() {
         if (surface === "projects") return <ProjectRow id={item.id} name={item.title}
           depth={mode === "Worst" ? index % 4 : 0} grouped={false} registered running={index % 3 === 0 ? 12 : 0}
           activeAt={index % 3 ? Date.now() - 21 * 86_400_000 : undefined}
-          opening={false} disabled={false} onPress={noAction} onDetails={noAction} onOpenView={noAction} />;
+          opening={false} disabled={false} onPress={noAction} onOptions={noAction} />;
         const session: HostSessionSummary = {
           id: item.id, title: item.title, projectId: "fixture-project", revision: 1,
           harness: item.harness === "claude" ? "claude" : "codex", status: item.status === "running" ? "running" : "idle",

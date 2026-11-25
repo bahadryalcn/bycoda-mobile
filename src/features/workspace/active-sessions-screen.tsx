@@ -14,10 +14,10 @@ import {
   SearchField,
   MultiSelectField,
   SearchToolbar,
-  SegmentedControl,
+  Row,
+  SectionHeader,
   SelectField,
   StateView,
-  ToggleField,
 } from "@/ui/primitives";
 import { queryOwnsRegion } from "./query-region";
 import { ProjectDirectoryFeedback } from "./project-directory-feedback";
@@ -32,10 +32,12 @@ import { globalSessionRows, recentGlobalSessionRows, urgencyGlobalSessionRows, t
 import { toggleSessionDirectoryFolder } from "./session-directory";
 import { SessionShelfHeader } from "./session-shelf-header";
 import { SessionFolderRow } from "./session-folder-row";
+import { SessionFilterChip } from "./session-filter-chip";
 import { HierarchyFrame, HierarchyWidthProvider } from "@/ui/hierarchy-frame";
 import { View } from "react-native";
 import { space } from "@/ui/tokens";
 import { SwipeActionsGroup } from "@/ui/swipe-actions";
+import { NoComputerState } from "@/ui/no-computer";
 import { providerName } from "./provider-choices";
 import {
   activeSessionFilterCount,
@@ -150,9 +152,8 @@ export function ActiveSessionsScreen({
   const statusOptions = [
     { value: "all" as const, label: copy("Tümü", "All") },
     { value: "running" as const, label: copy("Çalışıyor", "Working") },
-    { value: "reply" as const, label: copy("Girdi gerekiyor", "Needs input") },
+    { value: "reply" as const, label: copy("Senden bekleyen", "Needs you") },
   ];
-  const statusLabel = statusOptions.find((option) => option.value === filter)?.label;
   const timeLabels: Record<SessionTimeFilter, string> = {
     recent: copy("Son oturumlar", "Recent sessions"),
     all: copy("Tüm zamanlar", "All time"),
@@ -163,10 +164,9 @@ export function ActiveSessionsScreen({
   const timeOptions = SESSION_TIME_FILTERS.map((value) => ({ value, label: timeLabels[value] }));
   const providerOptions = providers.map((value) => ({ value, label: providerName(value) }));
   const shownProviders = providers.filter((provider) => !listFilters.hiddenProviders.includes(provider));
-  const managedLabel = copy("Yönetilen oturumlar", "Managed sessions");
-  const filterCount = Number(snoozed) + Number(archived) + Number(!!projectFilter) + Number(!archived && filter !== "all") + listFilterCount;
+  const managedLabel = copy("Asistan yönetimli", "Assistant-managed");
+  const filterCount = Number(snoozed) + Number(archived) + Number(!!projectFilter) + listFilterCount;
   const appliedFilters = [
-    !archived && filter !== "all" && `${copy("Durum", "Status")}: ${statusLabel}`,
     snoozed && copy("Ertelenmiş", "Snoozed"),
     archived && copy("Arşivlenmiş", "Archived"),
     projectFilter && `${copy("Proje", "Project")}: ${projectLabel ?? projectFilter}`,
@@ -194,17 +194,11 @@ export function ActiveSessionsScreen({
         renderItem={() => null}
         title={title}
         ListEmptyComponent={
-          <StateView
-            illustration="connect-computer"
-            title={copy("Önce bir bilgisayar bağlayın", "Connect a computer first")}
+          <NoComputerState
             description={copy(
-              "Oturumlarını görmek için bilgisayarını bağla.",
+              "Oturumlarını görmek ve başlatmak için bilgisayarını bağla.",
               "Connect your computer to see and start sessions.",
             )}
-            action={{
-              label: copy("Bilgisayar bağla", "Connect a computer"),
-              onPress: () => router.push("/machines"),
-            }}
           />
         }
       />
@@ -276,17 +270,22 @@ export function ActiveSessionsScreen({
               />
               {waitingForConnection ? null : (
                 <>
+                  {/* Quick status filter: the frequent choice stays one tap away, the rest is in the sheet. */}
+                  <Row>
+                    {statusOptions.map((option) => (
+                      <SessionFilterChip key={option.value} label={option.label} selected={!archived && filter === option.value}
+                        disabled={archived} onPress={() => setFilter(option.value)} />
+                    ))}
+                  </Row>
                   <AppliedFilters filters={appliedFilters} />
                 </>
               )}
               {draft ? <FilterSheet visible onClose={() => setDraft(null)}
-                onReset={() => setDraft({ status: "all", archived: false, snoozed: false, project: "", list: defaultSessionListFilters })}
+                onReset={() => setDraft({ status: draft.status, archived: false, snoozed: false, project: "", list: defaultSessionListFilters })}
                 onApply={() => {
                   setFilter(draft.status); setArchived(draft.archived); setSnoozed(draft.snoozed); setProjectFilter(draft.project);
                   setListFilters(draft.list); setDraft(null);
                 }}>
-                <SegmentedControl label={copy("Durum", "Status")} value={draft.status} options={statusOptions}
-                  disabled={draft.archived} onChange={(status) => setDraft({ ...draft, status })} />
                 <SelectField label={copy("Proje", "Project")} searchable value={draft.project}
                   options={[{ value: "", label: copy("Tüm projeler", "All projects") }, ...projectOptions]}
                   disabled={activity.privacyPending} onChange={(project) => setDraft({ ...draft, project })} />
@@ -300,12 +299,15 @@ export function ActiveSessionsScreen({
                       hiddenProviders: providers.filter((provider) => !shown.includes(provider)),
                     } })} />
                 ) : null}
-                <ToggleField label={managedLabel} value={draft.list.managed}
-                  onChange={(managed) => setDraft({ ...draft, list: { ...draft.list, managed } })} />
-                <ToggleField label={copy("Ertelenmiş oturumlar", "Snoozed sessions")} value={draft.snoozed} disabled={draft.archived}
-                  onChange={(value) => setDraft({ ...draft, snoozed: value })} />
-                <ToggleField label={copy("Arşivlenmiş oturumlar", "Archived sessions")} value={draft.archived}
-                  onChange={(value) => setDraft({ ...draft, archived: value })} />
+                <SectionHeader title={copy("Göster", "Include")} />
+                <Row>
+                  <SessionFilterChip label={managedLabel} selected={draft.list.managed}
+                    onPress={() => setDraft({ ...draft, list: { ...draft.list, managed: !draft.list.managed } })} />
+                  <SessionFilterChip label={copy("Ertelenmiş", "Snoozed")} selected={draft.snoozed} disabled={draft.archived}
+                    onPress={() => setDraft({ ...draft, snoozed: !draft.snoozed })} />
+                  <SessionFilterChip label={copy("Arşivlenmiş", "Archived")} selected={draft.archived}
+                    onPress={() => setDraft({ ...draft, archived: !draft.archived })} />
+                </Row>
               </FilterSheet> : null}
             </>
           ) : (
@@ -317,7 +319,7 @@ export function ActiveSessionsScreen({
       renderItem={({ item }) => {
         if (item.kind === "header") return <SessionShelfHeader row={item}
           onToggle={(shelf) => { if (!search.trim()) setCollapsed((current) => ({ ...current, [shelf]: item.expanded })); }} />;
-        if (item.kind === "folder") return <SessionFolderRow row={item} projectName={item.project.name}
+        if (item.kind === "folder") return <SessionFolderRow row={item} projectName={item.project.name} projectId={item.project.id}
           onToggle={() => setFolderCollapse((current) => ({
             ...current,
             [item.project.id]: toggleSessionDirectoryFolder(current[item.project.id] ?? {}, item, !!search.trim()),

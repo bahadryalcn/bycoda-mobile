@@ -26,6 +26,7 @@ vi.mock("@/ui/provider-identity", () => ({
 vi.mock("@/ui/primitives", () => ({
   Loading: ({ label }: { label: string }) => h("p", { role: "status" }, label),
   Notice: ({ message, children }: PropsWithChildren<{ message: string }>) => h("section", null, message, children), QueryState: () => null,
+  StateView: ({ title }: { title: string }) => h("p", null, title),
   Button: ({ label, onPress }: { label: string; onPress: () => void }) => h("button", { onClick: onPress }, label),
   SelectField: ({ disabled, value, options, onChange }: { disabled: boolean; value?: string; options: { value: string; label: string; group: string; icon: ReactNode }[]; onChange: (value: string) => void }) =>
     h("div", { "aria-disabled": disabled }, filterSelection(options, fixture.search, "tr").map(row => h("p", {

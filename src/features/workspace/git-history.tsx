@@ -1,15 +1,14 @@
 import type { TextInputInstance } from "react-native";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "@/ui/search-matching";
-import { useCallback, useDeferredValue, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import { useBackHandler } from "panelui-native/hooks/use-back-handler";
 import { useIsFocused } from "expo-router/react-navigation";
 import type { GitBlameLine, GitChangedFile, GitFileDiff, GitHistoryCommit } from "../../../../src/platform/tauri/fs";
-import ArrowLeft from "lucide-react-native/icons/arrow-left";
-import { Badge, Body, Button, CodeText, Disclosure, ErrorNotice, IconButton, NavigationRow, QueryState, Row, ScreenList, SearchField, SegmentedControl } from "@/ui/primitives";
+import { Badge, Body, Button, CodeText, Disclosure, ErrorNotice, NavigationRow, QueryState, Row, ScreenList, SearchField, SegmentedControl } from "@/ui/primitives";
+import { useProjectSubpage } from "./subpage-chrome";
 import { useCopy } from "@/ui/copy";
-import { useMobileTheme } from "@/ui/theme";
 import { gitChangeLabel, gitFilePresentation } from "./git-file-presentation";
 import { relativeTime } from "./shared";
 import { space } from "@/ui/tokens";
@@ -24,8 +23,7 @@ type HistoryView =
   | { kind: "file"; commit: GitHistoryCommit; path: string; mode: "diff" | "blame" | "fileHistory" };
 
 /** Separate virtualized page: history never nests another growing list in the changes list. */
-export function GitHistoryPanel({ scope, onClose }: { scope: GitScope; onClose: () => void }) {
-  const { colors } = useMobileTheme();
+export function GitHistoryPanel({ scope, onClose, registerExit }: { scope: GitScope; onClose: () => void; registerExit?: (exit: (() => void) | null) => void }) {
   const copy = useCopy();
   const [view, setView] = useState<HistoryView>({ kind: "history" });
   const back = useCallback(() => {
@@ -33,13 +31,11 @@ export function GitHistoryPanel({ scope, onClose }: { scope: GitScope; onClose: 
     else if (view.kind === "file") setView({ kind: "commit", commit: view.commit });
     else setView({ kind: "history" });
   }, [view, onClose]);
+  useProjectSubpage(copy("Commit geçmişi", "Commit history"), back);
+  useEffect(() => { registerExit?.(back); return () => registerExit?.(null); }, [back, registerExit]);
   const focused = useIsFocused();
   useBackHandler(focused, back);
   const header = <View style={{ gap: space.sm }}>
-    <Row>
-    <IconButton label={copy("Geri", "Back")} onPress={back}><ArrowLeft size={20} color={colors.muted} /></IconButton>
-    <Body style={{ flex: 1, minWidth: 0, fontWeight: "600" }}>{copy("Commit geçmişi", "Commit history")}</Body>
-    </Row>
     {view.kind !== "history" ? <>
       <Body>{view.commit.subject}</Body>
     </> : null}
@@ -76,7 +72,7 @@ function CommitList({ scope, header, onSelect, path }: ListProps & { path?: stri
     header={<View style={{ gap: space.sm }}>{header}
       {path ? <Body>{copy("Dosya geçmişi · mevcut dal", "File history · current branch")}</Body> : null}
       <SearchField ref={searchRef} label={copy("Yüklenen commitlerde ara", "Search loaded commits")} value={search} maxLength={200} onChangeText={setSearch} />
-      <QueryState query={commits.length ? query : { ...query, data: undefined }} empty={!filtered.length}
+      <QueryState size="region" query={commits.length ? query : { ...query, data: undefined }} empty={!filtered.length}
         emptyTitle={deferredSearch.trim() ? copy("Aramana uyan commit yok.", "No commits match your search.") : copy("Commit bulunamadı", "No commits found")}
         emptyAction={deferredSearch.trim() ?{ label: copy("Aramayı temizle", "Clear search"), onPress: () => { setSearch(""); searchRef.current?.focus(); } } : undefined} />
     </View>}
@@ -101,7 +97,7 @@ function CommitFiles({ scope, commit, header, onSelect }: { scope: GitScope; com
   const copy = useCopy();
   const query = useGitHistoryRead<GitChangedFile[]>(scope, { kind: "files", sha: commit.sha });
   return <ScreenList data={query.data ?? []} keyExtractor={(file) => file.relative} query={query}
-    header={<View style={{ gap: space.sm }}>{header}<QueryState query={query.data?.length ? query : { ...query, data: undefined }} empty={!query.data?.length}
+    header={<View style={{ gap: space.sm }}>{header}<QueryState size="region" query={query.data?.length ? query : { ...query, data: undefined }} empty={!query.data?.length}
       emptyTitle={copy("Bu committe dosya farkı yok", "No file changes in this commit")} /></View>}
     renderItem={({ item }) => <CommitFileRow file={item} onSelect={() => onSelect(item.relative)} />} />;
 }
@@ -132,7 +128,7 @@ function HistoricalDiff({ scope, commit, path, header }: FileProps) {
   const query = useGitHistoryRead<GitFileDiff>(scope, { kind: "diff", sha: commit.sha, path });
   const textDiff = query.data && !query.data.binary && !query.data.tooLarge ? query.data : undefined;
   const preview = useDiffPreview(textDiff?.original, textDiff?.current);
-  return <ScreenList data={[]} renderItem={() => null} query={query} header={<View style={{ gap: space.sm }}>{header}<QueryState query={query} />
+  return <ScreenList data={[]} renderItem={() => null} query={query} header={<View style={{ gap: space.sm }}>{header}<QueryState size="region" query={query} />
     {textDiff && !preview ? <Body muted>{copy("Diff hesaplanıyor…", "Computing diff…")}</Body> : null}
     {query.data?.binary || query.data?.tooLarge || preview?.tooLarge ? <Body muted>{copy("İkili veya diff için çok büyük dosya. Tam içeriği bilgisayarda aç.", "Binary file or diff exceeds the mobile budget. Open the full content on your computer.")}</Body>
       : preview?.unchanged ? <Body muted>{copy("İçerikte değişiklik yok.", "No content changes.")}</Body>
@@ -148,8 +144,8 @@ function HistoricalBlame({ scope, commit, path, header }: FileProps) {
   const query = useGitHistoryRead<GitBlameLine[]>(scope, { kind: "blame", sha: commit.sha, path }, supported);
   const lines = useMemo(() => content.data?.current.split(/\r?\n/) ?? [], [content.data]);
   return <ScreenList data={supported ? query.data ?? [] : []} keyExtractor={(line) => String(line.line)} query={supported ? query : content}
-    header={<View style={{ gap: space.sm }}>{header}<QueryState query={content} />
-      {supported ? <QueryState query={query.data?.length ? query : { ...query, data: undefined }} empty={!query.data?.length} emptyTitle={copy("Satır geçmişi yok", "No blame lines")} /> : null}
+    header={<View style={{ gap: space.sm }}>{header}<QueryState size="region" query={content} />
+      {supported ? <QueryState size="compact" query={query.data?.length ? query : { ...query, data: undefined }} empty={!query.data?.length} emptyTitle={copy("Satır geçmişi yok", "No blame lines")} /> : null}
       {content.data && !supported ? <Body muted>{content.data.status === "deleted"
         ? copy("Dosya bu committe silinmiş. Satır geçmişi önceki committen açılabilir.", "This file was deleted in this commit. Open its parent commit to inspect blame.")
         : copy("İkili veya diff için çok büyük dosya. Tam içeriği bilgisayarda aç.", "Binary file or diff exceeds the mobile budget. Open the full content on your computer.")}</Body> : null}

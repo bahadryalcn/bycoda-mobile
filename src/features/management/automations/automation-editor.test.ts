@@ -31,7 +31,7 @@ vi.mock("@/ui/primitives", () => {
   return {
     Stack: Group,
     showToast: fixture.toast,
-    Section: Group,
+    Disclosure: Group,
     Body: Group,
     NavigationGroup: Group,
     MutationState: () => null,
@@ -102,9 +102,9 @@ it.each(["0", "1", "10080", "10081"])(
           }),
         ),
       );
-      await act(async () => fixture.fields.get("Minimum gap")!.onChangeText(text));
+      await act(async () => fixture.fields.get("Minimum gap (minutes)")!.onChangeText(text));
       const valid = text === "1" || text === "10080";
-      expect(fixture.fields.get("Minimum gap")?.error).toBe(
+      expect(fixture.fields.get("Minimum gap (minutes)")?.error).toBe(
         valid ? undefined : "Enter minutes from 1 to 10080.",
       );
       expect(fixture.submit?.disabled).toBe(!valid);

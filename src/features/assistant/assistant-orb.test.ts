@@ -20,13 +20,17 @@ vi.mock("./assistant-avatar", () => ({ AssistantAvatar: () => null }));
 import { AssistantOrb } from "./assistant-orb";
 let root: ReturnType<typeof createRoot>;
 afterEach(async () => { await act(async () => root?.unmount()); f.reduced = true; vi.clearAllMocks(); vi.unstubAllGlobals(); });
-it("starts no decorative loops under reduced motion and cancels active loops on mute", async () => {
+it("starts no decorative loops under reduced motion, slows a muted call and stops loops when idle", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); root = createRoot(document.createElement("div"));
   await act(async () => root.render(h(AssistantOrb, { state: "thinking" })));
   expect(f.repeat).not.toHaveBeenCalled();
   f.reduced = false; await act(async () => root.render(h(AssistantOrb, { state: "thinking" })));
   expect(f.repeat).toHaveBeenCalledTimes(2);
   f.repeat.mockClear(); f.cancel.mockClear();
+  // A muted live call keeps a slow rotation (the call is still connected); only idle and error stand still.
   await act(async () => root.render(h(AssistantOrb, { state: "muted" })));
-  expect(f.repeat).not.toHaveBeenCalled(); expect(f.cancel).toHaveBeenCalled();
+  expect(f.cancel).toHaveBeenCalled(); expect(f.repeat).toHaveBeenCalledTimes(2);
+  f.repeat.mockClear();
+  await act(async () => root.render(h(AssistantOrb, { state: "idle" })));
+  expect(f.repeat).not.toHaveBeenCalled();
 });

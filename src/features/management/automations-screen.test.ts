@@ -12,6 +12,7 @@ const fixture = vi.hoisted(() => ({
   projectVisible: true,
   automations: [] as { id: string; name: string; prompt: string; projectId: string; enabled: boolean }[],
 }));
+vi.mock("react-native", () => ({ View: "div", useWindowDimensions: () => ({ fontScale: 1 }) }));
 vi.mock("expo-router", () => ({ router: { navigate: fixture.push } }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
@@ -29,7 +30,7 @@ vi.mock("../workspace/use-project-directory", () => ({ useProjectList: () => ({
 vi.mock("./automations/automation-editor", () => ({ AutomationEditor: () => null }));
 vi.mock("./automations/automation-card", () => ({ AutomationCard: () => null }));
 vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null, FilterButton: () => null, FilterSheet: () => null }));
-vi.mock("@/ui/screen-list", () => ({ ScreenList: ({ header, actions }: { header: React.ReactNode; actions: React.ReactNode }) => createElement("main", null, createElement("nav", null, actions), header) }));
+vi.mock("@/ui/screen-list", () => ({ ScreenList: ({ header, actions, data, ListEmptyComponent }: { header: React.ReactNode; actions: React.ReactNode; data: unknown[]; ListEmptyComponent?: React.ReactNode }) => createElement("main", null, createElement("nav", null, actions), header, data.length ? null : ListEmptyComponent) }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Body: Group, Button: () => null, Sheet: () => null, MutationState: () => null, SelectField: () => null, SearchField: () => null, SearchToolbar: () => null,
@@ -43,7 +44,6 @@ it("explains missing providers and retains recovery for global automations", asy
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); const container = document.createElement("div"), root = createRoot(container);
   try {
     await act(async () => root.render(createElement(AutomationsScreen)));
-    expect(container.textContent).toContain("Projectless automations run in Room.");
     expect(container.textContent).toContain("This computer has not reported an available agent. Check providers.");
     const buttons = [...container.querySelectorAll("button")];
     expect(buttons.find(node => node.textContent === "New automation")).toBeUndefined();

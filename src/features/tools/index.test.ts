@@ -36,7 +36,8 @@ vi.mock("@/ui/primitives", () => ({
   Button: ({ label }: { label: string }) => createElement("button", null, label),
 }));
 vi.mock("./dev-servers-screen", () => ({ DevServersScreen: () => null }));
-vi.mock("./runtime-logs-screen", () => ({ RuntimeLogsScreen: () => null }));
+vi.mock("./runtime-logs-screen", () => ({ RuntimeLogsScreen: () => createElement("div", null,
+  createElement("p", null, "Project logs"), createElement("input", { "aria-label": "Tool draft", defaultValue: "" })) }));
 vi.mock("./devices-screen", () => ({ DevicesScreen: () => null }));
 vi.mock("./browser-screen", () => ({ BrowserScreen: () => null }));
 vi.mock("./terminal-screen", () => ({ TerminalScreen: () => null }));
@@ -45,6 +46,7 @@ vi.mock("./diagnostics-screen", () => ({ DiagnosticsScreen: () => createElement(
 vi.mock("./usage-screen", () => ({ UsageScreen: () => createElement("p", null, "Host session usage") }));
 vi.mock("./provider-center", () => ({ ProviderCenter: () => createElement("p", null, "Global provider center") }));
 vi.mock("./access-center", () => ({ AccessCenter: () => createElement("p", null, "Global host access center") }));
+vi.mock("@/ui/no-computer", () => ({ NoComputerGate: () => createElement("p", null, "Connect a computer first"), NoComputerState: () => createElement("p", null, "Connect a computer first") }));
 
 beforeEach(() => {
   state.capabilities = [];
@@ -101,13 +103,26 @@ it("opens host access without requiring a selected project", () => {
   expect(renderToStaticMarkup(createElement(HostToolScreen, { tool: "access" }))).toContain("Global host access center");
 });
 
+it("opens resources at computer level even when a project is in the route", () => {
+  state.capabilities = ["resources.diagnostics"];
+  Object.assign(state.directory, { data: undefined, directoryReady: false, isPending: true });
+  expect(renderToStaticMarkup(createElement(HostToolScreen, { tool: "diagnostics", projectId: "project" }))).toContain("Host resources");
+});
+
+it("opens computer usage and resources without a project", () => {
+  state.capabilities = ["usage.limits.read", "resources.diagnostics"];
+  expect(renderToStaticMarkup(createElement(HostToolScreen, { tool: "usage" }))).toContain("Host session usage");
+  state.capabilities = ["usage.cost.read"];
+  expect(renderToStaticMarkup(createElement(HostToolScreen, { tool: "diagnostics" }))).toContain("Unavailable");
+});
+
 it("opens the supported tool for a project chosen from its empty state", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  state.capabilities = ["resources.diagnostics"];
+  state.capabilities = ["dev.servers"];
   const container = document.createElement("div");
   const root = createRoot(container);
   try {
-    await act(async () => root.render(createElement(HostToolScreen, { tool: "diagnostics" })));
+    await act(async () => root.render(createElement(HostToolScreen, { tool: "servers" })));
     expect(container.textContent).not.toContain("Back to projects");
     await act(async () => container.querySelector("button")!.click());
     expect(container.querySelectorAll("button")[1]?.textContent).toBe("Project");
@@ -122,7 +137,7 @@ it.each(["loading", "error", "sync-required"])("does not replace %s project veri
   Object.assign(state.directory, { data: undefined, directoryReady: false,
     isPending: readiness === "loading", privacyUnavailable: readiness === "sync-required",
     error: readiness === "error" ? new Error("Connection unavailable") : undefined });
-  const html = renderToStaticMarkup(createElement(HostToolScreen, { tool: "diagnostics", projectId: "project" }));
+  const html = renderToStaticMarkup(createElement(HostToolScreen, { tool: "logs", projectId: "project" }));
   expect(html).not.toContain("Choose a project");
   expect(html).not.toContain("bycoda may be outdated");
   expect(html).toContain(readiness === "loading" ? "Verifying project…" : readiness === "error" ? "Connection unavailable" : "sync the project directory");
@@ -130,10 +145,10 @@ it.each(["loading", "error", "sync-required"])("does not replace %s project veri
 
 it("preserves the mounted tool draft while expired project proof is concealed and reverified", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  state.capabilities = ["resources.diagnostics"];
+  state.capabilities = ["runtime.logs"];
   const container = document.createElement("div");
   const root = createRoot(container);
-  const render = () => root.render(createElement(HostToolScreen, { tool: "diagnostics", projectId: "project" }));
+  const render = () => root.render(createElement(HostToolScreen, { tool: "logs", projectId: "project" }));
   try {
     await act(async () => { render(); });
     const input = container.querySelector("input")!;

@@ -22,7 +22,17 @@ import { enterItem } from "@/ui/motion";
 import Animated from "react-native-reanimated";
 import { useCopy } from "@/ui/copy";
 import { HintLabel } from "@/ui/info-hint";
+import { InScreenBack } from "@/ui/in-screen-back";
+import { withTimeout } from "../../../../src/shared/lib/withTimeout";
+import { PERMISSION_READ_TIMEOUT_MS } from "../permissions/permission-deadline";
 import type { PairingScannerProps } from "./connection-types";
+import { stackBackOptions } from "@/ui/stack-back";
+
+/**
+ * A system prompt the user is reading may take a while; a request that shows nothing for this long
+ * did not reach the screen. Expiry shows the retry state and keeps "Paste pairing code" usable.
+ */
+const PERMISSION_REQUEST_TIMEOUT_MS = 30_000;
 
 export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps) {
   const { colors } = useMobileTheme();
@@ -72,7 +82,7 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
   const requestAccess = useCallback((owner: object, generation: number) => permissionAction.run(async () => {
     if (!active.current || generation !== session.current || currentPermissionOwner.current !== owner) return;
     requested.current = true;
-    const next = await duringSystemPrompt(requestPermission);
+    const next = await withTimeout(duringSystemPrompt(requestPermission), PERMISSION_REQUEST_TIMEOUT_MS, "Camera permission request");
     if (!active.current) return;
     if (generation === session.current && currentPermissionOwner.current === owner) {
       setPermissionCheck({ owner, permission: next });
@@ -86,7 +96,7 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
     if (!available) return;
     const generation = session.current;
     const stillOwnsRead = () => active.current && generation === session.current && currentPermissionOwner.current === permissionOwner;
-    void refreshPermission().then((current) => {
+    void withTimeout(refreshPermission(), PERMISSION_READ_TIMEOUT_MS, "Camera permission check").then((current) => {
       if (!stillOwnsRead()) return;
       setPermissionCheck({ owner: permissionOwner, permission: current });
       if (!requested.current && current.status === "undetermined" && current.canAskAgain) {
@@ -130,7 +140,10 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
 
   return (
     <Screen onContentViewport={measureViewport}>
-      <Stack.Screen options={{ title: copy("QR kodu tara", "Scan QR code"), headerLeft: () => <HeaderBackButton onPress={() => leave(onClose)} /> }} />
+      {/* The scanner is an in-screen step of Computers: swipe-back returns to the pairing choices, like
+          the header back button, instead of popping Computers. */}
+      <Stack.Screen options={{ title: copy("QR kodu tara", "Scan QR code"), gestureEnabled: false, ...stackBackOptions(<HeaderBackButton onPress={() => leave(onClose)} />) }} />
+      <InScreenBack active={focused} onBack={() => leave(onClose)} />
       <Animated.View entering={enterItem(0)} style={{ width: "100%", maxWidth: metrics.entryWidth, alignSelf: "center", gap: space.lg }}>
       <View onLayout={event => setIntroHeight(event.nativeEvent.layout.height)}>
         <HintLabel label={copy("Bağlantı kodu", "Pairing code")} presentation="visible" help={copy(
@@ -142,7 +155,8 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
       {permission && !permission.granted ? (
         <StateView
           illustration="permission"
-          title={copy("Kamera", "Camera")}
+          title={copy("Kamera izni gerekli", "Camera access needed")}
+          description={copy("Bilgisayarındaki QR kodunu taramak için kamerayı kullanır. Kodu yapıştırarak da bağlanabilirsin.", "Used to scan the QR code on your computer. You can also paste the code to connect.")}
           action={{
             label: permission.canAskAgain
               ? copy("Kameraya izin ver", "Allow camera")

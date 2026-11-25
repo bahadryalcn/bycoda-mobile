@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { KeyboardAvoidingView, useKeyboardState, useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Plus from "lucide-react-native/icons/plus";
 import Keyboard from "lucide-react-native/icons/keyboard";
+import Search from "lucide-react-native/icons/search";
 import Trash2 from "lucide-react-native/icons/trash-2";
 import { useSecurity } from "@/state/security";
 import { useMobileTheme } from "@/ui/theme";
@@ -15,26 +16,37 @@ import {
   Body,
   Disclosure,
   Button,
+  ChoiceChip,
   ErrorText,
   HeaderBackButton,
   Heading,
   IconButton,
+  FormActions,
   NavigationRow,
   Loading,
   Notice,
+  Row,
+  SearchField,
+  Sheet,
   Stack,
   StateView,
+  StatusLine,
   ScreenList,
   showToast,
 } from "@/ui/primitives";
 import { TerminalViewport } from "@/ui/terminal-viewport";
 import { useCopy } from "@/ui/copy";
-import { metrics } from "@/ui/tokens";
+import { darkColors, iconSize, metrics, space } from "@/ui/tokens";
+import { useClipboardFeedback } from "@/ui/use-clipboard-feedback";
 import type { SessionScope } from "../workspace/session-types";
 import { isPtyDesktopOffline, ptyRecoveryMessage } from "./mobile-pty-error";
 import { MobilePtyBar } from "./mobile-pty-bar";
 import { useMobilePtySession } from "./use-mobile-pty-session";
 import { attachTerminalOutput } from "./mobile-pty-attach";
+import { TerminalCopyButton, TerminalStatusDot } from "./terminal-header-controls";
+import { TerminalOutputView } from "./terminal-output-view";
+
+const PTY_HISTORY_LINES = 2000;
 
 export function MobilePty({
   scope,
@@ -48,18 +60,19 @@ export function MobilePty({
   const copy = useCopy();
   const title = copy("Terminal", "Terminal");
   const insets = useSafeAreaInsets();
-  const { colors } = useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const unlocked = useSecurity((state) => state.status === "unlocked");
   const keyboardVisible = useKeyboardState((state) => state.isVisible);
   const { progress } = useReanimatedKeyboardAnimation();
   // The home-indicator inset is replaced by the IME while it is open, as in SessionKeyboardFrame.
   const safeBottomStyle = useAnimatedStyle(
     () => ({ paddingBottom: insets.bottom * (1 - Math.min(1, Math.max(0, progress.value))) }),
-    [insets.bottom],
   );
   const [readyNonce, setReadyNonce] = useState<string | null>(null);
   const [attachedNonce, setAttachedNonce] = useState<string | null>(null);
   const [outputError, setOutputError] = useState<{ nonce: string; error: unknown } | null>(null);
+  const [closeReview, setCloseReview] = useState<string>();
+  const [search, setSearch] = useState<{ nonce: string; text: string; query: string }>();
   // Briefly disable reattaching the same output while the confirmation is displayed.
   useEffect(() => {
     if (!attachedNonce) return;
@@ -92,6 +105,16 @@ export function MobilePty({
     markLost,
     onPacket,
   } = session;
+  const terminalOpen = !!(showTerminal && lease);
+  const searchOpen = terminalOpen && search?.nonce === nonce ? search : undefined;
+  const tabs = lease && !session.terminals.some(entry => entry.terminalId === lease.terminal.terminalId)
+    ? [...session.terminals, lease.terminal] : session.terminals;
+  const clipboard = useClipboardFeedback(nonce, terminalOpen, undefined,
+    async () => {
+      const output = session.recentOutput(PTY_HISTORY_LINES);
+      if (!output) throw new Error(copy("Henüz çıktı yok.", "No output yet."));
+      return output;
+    });
   const desktopOffline = isPtyDesktopOffline(session.listError);
   const terminalError = desktopOffline && session.error === session.listError ? null : session.error;
   const recovery = ptyRecoveryMessage(terminalError, copy);
@@ -117,9 +140,10 @@ export function MobilePty({
           )}
         />
       ) : null}
-      {desktopOffline ? (
+      {/* One state at a time: an unavailable terminal owns the region, so nothing else stacks under it. */}
+      {!session.unavailable && desktopOffline ? (
         <StateView
-          compact
+          size="compact"
           tone="warning"
           title={copy("Masaüstü uygulamasına ulaşılamıyor", "Desktop app unavailable")}
           description={copy("Bağlı bilgisayarda bycoda’yı aç, ardından yeniden dene.", "Open bycoda on the connected computer, then retry.")}
@@ -131,7 +155,7 @@ export function MobilePty({
           } : undefined}
         />
       ) : null}
-      <ErrorText error={terminalError} message={recovery ?? copy(
+      {session.unavailable ? null : <><ErrorText error={terminalError} message={recovery ?? copy(
         "Terminal işlemi tamamlanamadı. Bağlantıyı kontrol edin; ayrıntıları aşağıda görebilirsiniz.",
         "The terminal action could not complete. Check the connection; details are available below.",
       )} />
@@ -146,14 +170,13 @@ export function MobilePty({
             "Terminal screen state was lost. If output is missing, explicitly create a fresh terminal.",
           )}
         />
-      ) : null}
+      ) : null}</>}
     </>
   );
   const leave = () => {
     session.pause();
     onClose();
   };
-  const terminalOpen = !!(showTerminal && lease);
   const outputAttached = attachedNonce === nonce;
   const attachOutput = () => {
     if (outputAttached) return;
@@ -179,14 +202,24 @@ export function MobilePty({
               <Heading numberOfLines={1}>{title}</Heading>
               {session.machineName ? <Body muted numberOfLines={1}>{session.machineName}</Body> : null}
             </View>
-            {terminalOpen ? (
+            {terminalOpen ? <>
+              <IconButton label={copy("Çıktıda ara", "Search output")} expanded={!!searchOpen} reserveTouchTarget
+                onPress={() => {
+                  if (keyboardVisible) viewport.current?.hideInput();
+                  setSearch(searchOpen ? undefined : { nonce, text: session.recentOutput(PTY_HISTORY_LINES), query: "" });
+                }}>
+                <Search size={iconSize.action} color={searchOpen ? colors.accent : colors.muted} />
+              </IconButton>
+              <TerminalCopyButton clipboard={clipboard} />
+            </> : null}
+            {terminalOpen && !searchOpen ? (
               <IconButton
                 label={keyboardVisible ? copy("Klavyeyi gizle", "Hide keyboard") : copy("Klavyeyi göster", "Show keyboard")}
                 reserveTouchTarget
                 disabled={!keyboardVisible && !canInterrupt}
                 onPress={() => keyboardVisible ? viewport.current?.hideInput() : viewport.current?.focusInput()}
               >
-                <Keyboard size={22} color={colors.accent} />
+                <Keyboard size={iconSize.action} strokeWidth={2} color={colors.accent} />
               </IconButton>
             ) : null}
             {(terminalOpen || session.listReady) ? <ActionMenu
@@ -197,31 +230,58 @@ export function MobilePty({
                 if (keyboardVisible) viewport.current?.hideInput();
               }}
               actions={[
-                { key: "new", label: copy("Yeni etkileşimli terminal", "New interactive terminal"), icon: <Plus size={18} color={colors.muted} />,
-                  disabled: !session.listReady || controlsDisabled || closePending || !!attempt, onPress: create },
                 terminalOpen && { key: "interrupt", label: "Ctrl-C", disabled: !canInterrupt || busy, onPress: interrupt },
                 terminalOpen && { key: "attach-output", label: outputAttached ? copy("Taslağa eklendi", "Added to draft") : copy("Çıktıyı ekle", "Attach output"),
                   disabled: outputAttached, onPress: attachOutput },
                 terminalOpen && { key: "list", label: copy("Terminaller", "Terminals"), disabled: closePending || busy, onPress: session.detach },
                 terminalOpen && { key: "close", label: closePending ? copy("Durumu kontrol et", "Check status") : copy("Terminali kapat", "Close terminal"), destructive: !closePending,
-                  icon: closePending ? undefined : <Trash2 size={18} color={colors.danger} />, disabled: controlsDisabled, onPress: closeTerminal },
+                  icon: closePending ? undefined : <Trash2 size={iconSize.row} color={colors.danger} />, disabled: controlsDisabled,
+                  onPress: closePending ? closeTerminal : () => setCloseReview(nonce) },
               ]}
             /> : null}
           </View>
       {terminalOpen && lease ? (
         <View style={{ flex: 1, paddingLeft: insets.left, paddingRight: insets.right }}>
+          <Row style={{ paddingHorizontal: space.screen }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={uiStyles.grow}>
+              <Row>{tabs.map(entry => <ChoiceChip key={entry.terminalId} label={entry.name}
+                selected={entry.terminalId === lease.terminal.terminalId}
+                disabled={controlsDisabled || closePending || entry.state !== "running"}
+                onPress={() => {
+                  if (entry.terminalId === lease.terminal.terminalId) return;
+                  viewport.current?.hideInput();
+                  attach(entry);
+                }} />)}</Row>
+            </ScrollView>
+            <IconButton label={copy("Yeni etkileşimli terminal", "New interactive terminal")} reserveTouchTarget
+              disabled={!session.listReady || controlsDisabled || closePending || !!attempt} onPress={create}>
+              <Plus size={iconSize.action} color={colors.accent} />
+            </IconButton>
+          </Row>
+          <Row style={{ paddingHorizontal: space.screen, paddingBottom: space.xs }}>
+            <TerminalStatusDot running={lease.terminal.state === "running"} />
+            <Body mono muted numberOfLines={1} ellipsizeMode="middle" style={[uiStyles.caption, uiStyles.grow]}>{lease.terminal.shell}</Body>
+          </Row>
           {terminalError || gap || lost ? <Stack>{failure}</Stack> : null}
           {outputError?.nonce === nonce ? <Stack><ErrorText error={outputError.error} /></Stack> : null}
-          <View style={{ flex: 1 }}>
+          <ErrorText error={clipboard.error} />
+          {searchOpen ? <View style={{ paddingHorizontal: space.screen, paddingBottom: space.xs }}>
+            <SearchField label={copy("Çıktıda ara", "Search output")} value={searchOpen.query} maxLength={200}
+              onChangeText={query => setSearch({ ...searchOpen, query })} />
+          </View> : null}
+          <View style={{ flex: 1, backgroundColor: darkColors.background }}>
             <TerminalViewport ref={viewport} nonce={nonce} onPacket={(packet) => {
               if (packet.type === "ready") setReadyNonce(nonce);
               onPacket(packet);
             }} onLost={markLost} />
             {!webReady ? (
-              <View style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center", backgroundColor: colors.background }}>
+              <View style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center", backgroundColor: darkColors.background }}>
                 <Loading centered label={copy("Terminal açılıyor…", "Opening terminal…")} />
               </View>
             ) : null}
+            {searchOpen ? <View style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}>
+              <TerminalOutputView output={searchOpen.text} query={searchOpen.query} />
+            </View> : null}
           </View>
           <MobilePtyBar
             paused={paused}
@@ -230,7 +290,7 @@ export function MobilePty({
             disabled={controlsDisabled || closePending}
             onResume={() => attach(lease.terminal, "resume")}
             onKey={sendKey}
-            keyboardVisible={keyboardVisible}
+            keyboardVisible={keyboardVisible && !searchOpen}
           />
         </View>
       ) : (
@@ -240,8 +300,12 @@ export function MobilePty({
           header={
             <Stack>
               {failure}
+              {!session.unavailable && !desktopOffline && session.listError && session.retryList ? (
+                <Button tone="quiet" label={copy("Yeniden dene", "Retry")} busy={session.listRefreshing}
+                  reserveTouchTarget onPress={session.retryList} />
+              ) : null}
               {session.listLoading ? <Loading label={copy("Terminaller yükleniyor…", "Loading terminals…")} /> : session.listWaiting ? (
-                <Notice message={copy(
+                <StatusLine busy label={copy(
                   "Bağlantı bekleniyor. Bağlantı geri geldiğinde yeniden denenecek.",
                   "Waiting for a connection. Loading will resume when it returns.",
                 )} />
@@ -271,13 +335,23 @@ export function MobilePty({
             <NavigationRow
               label={terminal.name}
               busy={busy && pendingAction === `attach:${terminal.terminalId}`}
-              detail={terminal.state}
+              detail={terminal.state === "running" ? copy("Çalışıyor", "Running") : terminal.state === "exited" ? copy("Kapandı", "Exited") : terminal.state}
               disabled={controlsDisabled || terminal.state !== "running"}
               onPress={() => attach(terminal)}
             />
           )}
         /></ScreenFrameInsets>
       )}
+          <Sheet visible={terminalOpen && closeReview === nonce}
+            title={copy("Terminali kapat", "Close terminal")} size="compact" onClose={() => setCloseReview(undefined)}>
+            <Body mono>{lease?.terminal.name}</Body>
+            <Notice tone="warning" message={copy("Bu terminalin kabuğu ve çalışan alt işlemleri sonlandırılacak.", "This terminal's shell and running child processes will end.")} />
+            <FormActions submitLabel={copy("Terminali kapat", "Close terminal")} tone="danger" disabled={controlsDisabled}
+              onCancel={() => setCloseReview(undefined)} onSubmit={() => {
+                setCloseReview(undefined);
+                closeTerminal();
+              }} />
+          </Sheet>
         </Animated.View>
       </KeyboardAvoidingView>
     </ScreenOverlay>

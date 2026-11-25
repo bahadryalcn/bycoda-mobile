@@ -11,6 +11,7 @@ const fixture = vi.hoisted(() => ({
 vi.mock("@/state/machines", () => ({ useMachines: (select: (state: typeof fixture) => unknown) => select(fixture) }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null }, router: {} }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/no-computer", () => ({ NO_COMPUTER_TITLE: ["", "Connect a computer first"], NO_COMPUTER_ACTION: ["", "Connect a computer"] }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const State = ({ title, description }: { title: string; description?: string }) =>

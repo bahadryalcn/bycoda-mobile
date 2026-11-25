@@ -8,12 +8,12 @@ vi.mock("expo-clipboard",()=>({setStringAsync:f.clipboard}));vi.mock("expo-crypt
 vi.mock("@/remote/transport",async()=>({RemoteHostError:(await import("@/remote/host-error")).RemoteHostError}));
 vi.mock("@/state/security",()=>({isAppAccessAllowed:()=>f.allowed,useSecurity:{getState:()=>f.state,subscribe:(fn:()=>void)=>{f.listeners.add(fn);return()=>f.listeners.delete(fn);}}}));
 vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));vi.mock("../reporting/report-store",()=>({startContentReport:f.report}));vi.mock("./composer-transfer",()=>({useComposerTransfer:()=>({transfer:vi.fn()})}));vi.mock("./selected-text",()=>({SelectedText:()=>createElement("p",null,"Selection open")}));
-vi.mock("@/ui/primitives",()=>{const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);const Action=({label,onPress,disabled,intent}:{label:string;onPress:()=>void;disabled?:boolean;intent?:string})=>{f.rows.push({label,press:onPress});return createElement("button",{onClick:onPress,disabled,"data-intent":intent},label);};return {Body:Wrapper,NavigationGroup:Wrapper,NavigationRow:Action,Button:Action,ErrorText:({error}:{error:unknown})=>error?createElement("p",{role:"alert"},String(error)):null,Notice:({message}:{message:string})=>createElement("p",null,message), Sheet:({children,dismissible}:PropsWithChildren<{dismissible?:boolean}>)=>createElement("section",{"data-dismissible":String(dismissible)},children)};});
+vi.mock("@/ui/primitives",()=>{const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);const Action=({label,onPress,disabled,intent}:{label:string;onPress:()=>void;disabled?:boolean;intent?:string})=>{f.rows.push({label,press:onPress});return createElement("button",{onClick:onPress,disabled,"data-intent":intent},label);};return {Body:Wrapper,RowIcon:()=>null,NavigationGroup:Wrapper,NavigationRow:Action,Button:Action,ErrorText:({error}:{error:unknown})=>error?createElement("p",{role:"alert"},String(error)):null,Notice:({message}:{message:string})=>createElement("p",null,message), Sheet:({children,dismissible}:PropsWithChildren<{dismissible?:boolean}>)=>createElement("section",{"data-dismissible":String(dismissible)},children)};});
 vi.mock("lucide-react-native/icons/copy", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/flag", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/notebook-pen", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/quote", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/text-select", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/share-2", () => ({ default: () => null }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { muted: "#888" } }) }));
@@ -34,7 +34,7 @@ it("does not close a changed source menu when an older clipboard write finishes"
  let done!:()=>void;f.clipboard.mockImplementationOnce(()=>new Promise<void>(resolve=>{done=resolve;}));await render();await click("Copy message");props={...props,text:"New message",onClose:f.nextClose};await render();await act(async()=>done());expect(f.close).not.toHaveBeenCalled();expect(f.nextClose).not.toHaveBeenCalled();
 });
 it("keeps report behind the same synchronous action gate as copy and note",async()=>{
- await render();const actions=["Copy message","Save as note","Report"].map(label=>f.rows.find(row=>row.label===label)!.press);await act(async()=>actions.forEach(action=>action()));expect(f.clipboard).toHaveBeenCalledTimes(1);expect(f.request).not.toHaveBeenCalled();expect(f.report).not.toHaveBeenCalled();expect(f.route).not.toHaveBeenCalled();
+ await render();const actions=["Copy message","Save as note","Report content"].map(label=>f.rows.find(row=>row.label===label)!.press);await act(async()=>actions.forEach(action=>action()));expect(f.clipboard).toHaveBeenCalledTimes(1);expect(f.request).not.toHaveBeenCalled();expect(f.report).not.toHaveBeenCalled();expect(f.route).not.toHaveBeenCalled();
 });
 
 it("keeps uncertain status when checking fails and reuses the original note ID",async()=>{
@@ -50,19 +50,19 @@ it("does not accept a different note/body as a saved receipt",async()=>{
  f.request.mockRejectedValueOnce(new RemoteHostError("m","network","Save outcome unknown",true)).mockResolvedValueOnce({id:"other",body:"other source"});await render();await click("Save as note");await click("Check saved note");expect(button("Save as note").disabled).toBe(true);expect(container.textContent).toContain("could not be verified");
 });
 it("retires retained copy/share/note/report callbacks when the Host scope changes",async()=>{
- await render();const old=["Copy message","Share","Save as note","Report"].map(label=>f.rows.find(row=>row.label===label)!.press);props={...props,context:context("fixture://two")};await render();await act(async()=>old.forEach(action=>action()));expect(f.clipboard).not.toHaveBeenCalled();expect(f.share).not.toHaveBeenCalled();expect(f.request).not.toHaveBeenCalled();expect(f.report).not.toHaveBeenCalled();
+ await render();const old=["Copy message","Share","Save as note","Report content"].map(label=>f.rows.find(row=>row.label===label)!.press);props={...props,context:context("fixture://two")};await render();await act(async()=>old.forEach(action=>action()));expect(f.clipboard).not.toHaveBeenCalled();expect(f.share).not.toHaveBeenCalled();expect(f.request).not.toHaveBeenCalled();expect(f.report).not.toHaveBeenCalled();
 });
 it("does not revive old actions after source A/B/A or private lock/return",async()=>{
  await render();const old=f.rows.find(row=>row.label==="Save as note")!.press;props={...props,text:"Other source"};await render();props={...props,text:"# Original message"};await render();await act(async()=>old());expect(f.request).not.toHaveBeenCalled();expect(button("Save as note").disabled).toBe(true);
 });
 it("rejects retained report and share actions across a batched lock and return",async()=>{
- await render();const old=["Share","Report"].map(label=>f.rows.find(row=>row.label===label)!.press);await act(async()=>{f.allowed=false;f.listeners.forEach(fn=>fn());f.allowed=true;f.listeners.forEach(fn=>fn());});await act(async()=>old.forEach(action=>action()));expect(f.share).not.toHaveBeenCalled();expect(f.report).not.toHaveBeenCalled();await click("Share");expect(f.share).toHaveBeenCalledTimes(1);
+ await render();const old=["Share","Report content"].map(label=>f.rows.find(row=>row.label===label)!.press);await act(async()=>{f.allowed=false;f.listeners.forEach(fn=>fn());f.allowed=true;f.listeners.forEach(fn=>fn());});await act(async()=>old.forEach(action=>action()));expect(f.share).not.toHaveBeenCalled();expect(f.report).not.toHaveBeenCalled();await click("Share");expect(f.share).toHaveBeenCalledTimes(1);
 });
 it("retains a started note write as uncertain after lock/return and a late success",async()=>{
  let done!:(value:unknown)=>void;f.request.mockImplementationOnce(()=>new Promise(resolve=>{done=resolve;}));await render();await click("Save as note");const submitted=f.request.mock.calls[0][1].note;await act(async()=>{f.allowed=false;f.listeners.forEach(fn=>fn());f.allowed=true;f.listeners.forEach(fn=>fn());done(submitted);});expect(button("Save as note").disabled).toBe(true);expect(button("Check saved note")).toBeDefined();expect(f.request).toHaveBeenCalledTimes(1);
 });
 it("checks a revoked report capability at invocation and latches report navigation once",async()=>{
- await render();const old=f.rows.find(row=>row.label==="Report")!.press;props={...props,reportable:false};await render();await act(async()=>old());expect(f.report).not.toHaveBeenCalled();props={...props,reportable:true};await render();const current=f.rows.filter(row=>row.label==="Report").at(-1)!.press;await act(async()=>{current();current();});expect(f.report).toHaveBeenCalledExactlyOnceWith(props.text);expect(f.route).toHaveBeenCalledExactlyOnceWith("/report");
+ await render();const old=f.rows.find(row=>row.label==="Report content")!.press;props={...props,reportable:false};await render();await act(async()=>old());expect(f.report).not.toHaveBeenCalled();props={...props,reportable:true};await render();const current=f.rows.filter(row=>row.label==="Report content").at(-1)!.press;await act(async()=>{current();current();});expect(f.report).toHaveBeenCalledExactlyOnceWith(props.text);expect(f.route).toHaveBeenCalledExactlyOnceWith("/report");
 });
 it("updates the complete-response copy target without replaying an older write",async()=>{
  let done!:()=>void;f.clipboard.mockImplementationOnce(()=>new Promise<void>(resolve=>{done=resolve;}));await render();await click("Copy complete response");props={...props,responseText:"New complete response"};await render();await act(async()=>done());expect(f.close).not.toHaveBeenCalled();await click("Copy complete response");expect(f.clipboard.mock.calls.map(call=>call[0])).toEqual(["Complete response","New complete response"]);expect(f.close).toHaveBeenCalledTimes(1);
@@ -80,7 +80,7 @@ it("keeps share cancellation quiet and anchors the iOS handoff",async()=>{
  vi.stubEnv("EXPO_OS","ios");f.share.mockResolvedValue({action:"dismissedAction"});await render();await click("Share");expect(f.share).toHaveBeenCalledWith({message:props.text},{anchor:73});expect(container.textContent).toContain("Sharing was cancelled.");expect(container.querySelector('[role="alert"]')).toBeNull();expect(f.close).not.toHaveBeenCalled();
 });
 it("does not execute retained menu callbacks after unmount",async()=>{
- await render();const old=["Copy message","Share","Save as note","Report"].map(label=>f.rows.find(row=>row.label===label)!.press);await act(async()=>root.unmount());await act(async()=>old.forEach(action=>action()));expect(f.clipboard).not.toHaveBeenCalled();expect(f.share).not.toHaveBeenCalled();expect(f.request).not.toHaveBeenCalled();expect(f.report).not.toHaveBeenCalled();root=createRoot(container);
+ await render();const old=["Copy message","Share","Save as note","Report content"].map(label=>f.rows.find(row=>row.label===label)!.press);await act(async()=>root.unmount());await act(async()=>old.forEach(action=>action()));expect(f.clipboard).not.toHaveBeenCalled();expect(f.share).not.toHaveBeenCalled();expect(f.request).not.toHaveBeenCalled();expect(f.report).not.toHaveBeenCalled();root=createRoot(container);
 });
 
 it("keeps an already-started copy visible and busy when the response disappears",async()=>{

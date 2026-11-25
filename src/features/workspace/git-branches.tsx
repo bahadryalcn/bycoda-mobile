@@ -1,10 +1,10 @@
 import type { TextInputInstance } from "react-native";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "@/ui/search-matching";
-import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
 import {
-  Badge,
+  RowIcon,
+  StatusText,
   Body,
   Button,
   ConfirmationCard,
@@ -19,9 +19,8 @@ import {
 } from "@/ui/primitives";
 import { useMemo, useRef, useState } from "react";
 import GitBranch from "lucide-react-native/icons/git-branch";
-import { IconTile } from "@/ui/icon-tile";
 import { useCopy } from "@/ui/copy";
-import { GroupedListRow, rowInset } from "./shared";
+import { GroupedListRow } from "./shared";
 import { useGitBranches } from "./git-queries";
 import { branchNameProblem } from "./git-branch-name";
 import type { GitBranchesPanelProps } from "./git-types";
@@ -36,7 +35,6 @@ export function GitBranchesPanel({
   onClose,
   children,
 }: GitBranchesPanelProps) {
-  const { colors } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale();
   const branches = useGitBranches(scope);
@@ -177,33 +175,14 @@ export function GitBranchesPanel({
           <GroupedListRow
             first={index === 0}
             last={index === rows.length - 1}
-            inset={rowInset}
           >
             <NavigationRow
               variant="plain"
               label={item.key}
-              icon={
-                <IconTile
-                  color={
-                    !item.remote && branches.data?.current === item.branch
-                      ? colors.success
-                      : undefined
-                  }
-                >
-                  <GitBranch
-                    size={18}
-                    strokeWidth={2}
-                    color={
-                      !item.remote && branches.data?.current === item.branch
-                        ? colors.success
-                        : colors.muted
-                    }
-                  />
-                </IconTile>
-              }
+              icon={<RowIcon glyph={GitBranch} />}
               trailing={
                 !item.remote && branches.data?.current === item.branch ? (
-                  <Badge label={copy("Geçerli", "Current")} tone="success" />
+                  <StatusText label={copy("Geçerli", "Current")} />
                 ) : undefined
               }
               disabled={creating || (!item.remote && branches.data?.current === item.branch)}

@@ -29,6 +29,8 @@ import { messageSessionLink, messageSessionRoute } from "./message-session-link"
 import { taskListItem } from "./message-task";
 import { isLoopbackWebUrl, loopbackScopeKey, useLoopbackLink } from "./loopback-link";
 import { messageTableColumnWidths } from "./message-table-model";
+import { hasMention, mentionParts } from "./message-selection-model";
+import { SelectableProse } from "./message-selection";
 
 /** Width reserved for a list marker ("•", "12.", task box) so item text aligns. */
 const LIST_MARKER_WIDTH = space.xxl;
@@ -159,21 +161,17 @@ export const MessageContent = memo(function MessageContent({
           );
         return <Fragment key={index}>{child}</Fragment>;
       }
-      if (node.type === "text" && context && /(^|\s)@/.test(node.text)) {
-        const parts: ReactNode[] = [];
-        let cursor = 0;
-        for (const match of node.text.matchAll(/(^|\s)@(?:"([^"]+)"|([^\s]+))/g)) {
-          const start = match.index! + match[1]!.length;
-          parts.push(node.text.slice(cursor, start));
-          const path = (match[2] || match[3] || "").replace(/[.,;!?]+$/, "");
-          parts.push(
-            <FileLink onOpenFile={onOpenFile} key={start} path={path} context={context}>
-              @{path}
-            </FileLink>,
-          );
-          cursor = match.index! + match[0].length;
-        }
-        parts.push(node.text.slice(cursor));
+      if (node.type === "text" && context && hasMention(node.text)) {
+        // Shared with the selection layer, which must produce the same characters.
+        const parts = mentionParts(node.text).map((part) =>
+          typeof part === "string" ? (
+            part
+          ) : (
+            <FileLink onOpenFile={onOpenFile} key={part.at} path={part.path} context={context}>
+              @{part.path}
+            </FileLink>
+          ),
+        );
         return <Text key={index}>{parts}</Text>;
       }
       return (
@@ -393,6 +391,19 @@ export const MessageContent = memo(function MessageContent({
         const all = node.children.flatMap((entry) =>
           entry.type === "inline" ? entry.children : [entry],
         );
+        const proseStyle = [
+          bodyStyle,
+          node.type === "heading" && {
+            ...typography.heading,
+            fontSize:
+              typography.heading.fontSize +
+              (node.tag === "h1" ? 5 : node.tag === "h2" ? 2 : 0),
+            lineHeight:
+              typography.heading.lineHeight +
+              (node.tag === "h1" ? 8 : node.tag === "h2" ? 3 : 0),
+          },
+          error && { color: colors.danger },
+        ];
         return (
           <View
             key={key}
@@ -402,24 +413,20 @@ export const MessageContent = memo(function MessageContent({
             }}
           >
             {!compactMedia || hasInlineText(all) ? (
-              <Body
-                accessibilityRole={node.type === "heading" ? "header" : undefined}
-                style={[
-                  bodyStyle,
-                  node.type === "heading" && {
-                    ...typography.heading,
-                    fontSize:
-                      typography.heading.fontSize +
-                      (node.tag === "h1" ? 5 : node.tag === "h2" ? 2 : 0),
-                    lineHeight:
-                      typography.heading.lineHeight +
-                      (node.tag === "h1" ? 8 : node.tag === "h2" ? 3 : 0),
-                  },
-                  error && { color: colors.danger },
-                ]}
+              <SelectableProse
+                nodes={all}
+                compactMedia={compactMedia}
+                mentions={!!context}
+                codeSize={typography.code.fontSize}
+                style={proseStyle}
               >
-                {inline(all)}
-              </Body>
+                <Body
+                  accessibilityRole={node.type === "heading" ? "header" : undefined}
+                  style={proseStyle}
+                >
+                  {inline(all)}
+                </Body>
+              </SelectableProse>
             ) : null}
             {images(all).map((image, imageIndex) => (
               <MessageImage

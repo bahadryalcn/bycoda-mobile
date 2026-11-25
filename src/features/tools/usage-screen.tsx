@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { providerName } from "../workspace/provider-choices";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
-import { Stack, useLocalSearchParams } from "expo-router";
-import { View } from "react-native";
+import { Stack, router, useLocalSearchParams } from "expo-router";
+import { StyleSheet, View } from "react-native";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { useHostQuery } from "@/state/queries";
@@ -14,7 +14,7 @@ import { MetricRow } from "@/ui/metric-row";
 import { useCopy } from "@/ui/copy";
 import { useInfoHint } from "@/ui/info-hint";
 import { useMobileTheme } from "@/ui/theme";
-import { space } from "@/ui/tokens";
+import { iconSize, space } from "@/ui/tokens";
 import {
   readUsageReport,
   usageDuration,
@@ -26,45 +26,53 @@ import { UsageCost } from "./usage-cost";
 import { UsageLimits } from "./usage-limits";
 import { ProviderShare, UsageKpis } from "./usage-charts";
 import { UsageUnavailable, type UsageTab } from "./usage-summary";
+import { toolLabels } from "./tool-labels";
+import { ProjectPicker } from "../workspace/project-picker";
 
-export function UsageScreen({ project }: { project: HostProject }) {
+/**
+ * Account limits and cost are computer-level and open without a project; only the Tokens tab reads
+ * per-project sessions and asks for a project inside the tab.
+ */
+export function UsageScreen({ project }: { project?: HostProject }) {
   const copy = useCopy();
   const machine = useActiveMachine();
   const cache = useQueryClient();
-  // Deep link from the provider sheet opens the Limits tab; any other value keeps the default tab.
+  // Limits is what a phone user checks most; a deep link may ask for another tab.
   const params = useLocalSearchParams<{ tab?: string }>();
-  const [tab, setTab] = useState<UsageTab>(() => params.tab === "limits" ? "limits" : "tokens");
+  const [tab, setTab] = useState<UsageTab>(() => params.tab === "tokens" || params.tab === "cost" ? params.tab : "limits");
+  const [choosingProject, setChoosingProject] = useState(false);
+  const projectId = project?.id ?? null;
   const selectedKey = hostKey(machine?.id ?? null, [tab === "limits" ? "usage-limits" : tab === "cost" ? "usage-cost" : "session-usage"]);
   const selectedFetching = useIsFetching({ queryKey: selectedKey }) > 0;
   const selectedSupported = !!machine?.environmentId && !!machine.capabilities?.includes(tab === "limits" ? "usage.limits.read" : tab === "cost" ? "usage.cost.read" : "usage.sessions.read");
   const [days, setDays] = useState("1");
   const [untilMs, setUntilMs] = useState(Date.now);
-  const [page, setPage] = useState<{ projectId: string; reviewed: ReviewedMachine | undefined; cursor?: string }>(() => ({ projectId: project.id, reviewed: reviewedMachine(machine) }));
-  const pageIsCurrent = page.projectId === project.id && isReviewedMachine(page.reviewed, { activeId: machine?.id ?? null, machines: machine ? [machine] : [] });
+  const [page, setPage] = useState<{ projectId: string | null; reviewed: ReviewedMachine | undefined; cursor?: string }>(() => ({ projectId, reviewed: reviewedMachine(machine) }));
+  const pageIsCurrent = page.projectId === projectId && isReviewedMachine(page.reviewed, { activeId: machine?.id ?? null, machines: machine ? [machine] : [] });
   const cursor = pageIsCurrent ? page.cursor : undefined;
-  const latestProject = useRef(project.id);
-  latestProject.current = project.id;
+  const latestProject = useRef(projectId);
+  latestProject.current = projectId;
   const [action, setAction] = useState<"refresh" | "first" | "next" | null>(null);
   const pending = useRef(false);
   const flight = useRef(0);
   const review = reviewedMachine(machine);
   const sinceMs = untilMs - Number(days) * 86400000;
-  const supported =
-    machine?.capabilities?.includes("usage.sessions.read") && !!machine.environmentId;
+  const sessionsSupported = !!machine?.capabilities?.includes("usage.sessions.read") && !!machine.environmentId;
+  const supported = sessionsSupported && !!project;
   const query = useHostQuery<SessionUsageReport>(
-    ["session-usage", project.id, sinceMs, untilMs, cursor],
+    ["session-usage", projectId, sinceMs, untilMs, cursor],
     "usage.sessions.read",
-    { projectId: project.id, sinceMs, untilMs, limit: 50, ...(cursor ? { cursor } : {}) },
+    { projectId, sinceMs, untilMs, limit: 50, ...(cursor ? { cursor } : {}) },
     {
-      enabled: !!supported,
+      enabled: supported,
       queryFn: async (client, signal) =>
         readUsageReport(
           await client.request(
             "usage.sessions.read",
-            { projectId: project.id, sinceMs, untilMs, limit: 50, ...(cursor ? { cursor } : {}) },
+            { projectId: project!.id, sinceMs, untilMs, limit: 50, ...(cursor ? { cursor } : {}) },
             { signal },
           ),
-          { environmentId: machine!.environmentId!, projectId: project.id, sinceMs, untilMs },
+          { environmentId: machine!.environmentId!, projectId: project!.id, sinceMs, untilMs },
         ),
     },
   );
@@ -75,8 +83,8 @@ export function UsageScreen({ project }: { project: HostProject }) {
     flight.current += 1;
     pending.current = false;
     setAction(null);
-    setPage({ projectId: project.id, reviewed: reviewedMachine(machine) });
-  }, [pageIsCurrent, project.id, machine?.id, machine?.endpoint, machine?.environmentId, machine?.lanKey]);
+    setPage({ projectId, reviewed: reviewedMachine(machine) });
+  }, [pageIsCurrent, projectId, machine?.id, machine?.endpoint, machine?.environmentId, machine?.lanKey]);
   useEffect(() => {
     if (!query.isFetching) {
       pending.current = false;
@@ -84,15 +92,15 @@ export function UsageScreen({ project }: { project: HostProject }) {
     }
   }, [query.isFetching, untilMs, cursor]);
   const navigate = (next: "refresh" | "first" | "next", update: (flight: number) => void) => {
-    if (pending.current || query.isFetching || !supported || latestProject.current !== project.id || !isReviewedMachine(review, useMachines.getState())) return;
+    if (pending.current || query.isFetching || !supported || latestProject.current !== projectId || !isReviewedMachine(review, useMachines.getState())) return;
     pending.current = true;
     setAction(next);
     update(++flight.current);
   };
-  const setCursor = (value?: string) => setPage({ projectId: project.id, reviewed: review, cursor: value });
+  const setCursor = (value?: string) => setPage({ projectId, reviewed: review, cursor: value });
   const refresh = async () => {
     if (tab !== "tokens") {
-      if (!selectedSupported || selectedFetching || latestProject.current !== project.id || !isReviewedMachine(review, useMachines.getState())) return;
+      if (!selectedSupported || selectedFetching || latestProject.current !== projectId || !isReviewedMachine(review, useMachines.getState())) return;
       await cache.refetchQueries({ queryKey: selectedKey, type: "active" }, { cancelRefetch: false });
       return;
     }
@@ -118,34 +126,49 @@ export function UsageScreen({ project }: { project: HostProject }) {
       disabled={!selectedSupported || (tab === "tokens" ? query.isFetching : selectedFetching)}
       onPress={() => { void refresh(); }}
     >
-      <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
+      <RefreshCw size={iconSize.action} strokeWidth={2} color={colors.accent} />
     </IconButton>
   );
   return (
+    <>
+    {choosingProject ? (
+      <ProjectPicker visible onClose={() => setChoosingProject(false)} onSelect={(selected) => {
+        setChoosingProject(false);
+        if (machine && useMachines.getState().activeId === machine.id)
+          router.setParams({ projectId: selected.id, machineId: machine.id, tab: "tokens" });
+      }} />
+    ) : null}
     <ScreenList
-      title={copy("Oturum kullanımı", "Session usage")}
-      subtitle={`${machine?.name ?? ""} · ${project.name}`}
+      title={copy(...toolLabels.usage)}
+      scope={{ computer: machine?.name, project: tab === "tokens" ? project?.name : undefined }}
       actions={refreshControl}
       refreshState={selectedSupported ? { refreshing: tab === "tokens" ? action === "refresh" : selectedFetching, onRefresh: refresh } : undefined}
       data={tab === "tokens" ? report?.rows ?? [] : []}
       keyExtractor={(row) => row.sessionId}
       header={
         <View style={{ gap: space.sm }}>
-          <Stack.Screen options={{ title: copy("Oturum kullanımı", "Session usage") }} />
+          <Stack.Screen options={{ title: copy(...toolLabels.usage) }} />
           <SegmentedControl
             hideLabel
             label={copy("Kullanım görünümü", "Usage view")}
             value={tab}
             options={[
+              { value: "limits", label: copy("Limitler", "Limits") },
               { value: "cost", label: copy("Maliyet", "Cost") },
               { value: "tokens", label: copy("Token", "Tokens") },
-              { value: "limits", label: copy("Limitler", "Limits") },
             ]}
             onChange={setTab}
           />
           {tab === "cost" ? (machine?.capabilities?.includes("usage.cost.read") ? <UsageCost /> : <UsageUnavailable tab="cost" />) : null}
           {tab === "limits" ? (machine?.capabilities?.includes("usage.limits.read") ? <UsageLimits /> : <UsageUnavailable tab="limits" />) : null}
-          {tab === "tokens" ? <>
+          {tab === "tokens" && !project ? (
+            <StateView
+              size="compact"
+              title={copy("Token kullanımı proje başına gösterilir", "Token usage is shown per project")}
+              action={sessionsSupported ? { label: copy("Proje seç", "Choose a project"), onPress: () => setChoosingProject(true) } : undefined}
+            />
+          ) : null}
+          {tab === "tokens" && project ? <>
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <SegmentedControl
@@ -158,7 +181,7 @@ export function UsageScreen({ project }: { project: HostProject }) {
                   { value: "7", label: copy("7 gün", "7 days") },
                 ]}
                 onChange={(value) => {
-                  if (value !== "1" && value !== "7" || pending.current || query.isFetching || !supported || latestProject.current !== project.id || !isReviewedMachine(review, useMachines.getState())) return;
+                  if (value !== "1" && value !== "7" || pending.current || query.isFetching || !supported || latestProject.current !== projectId || !isReviewedMachine(review, useMachines.getState())) return;
                   setDays(value);
                   setCursor(undefined);
                 }}
@@ -169,6 +192,7 @@ export function UsageScreen({ project }: { project: HostProject }) {
           {calcInfo.panel}
           {!supported ? (
             <StateView
+              size="compact"
               illustration="permission"
               title={copy("Güncelleme gerekiyor", "Update needed")}
               description={copy(
@@ -246,6 +270,7 @@ export function UsageScreen({ project }: { project: HostProject }) {
         ) : undefined
       }
     />
+    </>
   );
 }
 function usageWindowDate(value: number) {
@@ -267,7 +292,6 @@ export function UsageValues({ value }: { value: SessionUsageReport["totals"] }) 
       copy("Önbelleğe yazılan token’lar", "Cache write tokens"),
       usageNumber(value.cacheWriteTokens),
     ],
-    [copy("Maliyet", "Cost"), "—"],
   ];
   return (
     <View style={{ gap: space.xs }}>
@@ -284,7 +308,7 @@ function SessionRow({ row }: { row: SessionUsageReport["rows"][number] }) {
   const { colors } = useMobileTheme();
   const tokens = totalTokens(row);
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.sm, borderBottomWidth: 1, borderColor: colors.separator }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.separator }}>
       <View style={{ flex: 1, minWidth: 0, gap: space.xs }}>
         <Body style={{ fontWeight: "600" }}>{providerName(row.provider)}</Body>
         <Body muted mono>{`${copy("Oturum", "Session")} ${shortSessionId(row.sessionId)}`}</Body>

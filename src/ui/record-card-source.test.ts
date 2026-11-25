@@ -27,8 +27,20 @@ describe("RecordCard identity accessibility", () => {
   });
 
   it("keeps the disclosure state and the single-level details body", () => {
-    expect(card).toContain("accessibilityState={details ? { expanded } : undefined}");
-    expect(card).toContain('accessibilityRole={details ? "button" : undefined}');
-    expect(card).toContain("{visited && details ? (");
+    expect(card).toContain("accessibilityState={expandable ? { expanded } : undefined}");
+    expect(card).toContain('accessibilityRole={expandable ? "button" : undefined}');
+    expect(card).toContain("{visited && expandable ? (");
+  });
+
+  it("opens the same record actions from the options button, a long press and the screen-reader action", () => {
+    expect(card).toContain("onLongPress={options.available ? options.open : undefined}");
+    expect(card).toContain('accessibilityActions={options.available && actions ? [{ name: "longpress", label: actions.label }] : undefined}');
+    expect(card).toContain("<ActionMenu label={actions.label} subtitle={actions.subtitle ?? title} actions={actions.items} busy={actions.busy} />");
+    expect(card).not.toContain("<Hint");
+  });
+
+  it("shows persistent record failures as one quiet line each and the full text when expanded", () => {
+    expect(card).toContain('<StatusLine key={index} tone="danger" label={problem} />');
+    expect(card).not.toContain("<ErrorNotice");
   });
 });

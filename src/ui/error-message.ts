@@ -173,9 +173,10 @@ export function friendlyProviderFailure(text: string, copy: ErrorCopy): string {
       "This session is archived with the provider. Unarchive it on your computer, then send again.",
     );
   if (/usage_limit_reached|quota_exceeded|insufficient_quota|(?:usage|weekly|monthly|session)\s+limit\s+(?:reached|exceeded)|(?:you(?:'|’)ve|you have)\s+(?:hit|reached)\s+your\s+(?:(?:usage|weekly|monthly|session)\s+)?limit/i.test(text))
-    return `${text}\n\n${copy(
-      "Başka bir hesap veya model seçmek için Model ve akıl yürütme'yi açın.",
-      "Open Model and reasoning to choose another account or model.",
-    )}`;
+    // One localized line: the provider's own (English) wording never sits beside the app's language.
+    return copy(
+      "Kullanım sınırına ulaşıldı. Başka bir hesap veya model seçmek için Model ve erişim'i aç.",
+      "Usage limit reached. Open Model and access to choose another account or model.",
+    );
   return text;
 }

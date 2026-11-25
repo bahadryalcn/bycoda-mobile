@@ -1,4 +1,3 @@
-import { useMobileTheme } from "@/ui/theme";
 import { useLayoutEffect, useRef, useState } from "react";
 import Constants from "expo-constants";
 import * as Application from "expo-application";
@@ -7,11 +6,8 @@ import Animated from "react-native-reanimated";
 import Star from "lucide-react-native/icons/star";
 import Share2 from "lucide-react-native/icons/share-2";
 import Globe from "lucide-react-native/icons/globe";
-import MessageSquare from "lucide-react-native/icons/message-square";
 import Smartphone from "lucide-react-native/icons/smartphone";
-import { router, type Href } from "expo-router";
-import { Body, Notice, Stack, NavigationGroup, NavigationRow } from "../../ui/primitives";
-import { IconTile } from "../../ui/icon-tile";
+import { Body, Notice, Stack, NavigationGroup, NavigationRow, SettingIcon, ValueRow } from "../../ui/primitives";
 import { enterItem } from "../../ui/motion";
 import { space } from "../../ui/tokens";
 import { useCopy } from "../../ui/copy";
@@ -20,20 +16,11 @@ import { openPublicLink, sharePublicApp } from "./engagement-actions";
 import { websiteUrl } from "../legal/legal-content";
 import { BrandLogo } from "@/ui/brand";
 
-function tile(Glyph: typeof Star, color: string) {
-  return (
-    <IconTile color={color}>
-      <Glyph size={18} strokeWidth={2} color={color} />
-    </IconTile>
-  );
-}
-
 /**
- * User initiated public actions. This does not publish through connected social accounts.
- * `leaveSheet` closes the hosting sheet before running a navigation.
+ * Settings → About: version and build, then user initiated public actions. This does not publish
+ * through connected social accounts. Feedback has its own row on the Settings index.
  */
-export function EngagementSettings({ leaveSheet }: { leaveSheet: (go: () => void) => void }) {
-  const { colors } = useMobileTheme();
+export function EngagementSettings() {
   const copy = useCopy();
   const platform = process.env.EXPO_OS ?? "unknown";
   const links = engagementLinks(Constants.expoConfig, platform);
@@ -110,37 +97,38 @@ export function EngagementSettings({ leaveSheet }: { leaveSheet: (go: () => void
   return (
     <Stack style={{ gap: space.lg }}>
       <BrandLogo compact />
-      <Stack>
-        <Body>{copy("Sürüm: {p0}", "Version: {p0}", { p0: identity.version ?? copy("Bilinmiyor", "Unknown") })}</Body>
-        <Body muted>{identity.preview
-          ? copy("Önizleme — mağaza derlemesi değil.", "Preview — a store build is not running.")
-          : copy("Derleme: {p0}", "Build: {p0}", { p0: identity.nativeBuild ?? copy("Bilinmiyor", "Unknown") })}</Body>
-      </Stack>
+      <NavigationGroup>
+        <ValueRow label={copy("Sürüm", "Version")} value={identity.version ?? copy("Bilinmiyor", "Unknown")} />
+        <ValueRow label={copy("Derleme", "Build")} value={identity.preview
+          ? copy("Önizleme, mağaza derlemesi değil", "Preview, not a store build")
+          : identity.nativeBuild ?? copy("Bilinmiyor", "Unknown")} />
+      </NavigationGroup>
       <Animated.View entering={enterItem(0)}>
         <NavigationGroup>
           <NavigationRow
             label={copy("bycoda web sitesi", "bycoda website")}
             detail="bycoda.codes"
             disabled={!!busy}
-            icon={tile(Globe, colors.muted)}
+            icon={<SettingIcon glyph={Globe} />}
             busy={busy === "website"}
             onPress={() => { void perform("website"); }}
           />
-          <NavigationRow
-            label={copy("Uygulamayı değerlendir", "Rate the app")}
-            disabled={!!busy || !links.reviewUrl}
-            detail={!links.reviewUrl ? copy("Mağazada yayımlandığında kullanılabilir.", "Available after the store release.") : undefined}
-            detailLines={2}
-            icon={tile(Star, colors.muted)}
-            busy={busy === "review"}
-            onPress={() => { void perform("review"); }}
-          />
+          {/* Hidden until a store review URL exists; a permanently disabled row explains nothing useful. */}
+          {links.reviewUrl ? (
+            <NavigationRow
+              label={copy("Uygulamayı değerlendir", "Rate the app")}
+              disabled={!!busy}
+              icon={<SettingIcon glyph={Star} />}
+              busy={busy === "review"}
+              onPress={() => { void perform("review"); }}
+            />
+          ) : null}
           <View ref={shareAnchor} collapsable={false}>
             <NavigationRow
               label={copy("Uygulamayı paylaş", "Share the app")}
               intent="command"
               disabled={!!busy || !nativeSharing}
-              icon={tile(Share2, colors.muted)}
+              icon={<SettingIcon glyph={Share2} />}
               busy={busy === "share"}
               onPress={() => { void perform("share"); }}
             />
@@ -149,17 +137,11 @@ export function EngagementSettings({ leaveSheet }: { leaveSheet: (go: () => void
             <NavigationRow
               label={copy("Uygulama sayfası", "App page")}
               disabled={!!busy}
-              icon={tile(Smartphone, colors.muted)}
+              icon={<SettingIcon glyph={Smartphone} />}
               busy={busy === "public"}
               onPress={() => { void perform("public"); }}
             />
           </> : null}
-          <NavigationRow
-            label={copy("Geri bildirim gönder", "Send feedback")}
-            disabled={!!busy}
-            icon={tile(MessageSquare, colors.muted)}
-            onPress={() => leaveSheet(() => router.push("/feedback" as Href))}
-          />
         </NavigationGroup>
         {notice ? <Body accessibilityLiveRegion="polite" muted>{notice}</Body> : null}
         {error ? <Notice tone="warning" message={error} /> : null}

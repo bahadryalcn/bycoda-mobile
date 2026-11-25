@@ -9,26 +9,15 @@ import { MicrophonePriority } from "./microphone-priority";
 const fixture = vi.hoisted(() => ({
   inputs: [] as MicInput[],
   refresh: () => {},
-  drag: (_: unknown, _move: { id: string; to: number }) => {},
+  choose: (_kind: string) => {},
   update: vi.fn(),
   remove: vi.fn(),
 }));
 vi.mock("react-native", () => ({
-  View: ({ children }: PropsWithChildren) => children,
   AppState: { currentState: "active", addEventListener: (_: string, refresh: () => void) => {
     fixture.refresh = refresh;
     return { remove: fixture.remove };
   } },
-}));
-vi.mock("react-native-gesture-handler", () => ({ GestureHandlerRootView: ({ children }: PropsWithChildren) => children }));
-vi.mock("panelui-native/components/sortable", () => ({
-  Sortable: Object.assign(({ children, onReorder }: PropsWithChildren<{ onReorder: typeof fixture.drag }>) => {
-    fixture.drag = onReorder;
-    return children;
-  }, {
-    Item: ({ children }: PropsWithChildren) => children,
-    Handle: ({ accessibilityLabel }: { accessibilityLabel: string }) => h("button", null, accessibilityLabel),
-  }),
 }));
 vi.mock("../../../modules/bycoda-voice-companion", () => ({
   nativeVoiceCompanion: () => ({ listInputs: () => fixture.inputs }),
@@ -36,31 +25,33 @@ vi.mock("../../../modules/bycoda-voice-companion", () => ({
 vi.mock("./voice-preferences", () => ({ voicePreferences: { getState: () => ({ update: fixture.update }) } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/primitives", () => ({
-  Body: ({ children }: PropsWithChildren) => h("p", null, children),
-  Stack: ({ children }: PropsWithChildren) => children,
-  NavigationGroup: ({ children }: PropsWithChildren) => children,
-  SectionHeader: ({ title }: { title: string }) => h("h2", null, title),
-  ValueRow: ({ label }: { label: string }) => h("div", null, label),
+  ValueRow: ({ label, value }: { label: string; value?: string }) => h("div", null, `${label}: ${value}`),
+  SelectField: ({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string; detail?: string }[]; onChange(value: string): void }) => {
+    fixture.choose = onChange;
+    return h("div", null, `${label}: ${value}`, ...options.map((option) => h("button", { key: option.value }, [option.label, option.detail].filter(Boolean).join(" · "))));
+  },
 }));
 
-it("shows one attached mic without drag, then enables reordering after a second mic connects", async () => {
+// Owner decision: no drag reordering. One input is a value; two or more are a choice of which is used first.
+it("shows one attached mic as a value, then offers the first-used choice after a second mic connects", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const container = document.createElement("div");
   const root = createRoot(container);
   const micOrder = ["wired", "bluetooth", "builtin", "carplay"] satisfies VoicePreferences["micOrder"];
-  const preferences: VoicePreferences = { engine: "local", speaker: "M1", speech: "supertonic", micOrder };
-  fixture.inputs = [{ name: "Phone mic", type: "builtin", uid: "1" }];
+  const preferences = { micOrder } as unknown as VoicePreferences;
+  // The simulator reports an identifier, never shown to the owner.
+  fixture.inputs = [{ name: "MicrophoneBuiltIn", type: "builtin", uid: "1" }];
   fixture.update.mockImplementation(async (patch: (current: VoicePreferences) => Partial<VoicePreferences>) =>
     Object.assign(preferences, patch(preferences)));
   try {
     await act(async () => root.render(h(MicrophonePriority, { order: micOrder, disabled: false })));
-    expect(container.textContent).toBe("MicrophonePhone mic");
+    expect(container.textContent).toBe("Input device: Built-in");
     expect(container.querySelectorAll("button")).toHaveLength(0);
 
-    fixture.inputs = [...fixture.inputs, { name: "Headset mic", type: "bluetooth", uid: "2" }];
+    fixture.inputs = [{ name: "iPhone Microphone", type: "builtin", uid: "1" }, { name: "Headset mic", type: "bluetooth", uid: "2" }];
     await act(async () => fixture.refresh());
-    expect([...container.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["Headset mic", "Phone mic"]);
-    await act(async () => fixture.drag(undefined, { id: "builtin", to: 0 }));
+    expect([...container.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["Bluetooth · Headset mic", "Built-in · iPhone Microphone"]);
+    await act(async () => fixture.choose("builtin"));
     expect(preferences.micOrder).toEqual(["wired", "builtin", "bluetooth", "carplay"]);
   } finally {
     await act(async () => root.unmount());

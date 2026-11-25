@@ -12,15 +12,16 @@ vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: {}, semanticCo
 vi.mock("../management/shared/format", () => ({ stamp: () => "Today" }));
 vi.mock("../management/shared/paged-rows", () => ({ PagedRows: () => null }));
 vi.mock("@/ui/message-text", () => ({ MessageText: () => null }));
-vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
+vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children), Text: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Body: Wrap, Stack: Wrap, Row: Wrap, Section: Wrap, Disclosure: Wrap, QueryState: () => null,
+  return { Body: Wrap, Heading: Wrap, StatusText: ({ label }: { label: string }) => createElement("span", null, label), Stack: Wrap, Row: Wrap, Section: Wrap, Disclosure: Wrap, QueryState: () => null,
     Badge: ({ label }: { label: string }) => createElement("span", null, label),
     SectionHeader: ({ title, count }: { title: string; count?: number }) => createElement("h2", null, title, count === undefined ? null : new Intl.NumberFormat("tr").format(count)),
     Sheet: ({children,visible}:PropsWithChildren<{visible:boolean}>)=>visible?createElement("aside",null,children):null,
     ScreenList: ({header,data,renderItem}:{header:ReactNode;data:unknown[];renderItem:(row:{item:unknown})=>ReactNode})=>
       createElement("section",{"data-row-count":data.length},header,...data.map((item,index)=>createElement("article",{key:index},renderItem({item})))),
+    NavigationRow: ({ label, detail, trailing, accessibilityLabel }: { label: string; detail?: string; trailing?: ReactNode; accessibilityLabel?: string }) => createElement("div", { "aria-label": accessibilityLabel }, label, detail, trailing),
     Button: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label) };
 });
 
@@ -51,7 +52,7 @@ it("formats diff counts while retaining exact item and file identity", async () 
   };
   await render(createElement(PrReviewSummary, props));
   expect(node.textContent).toContain("+1.284"); expect(node.textContent).toContain("−2.345");
-  expect(node.textContent).not.toContain("src/draft-1284.ts");
+  expect(node.querySelector("[aria-label]")).toBeNull();
   await act(async()=>[...node.querySelectorAll("button")].find(button=>button.textContent==="Show files")!.click());
-  expect(node.textContent).toContain("#1284"); expect(node.textContent).toContain("src/draft-1284.ts");
+  expect(node.textContent).toContain("#1284"); expect(node.querySelector("[aria-label^=\"src/draft-1284.ts\"]")).not.toBeNull();
 });

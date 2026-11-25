@@ -4,6 +4,7 @@ import { Platform } from "react-native";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import { IconButton } from "./buttons";
+import { iconSize } from "./tokens";
 
 /** Native stack headers draw an arrow on Android and a chevron on iOS and web. */
 const BackGlyph = Platform.OS === "android" ? ArrowLeft : ChevronLeft;
@@ -23,7 +24,8 @@ export function HeaderBackButton({ label, onPress, disabled }: {
   const text = label ?? copy("Geri", "Back");
   return (
     <IconButton label={text} disabled={disabled} reserveTouchTarget onPress={onPress}>
-      <BackGlyph size={24} strokeWidth={Platform.OS === "android" ? 2 : 2.2} color={colors.text} />
+      <BackGlyph size={iconSize.back} strokeWidth={Platform.OS === "android" ? 2 : 2.2} color={colors.text} />
     </IconButton>
   );
 }
+

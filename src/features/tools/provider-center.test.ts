@@ -2,7 +2,8 @@
 import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import { ProviderCenter } from "./provider-center";
+import { ProviderCenter, orderProviders } from "./provider-center";
+vi.mock("@/ui/no-computer", () => ({ NoComputerState: () => createElement("p", null, "Connect a computer first"), NoComputerGate: () => createElement("p", null, "Connect a computer first") }));
 vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }), HintSection: ({ children }: PropsWithChildren) => createElement("div", null, children), InfoHint: () => null, InfoPanel: () => null, HintLabel: () => null, UnitHint: () => null, isUnitHint: () => false }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
@@ -15,13 +16,15 @@ vi.mock("@/state/queries", () => ({
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { accent: "#000" } }) }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/bot", () => ({ default: () => null }));
 vi.mock("@/ui/agent-avatar", () => ({ ProviderAccountMark: ({ provider }: { provider: string }) => createElement("i", null, provider) }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label);
   return { StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children),
-    Disclosure: Wrapper,
+    Disclosure: Wrapper, NavigationGroup: Wrapper, RowIcon: () => null,
+    ValueRow: ({ label, value, trailing }: { label: string; value?: string; trailing?: import("react").ReactNode }) => createElement("div", null, label, value, trailing),
     Row: Wrapper, Section: ({ title, children }: { title: string; children: import("react").ReactNode }) => createElement("section", null, title, children), SectionHeader: ({ title, count }: { title: string; count?: number }) => createElement("h3", null, count === undefined ? title : title + " (" + count + ")"),
     StateView: ({ title, description }: { title: string; description?: string }) => createElement("p", null, title, description), IconButton: ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { "aria-label": label, onClick: onPress, disabled }), Badge: ({ label }: { label: string }) => createElement("span", null, label),
     SearchField: ({ label, value, onChangeText }: { label: string; value: string; onChangeText: (value: string) => void }) => createElement("input", { "aria-label": label, value, onChange: (event: import("react").ChangeEvent<HTMLInputElement>) => onChangeText(event.target.value) }),
@@ -37,6 +40,16 @@ async function render() { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); if (!
 async function click(label: string) { await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === label)!.click()); }
 async function editName() { const input = container.querySelector('input[aria-label="Name"]') as HTMLInputElement; await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Renamed"); input.dispatchEvent(new Event("input", { bubbles: true })); }); }
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; container?.remove(); state.id = "machine"; state.endpoint = "https://original.example"; state.requests = []; state.methods = []; state.revision = "a".repeat(64); state.uncertain = false; vi.unstubAllGlobals(); });
+it("shows the normal launcher state as quiet text, problems first, and the ACP count without brackets", async () => {
+  await render();
+  expect(container.textContent).toContain("ClaudeAvailable");
+  expect(container.querySelector("h3")?.textContent).toBe("Agents on this computer (1)");
+  expect(container.textContent).not.toContain("Custom ACP agents (0)");
+});
+it("orders unavailable launchers first and keeps the computer order otherwise", () => {
+  const providers = [{ id: "a", launcher: "resolved" }, { id: "b", launcher: "unavailable" }, { id: "c", launcher: "unknown" }] as unknown as Parameters<typeof orderProviders>[0];
+  expect(orderProviders(providers).map((provider) => provider.id)).toEqual(["b", "a", "c"]);
+});
 it("reads only the safe method and confirms a frozen revision metadata patch", async () => {
   await render(); expect(state.methods).toEqual(["providers.center.read"]); expect(state.requests).toEqual([]);
   await click("Fixture agent"); await editName(); await click("Review changes");

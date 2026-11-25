@@ -22,9 +22,11 @@ import { ComposerTransferProvider } from "./composer-transfer";
 import { SessionKeyboardFrame } from "./session-keyboard-frame";
 import { useSessionSnapshot } from "./session-queries";
 import { SessionSettings } from "./session-settings";
+import { openModelSheet } from "./composer-model-sheet";
 import { SessionToolbar } from "./session-toolbar";
 import { SessionLoopbackBrowser } from "./session-loopback-browser";
 import { SessionTranscript } from "./session-transcript";
+import { SectionErrorBoundary } from "@/ui/error-boundary";
 import { SessionHeader } from "./session-header";
 import { SessionListSheet } from "./session-list-sheet";
 import { SessionParentBar } from "./session-parent-bar";
@@ -121,6 +123,7 @@ function SessionWorkspace({
     [privacy.projectId, projects.isProjectVisible],
   );
   const navigation = useRef(new TranscriptScrollPosition());
+  const dismissComposerSuggestions = useRef<(() => void) | null>(null);
   const loadedBefore = useRef<number | undefined>(undefined);
   const restoreBefore = useCallback(() => loadedBefore.current, []);
   const snapshot = useSessionSnapshot(scope, {
@@ -159,6 +162,10 @@ function SessionWorkspace({
     !!snapshot.data &&
     snapshot.data.projectId === privacy.projectId &&
     snapshot.data.session.id === id;
+  // A pre-verification list would measure inside display:none. Keep the composer
+  // mounted for its draft, and retain the transcript after its first visible layout.
+  const transcriptOpened = useRef(false);
+  if (visible) transcriptOpened.current = true;
   const retained = useRef<HostSession | undefined>(undefined);
   if (visible) {
     retained.current = snapshot.data;
@@ -249,6 +256,7 @@ function SessionWorkspace({
           provider={visible ? session?.session.harness : undefined}
           status={layout === "split" && !visible ? undefined : headerStatus.label}
           tone={headerStatus.tone}
+          onRefresh={visible && session && (!!snapshot.error || snapshot.fetchStatus === "paused") ? refresh : undefined}
           actions={
             visible && session ? (
               <PrivateContentBoundary visible={visible} isAllowed={canRead}>
@@ -344,6 +352,7 @@ function SessionWorkspace({
                 blocked={blocked}
                 busy={command.isPending}
                 onCommand={dispatch}
+                outsidePressRef={dismissComposerSuggestions}
                 onOpenSettings={() => setSettings(true)}
               />
             }
@@ -360,8 +369,11 @@ function SessionWorkspace({
               <View style={{ flex: 1 }}>
                 <QueryState query={snapshot} />
               </View>
-            ) : (
-              <View style={{ flex: 1 }}>
+            ) : transcriptOpened.current ? (
+              <View style={{ flex: 1 }} onTouchStart={() => dismissComposerSuggestions.current?.()}>
+                {/* A message that fails to render replaces the transcript with Try again, never the
+                    whole session: the composer and its draft stay usable. */}
+                <SectionErrorBoundary scope="session-transcript">
                 <SessionTranscript
                   targetTurnId={targetTurnId}
                   findOpen={findOpen}
@@ -376,8 +388,9 @@ function SessionWorkspace({
                   onReceiptHandled={receiptHandled}
                   onRefresh={refreshNow}
                 />
+                </SectionErrorBoundary>
               </View>
-            )}
+            ) : null}
           </SessionKeyboardFrame>
           </SessionLoopbackBrowser>
           {settings && session && projectId ? (
@@ -388,6 +401,7 @@ function SessionWorkspace({
               disabled={blocked}
               onCommand={dispatch}
               onUpdated={refresh}
+              onOpenModel={() => openModelSheet(scope.machineId, scope.sessionId)}
             />
           ) : null}
         </PrivateContentBoundary>

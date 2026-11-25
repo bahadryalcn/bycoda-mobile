@@ -1,9 +1,8 @@
-import { Laptop } from "@/ui/duotone-icon";
+import Laptop from "lucide-react-native/icons/laptop";
 import { useMobileTheme } from "@/ui/theme";
 import { View } from "react-native";
 import Animated from "react-native-reanimated";
-import { Body, FormActions, Heading, Row } from "@/ui/primitives";
-import { IconTile } from "@/ui/icon-tile";
+import { Body, FormActions, Heading, Row, RowIcon } from "@/ui/primitives";
 import { enterItem } from "@/ui/motion";
 import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
@@ -16,16 +15,14 @@ export function PairingPreview({ code, operation, disabled, busy, onConnect, onC
   code: MobilePairingCode; operation: ConnectionOperation; disabled: boolean; busy: boolean;
   onConnect: () => Promise<unknown>; onCancel: () => void;
 }) {
-  const { colors } = useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   return (
       <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
         <View style={{ gap: space.sm }}>
-          <Row style={{ flexWrap: "nowrap", alignItems: "flex-start" }}>
-          <IconTile color={colors.muted}>
-            <Laptop size={20} strokeWidth={2} color={colors.muted} />
-          </IconTile>
-          <Heading style={{ flex: 1, textAlign: "left" }}>{code.name}</Heading>
+          <Row style={{ flexWrap: "nowrap", alignItems: "center" }}>
+            <View accessible={false} style={uiStyles.rowLeading}><RowIcon glyph={Laptop} /></View>
+            <Heading style={{ flex: 1, textAlign: "left" }}>{code.name}</Heading>
           </Row>
           <Body muted style={{ textAlign: "left" }}>
             {code.endpoint}

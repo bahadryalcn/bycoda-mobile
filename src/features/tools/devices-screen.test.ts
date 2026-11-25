@@ -18,7 +18,7 @@ vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }))
 
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/tokens", () => ({ colors: {} }));
+vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, colors: {} }));
 vi.mock("@/ui/typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("@/state/connection-scope", () => ({ useConnectionScope: () => ({ isCurrent: () => true }) }));
 vi.mock("@/ui/private-content", () => ({
@@ -58,14 +58,14 @@ vi.mock("./device-runtime", () => ({ DeviceRuntime: ({ onClose }: any) => create
 vi.mock("@/ui/primitives", async () => {
   const { QueryState } = await import("@/ui/query-state");
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { QueryState, Sheet: Group, Body: Group, Disclosure: ({ label, children }: any) => createElement("details", null, createElement("summary", null, label), children), StatusText: () => null,
+  return { RowIcon: () => null, QueryState, Sheet: Group, Body: Group, Disclosure: ({ label, children }: any) => createElement("details", null, createElement("summary", null, label), children), StatusText: () => null,
     Row: Group, Badge: ({ label }: any) => createElement("span", null, label),
     IconButton: ({label,onPress,disabled}:any) => createElement("button",{onClick:onPress,disabled},label),
     ActionMenu: ({actions}:any) => createElement("div",null,actions.map((action:any)=>createElement("button",{key:action.key,onClick:action.onPress},action.label))),
     NavigationRow: ({ label, onPress }: any) => createElement("button", { onClick: onPress }, label),
     SearchField: ({ label, value, onChangeText }: any) => createElement("input", { "aria-label": label, value, onChange: (e: any) => onChangeText(e.target.value) }),
-    ScreenList: ({ header, data, renderItem, refresh, refreshState, actions }: any) => { fixture.refresh = refresh ?? refreshState?.onRefresh; return createElement("main", null,
-      fixture.hideHeader ? null : createElement("header", null, actions, header), createElement("section", null, data.map((item: any) => createElement("div", { key: item.id }, renderItem({ item }))))); },
+    ScreenList: ({ header, data, renderItem, refresh, refreshState, actions, ListEmptyComponent }: any) => { fixture.refresh = refresh ?? refreshState?.onRefresh; return createElement("main", null,
+      fixture.hideHeader ? null : createElement("header", null, actions, header), createElement("section", null, data.length ? null : ListEmptyComponent, data.map((item: any) => createElement("div", { key: item.id }, renderItem({ item }))))); },
   };
 });
 import { DevicesScreen } from "./devices-screen";

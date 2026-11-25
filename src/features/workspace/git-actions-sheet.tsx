@@ -74,7 +74,7 @@ export function GitActionsSheet({
     >
       <Stack>
         <Body selectable style={{ fontWeight: "600" }}>{index.branch || "Git"}</Body>
-        <Body muted>{gitFileCount(index.files.length, copy, numbers)}{additions}{deletions}</Body>
+        {index.files.length > 0 ? <Body muted>{gitFileCount(index.files.length, copy, numbers)}{additions}{deletions}</Body> : null}
       </Stack>
       {groups.map((group) => (
         <NavigationGroup key={group[0]}>

@@ -2,6 +2,7 @@
 import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+vi.mock("./pull-request-icon", () => ({ PullRequestIcon: () => null }));
 vi.mock("@/ui/duotone-icon", () => Object.fromEntries(
   ["FolderOpen", "GitBranch", "MessagesSquare", "CheckSquare", "Target", "Users", "Clock", "NotebookPen", "Bot", "Megaphone", "Activity", "Layers", "Plug", "KeyRound", "Inbox", "Laptop", "ShieldCheck", "Server", "ScrollText", "Smartphone", "Globe", "Terminal", "ChartColumn"].map((name) => [name, () => null]),
 ));
@@ -11,7 +12,7 @@ vi.mock("@/state/connection-scope", () => { const epochs = new Map<number, any>(
 } }; });
 vi.mock("expo-router", () => ({ router: { navigate: fixture.push } }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
-vi.mock("@/ui/tokens", () => ({ colors: {} }));
+vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, colors: {} }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (tr: string, en: string) => fixture.locale === "tr" ? tr : en }));
 vi.mock("@/i18n", () => ({ useLocale: () => fixture.locale }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "machine", environmentId: "host", capabilities: fixture.capabilities }), useMachines: { getState: () => ({ activeId: fixture.activeId, selectProject: fixture.selectProject }) } }));
@@ -24,15 +25,13 @@ vi.mock("../workspace/project-picker", async () => {
   } };
 });
 vi.mock("@/ui/primitives", () => ({
+  RowIcon: () => null,
   NavigationGroup: ({ children }: PropsWithChildren) => createElement("div", null, children),
   Section: ({ children, title }: PropsWithChildren<{ title: string }>) => createElement("section", null, createElement("h2", null, title), children),
   NavigationRow: ({ label, detail, onPress }: any) => createElement("div", null, createElement("button", { onClick: onPress }, label), detail),
   Empty: ({ title, action }: any) => createElement("div", null, title, action ? createElement("button", { onClick: action.onPress }, action.label) : null),
 }));
 import { ToolDirectory } from "./tool-directory";
-it("opens the paired assistant without requiring or inventing a project",async()=>{
- await render("Assistant");await click("Assistant");expect(fixture.push).toHaveBeenCalledWith("/assistant");
-});
 let root: ReturnType<typeof createRoot>, container: HTMLDivElement;
 async function render(query = "", projectId: string | null = null, extra: Partial<Parameters<typeof ToolDirectory>[0]> = {}) {
   await act(async () => root.render(createElement(ToolDirectory, { query, projectId, onClearSearch: fixture.clear, ...extra })));
@@ -41,13 +40,13 @@ async function click(label: string) { await act(async () => [...container.queryS
 beforeEach(() => { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); fixture.activeId = "machine"; fixture.epoch = 0; fixture.locale = "en"; container = document.createElement("div"); document.body.append(container); root = createRoot(container); });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 it("offers clear recovery without empty headings and preserves an already-open picker/search through filtering", async () => {
-  await render(); await click("Files");
+  await render(); await click("Terminals");
   const field = container.querySelector("input")!;
   await act(async () => { Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(field, "keep picker search"); field.dispatchEvent(new Event("input", { bubbles: true })); });
   await render("no matching tool 123"); expect(container.querySelectorAll("h2")).toHaveLength(0);
   expect(container.querySelector<HTMLInputElement>("input")!.value).toBe("keep picker search");
   await click("Clear search"); expect(fixture.clear).toHaveBeenCalledOnce();
-  await click("Choose project"); expect(fixture.push).toHaveBeenCalledWith({ pathname: "/project/[id]", params: { id: "project", machineId: "machine", view: "files" } });
+  await click("Choose project"); expect(fixture.push).toHaveBeenCalledWith({ pathname: "/tools/[tool]", params: { tool: "terminals", projectId: "project", machineId: "machine" } });
 });
 it("continues a project-local view without switching global project state or pushing a route", async () => {
   const onProjectView = vi.fn(); await render("", "project", { onProjectView }); await click("Files");
@@ -64,8 +63,8 @@ it("rejects deferred navigation from a retired connection with the same computer
   fixture.epoch++; navigate!(); expect(fixture.push).not.toHaveBeenCalled(); expect(fixture.selectProject).not.toHaveBeenCalled();
 });
 it("does not reopen a pending project picker across connection replacement", async () => {
-  await render(); await click("Files"); expect(container.querySelector("aside")).not.toBeNull(); fixture.epoch++; await render();
-  expect(container.querySelector("aside")).toBeNull(); await click("Files"); expect(container.querySelector("aside")).not.toBeNull();
+  await render(); await click("Terminals"); expect(container.querySelector("aside")).not.toBeNull(); fixture.epoch++; await render();
+  expect(container.querySelector("aside")).toBeNull(); await click("Terminals"); expect(container.querySelector("aside")).not.toBeNull();
 });
 
 it("matches Turkish tool and group labels using selected app language", async () => {
@@ -73,7 +72,7 @@ it("matches Turkish tool and group labels using selected app language", async ()
   vi.spyOn(String.prototype, "toLocaleLowerCase").mockImplementation(function (this: string, locale) { return lower.call(this, locale ?? "en"); });
   fixture.locale = "tr"; await render("BİLGİSAYAR ERİŞİMİ");
   expect(container.textContent).toContain("Bilgisayar erişimi");
-  await render("işler"); expect(container.textContent).toContain("Asistan");
+  await render("işler"); expect(container.textContent).toContain("Görevler");
   expect(fixture.push).not.toHaveBeenCalled();
 });
 
@@ -94,9 +93,40 @@ it("lists no Social tool and no tool the dock or Settings already owns", async (
   expect(container.textContent).toContain("Sessions");
 });
 
-it("opens Jira boards in the inbox, which owns their project scope", async () => {
-  await render(); await click("Jira");
-  expect(fixture.push).toHaveBeenCalledWith({ pathname: "/(tabs)/inbox", params: { view: "jira" } });
+it("keeps every root row inside the tab: no Assistant or Jira, Files and Changes only in a project's sheet", async () => {
+  await render();
+  for (const label of ["Assistant", "Jira", "Files", "Changes"])
+    expect([...container.querySelectorAll("button")].some((button) => button.textContent === label)).toBe(false);
+  expect([...container.querySelectorAll("h2")].map((heading) => heading.textContent)).toEqual(["Work", "Project", "Computer"]);
+  await render("", "project", { onProjectView: vi.fn() });
+  for (const label of ["Files", "Changes"]) expect(container.textContent).toContain(label);
+});
+
+it.each([null, "project"])("opens pull requests from the Tools tab with project scope %s", async (projectId) => {
+  await render("", projectId); await click("Pull requests");
+  expect(container.querySelector("aside")).toBeNull();
+  expect(fixture.push).toHaveBeenCalledWith({ pathname: "/pull-requests", params: { machineId: "machine", ...(projectId ? { projectId } : {}) } });
+});
+
+it("opens computer usage without a project and says which tools will ask for one", async () => {
+  fixture.capabilities = undefined;
+  await render();
+  const detail = (label: string) => [...container.querySelectorAll("button")].find((button) => button.textContent === label)!.parentElement!.textContent;
+  expect(detail("Terminals")).toContain("Choose a project");
+  expect(detail("Usage and limits")).not.toContain("Choose a project");
+  await click("Usage and limits");
+  expect(container.querySelector("aside")).toBeNull();
+  expect(fixture.push).toHaveBeenCalledWith({ pathname: "/tools/[tool]", params: { tool: "usage", projectId: "", machineId: "machine" } });
+  await render("", "project");
+  expect(detail("Terminals")).not.toContain("Choose a project");
+});
+
+it("treats usage as supported when the computer serves limits but not session usage", async () => {
+  fixture.capabilities = ["usage.limits.read"];
+  await render();
+  const detail = [...container.querySelectorAll("button")].find((button) => button.textContent === "Usage and limits")!.parentElement!.textContent;
+  expect(detail).not.toContain("Update needed");
+  fixture.capabilities = undefined;
 });
 
 it.each([null, "project"])("opens management with the explicit Tools project filter %s", async (projectId) => {

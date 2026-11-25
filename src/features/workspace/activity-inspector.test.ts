@@ -17,9 +17,10 @@ vi.mock("@/ui/primitives", () => ({
   Sheet: ({ title, headerAction, children, scroll }: { title: string; headerAction?: ReactNode; children: ReactNode; scroll: boolean }) =>
     h("section", { "aria-label": title, "data-scroll": scroll }, headerAction, children),
   StateView: ({ title }: { title: string }) => h("p", null, title),
+  NavigationRow: ({ label }: { label: string }) => h("button", null, label),
+  RowIcon: () => null,
 }));
 vi.mock("@/ui/chat-controls", () => ({
-  ChatSummary: ({ label }: { label: string }) => h("button", null, label),
   ChatToolbarAction: ({ label }: { label: string }) => h("button", null, label),
 }));
 vi.mock("./transcript-block", () => ({ TranscriptBlock: ({ block }: { block: Block }) => h("article", null, block.text) }));
@@ -46,4 +47,13 @@ it("explains the empty activity list and omits internal records from both views"
   expect(render(blocks)).not.toContain("Internal output");
   expect(render(blocks, "selected")).toContain("Action unavailable");
   expect(render(blocks, "selected")).not.toContain("Internal output");
+});
+
+it("shows distinct operations before the common directory and preserves the full detail", () => {
+  const blocks = [action("selected", 'cd "/a directory" && git status'), action("other", 'cd "/a directory" && git log')];
+  const list = render(blocks);
+  expect(list).toContain(">git status<");
+  expect(list).toContain(">git log<");
+  expect(render(blocks, "selected")).toContain("cd &quot;/a directory&quot; &amp;&amp; git status");
+  expect(render([action("selected", 'cd "a && b"')])).toContain("cd &quot;a &amp;&amp; b&quot;");
 });

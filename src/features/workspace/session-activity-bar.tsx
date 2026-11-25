@@ -8,7 +8,7 @@ import { Body } from "@/ui/typography";
 import { PressableCard } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
-import { fontSize, hitSlopFor, lineHeight, radii, space } from "@/ui/tokens";
+import { fontSize, lineHeight, metrics, radii, space } from "@/ui/tokens";
 import { activityStateLabel, agentCountText, type SessionActivity } from "./session-activity-model";
 import { formatElapsed } from "./run-status-model";
 import { useElapsedNow } from "./use-elapsed-now";
@@ -25,8 +25,7 @@ type Props = {
 };
 
 const TIMED = new Set(["working", "waiting", "needs-input"]);
-/** A quiet text line; each segment's hit area still reaches the 48dp target. */
-const BAR_HEIGHT = 32;
+const BAR_HEIGHT = metrics.touchTarget;
 
 /**
  * One borderless line above the composer: what the session is doing, then quiet segments for the
@@ -43,6 +42,8 @@ export function SessionActivityBar({ activity, device, browser, onAgents, onDevi
   const label = activityStateLabel(activity, copy);
   const busy = activity.state === "working" || activity.state === "waiting" || activity.state === "background";
   const dot = activity.state === "needs-input" ? colors.warning : activity.state === "done" ? colors.success : colors.tertiary;
+  const agentLabel = activity.counts.total === 1 ? copy("1 ajan", "1 agent")
+    : copy("{p0} ajan", "{p0} agents", { p0: activity.counts.total });
   return (
     <View style={{ flexDirection: "row", alignItems: "center", minHeight: BAR_HEIGHT, flexGrow: 1, flexShrink: 1, flexBasis: 240, minWidth: 0,
       paddingHorizontal: space.xs, gap: space.sm }}>
@@ -67,7 +68,10 @@ export function SessionActivityBar({ activity, device, browser, onAgents, onDevi
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}
         contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end", alignItems: "center", gap: space.xs }}>
         {hasAgents ? (
-          <Segment Icon={Users} text={agentCountText(activity.counts, copy)} a11y={`${agentCountText(activity.counts, copy, true)}. ${copy("Ajanları aç", "Open agents")}`} onPress={onAgents} />
+          <Segment Icon={Users} text={activity.counts.failed
+            ? `${agentLabel} · ${copy("{p0} başarısız", "{p0} failed", { p0: activity.counts.failed })}`
+            : agentLabel}
+            a11y={`${agentLabel}. ${agentCountText(activity.counts, copy, true)}. ${copy("Ajanları aç", "Open agents")}`} onPress={onAgents} />
         ) : null}
         {device ? (
           <Segment Icon={Smartphone} text={device.name || copy("Cihaz", "Device")}
@@ -85,11 +89,11 @@ export function SessionActivityBar({ activity, device, browser, onAgents, onDevi
 function Segment({ Icon, text, a11y, onPress }: { Icon: ComponentType<{ size?: number; color?: string }>; text: string; a11y: string; onPress: () => void }) {
   const { colors } = useMobileTheme();
   return (
-    <PressableCard label={a11y} onPress={onPress} hitSlop={hitSlopFor(BAR_HEIGHT)}
+    <PressableCard label={a11y} onPress={onPress}
       style={{ minHeight: BAR_HEIGHT, flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: 0, paddingHorizontal: space.sm, marginHorizontal: 0,
         borderRadius: radii.pill, flexShrink: 0 }}>
       <Icon size={14} color={colors.muted} />
-      <Body muted numberOfLines={1} style={{ fontSize: fontSize.caption, lineHeight: lineHeight.caption, fontVariant: ["tabular-nums"] }}>{text}</Body>
+      <Body muted numberOfLines={1} style={{ fontSize: fontSize.small, lineHeight: lineHeight.small, fontVariant: ["tabular-nums"] }}>{text}</Body>
     </PressableCard>
   );
 }

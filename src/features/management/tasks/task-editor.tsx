@@ -8,10 +8,11 @@ import {
   ErrorNotice,
   NavigationGroup,
   Stack,
+  SectionHeader,
   SelectField,
   ToggleField,
 } from "@/ui/primitives";
-import { MinuteLimitField } from "@/ui/limit-presets";
+import { IntegerTextStepper } from "@/ui/limit-presets";
 import { haptic } from "@/ui/motion";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { useCopy } from "@/ui/copy";
@@ -53,6 +54,19 @@ export function TaskEditor({ initial, save, busy, onClose }: TaskEditorProps) {
   const set = (patch: Partial<TaskDraft>) => {
     if (!busy) form.patch(patch);
   };
+  const blockedReason =
+    !projects.directoryReady || !draft.projectId || !projects.isProjectVisible(draft.projectId)
+      ? copy("Bir proje seçin.", "Choose a project.")
+      : !draft.title.trim()
+        ? copy("Bir başlık girin.", "Enter a title.")
+        : !normalized.model.trim()
+          ? copy("Bir model seçin.", "Choose a model.")
+          : !agentValid || (!draft.inheritMaxRunMinutes && !minutesValid)
+            ? copy(
+                "Gelişmiş bölümündeki süre sınırını kontrol edin.",
+                "Check the run limit in Advanced.",
+              )
+            : undefined;
   return (
     <Stack>
       {initial.updatedAt === undefined ? (
@@ -83,18 +97,28 @@ export function TaskEditor({ initial, save, busy, onClose }: TaskEditorProps) {
         multiline
       />
       <AgentFields
-        onValidityChange={setAgentValid}
         disabled={busy}
         value={draft}
         projectId={draft.projectId}
-        showRunLimit={false}
         onChange={(agent) =>
           set({ ...agent, modelSettings: { ...agent.modelSettings, ...draft.modelSettings } })
         }
       />
-      <Disclosure label={copy("Çalışma seçenekleri", "Execution options")}>
+      <Disclosure label={copy("Gelişmiş", "Advanced")}>
+        <AgentFields
+          part="settings"
+          onValidityChange={setAgentValid}
+          disabled={busy}
+          value={draft}
+          projectId={draft.projectId}
+          showRunLimit={false}
+          onChange={(agent) =>
+            set({ ...agent, modelSettings: { ...agent.modelSettings, ...draft.modelSettings } })
+          }
+        />
         {machine?.capabilities?.includes("tasks.workspaces") && (
           <>
+            <SectionHeader title={copy("Çalışma alanı", "Workspace")} />
             <Field
               label={copy("Çalışma klasörü (isteğe bağlı)", "Working folder (optional)")}
               value={draft.workspace?.checkoutCwd ?? ""}
@@ -122,10 +146,15 @@ export function TaskEditor({ initial, save, busy, onClose }: TaskEditorProps) {
             />
           </>
         )}
+        <SectionHeader title={copy("Çalıştırma", "Running")} />
         <NavigationGroup>
           <ToggleField
             disabled={busy}
             label={copy("Alt ajanlar", "Subagents")}
+            detail={copy(
+              "Ek ajanlar görevin parçalarını yürütebilir.",
+              "Agents can delegate parts of this task.",
+            )}
             value={draft.modelSettings.crossSubagents !== "[]"}
             onChange={(enabled) =>
               set({
@@ -135,40 +164,58 @@ export function TaskEditor({ initial, save, busy, onClose }: TaskEditorProps) {
           />
           <ToggleField
             disabled={busy}
-            label={copy("Work süre sınırını kullan", "Use Work run limit")}
+            label={copy("Varsayılan süre sınırını kullan", "Use Work run limit")}
+            detail={copy(
+              "Bilgisayardaki varsayılan görev süresi kullanılır.",
+              "Use the default task duration on the computer.",
+            )}
             value={draft.inheritMaxRunMinutes === true}
             onChange={(inherit) => set({ inheritMaxRunMinutes: inherit ? true : undefined })}
           />
           <ToggleField
             disabled={busy}
             label={copy("Ayrı çalışma dalı", "Isolated branch")}
+            detail={copy(
+              "Değişiklikler ayrı bir Git dalında kalır.",
+              "Keep changes on a separate Git branch.",
+            )}
             value={draft.isolate !== false}
             onChange={(isolate) => set({ isolate, autoMerge: false })}
           />
           <ToggleField
             disabled={busy}
             label={copy("Ajan incelemesi", "Agent review")}
+            detail={copy(
+              "Sonucu tamamlamadan önce bir ajan inceler.",
+              "An agent reviews the result before completion.",
+            )}
             value={draft.review !== false}
             onChange={(review) => set({ review })}
           />
           <ToggleField
             disabled={busy}
             label={copy("Tamamlayana kadar devam et", "Continue until done")}
+            detail={copy(
+              "Görev bitene kadar çalışmayı sürdürür.",
+              "Continue working until the task is complete.",
+            )}
             value={!!draft.continueUntilDone}
             onChange={(continueUntilDone) => set({ continueUntilDone })}
           />
         </NavigationGroup>
         {!draft.inheritMaxRunMinutes && (
-          <MinuteLimitField
+          <IntegerTextStepper
             disabled={busy}
-            label={copy("Çalışma sınırı", "Run limit")}
+            label={copy("Süre sınırı (dakika)", "Run limit (minutes)")}
+            min={0}
+            max={10080}
             value={minutes}
             error={
               !minutesValid
                 ? copy("0 ile 10080 arasında dakika girin.", "Enter minutes from 0 to 10080.")
                 : undefined
             }
-            onChange={(text) => {
+            onChangeText={(text) => {
               setMinutes(text);
               if (validAgentRunMinutes(text)) set({ maxRunMinutes: Number(text) });
             }}
@@ -194,20 +241,11 @@ export function TaskEditor({ initial, save, busy, onClose }: TaskEditorProps) {
           <>
             <MutationState mutation={save} />
             <ErrorNotice error={reconcileError} />
+            {!busy && !reconciling && blockedReason ? <Body muted>{blockedReason}</Body> : null}
           </>
         }
         submitLabel={copy("Kaydet", "Save")}
-        disabled={
-          !draft.projectId ||
-          !projects.directoryReady ||
-          !projects.isProjectVisible(draft.projectId) ||
-          !agentValid ||
-          (!draft.inheritMaxRunMinutes && !minutesValid) ||
-          busy ||
-          reconciling ||
-          !draft.title.trim() ||
-          !normalized.model.trim()
-        }
+        disabled={!!blockedReason || busy || reconciling}
         busy={save.isPending || reconciling}
         onSubmit={async () => {
           if (!expectedConfiguration && attempted.current) {

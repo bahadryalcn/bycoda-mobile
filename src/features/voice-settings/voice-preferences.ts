@@ -16,12 +16,19 @@ export type SupertonicSpeaker = (typeof SUPERTONIC_SPEAKERS)[number];
  * Phone-local voice preferences; the Host decides whether each engine is actually available.
  * `engine` is where the owner's speech is recognized; `speech` and `speaker` are how the assistant sounds.
  */
+/** Desktop "Wait before replying": seconds of silence that end the owner's turn. */
+export const TURN_PAUSES = [1.2, 2.5, 4] as const;
+export type TurnPause = (typeof TURN_PAUSES)[number];
 export type VoicePreferences = { engine: TranscriptionEngine; micOrder: MicKind[]; speech: SpeechEngine; speaker: SupertonicSpeaker;
+  /** Silence that ends a call turn; the desktop default is a natural 1.2 s pause. */
+  turnPause: TurnPause;
+  /** Desktop "I decide when my turn ends": silence keeps listening and only Send now commits the turn. */
+  manualTurnEnd: boolean;
   whisperModel?: "small" | "turbo"; cloudModel?: string; openaiModel?: string; elevenVoice?: string };
 export function selectedCloudModel(preferences: VoicePreferences) {
   return preferences.engine === "openai" ? preferences.openaiModel : preferences.engine === "cloud" ? preferences.cloudModel : undefined;
 }
-export const defaultVoicePreferences: VoicePreferences = { engine: "local", micOrder: ["wired", "bluetooth", "builtin", "carplay"], speech: "supertonic", speaker: "M1" };
+export const defaultVoicePreferences: VoicePreferences = { engine: "local", micOrder: ["wired", "bluetooth", "builtin", "carplay"], speech: "supertonic", speaker: "M1", turnPause: 1.2, manualTurnEnd: false };
 
 /**
  * The speech configuration a call sends to the Host. Built like the desktop's: defaults are omitted, so the
@@ -52,6 +59,8 @@ export function normalizeVoicePreferences(value: unknown): VoicePreferences {
     micOrder: normalizeMicOrder(data.micOrder),
     speech: (SPEECH_ENGINES as readonly unknown[]).includes(data.speech) ? (data.speech as SpeechEngine) : "supertonic",
     speaker: (SUPERTONIC_SPEAKERS as readonly unknown[]).includes(data.speaker) ? (data.speaker as SupertonicSpeaker) : "M1",
+    turnPause: (TURN_PAUSES as readonly unknown[]).includes(data.turnPause) ? (data.turnPause as TurnPause) : 1.2,
+    manualTurnEnd: data.manualTurnEnd === true,
     ...(data.whisperModel === "small" || data.whisperModel === "turbo" ? { whisperModel: data.whisperModel } : {}),
     ...(typeof data.cloudModel === "string" && /^[\w./:-]{1,200}$/.test(data.cloudModel) ? { cloudModel: data.cloudModel } : {}),
     ...(typeof data.openaiModel === "string" && /^[\w-]{1,200}$/.test(data.openaiModel) ? { openaiModel: data.openaiModel } : {}),

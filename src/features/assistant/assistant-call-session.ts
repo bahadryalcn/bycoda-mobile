@@ -13,7 +13,7 @@ import { nativeVoiceDependencies } from "./assistant-voice-native";
 import { selectedCloudModel, speechConfig, voicePreferences } from "../voice-settings/voice-preferences";
 import { AssistantMobileClient } from "./assistant-client";
 import { AssistantCallLoop } from "./assistant-call-loop";
-import { AssistantCallError, companionEndFailure } from "./assistant-call-error";
+import { AssistantCallError, assistantCallLinkDropped, assistantCallSleeps, companionEndFailure } from "./assistant-call-error";
 import { assistantSendKey, readStoredSend, sendRoomMessage, isAssistantSendPending } from "./assistant-send";
 import { assistantMessageVisible } from "./assistant-history";
 import { useAssistantCall } from "./assistant-call-state";
@@ -24,13 +24,41 @@ type ActiveCall = { id: string; native: NativeVoiceCompanion; loop: AssistantCal
 let active: ActiveCall | undefined;
 let cancelStartingCall: (() => void) | undefined;
 let generation = 0;
+/** Desktop reconnects a dropped voice line on its own; the phone retries for about two and a half minutes. */
+export const ASSISTANT_RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000, 30000] as const;
+let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+type CallResume = { attempt: number; muted: boolean; speakerMuted: boolean; original: unknown };
+function cancelReconnect() {
+  clearTimeout(reconnectTimer); reconnectTimer = undefined;
+}
+/**
+ * Reopens a call whose voice line dropped while nothing could have changed the computer. Mute and
+ * speaker choices carry over; End, a changed computer or running out of attempts stops trying.
+ */
+function scheduleReconnect(target: AssistantVoiceTarget, allowed: () => boolean, resume: CallResume): boolean {
+  const delay = ASSISTANT_RECONNECT_DELAYS_MS[resume.attempt - 1];
+  if (delay === undefined) return false;
+  cancelReconnect();
+  useAssistantCall.setState({ reconnecting: resume.attempt, error: undefined, asleep: undefined });
+  const timer = reconnectTimer = setTimeout(() => {
+    if (reconnectTimer !== timer) return;
+    reconnectTimer = undefined;
+    if (useAssistantCall.getState().reconnecting !== resume.attempt) return;
+    // The screen or connection that allowed the call is gone: report the original drop instead of a new reason.
+    if (!allowed()) { useAssistantCall.setState({ reconnecting: undefined, error: resume.original }); return; }
+    void startAssistantCall(target, allowed, resume);
+  }, delay);
+  return true;
+}
 
 export function assistantCallInBackground() {
   const state = useAssistantCall.getState();
   return !!active && state.phase !== "idle" && active.native.getState().sessionId === active.id && active.native.getState().active;
 }
-export function endAssistantCall() {
+/** `keepReconnect` is for the call's own teardown after a dropped line; every owner End stops reconnecting. */
+export function endAssistantCall(options?: { keepReconnect?: boolean }) {
   generation++;
+  if (!options?.keepReconnect) { cancelReconnect(); useAssistantCall.setState({ reconnecting: undefined }); }
   const cancelStarting = cancelStartingCall; cancelStartingCall = undefined;
   const call = active; active = undefined;
   useAssistantCall.setState({ phase: "idle", muted: false, speakerMuted: false, level: 0, sessionId: undefined, lastReply: undefined, utterance: undefined, target: undefined, thread: undefined, capture: undefined });
@@ -63,8 +91,9 @@ export async function pictureInPictureAssistant() {
 }
 
 /** Explicit Call grants only a native, fixed-thread voice socket, never background UI access. */
-export async function startAssistantCall(target: AssistantVoiceTarget, allowed: () => boolean) {
+export async function startAssistantCall(target: AssistantVoiceTarget, allowed: () => boolean, resume?: CallResume) {
   if (active || useAssistantCall.getState().phase === "starting") return;
+  if (!resume) cancelReconnect();
   target = { ...target };
   const version = ++generation;
   const machines = useMachines.getState(), machine = machines.machines.find(row => row.id === target.machineId);
@@ -72,7 +101,7 @@ export async function startAssistantCall(target: AssistantVoiceTarget, allowed: 
   const selectedThread = useAssistantCompanion.getState().thread;
   const projectId = selectedThread?.id === target.threadId ? selectedThread.projectId : undefined;
   const key = assistantSendKey(target.machineId, target.environmentId, target.threadId);
-  useAssistantCall.setState({ phase: "starting", target: { ...target }, error: undefined, lastReply: undefined, stage: "connect" });
+  useAssistantCall.setState({ phase: "starting", target: { ...target }, error: undefined, asleep: undefined, reconnecting: resume?.attempt, lastReply: undefined, stage: "connect" });
   const stage = (value: AssistantVoiceStage) => { if (version === generation && !retired) useAssistantCall.setState({ stage: value }); };
   let native: NativeVoiceCompanion | null = null, id: string | undefined;
   let retired = false;
@@ -187,7 +216,10 @@ export async function startAssistantCall(target: AssistantVoiceTarget, allowed: 
         if (!valid()) { reject(new AssistantCallError("stopped")); return; }
         // Silence returns to listening, so a later "no speech" stop belongs to the microphone, not transcription.
         pending = { resolve: text => { if (!text.trim()) stage("microphone"); resolve(text); }, reject }; audioError = undefined;
-        void engine.record({ current: () => current() && valid(), request: port.request.bind(port) } as VoicePort, target, { endOnSilence: true, natural: true }).catch(reject);
+        void engine.record({ current: () => current() && valid(), request: port.request.bind(port) } as VoicePort, target, {
+          endOnSilence: true, natural: true,
+          turn: { endSilence: turnPreferences.turnPause, manualTurnEnd: turnPreferences.manualTurnEnd },
+        }).catch(reject);
         });
       },
       send: async text => {
@@ -217,10 +249,15 @@ export async function startAssistantCall(target: AssistantVoiceTarget, allowed: 
         if (retired || version !== generation) return;
         useAssistantCall.setState({ phase, level: 0 });
         // Loop reports its error immediately after idle; preserve that feedback before teardown.
-        if (phase === "idle") queueMicrotask(() => { if (active?.loop === loop) endAssistantCall(); });
+        if (phase === "idle") queueMicrotask(() => { if (active?.loop === loop) endAssistantCall({ keepReconnect: true }); });
       },
       error: error => {
         if (retired || version !== generation) return;
+        // Three minutes without speech: the desktop sleeps ("Ready. Microphone is off.") instead of failing.
+        if (assistantCallSleeps(error)) { useAssistantCall.setState({ asleep: true, error: undefined }); return; }
+        const { muted, speakerMuted, stage: failedAt } = useAssistantCall.getState();
+        if (!needsRecovery && assistantCallLinkDropped(error, failedAt) &&
+          scheduleReconnect(target, allowed, { attempt: (resume?.attempt ?? 0) + 1, muted, speakerMuted, original: error })) return;
         useAssistantCall.setState({ error });
         if (needsRecovery && lastUtterance) void readStoredSend(AsyncStorage, key).then(record => {
           if (!record) return retainAssistantSpeech(target, lastUtterance);
@@ -235,7 +272,8 @@ export async function startAssistantCall(target: AssistantVoiceTarget, allowed: 
       if (retired || version !== generation || active?.id !== id || event.sessionId !== id) return;
       // The service ended the whole session (not one capture): say why, under the step it stopped at.
       const ended = event.type === "ended" && !event.captureId ? companionEndFailure(event.reason) : undefined;
-      if (ended) useAssistantCall.setState({ error: new AssistantCallError(ended, event.error ? new Error(event.error) : undefined) });
+      if (ended) useAssistantCall.setState(ended === "idle-timeout" ? { asleep: true }
+        : { error: new AssistantCallError(ended, event.error ? new Error(event.error) : undefined) });
       if (!native!.getState().active) { endAssistantCall(); return; }
       if (event.state && event.state.muted !== useAssistantCall.getState().muted) muteAssistantCall(event.state.muted);
     });
@@ -245,9 +283,26 @@ export async function startAssistantCall(target: AssistantVoiceTarget, allowed: 
     active = { id, native, loop, engine, release };
     useAssistantCall.setState({ sessionId: id, thread: { ...selectedThread } });
     if (!loop.start(target)) throw new AssistantCallError("not-started");
+    if (resume) {
+      useAssistantCall.setState({ reconnecting: undefined });
+      if (resume.muted) muteAssistantCall(true);
+      if (resume.speakerMuted) setAssistantCallSpeakerMuted(true);
+      // A later drop of this reopened call starts its attempts afresh.
+      resume = undefined;
+    }
   } catch (error) {
     release(); if (id) native?.endSession(id);
-    if (version === generation) { active = undefined; useAssistantCall.setState({ phase: "idle", sessionId: undefined, error }); }
+    if (version === generation) {
+      active = undefined;
+      useAssistantCall.setState({ phase: "idle", sessionId: undefined });
+      // A reopening call keeps trying while the computer is still unreachable; any other failure is reported.
+      if (resume && assistantCallLinkDropped(error, "connect") &&
+        scheduleReconnect(target, allowed, { ...resume, attempt: resume.attempt + 1 })) return;
+      // A reopening that ran out of attempts, or could not run in the background, reports the original drop.
+      const generic = assistantCallLinkDropped(error, "connect") ||
+        (error instanceof AssistantCallError && (error.reason === "unlock" || error.reason === "connection-changed"));
+      useAssistantCall.setState({ reconnecting: undefined, error: resume && generic ? resume.original : error });
+    }
   } finally {
     if (cancelStartingCall === cancelStarting) cancelStartingCall = undefined;
   }

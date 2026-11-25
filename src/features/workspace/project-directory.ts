@@ -28,17 +28,54 @@ export function projectPathLabel(path: string, full = false) {
 /** Section key of the pinned projects; group ids never start with a colon. */
 export const PINNED_SECTION_KEY = ":pinned";
 
-/** Desktop rail parity: pinned projects stay on top; running sessions never reorder projects. */
+/** The three sort choices the person picks on the phone; stored per computer. */
+export type ProjectSort = "desktop" | "recent" | "name";
+export const PROJECT_SORTS: readonly ProjectSort[] = ["desktop", "recent", "name"];
+
+/** Any other value (such as the retired "custom" drag order) falls back to the computer's order. */
+export function projectSortOf(sort: string | undefined): ProjectSort {
+  return sort === "recent" || sort === "name" ? sort : "desktop";
+}
+
+/**
+ * Desktop rail parity: pinned projects stay on top in every sort. "desktop" keeps the computer's
+ * order, "recent" puts the latest session activity (or the latest opening on this phone) first,
+ * "name" is A–Z. Ties keep the computer's order, then the name.
+ */
 export function sortDirectoryProjects<T extends { id: string; name: string; pinned?: boolean }>(
-  projects: readonly T[], preferences: Pick<ProjectDirectoryPreferences, "sort" | "recent">,
+  projects: readonly T[],
+  preferences: Pick<ProjectDirectoryPreferences, "sort" | "recent">,
+  activity: Readonly<Record<string, number | undefined>> = {},
 ): T[] {
-  // Custom order is applied by the caller (applyCustomOrder); keep the computer order here.
-  if (preferences.sort === "custom") return [...projects];
+  const sort = projectSortOf(preferences.sort);
+  const latest = (id: string) => Math.max(activity[id] ?? 0, preferences.recent[id] ?? 0);
+  const byName = (a: T, b: T) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
   return [...projects].sort((a, b) =>
     Number(!!b.pinned) - Number(!!a.pinned) ||
-    (preferences.sort === "desktop" ? 0 :
-    (preferences.sort === "recent" ? (preferences.recent[b.id] ?? 0) - (preferences.recent[a.id] ?? 0) : 0) ||
-    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })));
+    (sort === "desktop" ? 0 : sort === "recent" ? latest(b.id) - latest(a.id) || byName(a, b) : byName(a, b)));
+}
+
+/** Sessions waiting for the owner, per project (archived sessions never count). */
+export function projectAttentionCounts(
+  rows: readonly { project: { id: string }; session: { needsInput?: boolean; archived?: boolean } }[],
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const { project, session } of rows)
+    if (session.needsInput && !session.archived) counts[project.id] = (counts[project.id] ?? 0) + 1;
+  return counts;
+}
+
+/** The project's most recently active session: the context the computer's organization editor needs. */
+export function latestProjectSessions(
+  rows: readonly { project: { id: string }; session: { id: string; archived?: boolean; lastActivityAt?: number; updatedAt?: number } }[],
+): Record<string, string> {
+  const best: Record<string, { id: string; at: number }> = {};
+  for (const { project, session } of rows) {
+    if (session.archived) continue;
+    const at = session.lastActivityAt ?? session.updatedAt ?? 0;
+    if (!best[project.id] || at > best[project.id]!.at) best[project.id] = { id: session.id, at };
+  }
+  return Object.fromEntries(Object.entries(best).map(([id, value]) => [id, value.id]));
 }
 
 export type DirectoryRow =

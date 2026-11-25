@@ -41,6 +41,7 @@ vi.mock("@/ui/primitives", () => {
   return {
     Body: Group, Heading: Group, Card: Group, Row: Group, Screen: Group,
     Badge: ({ label }: { label: string }) => createElement("span", null, label),
+    StatusText: ({ label }: { label: string }) => createElement("span", null, label),
     Button, Empty: () => null, QueryState: () => null,
     Notice: ({ message, action }: { message: string; action?: { label: string; onPress(): void } }) =>
       createElement("div", null, message, action ? createElement(Button, action) : null),
@@ -49,6 +50,7 @@ vi.mock("@/ui/primitives", () => {
   };
 });
 import { ApprovalsScreen } from "./approvals-screen";
+vi.mock("@/ui/no-computer", () => ({ NoComputerState: () => null, NoComputerGate: () => null }));
 
 let root: ReturnType<typeof createRoot>, container: HTMLDivElement;
 const deferred = <T,>() => {

@@ -11,9 +11,9 @@ import { openPublicLink, sharePublicApp } from "./engagement-actions";
 
 it("keeps the About version locale-controlled and uses distinct website and store rows", () => {
   const source = readFileSync(new URL("./engagement-settings.tsx", import.meta.url), "utf8");
-  expect(source).toContain('copy("Sürüm: {p0}", "Version: {p0}",');
-  expect(source.match(/icon=\{tile\(Globe,/g)).toHaveLength(1);
-  expect(source).toMatch(/"App page"\)\}[\s\S]*?icon=\{tile\(Smartphone,/);
+  expect(source).toContain('label={copy("Sürüm", "Version")}');
+  expect(source.match(/icon=\{<SettingIcon glyph=\{Globe\}/g)).toHaveLength(1);
+  expect(source).toMatch(/"App page"\)\}[\s\S]*?icon=\{<SettingIcon glyph=\{Smartphone\}/);
   expect(source).not.toContain('copy("Bağlantılar", "Links")');
 });
 

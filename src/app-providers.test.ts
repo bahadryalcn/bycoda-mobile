@@ -64,6 +64,8 @@ vi.mock("./state/machines", () => ({ useMachines: { getState: () => ({ machines:
 vi.mock("./features/diagnostics/diagnostic-log", () => ({ logDiagnostic: vi.fn() }));
 vi.mock("./features/diagnostics/diagnostic-events", () => ({ transportKind: () => "fixture" }));
 vi.mock("./features/diagnostics/DiagnosticsCoordinator", () => ({ DiagnosticsCoordinator: () => null }));
+vi.mock("./features/diagnostics/DiagnosticSharingNotice", () => ({ DiagnosticSharingNotice: () => null }));
+vi.mock("./features/legal/policy-update-notice", () => ({ PolicyUpdateNotice: () => null }));
 vi.mock("./state/host-runtime", () => ({ installMobileHostRuntime: vi.fn() }));
 vi.mock("./state/route-selection-runtime", () => ({ startRouteSelection: vi.fn() }));
 vi.mock("./features/workspace/project-privacy-cache", () => ({

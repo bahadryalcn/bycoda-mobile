@@ -25,6 +25,7 @@ vi.mock("@/state/host-runtime-state", () => ({
 }));
 vi.mock("@/ui/query-state", () => ({ useReadRetryNotice: (recovering: boolean) => recovering && state.recoveryElapsed }));
 vi.mock("@/ui/machine-bar", () => ({ useMachineStatus: () => ({ phase: state.checking ? "checking" : state.disconnected ? "disconnected" : "connected" }) }));
+vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("react-native-reanimated", () => ({ default: { View: ({ children }: PropsWithChildren) => createElement("div", null, children) } }));
 vi.mock("@/ui/styles", () => ({ uiStyles: { caption: {} } }));
 vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));

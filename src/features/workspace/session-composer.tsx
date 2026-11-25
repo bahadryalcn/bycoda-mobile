@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Keyboard, ScrollView, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import Plus from "lucide-react-native/icons/plus";
 import X from "lucide-react-native/icons/x";
@@ -20,6 +20,7 @@ import {
   encodeComposerDraft,
   sameComposerContent,
   queuedComposerDraft,
+  crewIntentForDraft,
   retainQueuedComposerIntent,
   type QueuedComposerDraft,
 } from "./composer-draft";
@@ -43,12 +44,12 @@ import {
   supportsAttachmentOwnership,
 } from "./attachment-ownership";
 import { ChatCircleAction } from "@/ui/chat-controls";
-import { ComposerModeChip, ComposerModeMenu } from "./composer-mode-controls";
+import { ComposerModeChip } from "./composer-mode-controls";
 import { activeComposerMode, setComposerMode, type ComposerMode } from "./composer-mode";
 import { ChatComposer } from "@/ui/chat-composer";
 import { ComposerModelChip } from "./composer-model-chip";
 import { ComposerActionsProvider } from "@/ui/composer-actions";
-import { composerCollapsed, composerInputLimits, composerNeedsInlineActions, composerPrefixMaximum, composerSuggestionLimits } from "@/ui/chat-composer-model";
+import { composerInputLimits, composerNeedsInlineActions, composerPrefixMaximum, composerSuggestionLimits } from "@/ui/chat-composer-model";
 import { haptic } from "@/ui/motion";
 import {
   composerCommand,
@@ -74,10 +75,9 @@ import { captureSessionAuthority, sessionIntent } from "@/domain/session-authori
 import { ComposerSheets } from "./composer-sheets";
 import { ComposerNotices } from "./composer-notices";
 import { ComposerNoteCard } from "./composer-note-card";
-import { ComposerContextMeter } from "./composer-context-meter";
+import { ComposerContextRing, contextNeedsAttention } from "./composer-context-meter";
 import { composerContextReading } from "./composer-context";
-import { ComposerAccessMenu } from "./composer-access";
-import { composerAccessAvailable } from "./composer-access-model";
+import { openModelSheet } from "./composer-model-sheet";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useKeyCommand } from "../../../modules/bycoda-key-commands";
 import { useCommandPalette } from "@/features/keyboard/keyboard-context";
@@ -88,10 +88,11 @@ import { sendOutbox } from "../outbox/runtime/store";
 import { lockOutbox } from "../outbox/runtime/delivery";
 import { registerOutboxEditor } from "../outbox/runtime/composer-edit";
 import { cleanOutboxFiles } from "../outbox/runtime/custody";
-
-/** A chip tap blurs the field just after the touch; the row must not collapse under its menu. */
-const CAPSULE_TOUCH_MS = 600;
-const touchedRecently = (at: number) => Date.now() - at <= CAPSULE_TOUCH_MS;
+import { SideChatSheet } from "../side-chat/side-chat-sheet";
+import { composerCrewHandles, deliverComposerCrews, resolveComposerCrews } from "./composer-crew-delivery";
+import { MAX_DELEGATIONS } from "../../../../src/features/sessions/model/crewMentions";
+import { composerWorkItemContext } from "./composer-work-item-context";
+import { composerNoteContext } from "./composer-note-context";
 
 export function SessionComposer({
   scope,
@@ -99,30 +100,16 @@ export function SessionComposer({
   blocked,
   busy,
   onCommand,
-}: SessionComposerProps & { onOpenSettings?: () => void }) {
+  outsidePressRef,
+}: SessionComposerProps & { onOpenSettings?: () => void; outsidePressRef?: RefObject<(() => void) | null> }) {
   const { colors } = useMobileTheme();
   useTemplateHydration();
   const copy = useCopy();
   useKeyboardPreferenceHydration();
   const enterSends = useKeyboardPreferences((state) => state.hydrated && !state.error && state.enterSends);
   const routeFocused = useIsFocused();
+  // The toolbar is always visible, so focus only drives hardware key commands, not layout.
   const [inputFocused, setInputFocused] = useState(false);
-  const [toolbarOpen, setToolbarOpen] = useState(false);
-  const fieldFocused = useRef(false);
-  const capsuleTouchedAt = useRef(0);
-  // Android Back hides the keyboard without blurring the field, so the keyboard also drives the row.
-  useEffect(() => {
-    const shown = Keyboard.addListener("keyboardDidShow", () => {
-      if (fieldFocused.current) setToolbarOpen(true);
-    });
-    const hidden = Keyboard.addListener("keyboardDidHide", () => {
-      if (!touchedRecently(capsuleTouchedAt.current)) setToolbarOpen(false);
-    });
-    return () => {
-      shown.remove();
-      hidden.remove();
-    };
-  }, []);
   const palette = useCommandPalette();
   const client = useHostClient();
   const account = useAccount();
@@ -134,6 +121,7 @@ export function SessionComposer({
   const availableHeight = use(SessionKeyboardSpace);
   const [selectedRange, setSelection] = useState<{ start: number; end: number } | null>(null);
   const [picker, setPicker] = useState(false);
+  const [sideOpen, setSideOpen] = useState(false);
   const [draftDetailsOpen, setDraftDetailsOpen] = useState(false);
   const [templatePicker, setTemplatePicker] = useState(false);
   const templateDestination = useRef<{ machineId: string; sessionId: string } | null>(null);
@@ -189,14 +177,27 @@ export function SessionComposer({
     () => (ready && !isStored ? registerWorkspaceDraft(draftKey, () => persist()) : undefined),
     [ready, isStored, draftKey, persist],
   );
+  const openSideQuestion = () => {
+    if (blocked || !client?.machine.capabilities?.includes("sessions.sideQuestion")) return false;
+    Keyboard.dismiss();
+    setSideOpen(true);
+    return true;
+  };
   const suggestions = useComposerSuggestions({
     session,
     prompt,
     selection,
     setSelection,
     setValue,
+    focused: routeFocused && inputFocused && ready && !picker && !templatePicker && !draftDetailsOpen && !sideOpen,
+    onSideQuestion: openSideQuestion,
   });
   const { token } = suggestions;
+  useLayoutEffect(() => {
+    if (!outsidePressRef) return;
+    outsidePressRef.current = token ? suggestions.close : null;
+    return () => { outsidePressRef.current = null; };
+  }, [outsidePressRef, suggestions.close, token]);
   const suggestionPrefix = token ? suggestionsHeight + (measuredPrefix > 0 ? space.xs : 0) : 0;
   const inputLimits = composerInputLimits(
     windowHeight,
@@ -207,7 +208,7 @@ export function SessionComposer({
     toolbarHeight,
   );
   const maximumInputHeight = inputLimits.maximum;
-  const compactSuggestions = !!token && suggestionLimits.compact;
+  const showSuggestions = !!token;
   const uploads = useComposerAttachments({
     scope,
     client,
@@ -285,12 +286,27 @@ export function SessionComposer({
       activeComposerMode(valueRef.current?.text ?? "") === "draft" ? "send" : (override ?? mode);
     if (!ready || blocked || busy || uploading || submission.current || !client || !session) return;
     if (sendMode === "queue" && (!queue.supported || (!!queue.error && !client.machine.capabilities?.includes(OUTBOX_CAPABILITY)) || queue.changing)) return;
-    const submitted = valueRef.current;
+    const currentDraft = valueRef.current;
     if (
-      !submitted ||
-      (!submitted.text.trim() && !submitted.attachments.length && !submitted.noteCard)
+      !currentDraft ||
+      (!currentDraft.text.trim() && !currentDraft.attachments.length && !currentDraft.noteCard)
     )
       return;
+    let submitted = currentDraft;
+    const crewHandles = composerCrewHandles(submitted.text);
+    if (crewHandles.length) {
+      const reason = crewHandles.length > MAX_DELEGATIONS
+        ? copy("Bir mesajda en fazla beş ekip veya ajana görev verin.", "Delegate to at most five crews or agents per message.")
+        : !client.machine.capabilities?.includes("crews.v1")
+          ? copy("Ekip ve ajanlara görev verme bu bilgisayarda kullanılamıyor.", "Crew and agent delegation is unavailable on this computer.")
+          : sendMode !== "send" || running || activeComposerMode(submitted.text) === "draft"
+            ? copy("Ekip veya ajana görev vermek için bu mesajı çalışma bitince doğrudan gönderin.", "Send this message directly after the run finishes to delegate to a crew or agent.")
+            : undefined;
+      if (reason) {
+        setLocalError(new Error(reason));
+        return;
+      }
+    }
     let savedMessageId: string | undefined;
     try {
       if (
@@ -349,11 +365,51 @@ export function SessionComposer({
     uploads.begin(controller);
     setLocalError(null);
     try {
+      let contextReplay: string | undefined;
+      if (crewHandles.length) {
+        const check = () => {
+          if (controller.signal.aborted || !mounted.current ||
+              useMachines.getState().activeId !== scope.machineId || !sameComposerContent(valueRef.current, submitted!))
+            throw new Error(copy("Taslak veya bilgisayar değişti. Göndermeden önce yeniden inceleyin.", "The draft or computer changed. Review it before sending."));
+          client.assertCurrentAccess?.();
+        };
+        const resolved = await resolveComposerCrews(client, intendedSession.projectId, crewHandles, controller.signal);
+        check();
+        const missing = resolved.find(({ target }) => !target);
+        if (missing) throw new Error(copy("Ekip veya ajan bulunamadı: @{p0}", "Crew or agent not found: @{p0}", { p0: missing.handle }));
+        const targets = resolved.flatMap(({ target }) => target ? [target] : []);
+        const keys = targets.map(({ kind, id }) => `${kind}:${id}`);
+        const intent = crewIntentForDraft(submitted, client.machine.environmentId, keys, randomUUID);
+        if (intent.targets.some((key, index) => key !== keys[index]) || intent.targets.length !== keys.length)
+          throw new Error(copy("Ekip veya ajan değişti. Mesajdaki bahsetmeyi yeniden seçin.", "The crew or agent changed. Select the mention again."));
+        submitted = { ...submitted, crewIntent: intent };
+        setValue(submitted);
+        // Keep the write identity durable before either Host delegation can be accepted.
+        await persist();
+        contextReplay = await deliverComposerCrews(client, {
+          projectId: intendedSession.projectId,
+          sessionId: scope.sessionId,
+          text: submitted.text,
+          intentId: intent.id,
+        }, targets, controller.signal, check);
+      }
+      // Native slash arguments belong to the provider. Ordinary and planned
+      // sends can carry tracker data separately from the exact visible prompt.
+      if (sendMode === "send" && submitted.text.includes("@") &&
+          (!/^\s*\//.test(submitted.text) || activeComposerMode(submitted.text) === "plan")) {
+        const inputs = [client, intendedSession.projectId, submitted.text, controller.signal] as const;
+        const references = await Promise.all([
+          client.machine.capabilities?.includes("inbox.providers.desktop") ? composerWorkItemContext(...inputs) : undefined,
+          noteContextSupported ? composerNoteContext(...inputs) : undefined,
+        ]);
+        contextReplay = [contextReplay, ...references].filter(Boolean).join("\n\n") || undefined;
+        if (controller.signal.aborted || !mounted.current) return;
+      }
       if (outboxSupported) {
         const references = submitted.attachments.map(({ uri: _uri, claimId: _claimId, ...reference }) => reference);
         const command = sendMode === "queue"
           ? queuedComposerMessage(clientMessageId, { ...intendedSession, authorityGeneration: queuedDraft.current!.authorityGeneration }, submitted.text, references, submitted.noteCard)
-          : composerCommand(intendedSession, sendMode, submitted.text, references, submitted.noteCard);
+          : composerCommand(intendedSession, sendMode, submitted.text, references, submitted.noteCard, contextReplay);
         outboxRow = {
           id: clientMessageId, machineId: scope.machineId, sessionId: scope.sessionId,
           projectId: intendedSession.projectId,
@@ -409,6 +465,7 @@ export function SessionComposer({
             submitted.text,
             attachments,
             submitted.noteCard,
+            contextReplay,
           ),
           ...(outboxSupported ? { clientMessageId } : {}),
         });
@@ -583,13 +640,6 @@ export function SessionComposer({
   };
   const hasContent = !!prompt.trim() || value.attachments.length > 0 || !!value.noteCard;
   const canStop = running && !!session?.runId;
-  const collapsed = composerCollapsed({
-    toolbarOpen,
-    hasContent,
-    hasPrefix,
-    suggesting: !!token,
-    dictating: dictation.phase !== "idle",
-  });
   const stop = () => {
     if (!session || !session.runId || stopping.current) return;
     const intent = sessionIntent(session, {
@@ -657,6 +707,7 @@ export function SessionComposer({
     const text = setComposerMode(valueRef.current?.text ?? prompt, next);
     setValue((current) => ({ ...(current ?? emptyComposerDraft()), text }));
     setSelection({ start: text.length, end: text.length });
+    setPicker(false);
   };
   const openDraftDetails = () => {
     Keyboard.dismiss();
@@ -693,25 +744,6 @@ export function SessionComposer({
   return (
     <ComposerActionsProvider>
       <View style={{ gap: space.xs }}>
-        {token ? (
-          <View onLayout={measureSuggestions}>
-            <ComposerSuggestions
-              keyboardActive={keyboardActive}
-              maximumHeight={suggestionLimits.maximum}
-              compact={suggestionLimits.compact}
-              items={suggestions.items}
-              loading={suggestions.catalog.isFetching}
-              error={suggestions.catalog.error}
-              trigger={token.trigger}
-              selected={suggestions.selected}
-              onPick={suggestions.choose}
-              onRetry={() => {
-                void suggestions.catalog.refetch();
-              }}
-              onClose={suggestions.close}
-            />
-          </View>
-        ) : null}
         <SessionAgents session={session} scope={scope} disabled={blocked} onCommand={onCommand}>
           {(controls) => (
             <View
@@ -736,18 +768,41 @@ export function SessionComposer({
             </View>
           )}
         </SessionAgents>
-        <View onTouchStart={() => { capsuleTouchedAt.current = Date.now(); }}>
+        {token ? (
+          <View onLayout={measureSuggestions}>
+            <ComposerSuggestions
+              keyboardActive={keyboardActive}
+              maximumHeight={suggestionLimits.maximum}
+              items={suggestions.items}
+              loading={suggestions.catalog.isFetching}
+              error={suggestions.catalog.error}
+              trigger={token.trigger}
+              query={token.query}
+              selected={suggestions.selected}
+              onMove={suggestions.move}
+              onPick={suggestions.choose}
+              onRetry={() => { void suggestions.catalog.refetch(); }}
+              onClose={suggestions.close}
+            />
+          </View>
+        ) : null}
         <ChatComposer
           onToolbarLayout={measureToolbar}
-          collapsed={collapsed}
           inlineSubmit={shortFrame}
-          inlineLeading={shortFrame && !showInlinePrefix && !compactSuggestions && noteErrorMessage ? (
+          inlineLeading={shortFrame && !showInlinePrefix && !showSuggestions && noteErrorMessage ? (
             <ChatCircleAction label={copy("Taslağı incele", "Review draft")} hint={noteErrorMessage} onPress={openDraftDetails}>
               <TriangleAlert size={19} color={colors.warning} />
             </ChatCircleAction>
           ) : undefined}
           value={prompt}
           onValueChange={(text) => {
+            if (/^\s*\/btw$/i.test(prompt) && text === `${prompt} ` &&
+                selection.start === prompt.length && selection.end === prompt.length && openSideQuestion()) {
+              setValue((current) => current ? { ...current, text: "" } : current);
+              setSelection({ start: 0, end: 0 });
+              suggestions.close();
+              return;
+            }
             const templates = useTemplates.getState();
             const expanded =
               templates.hydrated && !templates.error
@@ -774,42 +829,48 @@ export function SessionComposer({
               </ScrollView>
             ) : null
           }
-          mode={
-            <>
-              <ComposerModeMenu
-                active={activeMode}
-                blockedReasons={modeBlockedReasons}
-                onSelect={chooseMode}
-              />
-              {composerAccessAvailable(session) ? (
-                <ComposerAccessMenu
-                  session={session}
-                  disabled={blocked || unavailable}
-                  running={running}
-                  onCommand={onCommand}
-                  onError={setLocalError}
-                />
-              ) : null}
-            </>
-          }
           model={
-            session ? (
-              <ComposerModelChip session={session} blocked={blocked} onCommand={onCommand} />
+            session
+              ? ({ iconOnly }) => (
+                  <ComposerModelChip
+                    machineId={scope.machineId}
+                    session={session}
+                    blocked={blocked}
+                    iconOnly={iconOnly}
+                    context={contextReading ? {
+                      reading: contextReading,
+                      compactDisabled: running || unavailable,
+                      onCompact: contextReading.empty ? undefined : compact,
+                    } : undefined}
+                    onCommand={onCommand}
+                  />
+                )
+              : undefined
+          }
+          status={
+            session && contextNeedsAttention(contextReading) ? (
+              <ComposerContextRing
+                reading={contextReading!}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  openModelSheet(scope.machineId, scope.sessionId);
+                }}
+              />
             ) : undefined
           }
           leading={
             <ChatCircleAction
               label={
-                compactSuggestions ? copy("Kapat", "Close") : copy("Mesaja ekle", "Add to message")
+                showSuggestions ? copy("Önerileri kapat", "Dismiss suggestions") : copy("Mesaja ekle", "Add to message")
               }
-              disabled={compactSuggestions ? false : unavailable}
-              busy={compactSuggestions ? false : picking}
-              onPress={compactSuggestions ? suggestions.close : () => {
+              disabled={showSuggestions ? false : unavailable}
+              busy={showSuggestions ? false : picking}
+              onPress={showSuggestions ? suggestions.close : () => {
                 Keyboard.dismiss();
                 setPicker(true);
               }}
             >
-              {compactSuggestions ? (
+              {showSuggestions ? (
                 <X size={19} strokeWidth={2.2} color={colors.text} />
               ) : (
                 <Plus size={19} strokeWidth={2.2} color={colors.text} />
@@ -817,16 +878,8 @@ export function SessionComposer({
             </ChatCircleAction>
           }
           field={{
-            onFocus: () => {
-              fieldFocused.current = true;
-              setInputFocused(true);
-              setToolbarOpen(true);
-            },
-            onBlur: () => {
-              fieldFocused.current = false;
-              setInputFocused(false);
-              if (!touchedRecently(capsuleTouchedAt.current)) setToolbarOpen(false);
-            },
+            onFocus: () => setInputFocused(true),
+            onBlur: () => setInputFocused(false),
             accessibilityLabel: copy("Mesaj", "Message"),
             selection,
             onSelectionChange: (event) => {
@@ -839,18 +892,7 @@ export function SessionComposer({
             placeholder: copy("Mesaj", "Message"),
             style: { maxHeight: maximumInputHeight },
           }}
-          secondarySubmit={
-            <>
-              {contextReading && !collapsed ? (
-                <ComposerContextMeter
-                  reading={contextReading}
-                  compactDisabled={running || unavailable}
-                  onCompact={contextReading.empty ? undefined : compact}
-                />
-              ) : null}
-              <ComposerDictationButton dictation={dictation} />
-            </>
-          }
+          secondarySubmit={<ComposerDictationButton dictation={dictation} />}
           submit={
             <>
               {canStop ? (
@@ -869,7 +911,9 @@ export function SessionComposer({
                   />
                 </ChatCircleAction>
               ) : null}
-              {(canStop || collapsed) && !hasContent ? null : (
+              {/* One slot: Stop while running with an empty draft; Send otherwise. A draft typed
+                  during a run keeps Stop direct beside Send (steer/queue on long-press). */}
+              {canStop && !hasContent ? null : (
                 <ComposerSendButton
                   mode={mode}
                   alternate={alternate}
@@ -883,7 +927,6 @@ export function SessionComposer({
             </>
           }
         />
-        </View>
         <View onLayout={measureFooter} style={{ gap: space.xs }}>
           <ComposerDictationFeedback dictation={dictation} />
           <ComposerNotices
@@ -917,6 +960,7 @@ export function SessionComposer({
           />
         </View>
       </View>
+      {sideOpen ? <SideChatSheet visible sessionId={scope.sessionId} onClose={() => setSideOpen(false)} /> : null}
       <ComposerSheets
         scope={scope}
         projectId={session?.projectId}
@@ -938,6 +982,7 @@ export function SessionComposer({
           void uploads.choose(kind);
         }}
         onInsertTemplate={insertTemplateBody}
+        modes={{ active: activeMode, blockedReasons: modeBlockedReasons, onSelect: chooseMode }}
       />
     </ComposerActionsProvider>
   );

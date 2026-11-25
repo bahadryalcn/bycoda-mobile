@@ -22,7 +22,7 @@ export function TemplateActionsMenu({ templateId, name, revision, disabled, busy
   const available = () => review.active && !disabled && !busy && (isCurrent?.() ?? true);
   return <ActionMenu label={copy("{p0} işlemleri", "{p0} actions", { p0: name })} busy={busy}
     actions={[{
-      key: "delete", label: copy("Şablonu sil", "Delete template"), destructive: true, disabled: disabled || busy,
+      key: "delete", label: copy("Şablonu sil", "Delete template"), destructive: true, reviewed: true, disabled: disabled || busy,
       onPress: () => {
         if (!available()) return;
         confirmAction(copy("Şablonu sil", "Delete template"), name, copy("Sil", "Delete"), () => {

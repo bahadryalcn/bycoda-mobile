@@ -19,18 +19,16 @@ vi.mock("../outbox/runtime/custody", () => ({ cleanOutboxFiles: async () => {} }
 const state = vi.hoisted(() => ({ activeId: "machine", supported: true, browserSupported: false, stageBrowser: vi.fn(), removeStaged: vi.fn(), draft: null as ComposerDraft | null,
   templateInsert: null as null | ((body: string) => void), draftReady: true,
   selection: { start: 0, end: 0 }, select: null as null | ((selection: { start: number; end: number }) => void),
-  keyboard: {} as Record<string, () => void>, collapsed: false, focusField: () => {}, blurField: () => {},
+  keyboard: {} as Record<string, () => void>, focusField: () => {}, blurField: () => {},
   receiver: null as null | ((request: ComposerTransfer) => void), renderDraft: null as null | (() => void),
   onCommand: vi.fn(async () => undefined), persist: vi.fn(async () => undefined), enqueue: vi.fn(), pause: vi.fn(async () => undefined), dismissKeyboard: vi.fn(),
   register: (receiver: (request: ComposerTransfer) => void) => { state.receiver = receiver; return () => { state.receiver = null; }; },
 }));
 vi.mock("./composer-model-chip", () => ({ ComposerModelChip: () => null }));
 vi.mock("./composer-mode-controls", () => ({
-  ComposerModeMenu: () => null,
   ComposerModeChip: ({ onRemove }: { onRemove: () => void }) => createElement("button", { onClick: onRemove }, "Turn off mode"),
 }));
-vi.mock("./composer-context-meter", () => ({ ComposerContextMeter: () => null }));
-vi.mock("./composer-access", () => ({ ComposerAccessMenu: () => null }));
+vi.mock("./composer-context-meter", () => ({ ComposerContextRing: () => null, contextNeedsAttention: () => false }));
 vi.mock("lucide-react-native/icons/send", () => ({ default: () => null }));
 vi.mock("expo-image",() => ({ Image: () => null }));
 vi.mock("./composer-links", () => ({ ComposerLinks: () => null }));
@@ -58,6 +56,9 @@ vi.mock("lucide-react-native/icons/check", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/image", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/file", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/layout-template", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/clipboard-list", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/circle-dashed", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/lightbulb", () => ({ default: () => null }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: ({ children }: PropsWithChildren) => children }));
 vi.mock("lucide-react-native/icons/chevron-down", () => ({ default: () => null }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "request" }));
@@ -107,26 +108,26 @@ vi.mock("@/ui/chat-controls", () => {
   const Button = ({ label, hint, disabled, onPress }: { label: string; hint?: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress, title: hint }, label);
   return { ChatCircleAction: Button, ChatToolbarAction: Button, ChatAction: Button };
 });
-vi.mock("@/ui/chat-composer", () => ({ ChatComposer: ({ value, submit, mode, leading, inlineLeading, field, top, collapsed }: {
-  value: string; submit: ReactNode; mode: ReactNode; leading: ReactNode; top?: ReactNode;
-  inlineLeading?: ReactNode; collapsed?: boolean;
+vi.mock("@/ui/chat-composer", () => ({ ChatComposer: ({ value, submit, leading, inlineLeading, field, top }: {
+  value: string; submit: ReactNode; leading: ReactNode; top?: ReactNode;
+  inlineLeading?: ReactNode;
   field: { selection: { start: number; end: number }; onSelectionChange: (event: unknown) => void; onFocus: () => void; onBlur: () => void };
 }) => {
-  state.collapsed = !!collapsed;
   state.focusField = field.onFocus;
   state.blurField = field.onBlur;
   state.selection = field.selection;
   state.select = (selection) => field.onSelectionChange({ nativeEvent: { selection } });
-  return createElement("div", null, top, inlineLeading, createElement("textarea", { value, readOnly: true }), leading, mode, submit);
+  return createElement("div", null, top, inlineLeading, createElement("textarea", { value, readOnly: true }), leading, submit);
 } }));
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { ErrorNotice: ({ error, message, onRetry }: { error?: Error; message?: string; onRetry?: () => void }) =>
     error ? createElement("p", { "data-has-retry": !!onRetry }, message ?? error.message) : null,
-    Body: Wrap, Stack: Wrap, Row: Wrap, NavigationGroup: Wrap,
+    Body: Wrap, Stack: Wrap, Row: Wrap, NavigationGroup: Wrap, SectionHeader: () => null,
     Sheet: ({ children, visible }: PropsWithChildren<{ visible: boolean }>) => visible ? createElement("div", null, children) : null,
     Button: ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label),
-    NavigationRow: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label),
+    NavigationRow: ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label),
+    RowIcon: () => null,
   };
 });
 const note = { id: "note-1", slug: "reviewed", title: "Reviewed note", body: "Complete source body\n" };
@@ -196,7 +197,7 @@ it("keeps draft details reachable from Add to message when the inline area is to
   expect(container.querySelector("[data-prefix-height]")).toBeNull();
   expect(container.querySelector("textarea")?.value).toBe("Draft text");
   await click("Add to message");
-  await click("Draft");
+  await click("Draft contents");
   expect(container.textContent).toContain("Reviewed note");
   await click("Remove note context");
   expect(container.textContent).toContain("No content yet");
@@ -305,17 +306,28 @@ it("rejects wrong browser conversation/project or old host before staging a file
   expect(state.stageBrowser).not.toHaveBeenCalled(); expect(state.draft).toBeNull();
 });
 
-it("collapses an empty composer when Back hides the keyboard and reopens when the keyboard returns", async () => {
+it("keeps Send visible at rest and the same controls through focus and keyboard changes", async () => {
   await mount();
-  expect(state.collapsed).toBe(true);
+  const send = () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Send");
+  expect(send()?.disabled).toBe(true);
   await act(async () => state.focusField());
-  expect(state.collapsed).toBe(false);
-  await act(async () => state.keyboard.keyboardDidHide!());
-  expect(state.collapsed).toBe(true);
-  await act(async () => state.keyboard.keyboardDidShow!());
-  expect(state.collapsed).toBe(false);
+  expect(send()?.disabled).toBe(true);
   await act(async () => state.blurField());
-  expect(state.collapsed).toBe(true);
+  expect(send()).toBeDefined();
+  expect(state.keyboard.keyboardDidHide).toBeUndefined();
+});
+
+it("chooses Plan mode and Save as draft from Add to message and shows the blocked reason", async () => {
+  state.draft = { ...emptyComposerDraft(), text: "Build it" };
+  await mount();
+  await click("Add to message");
+  await click("Plan mode");
+  expect(state.draft?.text).toBe("/plan Build it");
+  expect(container.textContent).not.toContain("For this message");
+  await click("Add to message");
+  await click("Save as draft");
+  expect(state.draft?.text).toBe("/draft Build it");
+  expect(state.onCommand).not.toHaveBeenCalled();
 });
 
 it("shows a direct Stop while a run is active and cancels that exact run after pausing the queue", async () => {

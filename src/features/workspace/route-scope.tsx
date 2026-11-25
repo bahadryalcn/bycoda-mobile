@@ -1,8 +1,9 @@
 import { useRef, type PropsWithChildren } from "react";
-import { router, Stack } from "expo-router";
+import { router } from "expo-router";
 import { useMachines } from "@/state/machines";
 import { Screen, StateView } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { NO_COMPUTER_ACTION, NO_COMPUTER_TITLE } from "@/ui/no-computer";
 import { RouteMachine } from "./route-machine";
 
 export function WorkspaceRouteScope({
@@ -24,13 +25,14 @@ function BoundWorkspaceRoute({
   const origin = useMachines((state) =>
     state.machines.find((machine) => machine.id === binding.current.origin),
   );
-  if (!binding.current.matches(active))
+  if (!binding.current.matches(active)) {
+    // The route keeps its own title; only the body explains why the workspace is held back.
+    const noComputer = binding.current.origin === null;
     return (
       <Screen>
-        <Stack.Screen options={{ title: copy("Bilgisayar seç", "Choose computer"), headerTitle: undefined, headerRight: undefined }} />
         <StateView
-          illustration="unreachable"
-          title={binding.current.origin === null ? copy("Bilgisayar bağla", "Connect a computer") : copy(
+          illustration={noComputer ? "connect-computer" : "unreachable"}
+          title={noComputer ? copy(...NO_COMPUTER_TITLE) : copy(
             "Bu çalışma alanı başka bir bilgisayara ait.",
             "This workspace belongs to another computer.",
           )}
@@ -43,7 +45,7 @@ function BoundWorkspaceRoute({
                 )
           }
           action={{
-            label: copy("Bilgisayar seç", "Choose computer"),
+            label: noComputer ? copy(...NO_COMPUTER_ACTION) : copy("Bilgisayar seç", "Choose computer"),
             onPress: () => router.push("/machines"),
           }}
           secondaryAction={{
@@ -53,5 +55,6 @@ function BoundWorkspaceRoute({
         />
       </Screen>
     );
+  }
   return children;
 }

@@ -9,14 +9,15 @@ import { RecordCard } from "@/ui/record-card";
 import Pencil from "lucide-react-native/icons/pencil";
 import MessageSquare from "lucide-react-native/icons/message-square";
 import Trash2 from "lucide-react-native/icons/trash-2";
+import Play from "lucide-react-native/icons/play";
+import Pause from "lucide-react-native/icons/pause";
 import {
-  ActionMenu,
   Body,
-  ErrorNotice,
   Button,
+  IconButton,
   MutationState,
-  Row,
 } from "@/ui/primitives";
+import { useMobileTheme } from "@/ui/theme";
 import { joinMeta, RecordTrailing, useMenuGlyph, useRelativeTime } from "../shared/record-bits";
 import { Status } from "../shared/status";
 import { scheduleSentence } from "../automations/schedule-model";
@@ -43,6 +44,7 @@ export function StewardCard({
   onEdit,
 }: StewardCardProps) {
   const copy = useCopy();
+  const { colors } = useMobileTheme();
   const machine = useActiveMachine();
   const projects = useProjectList();
   const glyph = useMenuGlyph();
@@ -85,73 +87,74 @@ export function StewardCard({
         <>
           {item.focus ? <Body>{item.focus}</Body> : null}
           <Body muted>{agentPresentation(item.harness, item.model)}</Body>
+          <Button tone="primary" label={copy("Şimdi çalıştır", "Run now")} busy={running} fullWidth
+            disabled={busy || !!item.run || editorOpen} onPress={runNow} />
         </>
       }
-      footer={<Row>
-        <Button tone="primary" label={copy("Şimdi çalıştır", "Run now")} busy={running} style={{ flexGrow: 1 }}
-          disabled={busy || !!item.run || editorOpen} onPress={runNow} />
-        <Button tone="secondary" label={item.enabled ? copy("Duraklat", "Pause") : copy("Etkinleştir", "Enable")} style={{ flexGrow: 1 }}
-          busy={toggling} disabled={busy || editorOpen || toggling} onPress={() =>
-            save.mutate({ steward: { ...item, enabled: !item.enabled, expectedConfiguration: item } })} />
-      </Row>}
       menu={
         <RecordTrailing>
-        <ActionMenu
-          label={copy("Proje sorumlusu işlemleri", "Steward actions")}
-          busy={
-            (save.isPending &&
-              (save.variables?.steward as { id?: string } | undefined)?.id ===
-                item.id) ||
-            (remove.isPending && remove.variables?.stewardId === item.id)
-          }
-          actions={[
-            {
-              key: "edit",
-              icon: glyph(Pencil),
-              label: copy("Düzenle", "Edit"),
-              disabled: busy || editorOpen,
-              onPress: () => onEdit(item),
-            },
-            item.lastSessionId && machine
-              ? {
-                  key: "session",
-                  icon: glyph(MessageSquare),
-                  label: copy("Son oturum", "Last session"),
-                  onPress: () =>
-                    router.navigate({
-                      pathname: "/session/[id]",
-                      params: {
-                        id: item.lastSessionId!,
-                        machineId: machine.id,
-                        projectId: item.projectId,
-                      },
-                    }),
-                }
-              : null,
-            {
-              key: "delete",
-              icon: glyph(Trash2, true),
-              label: copy("Sil", "Delete"),
-              destructive: true,
-              disabled: busy || editorOpen,
-              onPress: () =>
-                confirmAction(
-                  copy("Sil", "Delete"),
-                  copy(
-                    "Proje sorumlusu silinir ve varsa çalışması durdurulur. Önerilen görevler korunur.",
-                    "The steward will be deleted and its active run stopped. Proposed tasks are kept.",
-                  ),
-                  copy("Sil", "Delete"),
-                  () => remove.mutate({ stewardId: item.id }),
-                  copy("Vazgeç", "Cancel"),
-                ),
-            },
-          ]}
-        />
+          <IconButton label={copy("Şimdi çalıştır", "Run now")} busy={running}
+            disabled={busy || !!item.run || editorOpen} onPress={runNow}>
+            <Play size={18} color={colors.accent} />
+          </IconButton>
         </RecordTrailing>
       }
+      issues={[item.lastRunError]}
+      actions={{
+        label: copy("Proje sorumlusu işlemleri", "Steward actions"),
+        busy: toggling || (remove.isPending && remove.variables?.stewardId === item.id),
+        items: [
+          {
+            key: "toggle",
+            icon: glyph(item.enabled ? Pause : Play),
+            label: item.enabled ? copy("Duraklat", "Pause") : copy("Etkinleştir", "Enable"),
+            disabled: busy || editorOpen || toggling,
+            onPress: () => save.mutate({ steward: { ...item, enabled: !item.enabled, expectedConfiguration: item } }),
+          },
+          {
+            key: "edit",
+            icon: glyph(Pencil),
+            label: copy("Düzenle", "Edit"),
+            disabled: busy || editorOpen,
+            onPress: () => onEdit(item),
+          },
+          item.lastSessionId && machine
+            ? {
+                key: "session",
+                icon: glyph(MessageSquare),
+                label: copy("Son oturum", "Last session"),
+                onPress: () =>
+                  router.navigate({
+                    pathname: "/session/[id]",
+                    params: {
+                      id: item.lastSessionId!,
+                      machineId: machine.id,
+                      projectId: item.projectId,
+                    },
+                  }),
+              }
+            : null,
+          {
+            key: "delete",
+            icon: glyph(Trash2, true),
+            label: copy("Sil", "Delete"),
+            destructive: true,
+            disabled: busy || editorOpen,
+            onPress: () =>
+              confirmAction(
+                copy("Sil", "Delete"),
+                copy(
+                  "Proje sorumlusu silinir ve varsa çalışması durdurulur. Önerilen görevler korunur.",
+                  "The steward will be deleted and its active run stopped. Proposed tasks are kept.",
+                ),
+                copy("Sil", "Delete"),
+                () => remove.mutate({ stewardId: item.id }),
+                copy("Vazgeç", "Cancel"),
+              ),
+          },
+        ],
+      }}
     >
-      <ErrorNotice error={item.lastRunError} />
       {savedStewardId(save.variables) === item.id ? (
         <MutationState
           mutation={save}

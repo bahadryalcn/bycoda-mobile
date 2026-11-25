@@ -10,10 +10,10 @@ Bottom navigation uses a floating icon dock for Projects, Sessions, Inbox, Tools
 and Settings. A dot marks the current tab; Sessions shows its running count.
 The plus button opens New session; hold it for quick actions. On narrow screens
 or with large text, More opens the remaining destinations. The sheet closes when
-the window fits all destinations. In **Settings →
-Customize tabs**, switches control which tabs appear, and the grips change their
-order. Changes apply immediately. If you change the layout, **Use default tab
-layout** restores the original order and visibility. Screen readers retain
+the window fits all destinations. In **Settings → General → Customize tabs**,
+switches control which tabs appear; tabs keep a fixed order and cannot be
+reordered. At least one tab besides Settings stays visible. Changes apply
+immediately. When a tab is hidden, **Show all tabs** shows every tab again. Screen readers retain
 full destination names and running-count descriptions. The dock hides while the
 keyboard is open.
 
@@ -49,7 +49,8 @@ sessions are available, **All time** is also available directly from the list.
 If a project tool opens without a visible project, use **Choose a project** to
 open that same tool for a project on the connected computer.
 
-**Settings → Chat** contains the send behavior for busy agents and voice settings.
+**Settings → Chat** contains the send behavior for busy agents and the hardware
+keyboard Enter key; **Settings → Voice assistant** holds the voice settings.
 If the phone can’t save a tab or voice preference, your choice stays on screen.
 Select **Retry** to finish saving it. The notice clears once the save succeeds.
 
@@ -108,6 +109,17 @@ provider/model names. Existing pages reopen without stacking another copy.
 
 Host access keeps the current phone first and offers device search for long paired
 device lists. Filtering does not revoke devices or change connection authority.
+Each device shows what identifies it (this phone, this computer or paired device)
+with a short ID, so devices with the same name stay distinguishable. A device that
+cannot be revoked from the phone shows why, without a revoke action.
+
+The phone does not start external tunnels. Starting one needs the computer to be
+reachable already and exposes the Host on the public internet, so tunnels are
+started and configured in bycoda on the computer (**Settings → Connections →
+Sharing**; see [remote access](../../../docs/guides/remote-access.md)). Host access
+lists only starting, running and failed tunnels with their public address, and
+shows "External access is off" otherwise. A running tunnel can still be stopped
+from the phone after a confirmation that warns it may disconnect you.
 
 ## Sign in on mobile
 
@@ -206,12 +218,17 @@ including a known zero. Viewing or refreshing these values consumes no reset cre
 
 ## Model and account
 
-Open **Model and reasoning** from the conversation composer. The picker names the
-provider and account even when there is only one choice. A renamed default account
+Open **Model and access** from the model chip in the conversation composer, from
+**Session options**, or from **Session settings**; all three open the same sheet.
+It holds the agent, account, reasoning, model and access mode, plus the context
+reading with **Compact now**. Choices stay in the sheet until **Save**. The picker
+names the provider and account even when there is only one choice. A renamed default account
 keeps its name; the generic default label follows the app language.
 
-The composer shows the selected model. At narrow widths or larger text sizes,
-the model can use its own row. Open the picker to check the reasoning setting.
+The composer always shows the selected model in its toolbar. When the toolbar is
+short, the chip shows only the provider mark; its spoken label stays complete.
+Full access adds a warning mark to the chip. The context ring appears in the
+toolbar only when the context window is nearly full.
 
 If the saved account is no longer available, its state remains explicit. Choose an
 available account before changing the model. Opening or closing the picker does
@@ -271,10 +288,10 @@ It pins the environment identity so a changed server cannot silently become a
 different computer. Native credentials live in SecureStore; saved metadata and
 last selected projects contain no credentials.
 
-Application lock starts off on a new install; turn it on under **Settings → Secure
-access** (it needs a configured passcode or biometrics). Unlock uses the device's strong biometric authentication or passcode.
+Application lock starts off on a new install; turn it on under **Settings → App
+lock** (it needs a configured passcode or biometrics). Unlock uses the device's strong biometric authentication or passcode.
 Leaving the app immediately covers the workspace and open sheets and stops host
-access and polling. **Settings → Secure access** lets you require authentication
+access and polling. **Settings → App lock** lets you require authentication
 immediately (the default), or after 30 seconds, 1, 5 or 15 minutes away. Returning
 within the selected delay restores the workspace without another prompt. At or
 after the delay, unlocking requires device authentication. App restarts and
@@ -289,8 +306,11 @@ does not provide that acceptance path.
 
 ## Project list preferences
 
-On **Projects**, open **View** to choose grouped or flat presentation, computer
-order, natural name order or recently opened projects. Compact folder paths keep
+On **Projects**, open **Sort and view** (the arrows beside search) to sort by
+**Computer order** (default), **Recent activity** (latest session activity, or the
+latest opening on this phone) or **Name (A–Z)**, and to choose grouped or flat
+presentation. The phone has no drag reordering; the computer's own order is
+edited on the desktop. Compact folder paths keep
 the last two path components; **Full folder paths** restores the complete path.
 Search always matches full paths and group names. Grouped view offers expand and
 collapse controls, and searching temporarily opens matching groups. These choices
@@ -300,21 +320,33 @@ different host IDs remain distinct even when names or folders match. When you
 switch or re-pair a computer, open project panels close. Open project details,
 tools or the working-folder picker again on the current computer. Projects
 pinned on the desktop rail stay on top (their own **Pinned** section in grouped
-view); running sessions never reorder projects. As on the desktop, session lists
+view); running sessions never reorder projects. Hold a project row for **Project
+options** (new session, files, changes, pull requests, rename, move to group,
+copy path, details); swipe it for **New session** and **More**. Hold a session
+row for its actions in the desktop order (settle, pin, rename, read state,
+snooze, move to folder, copy, details, archive, stop, delete); swipe it for one
+state-dependent action and **More**. Pin, settle and archive confirm with a
+toast that offers **Undo**. Hold a conversation folder for rename, move and
+conversation choices when the computer supports organization. As on the desktop, session lists
 leave out internal orchestration workers, and a project's session list leaves
 conversations owned by a crew run to **Crews**.
 
 ## Phone permissions
 
 Open **Settings → Phone permissions** to inspect camera, microphone and notification access.
+Each row names its state; a read that does not answer within 8 seconds shows a
+retry instead of a lasting spinner.
 Opening **Scan QR code** requests camera access the first time. A denied request
 can be retried; a permanent denial offers phone settings. When you return from
 phone settings, the camera waits for a fresh permission check. You can paste the
-pairing code if the camera is unavailable. Photo and document
+pairing code if the camera is unavailable. Swiping back from the scanner returns
+to the pairing choices, like its back button. Photo and document
 attachments use system pickers with access limited to the selected items.
 
-Tap **Notifications** to request system notification access, then **Test
-notification** to verify a local notification. Android creates its notification
+**Settings → Notifications** is the one place for notifications: this phone's
+permission with its single enable action, what your computer sends (disabled
+until a computer is connected), what your account sends with push detail text and
+quiet hours, and **Test on this phone** / **Test from computer**. Android creates its notification
 channel before requesting permission. Camera, microphone and storage access are
 not requested together on startup; microphone recording is not used by the QR
 scanner.
@@ -370,26 +402,27 @@ these permissions.
 
 ## Sharing, reviews and reports
 
-**Settings → About bycoda** shows the app version and, in a native standalone
+**Settings → About** shows the app version and, in a native standalone
 build, its installed build number. **Share app** opens the native share sheet
 with a public product or store URL. It never includes computer addresses,
 pairing codes, access keys, project identities or conversations. Browser preview
 displays the public URL when a native share sheet is unavailable.
 
-**Rate app** opens the actual platform listing only after a real store URL is
+**Rate app** appears and opens the actual platform listing only after a real store URL is
 configured in `mobile/app.json` under `expo.extra.engagement`. Both store URLs
 are intentionally unset until registrations exist. iOS requires the assigned
 numeric App Store ID; the Android listing must match `com.bycoda.mobile`. This
 explicit action does not schedule review prompts or claim that a rating occurred.
 
-In **Help & support**, **Open email app** uses the device's email handler.
+**Settings → Help and support** links the help guide, e-mail contact, AI content
+reports and diagnostic logs. In the help guide, **Open email app** uses the device's email handler.
 If the handler cannot open, choose **Copy support address**.
 
-Use **Report** on an AI answer, or **Settings → Help & support → Report AI
+Use **Report** on an AI answer, or **Settings → Help and support → Report AI
 content**, to review a description and an optional excerpt. Reports use the
 Firebase HTTP adapter described in [Firebase reporting](../integrations/firebase-reporting.md).
-The service is unavailable until a verified endpoint is configured. No mail app
-is opened. If delivery cannot be confirmed, **Retry** keeps the in-memory draft
+Until a verified endpoint is configured the form is not shown; the page offers
+e-mail instead. Sending a report never opens a mail app. If delivery cannot be confirmed, **Retry** keeps the in-memory draft
 and resubmits the same request. A matching server receipt clears the draft and
 shows its reference. No excerpt is included without choosing it.
 
@@ -413,7 +446,7 @@ Add as many computers as needed. The machine strip identifies the active host.
 Tap a saved computer in the machine picker to switch. In **Manage computers**,
 open a saved computer and tap **Use computer**. Check its connection status, then
 go back to the workspace. Each computer keeps its selected project.
-Re-pair a revoked credential through **Settings → Manage computers → Edit
+Re-pair a revoked credential through **Settings → Computers → Edit
 connection**. Removing a connection forgets it on the phone. Revoke the device
 on the host to remove its authorization.
 
@@ -452,8 +485,9 @@ on the host to remove its authorization.
   The Notes library and session Notes show plain-text excerpts. Opening a note
   shows its original Markdown. In the library, swipe a row or open its **More
   actions** menu to review deletion. The library menu contains **Recover unsaved draft**.
-- **Settings:** open the focused controls for appearance, data saver and how chat
-  sends to a running agent. In **Computer settings**, adjust concurrent tasks with
+- **Settings:** an index of pages, each row showing its current value. In
+  **Settings → Agents and tasks** (it explains what to do when no computer is
+  connected), adjust concurrent tasks with
   the plus and minus buttons. Hold either button to keep changing the limit.
   Daily agent time offers presets and accepts a custom value.
 
@@ -554,8 +588,11 @@ Feature identity glyphs at 20dp and larger use a shared duotone vector style: on
 
 The bottom navigation keeps Projects, Sessions, Inbox, Tools and Settings within
 reach. Tools groups destinations by Project, Work, Communication, Development and
-Computer; search also finds a group name. Settings separates preferences, access
-and privacy, computer controls and support.
+Computer; search also finds a group name. Settings opens with your account, then
+four groups of pages: Computer (Computers, Agents and tasks), App (General,
+Appearance, Chat, Voice assistant, Notifications), Privacy and security (App
+lock, Phone permissions, Data and privacy) and Support (Help and support, Send
+feedback, About). Each page has a link such as `bycoda://settings/notifications`.
 The project filter in Tools carries into the work screens it opens, including an
 explicit **All projects** selection. If the selected project is still loading or
 is no longer visible, Tools opens the project picker before opening a work
@@ -579,39 +616,48 @@ fresh snapshot. Older Hosts and interrupted streams fall back to periodic refres
 Expired privacy proof requires a fresh authorized read before projects become visible.
 Drafts and uncertain sends are preserved; reconnect never resends them automatically.
 
-**Settings > Appearance** opens one full-screen sheet for System, Light and Dark,
+**Settings > Appearance** opens one page for System, Light and Dark,
 nine palettes, general typography and message text size. Text size (85–130%) and
 line spacing (100–150%) use sliders; release a slider to save and apply its value.
 Font family offers native System, Sans serif, Serif and Monospace choices, with
 Regular, Medium and Bold weights. Code retains its monospace role. System text
 scaling remains enabled. The shared-component and conversation preview reflects
-saved choices. **Reset typography** resets only general size, font, weight and
+saved choices and sits right after the palette. **Reset typography** resets only general size, font, weight and
 spacing; theme, palette and message text size remain selected. Changes preserve
 drafts and navigation. A failed save retains the chosen value and shows recovery.
-**Settings > Send while agent is running** defaults to **Steer**. Hold Send to use
+**Settings > Chat > Send while agent is running** defaults to **Steer**. Hold Send to use
 the alternate **Queue** action. Steer is available when the connected Host
 advertises support for the provider running the turn. Otherwise Send queues the
 message until the turn ends.
 
 ## Assistant and voice
 
-Open **Assistant** from quick actions or Tools. Minimize it to continue navigating,
-then return to the same Room conversation from the floating assistant window.
+Open **Assistant** from quick actions or Tools. Its home shows your presence (Here,
+Away, Do not disturb), questions waiting for you, jobs that need you, what the
+assistant did, and recent conversations. A tapped "the assistant needs you"
+notification opens that home with the question or job in view. While a call,
+dictation or read-aloud runs, **Minimize** keeps it in the floating assistant window;
+otherwise leaving the assistant leaves nothing behind.
 Drag its handle to reposition it, or expand it to return to the full conversation.
 Closing the floating window ends its phone audio and active voice call. Work
 already accepted by the computer may continue.
 
-In **Assistant → Settings → Reply model**, if a change cannot be confirmed,
+The gear opens **Assistant settings**: this conversation (scope, reply model), voice
+choices that can change during a call, and the assistant's Work and Access
+preferences, saved with one Save. In **Reply model**, if a change cannot be confirmed,
 tap **Refresh** to read the current selection from the computer. Choose a
 different model only after that check finishes.
 
-While voice settings are open, an unsaved ElevenLabs voice ID stays with the
-computer where you entered it. A connection change closes any open Whisper
-model removal confirmation. If the phone cannot save a voice preference, use
-**Retry** in the same settings panel.
+**Settings → Voice assistant** uses the desktop's groups: Microphone (input device
+and microphone access), Voice engine (reply voice and speaker), Dictation (dictation
+recognition and transcription models on the computer) and Conversation style
+(**Wait before replying**, 1.2 s by default, and **I decide when my turn ends**).
+The ElevenLabs voice ID is saved when you leave the field and stays with the
+computer where you entered it. A connection change closes any open model removal
+confirmation. If the phone cannot save a voice preference, use **Retry** on the page.
 
-The microphone section shows inputs the phone reports as available. When
-more than one input type is connected, drag their handles to set the order.
+When more than one input type is connected, **Input device** chooses which one is
+used first.
 OpenAI Realtime and Grok Voice are desktop conversation modes. On mobile,
 OpenAI and Grok can be selected for speech recognition when the computer
 reports them as available.
@@ -631,8 +677,13 @@ recording from replacing it. A saved speech ID prevents duplicate insertion afte
 an interrupted save or application restart.
 
 On Android, iPhone and iPad, **Voice call** explicitly starts a hands-free conversation in the open
-Room thread. It listens, sends recognized speech after a pause, reads the reply
-aloud, then listens again. A call sends speech automatically; the separate
+Room thread. It listens, sends recognized speech after the chosen pause (or when you
+tap **Send now**), reads the reply aloud, then listens again. The call controls are
+**Mute**/**Unmute**, **Send now** (or **Stop speaking** while a reply plays),
+**Speaker off**/**Speaker on** and **End**. After three minutes without speech the
+call sleeps ("Ready. Microphone is off.") until you tap **Talk**. If the link to the
+computer drops while nothing was being sent, the call shows **Reconnecting…** and
+reopens itself with the same mute choices; an uncertain send is never retried. A call sends speech automatically; the separate
 **Dictate message** control still requires reviewing and sending the draft yourself.
 Starting a call requires the app to be visible and unlocked, microphone permission,
 a native build with the voice companion module, and local recognition and speech
@@ -707,11 +758,14 @@ hidden project or changed session requires a fresh review before a write. An
 uncertain archive or delete result blocks another write from that row; check
 the session on the computer before attempting the operation again.
 
-The message composer gives text a full-width editing row and keeps attachment,
-mode and send controls together below it. Its surface stays steady while typing.
+The message composer gives text a full-width editing row and keeps one toolbar
+below it: Add, the model chip, the microphone and Send or Stop. The toolbar is
+visible at rest too, so focusing the field does not change the composer height.
+**Add to message** holds photos, files, templates, **Plan mode** and **Save as
+draft**; an active mode shows as a removable chip above the field.
 Scroll the draft details above the editor to reach additional files, notes and
 links. The editor and Send stay outside that scrolling area. When the keyboard
-leaves little room, open **Add to message**, then **Draft** to see those details.
+leaves little room, open **Add to message**, then **Draft contents** to see those details.
 In a very short area above the keyboard, Add, Send and Stop sit beside the
 editor. If a note prevents sending, **Review draft** opens the draft with the
 reason and the controls to resolve it. Opening the draft or attachment menu
@@ -912,7 +966,7 @@ discovery are bounded and disclose partial results.
 On a physical keyboard, Command/Ctrl+K opens the command palette, Command/Ctrl+F focuses list
 search, and Command/Ctrl+Enter sends through the usual guarded action. Preferences controls whether
 plain hardware Enter sends; Shift+Enter and the software keyboard keep adding newlines.
-Navigation settings customize dock order and visibility; hidden destinations remain routable.
+Navigation settings customize dock visibility (the order is fixed); hidden destinations remain routable.
 
 Android 12 and newer can use Material You in Appearance. A rebuilt app reads Android's system
 accent and neutral tones for both native styles and shared control colors. Older binaries without

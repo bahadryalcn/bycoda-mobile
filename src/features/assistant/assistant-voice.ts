@@ -1,4 +1,4 @@
-import { AssistantUtteranceVad } from "./assistant-call-loop";
+import { AssistantUtteranceVad, type AssistantTurnOptions } from "./assistant-call-loop";
 import { pcmBase64, resamplePcm } from "../../../../src/features/voice/model/voiceVad";
 import { graphemes } from "../../../../src/shared/lib/text/truncate";
 import { assistantMicrophoneLevel, type AssistantVoiceStage } from "./assistant-voice-presentation";
@@ -105,10 +105,10 @@ export class AssistantVoice {
     return { ...(this.dependencies.speech?.() ?? {}), natural: true };
   }
   /** `natural` matches the speech lease a call holds, so the Host shares its loaded models instead of reloading. */
-  async record(port: VoicePort, target: AssistantVoiceTarget, options?: { endOnSilence?: boolean; natural?: boolean }) {
+  async record(port: VoicePort, target: AssistantVoiceTarget, options?: { endOnSilence?: boolean; natural?: boolean; turn?: AssistantTurnOptions }) {
     if (this.phase !== "idle" || !port.current()) return;
     this.port = port; this.target = { ...target };
-    this.utterance = options?.endOnSilence ? new AssistantUtteranceVad() : undefined;
+    this.utterance = options?.endOnSilence ? new AssistantUtteranceVad(options.turn) : undefined;
     const epoch = ++this.epoch;
     this.update("preparing");
     try {

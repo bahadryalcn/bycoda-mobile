@@ -1,14 +1,15 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { DIAGNOSTIC_RETENTION_DAYS } from "../account/contracts";
 import { useAccount } from "../account/ui/account-context";
 import * as Clipboard from "expo-clipboard";
-import { Button, Field, NavigationGroup, Notice, SegmentedRow, Stack } from "../../ui/primitives";
+import { Button, Field, NavigationGroup, Notice, SegmentedRow, Stack, showToast } from "../../ui/primitives";
 import { HintSection } from "../../ui/info-hint";
 import { useCopy } from "../../ui/copy";
 import { useDiagnosticResultText } from "./diagnostic-copy";
 import { lastCrashLog, sendDiagnostics, useDiagnosticPrefs } from "./diagnostics-runtime";
 import type { DiagnosticMode } from "./diagnostic-prefs";
 import type { DiagnosticSendResult } from "./diagnostic-report";
+import { diagnosticReceiptsShown, setDiagnosticReceiptsShown, subscribeDiagnosticSharing } from "./diagnostic-sharing";
 
 /** Privacy & data: the diagnostic log sharing choice and a manual "send now". */
 export function DiagnosticsSettings() {
@@ -17,6 +18,7 @@ export function DiagnosticsSettings() {
   const hydrate = useDiagnosticPrefs((state) => state.hydrate);
   const mode = useDiagnosticPrefs((state) => state.consent.mode);
   const setMode = useDiagnosticPrefs((state) => state.setMode);
+  const receipts = useSyncExternalStore(subscribeDiagnosticSharing, diagnosticReceiptsShown);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const noteRevision = useRef(0);
@@ -30,24 +32,29 @@ export function DiagnosticsSettings() {
   }, [hydrate]);
 
   const options: { value: DiagnosticMode; label: string; detail: string }[] = [
-    { value: "off", label: copy("Kapalı", "Off"), detail: copy("Günlükleri şimdi gönder demedikçe hiçbir şey gönderilmez.", "Nothing is sent unless you choose Send logs now.") },
-    { value: "ask", label: copy("Bana sor", "Ask me"), detail: copy("Çökmeden sonra göndermek isteyip istemediğin sorulur.", "After a crash you are asked whether to send them.") },
-    { value: "auto", label: copy("Otomatik", "Automatic"), detail: copy("Çökme raporları sormadan gönderilir.", "Crash reports are sent without asking.") },
+    { value: "off", label: copy("Gönderme", "Do not send"), detail: copy("Tanılama raporları gönderilmez.", "Diagnostic reports are not sent.") },
+    { value: "ask", label: copy("Her seferinde sor", "Ask every time"), detail: copy("Her gönderim için onayın istenir.", "Every report requires approval.") },
+    { value: "auto", label: copy("Her seferinde gönder", "Send every time"), detail: copy("Raporu otomatik gönderimden önce inceleyebilirsin.", "You can inspect the report before it sends automatically.") },
   ];
   const choose = (value: DiagnosticMode) => {
     setResult(null);
     setMode(value).catch(() => setResult("save-failed"));
   };
-  const [copied, setCopied] = useState<boolean | null>(null);
   const copyCrash = async () => {
     const text = lastCrashLog();
-    if (!text) return setCopied(false);
-    try {
-      await Clipboard.setStringAsync(text);
-      setCopied(true);
-    } catch {
-      setCopied(false);
+    if (!text) {
+      showToast({ tone: "info", message: copy("Kayıtlı çökme yok.", "No crash recorded.") });
+      return;
     }
+    try {
+      if (await Clipboard.setStringAsync(text)) {
+        showToast({ message: copy("Çökme kaydı kopyalandı.", "Crash log copied.") });
+        return;
+      }
+    } catch {
+      // Clipboard rejection and a false result both mean nothing was copied.
+    }
+    showToast({ tone: "danger", message: copy("Kopyalanamadı. Yeniden dene.", "Could not copy. Try again.") });
   };
   const sendNow = async () => {
     if (pending.current || !mounted.current) return;
@@ -72,20 +79,19 @@ export function DiagnosticsSettings() {
     result === "save-failed"
       ? { tone: "danger", text: copy("Seçim kaydedilemedi.", "Your choice could not be saved.") }
       : result
-        ? { tone: result === "sent" ? "success" : result === "empty" || result === "not-configured" ? "info" : "danger", text: resultText(result) }
+        ? { tone: result === "sent" ? "success" : result === "empty" || result === "not-configured" || result === "declined" ? "info" : "danger", text: resultText(result) }
         : null;
   return (
     <HintSection
       title={copy("Tanılama günlükleri", "Diagnostic logs")}
       presentation="visible"
       help={copy(
-        "Tanılama günlükleri uygulama günlükleridir; gizli bilgiler, e-posta adresleri ve kullanıcı adın bu telefonda çıkarılır. Konuşmalarını, istemlerini veya kodunu asla içermez. {p0} gün saklanır.",
+        "Telefonun gizli bilgileri, e-posta adreslerini ve kullanıcı adını günlüklerden çıkarır. Günlükler konuşmalarını, istemlerini veya kodunu içermez. Gönderilen günlükler {p0} gün saklanır.",
         "Diagnostic logs are the app logs, with secrets, e-mail addresses and your user name removed on this phone. They never include your conversations, prompts or code. They are kept {p0} days.",
         { p0: DIAGNOSTIC_RETENTION_DAYS },
       )}
     >
       <Stack>
-        {/* One consent with three states, so one control: automatic sends crash reports (and the weekly log) without asking. */}
         <NavigationGroup>
           <SegmentedRow
             label={copy("Günlükleri paylaş", "Share logs")}
@@ -93,6 +99,15 @@ export function DiagnosticsSettings() {
             value={mode ?? "ask"}
             options={options.map(({ value, label }) => ({ value, label }))}
             onChange={choose}
+          />
+          <SegmentedRow
+            label={copy("Gönderim bildirimi", "Data sharing receipts")}
+            value={receipts ? "show" : "hide"}
+            options={[
+              { value: "show", label: copy("Göster", "Show") },
+              { value: "hide", label: copy("Gösterme", "Hide") },
+            ]}
+            onChange={(value) => { void setDiagnosticReceiptsShown(value === "show").catch(() => setResult("save-failed")); }}
           />
         </NavigationGroup>
         <Field
@@ -104,7 +119,7 @@ export function DiagnosticsSettings() {
         <Button
           label={copy("Günlükleri şimdi gönder", "Send logs now")}
           busy={busy}
-          disabled={busy}
+          disabled={busy || mode === "off"}
           onPress={() => void sendNow()}
         />
         {shown ? <Notice tone={shown.tone} message={shown.text} /> : null}
@@ -114,12 +129,6 @@ export function DiagnosticsSettings() {
           flush
           onPress={() => void copyCrash()}
         />
-        {copied !== null ? (
-          <Notice
-            tone={copied ? "success" : "info"}
-            message={copied ? copy("Çökme kaydı kopyalandı.", "Crash log copied.") : copy("Kayıtlı çökme yok.", "No crash recorded.")}
-          />
-        ) : null}
       </Stack>
     </HintSection>
   );

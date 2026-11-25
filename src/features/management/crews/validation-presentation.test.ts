@@ -23,7 +23,7 @@ describe("crew validation presentation", () => {
     const draft = newDefinition("crew", "project");
     expect(crewValidation(draft)).toBeTruthy();
     const row = crewMemberPresentation(draft.agents[0], "Koordinatör", tr);
-    expect(row).toEqual({ label: "Koordinatör", detail: "Model seçilmedi", error: undefined });
+    expect(row).toEqual({ label: "Koordinatör", detail: "", error: undefined });
     const touched = crewMemberPresentation(draft.agents[0], "Koordinatör", tr, true);
     expect(touched.error).toBe("Üye adı girin.");
     expect(touched.detail).not.toContain("Koordinatör");

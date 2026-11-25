@@ -3,7 +3,7 @@ import type { HostModelCatalog } from "@/domain/types";
 import { useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { useLocale } from "@/i18n";
-import { Button, Loading, Notice, QueryState, SelectField } from "@/ui/primitives";
+import { Button, Loading, Notice, QueryState, SelectField, StateView } from "@/ui/primitives";
 import { ProviderIcon } from "@/ui/provider-identity";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import type { AssistantProfile } from "../../../../src/shared/model/host-contracts/assistant";
@@ -81,7 +81,7 @@ export function AssistantReplyModel({ client, profile, projectId, disabled, curr
       catalog.data.pending?.length ? (
         <Loading label={copy("Yükleniyor…", "Loading…")} />
       ) : (
-        <Notice message={copy("Kullanılabilir model yok.", "No models available.")} />
+        <StateView size="compact" title={copy("Kullanılabilir model yok.", "No models available.")} />
       )
     ) : null}
     <SelectField label={copy("Yanıt modeli", "Reply model")} value={selectedValue}

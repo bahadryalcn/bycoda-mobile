@@ -9,10 +9,11 @@ vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
 vi.mock("@/ui/duotone-icon", () => ({ Laptop: "Laptop" }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: "IconTile" }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
-vi.mock("@/ui/tokens", () => ({ space: {} }));
+vi.mock("@/ui/tokens", () => ({ space: {}, gapIcon: 8, iconSize: {} }));
+vi.mock("lucide-react-native/icons/laptop", () => ({ default: "Laptop" }));
 vi.mock("@/ui/primitives", () => ({
   Body: "Body", ErrorNotice: "ErrorNotice", FormActions: "FormActions", Disclosure: "Disclosure",
-  Field: "Field", IdentifierField: "IdentifierField", Stack: "Stack", Heading: "Heading", Row: "Row",
+  Field: "Field", IdentifierField: "IdentifierField", Stack: "Stack", Heading: "Heading", Row: "Row", RowIcon: "RowIcon",
 }));
 import { ManualConnectionForm } from "./manual-connection-form";
 import { ConnectionFeedback } from "./connection-feedback";

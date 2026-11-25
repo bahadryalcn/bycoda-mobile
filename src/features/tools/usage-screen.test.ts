@@ -7,8 +7,10 @@ const fixture = vi.hoisted(() => ({
   fetching: false, error: false, emptyPage: false, emptyAll: false, params: {} as any, reads: [] as any[], refresh: undefined as any, oldNext: undefined as any,
   refetch: vi.fn(async () => ({})),
   reportSupported: false,
+  tab: "tokens" as string | undefined,
   refetchReports: vi.fn(async () => undefined),
 }));
+vi.mock("../workspace/project-picker", () => ({ ProjectPicker: () => null }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...await importOriginal<typeof import("@tanstack/react-query")>(),
   useQueryClient: () => ({ refetchQueries: fixture.refetchReports }),
@@ -21,13 +23,13 @@ vi.mock("lucide-react-native/icons/user-round", () => ({ default: () => null }))
 vi.mock("lucide-react-native/icons/briefcase", () => ({ default: () => null }));
 vi.mock("@/ui/state-view", () => ({ StateView: ({ title, description, action, secondaryAction }: any) => createElement("div", null, title, description, ...[action, secondaryAction].filter(Boolean).map((item: any) => createElement("button", { key: item.label, onClick: item.onPress }, item.label))) }));
 vi.mock("@/ui/toast", () => ({ showToast: () => undefined, useToastAvailable: () => false, useSuccessToast: () => () => undefined }));
-vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
-vi.mock("expo-router", () => ({ Stack: { Screen: () => null }, router: { push: vi.fn() }, useLocalSearchParams: () => ({}) }));
+vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children), StyleSheet: { hairlineWidth: 1 } }));
+vi.mock("expo-router", () => ({ Stack: { Screen: () => null }, router: { push: vi.fn(), setParams: vi.fn() }, useLocalSearchParams: () => ({ tab: fixture.tab }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
 vi.mock("@/ui/usage-meters", () => ({ RemainingMeter: () => null, AccountMeter: () => null, CostKpi: () => null, DailyBars: () => null }));
 vi.mock("./usage-charts", () => ({ UsageKpis: ({ items }: any) => createElement("div", null, items.map((item: any) => createElement("span", { key: item.title }, item.title, item.value))), ProviderShare: () => null }));
-vi.mock("@/ui/tokens", () => ({ space: {}, fontSize: {}, radii: {} }));
+vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, space: {}, fontSize: {}, radii: {} }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
 vi.mock("@/ui/typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("@/state/machines", () => {
@@ -44,6 +46,7 @@ vi.mock("@/state/queries", () => ({ useHostQuery: (_key: unknown, _method: strin
 vi.mock("@/ui/feedback", () => ({
   Empty: ({ title, action }: any) => createElement("div", null, title, action ? createElement("button", { onClick: action.onPress }, action.label) : null),
   ErrorNotice: () => null, Notice: ({ message }: any) => createElement("span", null, message), Loading: () => null, Skeleton: () => null,
+  StatusLine: ({ label, action }: any) => createElement("div", null, label, action ? createElement("button", { onClick: action.onPress }, action.label) : null),
 }));
 vi.mock("@/ui/metric-row", () => ({ MetricRow: ({ label, value }: any) => createElement("div", null, label, value) }));
 vi.mock("@/ui/record-card", () => ({ RecordCard: ({ title, preview }: any) => createElement("div", null, title, preview) }));
@@ -70,7 +73,7 @@ beforeEach(() => {
   fixture.machineId = "computer"; fixture.endpoint = "https://synthetic.invalid"; fixture.environmentId = "environment"; fixture.lanKey = "synthetic"; fixture.projectId = "project";
   fixture.supported = true; fixture.fetching = false; fixture.error = false; fixture.emptyPage = false; fixture.emptyAll = false; fixture.reads = [];
   fixture.refetch.mockReset().mockResolvedValue({}); node = document.createElement("div"); document.body.append(node); root = createRoot(node);
-  fixture.reportSupported = false; fixture.refetchReports.mockReset().mockResolvedValue(undefined);
+  fixture.reportSupported = false; fixture.tab = "tokens"; fixture.refetchReports.mockReset().mockResolvedValue(undefined);
 });
 afterEach(() => { act(() => root.unmount()); node.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 it.each(["machine", "endpoint", "project", "environment", "key"])("drops the previous page before the first %s scope read and rejects a stale action", async kind => {
@@ -121,7 +124,17 @@ it("does not let an old refresh completion clear the current scope's refresh ind
   await act(async () => first()); expect(fixture.refresh.refreshing).toBe(true);
   await act(async () => second()); expect(fixture.refresh.refreshing).toBe(false);
 });
-it("shows token breakdown by default and a Host-update state for Cost and Limits without session rows", async () => {
+it("opens on Limits and asks for a project only inside the Tokens tab", async () => {
+  fixture.tab = undefined;
+  await act(() => root.render(createElement(UsageScreen, {})));
+  expect(node.textContent).toContain("Limits are unavailable on this computer");
+  expect([...node.querySelectorAll("button")].map((item) => item.textContent).slice(-3)).toEqual(["Limits", "Cost", "Tokens"]);
+  expect(fixture.reads.every((read) => read.projectId === null)).toBe(true);
+  await click("Tokens");
+  expect(node.textContent).toContain("Token usage is shown per project");
+  expect(node.textContent).not.toContain("Total tokens");
+});
+it("shows token breakdown from a Tokens link and a Host-update state for Cost and Limits without session rows", async () => {
   await render();
   expect(node.textContent).toContain("Total tokens"); expect(node.textContent).toContain("By provider");
   await click("Cost"); expect(node.textContent).toContain("Cost is unavailable on this computer");

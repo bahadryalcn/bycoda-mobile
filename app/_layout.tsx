@@ -1,6 +1,6 @@
 import "../src/global.css";
 import { Stack } from "expo-router/stack";
-import { DarkTheme, DefaultTheme, ThemeProvider, router } from "expo-router";
+import { DarkTheme, DefaultTheme, ThemeProvider, router, type ErrorBoundaryProps } from "expo-router";
 import { NavigationBar } from "expo-navigation-bar";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
@@ -9,12 +9,14 @@ import { AppProviders } from "../src/app-providers";
 import { KeyboardCommandsProvider, KeyboardScreen } from "../src/features/keyboard/keyboard-provider";
 import { ScreenChromeProvider } from "../src/ui/layout";
 import { HeaderBackButton } from "../src/ui/header-back-button";
+import { stackBackItem } from "../src/ui/stack-back";
 import { useCopy } from "../src/ui/copy";
 import { useReducedMotionPreference } from "../src/ui/use-reduced-motion";
 import { useMobileTheme } from "../src/ui/theme";
 import { useRestoreLastSession } from "../src/features/workspace/last-session";
 import { useAssistantWindowReserve } from "../src/features/assistant/assistant-window-reserve";
 import { useEffect } from "react";
+import { AppErrorScreen } from "../src/ui/error-boundary";
 
 /**
  * Home sits beneath every cold deep link (widget setup, `bycoda://project/...`, `/machines`,
@@ -25,6 +27,11 @@ export const unstable_settings = { anchor: "(tabs)" };
 
 // Module scope: capture starts before the first render so early warnings and crashes are kept.
 startDiagnostics();
+
+/** A render crash anywhere below the root shows one compact recovery screen instead of a blank app. */
+export function ErrorBoundary(props: ErrorBoundaryProps) {
+  return <AppErrorScreen {...props} />;
+}
 
 function RootNavigation() {
   useRestoreLastSession();
@@ -53,12 +60,15 @@ function RootNavigation() {
             screenLayout={({ children }) => <KeyboardScreen>{children}</KeyboardScreen>}
             screenOptions={{
               headerStyle: { backgroundColor: colors.background },
+              ...(process.env.EXPO_OS === "ios" ? { statusBarStyle: mode === "dark" ? "light" : "dark" } : {}),
               animation: reducedMotion ? "none" : "default",
               headerTintColor: colors.text,
               headerTitleStyle: uiStyles.title,
               headerBackButtonDisplayMode: "minimal",
               // One back presentation for every stack header; the native arrow is replaced, not mixed in.
               headerLeft: ({ canGoBack }) => canGoBack ? <HeaderBackButton onPress={() => router.back()} /> : null,
+              // iOS: the same chevron as an item without the shared glass capsule (see stackBackItem).
+              unstable_headerLeftItems: ({ canGoBack }) => canGoBack ? [stackBackItem(<HeaderBackButton onPress={() => router.back()} />)] : [],
               contentStyle: { backgroundColor: colors.background },
               headerShadowVisible: false,
             }}
@@ -69,7 +79,8 @@ function RootNavigation() {
               options={{ title: copy("Bilgisayarlar", "Computers"), presentation: "card" }}
             />
             <Stack.Screen name="account" options={{ title: copy("Hesap", "Account") }} />
-            <Stack.Screen name="account-notifications" options={{ title: copy("Bildirim ayarları", "Notification settings") }} />
+            {/* `account-notifications` only redirects to settings/notifications. Every settings/* page
+                sets its own title through SettingsPage, so this table lists none of them. */}
             <Stack.Screen name="project/[id]" options={{ title: copy("Proje", "Project") }} />
             {/* The chat screen draws its own compact 48dp header so the first frame never shifts. */}
             <Stack.Screen name="session/[id]" options={{ title: copy("Oturum", "Session"), headerShown: false }} />
@@ -90,7 +101,7 @@ function RootNavigation() {
             />
             <Stack.Screen
               name="report"
-              options={{ title: copy("İçerik bildir", "Report content") }}
+              options={{ title: copy("İçerik şikâyet et", "Report content") }}
             />
           </Stack>
         </ScreenChromeProvider>
@@ -112,8 +123,7 @@ export default function RootLayout() {
   return (
     <>
       <AppProviders><KeyboardCommandsProvider><RootNavigation /></KeyboardCommandsProvider></AppProviders>
-      {/* Expo Go owns the native plist; use one global status bar owner instead of native-stack traits. */}
-      <StatusBar style={barStyle} />
+      {process.env.EXPO_OS !== "ios" ? <StatusBar style={barStyle} /> : null}
       {process.env.EXPO_OS === "android" ? <NavigationBar style={barStyle} hidden={false} /> : null}
     </>
   );

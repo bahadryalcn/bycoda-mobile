@@ -3,7 +3,7 @@ import { act, createElement, createRef, Fragment, type PropsWithChildren } from 
 import { createRoot } from "react-dom/client";
 import type { HostInstance } from "react-native";
 import { afterEach, expect, it, vi } from "vitest";
-const state=vi.hoisted(()=>({measure:null as null|((event:any)=>void)}));
+const state=vi.hoisted(()=>({measure:null as null|((event:any)=>void),keyboard:false}));
 vi.mock("react-native",()=>({
  View:({children,onLayout,style}:PropsWithChildren<{onLayout?:(event:any)=>void;style?:any}>)=>{
   if(onLayout)state.measure=onLayout;
@@ -12,7 +12,8 @@ vi.mock("react-native",()=>({
  ScrollView:({children,style}:PropsWithChildren<{style?:any}>)=>createElement("div",{style,"data-feedback-scroll":true},children),
  useWindowDimensions:()=>({height:400}),
 }));
-vi.mock("./theme",()=>({useMobileTheme:()=>null}));
+vi.mock("./theme",()=>({useMobileTheme:()=>({semanticColors:{warning:{text:"warning"}}})}));
+vi.mock("react-native-keyboard-controller",()=>({useKeyboardState:(select:(state:{isVisible:boolean})=>boolean)=>select({isVisible:state.keyboard})}));
 vi.mock("./copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
 vi.mock("./unsaved-badge",()=>({UnsavedBadge:()=>createElement("i",null,"Unsaved changes")}));
 vi.mock("./buttons",()=>({Button:({label,onPress,busy,disabled,ref}:any)=>createElement("button",{ref,onClick:onPress,disabled:busy||disabled},label)}));
@@ -20,7 +21,7 @@ import { FormActionRow } from "./form-action-row";
 import { FormActionScrollOwner } from "./form-action-context";
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
 let root:ReturnType<typeof createRoot>|undefined;
-afterEach(()=>{act(()=>root?.unmount());root=undefined;document.body.replaceChildren();state.measure=null;});
+afterEach(()=>{act(()=>root?.unmount());root=undefined;document.body.replaceChildren();state.measure=null;state.keyboard=false;});
 function mount(props:any){const host=document.createElement("div");document.body.append(host);root=createRoot(host);act(()=>root!.render(createElement(FormActionRow,props)));return host;}
 it("puts sheet operations before long feedback and leaves standalone feedback before operations",()=>{
  const props={submitLabel:"Save",onSubmit:vi.fn(),feedback:createElement("span",null,"Long operation failure")};
@@ -28,6 +29,14 @@ it("puts sheet operations before long feedback and leaves standalone feedback be
  expect(host.textContent).toBe("SaveLong operation failure");
  act(()=>root!.render(createElement(FormActionRow,props)));
  expect(host.textContent).toBe("Long operation failureSave");
+});
+it("puts the disabled-save reason above the sheet actions", () => {
+  const host = mount({
+    disabled: true, submitLabel: "Save", onSubmit: vi.fn(), onCancel: vi.fn(),
+    feedback: createElement("span", null, "Choose a computer"), feedbackPlacement: "after",
+  });
+  expect(host.textContent).toBe("Choose a computerSaveCancel");
+  expect(host.querySelector("button")?.disabled).toBe(true);
 });
 it("preserves the action node, focus and current callbacks when feedback changes",()=>{
  const first=vi.fn(),latest=vi.fn(),cancel=vi.fn();
@@ -70,4 +79,15 @@ it("shows the unsaved pill above the actions only while dirty",()=>{
  const host=mount(props);expect(host.textContent).toBe("Save");
  act(()=>root!.render(createElement(FormActionRow,{...props,dirty:true})));
  expect(host.textContent).toBe("Unsaved changesSave");
+});
+
+it("puts Cancel and the primary action on one row while the keyboard is open, keeping the same submit node",()=>{
+ const host=mount({submitLabel:"Save",onSubmit:vi.fn(),onCancel:vi.fn(),dirty:true});
+ const submit=host.querySelector("button")!;
+ expect(host.textContent).toContain("Unsaved changes");
+ state.keyboard=true;
+ act(()=>root!.render(createElement(FormActionRow,{submitLabel:"Save",onSubmit:vi.fn(),onCancel:vi.fn(),dirty:true})));
+ expect(host.querySelector("button")).toBe(submit);
+ expect(host.textContent).not.toContain("Unsaved changes");
+ expect((submit.parentElement as HTMLElement).style.flexDirection).toBe("row-reverse");
 });

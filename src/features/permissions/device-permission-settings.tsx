@@ -5,28 +5,29 @@ import Camera from "lucide-react-native/icons/camera";
 import Mic from "lucide-react-native/icons/mic";
 import ImageIcon from "lucide-react-native/icons/image";
 import { useAsyncAction } from "@/state/actions";
-import { Badge, Body, Button, FormActions, MutationState, NavigationGroup, NavigationRow, Row, SectionHeader, Stack, StateView, ValueRow } from "@/ui/primitives";
-import { IconTile } from "@/ui/icon-tile";
+import { Button, MutationState, NavigationGroup, NavigationRow, Row, SectionHeader, SettingIcon, StateView, StatusText, ValueRow } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useInfoHint } from "@/ui/info-hint";
 import { space } from "@/ui/tokens";
-import { useMobileTheme } from "@/ui/theme";
 import { IssueSummary } from "@/ui/issue-summary";
-import { PushSettings, usePushTestFromComputer } from "../push/PushSettings";
 import { errorMessage } from "@/ui/error-message";
-import { allowDevicePermission, readDevicePermission, testDeviceNotification, type DevicePermissionKind } from "./device-permissions";
+import { allowDevicePermission, readDevicePermission, type DevicePermissionKind } from "./device-permissions";
 import { failedPermissionKinds, markRetrying, pendingPermissionReads, permissionKinds, readDevicePermissionStatuses,
   type PermissionRead, type PermissionReads } from "./device-permission-status";
 
+/**
+ * Settings → Phone permissions: one row per permission with its state. A tap asks in place or, once
+ * granted or permanently denied, opens phone settings. Notification choices live on the
+ * Notifications page.
+ */
 export function DevicePermissionSettings() {
   const copy = useCopy();
-  const { colors } = useMobileTheme();
   const action = useAsyncAction();
   const retry = useAsyncAction();
   const [reads, setReads] = useState<PermissionReads>(pendingPermissionReads);
   const latestRead = useRef<Partial<Record<DevicePermissionKind, symbol>>>({});
   const mounted = useRef(true);
-  const [operationTarget, setOperationTarget] = useState<DevicePermissionKind | "test" | "settings">();
+  const [operationTarget, setOperationTarget] = useState<DevicePermissionKind | "settings">();
   // A rejected concurrent request must not steal the active operation's feedback.
   const runFor = useCallback((target: NonNullable<typeof operationTarget>, work: () => Promise<unknown>) => action.run(async () => {
     if (mounted.current) setOperationTarget(target);
@@ -59,9 +60,9 @@ export function DevicePermissionSettings() {
   const status = (read: PermissionRead) => {
     if (read.status !== "ready") return undefined;
     if (read.permission.granted) return { label: copy("İzin verildi", "Granted"), tone: "success" } as const;
-    if (read.permission.status === "undetermined") return { label: copy("Henüz sorulmadı", "Not asked") };
+    if (read.permission.status === "undetermined") return { label: copy("Henüz sorulmadı", "Not asked"), tone: "default" } as const;
     if (read.permission.status === "denied") return { label: copy("Reddedildi", "Denied"), tone: "danger" } as const;
-    return { label: copy("Kullanılamıyor", "Unavailable") };
+    return { label: copy("Kullanılamıyor", "Unavailable"), tone: "default" } as const;
   };
   const failed = failedPermissionKinds(reads);
   const labels = { camera: copy("Kamera", "Camera"), microphone: copy("Mikrofon", "Microphone"), notifications: copy("Bildirimler", "Notifications") };
@@ -75,7 +76,6 @@ export function DevicePermissionSettings() {
 ${labels.microphone}: ${reasons.microphone}
 ${labels.notifications}: ${reasons.notifications}
 ${copy("Fotoğraflar ve dosyalar", "Photos and files")}: ${reasons.photos}`, "inline");
-  const testInfo = useInfoHint(copy("Bu telefonda dene yerel bir bildirim gösterir. Bilgisayardan dene ise bilgisayara bu telefona bildirim göndermesini söyler.", "Test on this phone shows a local notification here. Test from the computer asks the computer to send one to this phone."));
   const issues = failed.map((kind) => {
     const read = reads[kind];
     return read.status === "error" ? `${labels[kind]}: ${errorMessage(read.error, copy)}` : undefined;
@@ -84,9 +84,12 @@ ${copy("Fotoğraflar ve dosyalar", "Photos and files")}: ${reasons.photos}`, "in
     const read = reads[kind];
     const badge = status(read);
     const Icon = icon;
-    return <><NavigationRow label={labels[kind]} trailing={badge ? <Badge {...badge} /> : null}
-      accessibilityLabel={badge ? `${labels[kind]}. ${badge.label}` : labels[kind]}
-      icon={<IconTile color={colors.muted}><Icon size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
+    // A pending read is named, never a silent blank: reads carry a deadline and then become errors.
+    const state = badge ?? (read.status === "pending" ? { label: copy("Kontrol ediliyor…", "Checking…"), tone: "default" } as const
+      : { label: copy("Okunamadı", "Unreadable"), tone: "warning" } as const);
+    return <><NavigationRow label={labels[kind]} trailing={<StatusText {...state} />} intent="command"
+      accessibilityLabel={`${labels[kind]}. ${state.label}`}
+      icon={<SettingIcon glyph={Icon} />}
       busy={operationTarget === kind && action.isPending}
       disabled={action.isPending || read.status !== "ready"}
       onPress={() => { void runFor(kind, async () => {
@@ -95,17 +98,10 @@ ${copy("Fotoğraflar ve dosyalar", "Photos and files")}: ${reasons.photos}`, "in
         await refresh();
       }); }} />{operationTarget === kind ? <MutationState mutation={action} /> : null}</>;
   };
-  const notificationsGranted = reads.notifications.status === "ready" && reads.notifications.permission.granted;
-  // Names the blocking permission state so a dimmed test button is never unexplained.
-  const testBlockedReason = notificationsGranted ? null
-    : reads.notifications.status === "pending" ? copy("Bildirim izni kontrol ediliyor.", "Checking notification permission.")
-      : reads.notifications.status === "error" ? copy("Bildirim izni okunamadı. Yukarıdan yenile.", "Notification permission could not be read. Refresh above.")
-        : copy("Önce bildirimlere izin ver.", "Allow notifications first.");
-  const pushTest = usePushTestFromComputer();
   return (
     <>
       <View style={{ gap: space.sm }}>
-        <SectionHeader flush title={copy("Bu telefonun izinleri", "This phone's permissions")} trailing={permissionInfo.button} />
+        <SectionHeader title={copy("Bu telefonun izinleri", "This phone's permissions")} trailing={permissionInfo.button} />
         {permissionInfo.panel}
         <NavigationGroup>
           {row("camera", Camera)}
@@ -113,8 +109,8 @@ ${copy("Fotoğraflar ve dosyalar", "Photos and files")}: ${reasons.photos}`, "in
           {row("notifications", Bell)}
           {/* The system picker grants access per selection, so there is no app permission to read or request. */}
           <ValueRow label={copy("Fotoğraflar ve dosyalar", "Photos and files")}
-            icon={<IconTile color={colors.muted}><ImageIcon size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
-            trailing={<Badge label={copy("Sistem seçicisi", "System picker")} />} />
+            icon={<SettingIcon glyph={ImageIcon} />}
+            value={copy("Sistem seçicisi", "System picker")} />
         </NavigationGroup>
         <IssueSummary issues={issues} retrying={retry.isPending} onRetry={() => { void retry.run(() => refresh(failed)); }} />
         <Row style={{ justifyContent: "flex-end" }}>
@@ -122,23 +118,6 @@ ${copy("Fotoğraflar ve dosyalar", "Photos and files")}: ${reasons.photos}`, "in
             onPress={() => { void runFor("settings", () => Linking.openSettings()); }} />
         </Row>
         {operationTarget === "settings" ? <MutationState mutation={action} /> : null}
-      </View>
-      <PushSettings />
-      <View style={{ gap: space.sm }}>
-        <SectionHeader flush title={copy("Deneme", "Test")} trailing={testInfo.button} />
-        {testInfo.panel}
-        <Stack>
-          <Row style={{ flexWrap: "wrap" }}>
-            <Button label={copy("Bu telefonda dene", "Test on this phone")} disabled={!notificationsGranted || action.isPending}
-              busy={action.isPending && operationTarget === "test"}
-              onPress={() => { void runFor("test", () => testDeviceNotification("bycoda", copy("Bildirimler bu telefonda çalışıyor.", "Notifications work on this phone."))); }} />
-            <Button label={copy("Bilgisayardan dene", "Test from computer")} tone="secondary" disabled={pushTest.disabled} busy={pushTest.busy}
-              onPress={pushTest.run} />
-          </Row>
-          {testBlockedReason && !action.isPending ? <Body muted selectable={false}>{testBlockedReason}</Body> : null}
-          {operationTarget === "test" ? <MutationState mutation={action} /> : null}
-          <MutationState mutation={pushTest.action} />
-        </Stack>
       </View>
     </>
   );

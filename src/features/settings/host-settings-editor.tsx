@@ -9,6 +9,7 @@ import { getQueryPresentation } from "@/ui/query-presentation";
 import { useReadRetryNotice } from "@/ui/query-state";
 import { router } from "expo-router";
 import Animated from "react-native-reanimated";
+import { View } from "react-native";
 import type { HostSettingsState } from "../../remote/types";
 import { hostKey, useHostMutation, useHostQuery } from "../../state/queries";
 import { Body, Disclosure, FormActions, QueryState, MutationState, Notice, SectionHeader, Stack, StateView, ErrorText, Loading } from "../../ui/primitives";
@@ -144,9 +145,7 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
   const manageConnections = () => requestCloseThen(() => router.navigate("/machines"));
   const checkingConnection = copy("Bağlantı kontrol ediliyor…", "Checking connection…");
   if (validScope && accessError && supported) return (
-    <Stack><Body muted>{opening.name}</Body>
-      <QueryState query={settings} loading="inline" compact onManageConnections={manageConnections} />
-    </Stack>
+    <QueryState query={settings} loading="inline" compact onManageConnections={manageConnections} />
   );
   if (validScope && !showSections.current && (quietLinkDown || (!linkDown && phase === "checking"))) {
     return <Loading label={checkingConnection} />;
@@ -158,42 +157,43 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
   );
   return (
     <Stack style={{ gap: space.lg }}>
-      <Body>{opening.name}</Body>
       {validScope && !linkDown && !snapshot && supported ? <SectionHeader title={copy("Görev sınırları", "Task limits")} /> : null}
-      {!validScope ? <Notice tone="warning" message={copy("Seçili bilgisayar değişti. Ayarları yeniden açın.", "The selected computer changed. Reopen the settings.")} /> : quietLinkDown ? null : linkDown ? <Notice tone="warning" message={copy("{p0} bu ağda erişilemiyor.", "Can't reach {p0} on this network.", { p0: opening.name ?? "" })} action={{ label: copy("Bağlantıları yönet", "Manage connections"), onPress: manageConnections }} /> : !supported ? <StateView compact illustration="error" title={copy("Görev sınırları kullanılamıyor", "Task limits unavailable")} description={copy("Görev sınırlarını düzenlemek için bu bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer to edit task limits.")} /> : <QueryState query={uncertain ? { ...settings, refetch: undefined } : settings} loading="inline" compact onManageConnections={manageConnections} />}
+      {!validScope ? <Notice tone="warning" message={copy("Seçili bilgisayar değişti. Ayarları yeniden aç.", "The selected computer changed. Reopen the settings.")} /> : quietLinkDown ? null : linkDown ? <Notice tone="warning" message={copy("{p0} bu ağda erişilemiyor.", "Can't reach {p0} on this network.", { p0: opening.name ?? "" })} action={{ label: copy("Bağlantıları yönet", "Manage connections"), onPress: manageConnections }} /> : !supported ? <StateView compact illustration="error" title={copy("Görev sınırları kullanılamıyor", "Task limits unavailable")} description={copy("Görev sınırlarını düzenlemek için bu bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer to edit task limits.")} /> : <QueryState query={uncertain ? { ...settings, refetch: undefined } : settings} loading="inline" compact onManageConnections={manageConnections} />}
       {snapshot ? (
         <>
           <Animated.View entering={enterItem(0)}>
-            <Stack style={{ gap: space.lg }}>
+            <View style={{ gap: space.sm }}>
               <SectionHeader title={copy("Görev sınırları", "Task limits")} />
-              <IntegerStepper
-                label={copy("Aynı anda çalışan görev", "Concurrent tasks")}
-                value={Number(fields.maxRunning)}
-                min={1}
-                max={Number.MAX_SAFE_INTEGER}
-                onValueChange={(value) => update("maxRunning", String(value))}
-                disabled={!mayEditLimits}
-              />
-              <Stack style={{ gap: space.xs }}>
-                <LimitPresets
-                  label={copy("Günlük ajan süresi", "Daily agent time")}
-                  customLabel={copy("Günlük ajan süresi (dakika)", "Daily agent time (minutes)")}
-                  values={DAILY_TIME_PRESETS}
-                  value={fields.dailyMinutes}
-                  format={formatMinutes}
-                  onChange={(value) => update("dailyMinutes", value)}
+              <Stack style={{ gap: space.lg }}>
+                <IntegerStepper
+                  label={copy("Aynı anda çalışan görev", "Concurrent tasks")}
+                  value={Number(fields.maxRunning)}
+                  min={1}
+                  max={Number.MAX_SAFE_INTEGER}
+                  onValueChange={(value) => update("maxRunning", String(value))}
                   disabled={!mayEditLimits}
                 />
-                {!validMinutes ? (
-                  <ErrorText error={copy("Sıfır veya pozitif bir tam dakika girin.", "Enter zero or a positive whole number of minutes.")} />
-                ) : null}
-                <Body muted style={uiStyles.caption}>
-                  {copy("Bugün {p0} dakika kullanıldı.", "{p0} minutes used today.", {
-                    p0: new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false }).format(snapshot.usedMinutes),
-                  })}
-                </Body>
+                <Stack style={{ gap: space.xs }}>
+                  <LimitPresets
+                    label={copy("Günlük ajan süresi", "Daily agent time")}
+                    customLabel={copy("Günlük ajan süresi (dakika)", "Daily agent time (minutes)")}
+                    values={DAILY_TIME_PRESETS}
+                    value={fields.dailyMinutes}
+                    format={formatMinutes}
+                    onChange={(value) => update("dailyMinutes", value)}
+                    disabled={!mayEditLimits}
+                  />
+                  {!validMinutes ? (
+                    <ErrorText error={copy("Sıfır veya pozitif bir tam dakika gir.", "Enter zero or a positive whole number of minutes.")} />
+                  ) : null}
+                  <Body muted style={uiStyles.caption}>
+                    {copy("Bugün {p0} dakika kullanıldı.", "{p0} minutes used today.", {
+                      p0: new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false }).format(snapshot.usedMinutes),
+                    })}
+                  </Body>
+                </Stack>
               </Stack>
-            </Stack>
+            </View>
           </Animated.View>
           {snapshot.limitReached ? (
             <Notice
@@ -207,7 +207,7 @@ export function HostSettingsEditor({ machineId, machineName, target }: HostSetti
             busy={action.isPending || save.isPending || reading}
             disabled={uncertain ? !supported || linkDown : !writable || !dirty || !validSettingsFields(fields)}
             onSubmit={uncertain ? () => { void refreshSettings(); } : submit}
-            feedback={<>{uncertain ? <><Notice tone="warning" message={copy("Kaydetmenin sonucu bilinmiyor. Tekrar göndermeden bilgisayardaki tercihi kontrol edin.", "The save outcome is unknown. Check the preference on the computer before sending again.")} /></> : null}{validScope && observed ? <Body muted>{copy("Son alınan sınırlar: {p0} görev · {p1} dakika (0 sınırsız).", "Last received limits: {p0} tasks · {p1} minutes (0 unlimited).", { p0: observed.maxRunningTasks, p1: observed.dailyAgentMinutes })}</Body> : null}{validScope && !uncertain ? <MutationState
+            feedback={<>{uncertain ? <><Notice tone="warning" message={copy("Kaydetmenin sonucu bilinmiyor. Tekrar göndermeden bilgisayardaki tercihi kontrol et.", "The save outcome is unknown. Check the preference on the computer before sending again.")} /></> : null}{validScope && observed ? <Body muted>{copy("Son alınan sınırlar: {p0} görev · {p1} dakika (0 sınırsız).", "Last received limits: {p0} tasks · {p1} minutes (0 unlimited).", { p0: observed.maxRunningTasks, p1: observed.dailyAgentMinutes })}</Body> : null}{validScope && !uncertain ? <MutationState
             mutation={action}
             success={
               dirty

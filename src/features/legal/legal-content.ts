@@ -9,6 +9,7 @@ export type LegalSection = {
 };
 
 export const legalUpdatedDate: LegalText = ["14 Kasım 2026", "14 November 2026"];
+export const privacyUpdatedDate: LegalText = ["25 Kasım 2026", "25 November 2026"];
 export const supportEmail = "info@bycoda.codes";
 export const privacyPolicyUrl =
   "https://github.com/bahadryalcn/bycoda/blob/main/docs/guides/privacy-policy.md";
@@ -48,8 +49,8 @@ export const legalSections: Record<LegalDocumentId, readonly LegalSection[]> = {
       title: ["bycoda hesabı ve takip", "bycoda accounts & tracking"],
       paragraphs: [
         [
-          "bycoda projelerini, konuşmalarını veya bağlantı anahtarlarını otomatik yüklemez. Bildirimler yalnızca inceleyip gönderdiğinde iletilir.",
-          "bycoda does not automatically upload your projects, conversations or connection keys. Reports are sent only when you review and submit them.",
+          "Rutin hesap istekleri projelerini, konuşmalarını veya bağlantı anahtarlarını içermez. Tanılama yüklemeleri varsayılan olarak onay ister. Gönderimi kapatabilir veya otomatik raporları açabilirsin.",
+          "Routine account requests exclude your projects, conversations and connection keys. Diagnostic uploads ask for approval by default. You can turn them off or enable automatic reports.",
         ],
         [
           "Bu, hiçbir veri saklanmadığı veya ağ kullanılmadığı anlamına gelmez. Veriler telefonunda, bağlandığın bilgisayarda ve seçtiğin servislerde işlenir.",
@@ -84,6 +85,14 @@ export const legalSections: Record<LegalDocumentId, readonly LegalSection[]> = {
     {
       title: ["Telefonunda saklanan veriler", "Data stored on your phone"],
       paragraphs: [
+        [
+          "Hesapla bilgisayar keşfi açıldığında Cloud bilgisayar adını, Host kimliğini, bağlantı adreslerini ve varsa LAN açık anahtarını saklar. Eşleştirme bileti isteyen cihaza özel şifrelenir ve teslimde Cloud kaydından silinir. Hesaptan erişim yönetimini açarsan Cloud son cihaz listesini, izinleri ve bekleyen erişim değişikliklerini saklar.",
+          "When account discovery is on, Cloud stores the computer name, Host identifier, connection addresses and any LAN public key. The pairing ticket is encrypted for the requesting device and cleared from Cloud on delivery. If you enable account access management, Cloud stores the last device list, permissions and pending changes.",
+        ],
+        [
+          "Önemli gizlilik ve kullanım koşulu değişiklikleri açık depoda sürümlenir. Uygulama GitHub'daki değişiklik kaydını hesabını veya cihaz kimliğini göndermeden kontrol eder. Bildirimi kapatman sadece telefonunda kaydedilir.",
+          "Material privacy and terms updates are versioned in the public repository. The app checks the GitHub update file without sending your account or device identifier. Dismissing the notice is recorded on the phone.",
+        ],
         [
           "Bilgisayar adları ve adresleri, bağlantı kimlikleri, seçili proje, dil ve bağlantı tercihleri uygulamanın yerel AsyncStorage alanında saklanır. Gönderilmemiş mesajlar, dosya düzenlemeleri ve not taslakları da yerel olarak saklanabilir. Bu alanların tamamının ayrıca şifrelendiği garantisi verilmez.",
           "Computer names and addresses, connection identifiers, selected projects, language and connection preferences are stored in the app’s local AsyncStorage. Unsent messages, file edits and note drafts may also be stored locally. These stores are not guaranteed to have additional application-level encryption.",

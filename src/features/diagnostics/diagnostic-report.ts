@@ -12,7 +12,7 @@ import { gzipBase64 } from "./diagnostic-gzip";
 import { capSections } from "./host-logs";
 import type { CrashMarker } from "./diagnostic-capture";
 
-export type DiagnosticSendResult = "sent" | "rate-limited" | "not-configured" | "failed" | "empty";
+export type DiagnosticSendResult = "sent" | "rate-limited" | "not-configured" | "failed" | "empty" | "declined";
 
 export interface BuildReportInput {
   trigger: DiagnosticTrigger;

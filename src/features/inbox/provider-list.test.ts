@@ -7,11 +7,12 @@ import { ProviderInboxRow } from "./provider-list";
 
 vi.mock("../workspace/pull-request-state-badge", () => ({ PullRequestStateBadge: ({ label }: { label: string }) => createElement("span", null, label) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: { caption: {} } }) }));
 vi.mock("@/ui/issue-summary", () => ({ IssueSummary: () => null }));
 vi.mock("../management/shared/record-bits", () => ({ useRelativeTime: () => () => "" }));
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("span", null, children);
-  return { Body: Wrap, Row: Wrap, Badge: ({ label }: { label: string }) => createElement("span", null, label),
+  return { Body: Wrap, Row: Wrap, StatusText: ({ label }: { label: string }) => createElement("span", null, label), Badge: ({ label }: { label: string }) => createElement("span", null, label),
     NavigationRow: ({ label, detail, accessibilityLabel, supporting, trailing, onPress }: {
       label: string; detail?: string; accessibilityLabel?: string; supporting?: ReactNode; trailing?: ReactNode; onPress: () => void;
     }) => createElement("button", { "aria-label": accessibilityLabel ?? [label, detail].filter(Boolean).join(". "), onClick: onPress }, label, detail, supporting, trailing),

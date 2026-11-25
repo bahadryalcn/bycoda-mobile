@@ -8,6 +8,9 @@ import {
   projectPathLabel,
   PINNED_SECTION_KEY,
   sortDirectoryProjects,
+  projectSortOf,
+  projectAttentionCounts,
+  latestProjectSessions,
   type DirectoryProject,
 } from "./project-directory";
 
@@ -34,7 +37,8 @@ describe("complete project directory", () => {
     for (const sort of ["desktop", "name", "recent"] as const)
       expect(sortDirectoryProjects(pinned, { sort, recent: { p0: 100 } }).slice(0, 2).map((row) => row.id))
         .toEqual(["p5", "p70"]);
-    expect(sortDirectoryProjects(pinned, { sort: "custom", recent: {} })[0]?.id).toBe("p0");
+    // The retired phone-only custom order now reads as the computer order.
+    expect(sortDirectoryProjects(pinned, { sort: "custom" as never, recent: {} })[0]?.id).toBe("p5");
     const sections = directorySections(pinned, groups, "", {});
     expect(sections.map((section) => section.key)).toEqual([PINNED_SECTION_KEY, "work", ""]);
     expect(sections[0]).toMatchObject({ pinned: true, total: 1, data: [{ id: "p70" }] });
@@ -122,5 +126,33 @@ describe("same-name projects", () => {
       { id: "a", name: "data", cwd: "D:\\data" },
       { id: "b", name: "data", cwd: "E:/backup/data" },
     ])).toEqual({ b: "backup" });
+  });
+});
+
+describe("project sort choices", () => {
+  const rows = [
+    { id: "b", name: "Beta" },
+    { id: "a", name: "alpha", pinned: true },
+    { id: "c", name: "Gamma" },
+    { id: "d", name: "Delta" },
+  ];
+  const ids = (list: readonly { id: string }[]) => list.map((row) => row.id);
+  it("keeps the computer order with pinned first, and maps the retired custom order to it", () => {
+    expect(ids(sortDirectoryProjects(rows, { sort: "desktop", recent: {} }))).toEqual(["a", "b", "c", "d"]);
+    expect(ids(sortDirectoryProjects(rows, { sort: "custom" as never, recent: {} }))).toEqual(["a", "b", "c", "d"]);
+    expect(projectSortOf("custom")).toBe("desktop");
+  });
+  it("sorts by name A-Z and by the latest session activity or phone opening", () => {
+    expect(ids(sortDirectoryProjects(rows, { sort: "name", recent: {} }))).toEqual(["a", "b", "d", "c"]);
+    expect(ids(sortDirectoryProjects(rows, { sort: "recent", recent: { d: 50 } }, { c: 100, b: 10 }))).toEqual(["a", "c", "d", "b"]);
+  });
+  it("counts needs-you sessions and picks the latest live session per project", () => {
+    const directory = [
+      { project: { id: "p" }, session: { id: "s1", needsInput: true, lastActivityAt: 5 } },
+      { project: { id: "p" }, session: { id: "s2", lastActivityAt: 9 } },
+      { project: { id: "p" }, session: { id: "s3", needsInput: true, archived: true, lastActivityAt: 20 } },
+    ];
+    expect(projectAttentionCounts(directory)).toEqual({ p: 1 });
+    expect(latestProjectSessions(directory)).toEqual({ p: "s2" });
   });
 });

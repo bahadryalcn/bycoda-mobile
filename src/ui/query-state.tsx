@@ -1,8 +1,8 @@
 import { router } from "expo-router";
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { ErrorNotice, Loading, Notice, Skeleton } from "./feedback";
+import { ErrorNotice, Loading, Notice, Skeleton, StatusLine } from "./feedback";
 import { StateView } from "./state-view";
-import { errorIllustration, errorTitle } from "./state-model";
+import { errorTitle, queryStateSize } from "./state-model";
 import { showToast, useToastAvailable } from "./toast";
 import { useCopy } from "./copy";
 import { errorMessage, isConnectionLevelError, remoteErrorKind } from "./error-message";
@@ -56,6 +56,64 @@ function useQuietReconnect(query: QueryStateProps["query"], transient: boolean, 
   };
 }
 
+/** Unknown Host replies and timeouts on a reachable computer get one quiet automatic retry after this delay. */
+const GRACE_RETRY_DELAY_MS = 1_000;
+/** Shown data that keeps failing to refresh is marked stale after this many consecutive failures... */
+const STALE_FAILURE_COUNT = 2;
+/** ...or after it has been stale this long. */
+const STALE_NOTICE_AFTER_MS = 60_000;
+
+/**
+ * A failure that is not a dropped link (a timeout on a reachable computer, an unknown Host reply)
+ * first stays quiet for the shared grace with one automatic retry. `hidden` keeps the loading
+ * presentation; `slow` says the automatic retry outlasted the grace.
+ */
+export function useFailureGrace(failing: boolean, fetching: boolean, refetch?: () => unknown) {
+  const [phase, setPhase] = useState<"idle" | "grace" | "shown">("idle");
+  const [retrying, setRetrying] = useState(false);
+  const latest = useRef(refetch);
+  latest.current = refetch;
+  useEffect(() => {
+    if (failing && phase === "idle") setPhase("grace");
+    // The episode ends once nothing fails and nothing for it runs (data arrived or the query changed).
+    else if (!failing && !fetching && phase !== "idle") {
+      setPhase("idle");
+      setRetrying(false);
+    }
+  }, [failing, fetching, phase]);
+  useEffect(() => {
+    if (phase !== "grace") return;
+    const retry = setTimeout(() => {
+      if (!latest.current) return;
+      setRetrying(true);
+      void Promise.resolve(latest.current()).catch(() => undefined).finally(() => setRetrying(false));
+    }, GRACE_RETRY_DELAY_MS);
+    const shown = setTimeout(() => setPhase("shown"), READ_RETRY_GRACE_MS);
+    return () => { clearTimeout(retry); clearTimeout(shown); };
+  }, [phase]);
+  return { hidden: failing && (phase !== "shown" || retrying), slow: failing && phase === "shown" && retrying };
+}
+
+/** A failed background refresh under shown data stays silent until it repeats or lasts a minute. */
+export function useStaleFailureVisible(stale: boolean, error: unknown) {
+  const [failures, setFailures] = useState<{ last: unknown; count: number }>({ last: undefined, count: 0 });
+  const [aged, setAged] = useState(false);
+  useEffect(() => {
+    if (!stale) {
+      setFailures((current) => current.count ? { last: undefined, count: 0 } : current);
+      setAged(false);
+      return;
+    }
+    setFailures((current) => current.last === error ? current : { last: error, count: current.count + 1 });
+  }, [stale, error]);
+  useEffect(() => {
+    if (!stale) return;
+    const timer = setTimeout(() => setAged(true), STALE_NOTICE_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [stale]);
+  return stale && (failures.count >= STALE_FAILURE_COUNT || aged);
+}
+
 export function QueryState(props: QueryStateProps) {
   const { loading = "list", loadingLabel } = props;
   const state = useQueryStatePresentation(props);
@@ -72,6 +130,7 @@ export function QueryState(props: QueryStateProps) {
 function useQueryStatePresentation({
   query,
   compact = false,
+  size,
   empty,
   emptyTitle,
   emptyDetail,
@@ -87,6 +146,7 @@ function useQueryStatePresentation({
 }: QueryStateProps): { node: ReactNode; skeleton: boolean; label?: string; lead?: ReactNode } {
   const copy = useCopy();
   const sheet = useContext(SheetGuardContext);
+  const toasts = useToastAvailable();
   const presentation = getQueryPresentation(query, !!empty);
   const deviceOffline = useDeviceOffline();
   // The computer is known to be unreachable: a read with nothing loaded would otherwise spin
@@ -104,6 +164,14 @@ function useQueryStatePresentation({
     !deviceOffline && transientLinkFailure && !readTimedOut,
     fetching || presentation === "loading",
   );
+  // A timeout on a reachable computer or an unknown Host reply joins the same quiet grace as a
+  // dropped link (one automatic retry) before anything is shown.
+  const graced = useFailureGrace(
+    presentation === "error" && query.data === undefined && !deviceOffline &&
+      (readTimedOut || ((kind === "host" || kind === "protocol") && !transientLinkFailure)),
+    fetching,
+    query.refetch,
+  );
   const needsLink = !deviceOffline && query.data === undefined &&
     (presentation === "loading" || presentation === "paused" ||
       (presentation === "error" && transientLinkFailure));
@@ -120,6 +188,11 @@ function useQueryStatePresentation({
   const showOffline = deviceOffline && !repair && query.data === undefined &&
     (presentation === "loading" || presentation === "paused" ||
       (presentation === "error" && (kind === "network" || isTransientConnectionError(query.error))));
+  // Shown data stays as it is while a refresh fails or waits: the computer pill carries link
+  // failures, and a connected Host refusing a refresh stays silent until it repeats.
+  const staleFailure = query.data !== undefined && presentation === "stale-error" && !linkDown && !deviceOffline &&
+    !isConnectionLevelError(query.error) && !(transientLinkFailure && !readTimedOut);
+  const staleVisible = useStaleFailureVisible(staleFailure, query.error);
   // Revoked access, an unreachable or outdated computer and a missing network are one problem
   // for the whole region; only one section of a sheet or screen says so.
   const connectionLevel = waitingForLink || query.data === undefined && presentation !== "empty" && !reconnecting && (
@@ -129,58 +202,69 @@ function useQueryStatePresentation({
     waitingForLink || showOffline || presentation === "paused" ||
     (presentation === "error" && !reconnecting && !readTimedOut && (kind === "network" || kind === "timeout") &&
       isTransientConnectionError(query.error)));
+  // Any other failed first load is reported once per region too; later sections get one line.
+  const loadFailure = query.data === undefined && presentation === "error" && !reconnecting && !graced.hidden;
   const canShowConnection = !quietLinkRecovery && !(showOffline && loading === "none");
-  const connection = useConnectionFeedbackOwner(canShowConnection && (connectionLevel || sharedOutage), sharedOutage,
-    () => query.isFetching ? undefined : query.refetch?.());
-  if (!connection.visible) return { node: null, skeleton: false };
-  const repairAction = repair ? {
-    label: copy("Bağlantıları yönet", "Manage connections"),
-    onPress: onManageConnections ?? (() => {
-      const navigate = () => router.navigate("/machines");
-      if (sheet) (sheet.requestCloseStackThen ?? sheet.requestCloseThen)(navigate);
-      else navigate();
-    }),
-  } : undefined;
+  const connection = useConnectionFeedbackOwner(canShowConnection && (connectionLevel || sharedOutage || loadFailure),
+    sharedOutage, () => query.isFetching ? undefined : query.refetch?.());
+  if (!connection.visible) {
+    if (connectionLevel || sharedOutage) return { node: null, skeleton: false };
+    return { skeleton: false, node: (
+      <StateView size="line" tone="danger" title={copy("Bu bölüm yüklenemedi.", "This section couldn't load.")} />
+    ) };
+  }
+  const stateSize = (art = false) => queryStateSize({ size, compact, loading, owner: true, art });
+  const manageConnections = onManageConnections ?? (() => {
+    const navigate = () => router.navigate("/machines");
+    if (sheet) (sheet.requestCloseStackThen ?? sheet.requestCloseThen)(navigate);
+    else navigate();
+  });
+  const repairAction = repair ? { label: copy("Bağlantıları yönet", "Manage connections"), onPress: manageConnections } : undefined;
   const placeholder = loading === "list" || loading === "content";
+  // The computer pill already reports a dropped or recovering link; the region adds no second line.
+  const pillReports = linkDown || !!recoveringMachine;
   const renderProgress = (label?: string) =>
     loading === "inline" || loading === "centered"
       ? renderLoading
         ? renderLoading(label ?? copy("Yükleniyor…", "Loading…"))
         : <Loading label={label} centered={loading === "centered"} />
       : null;
-  if ((presentation === "loading" || quietLinkRecovery) && !showOffline && !waitingForLink) {
+  if ((presentation === "loading" || quietLinkRecovery || graced.hidden) && !showOffline && !waitingForLink) {
     // A failed attempt that is being retried can take several request deadlines on a busy
     // computer; without a word the placeholder looks frozen.
-    const slow = explainRetry
+    const slow = explainRetry || graced.slow
       ? copy("Bilgisayar yavaş yanıt veriyor; yeniden deneniyor…", "The computer is slow to answer; trying again…")
       : undefined;
     return {
       skeleton: placeholder,
       label: slow,
-      lead: slow && placeholder ? <Notice message={slow} /> : undefined,
+      lead: slow && placeholder && !pillReports ? <StatusLine label={slow} busy /> : undefined,
       node: renderProgress(slow ?? loadingLabel),
     };
   }
-  // Shown data stays as it is while a refresh fails or waits: the computer pill carries the
-  // connection state, so no warning banner competes with the content.
   if (query.data !== undefined && (presentation === "paused" || presentation === "stale-error")) {
-    // The computer pill owns link failures. A connected Host can refuse a read while
-    // it continues serving the rest of the screen, including during automatic retries.
-    if (presentation === "paused" || fetching || linkDown || deviceOffline || isConnectionLevelError(query.error) ||
-        (transientLinkFailure && !readTimedOut))
-      return { node: null, skeleton: false };
+    if (!staleFailure || !staleVisible || fetching) return { node: null, skeleton: false };
+    const refresh = () => {
+      if (query.isFetching || !query.refetch) return;
+      void Promise.resolve(query.refetch()).then((result) => {
+        // A refresh the user asked for reports its own failure briefly; the line itself stays.
+        if (toasts && (result as { error?: unknown } | undefined)?.error)
+          showToast({ tone: "danger", message: copy("Yenilenemedi.", "Couldn't refresh."),
+            action: { label: copy("Yeniden dene", "Retry"), onPress: refresh } });
+      }).catch(() => undefined);
+    };
     return { skeleton: false, node: (
-      <Notice tone="warning"
-        message={copy("Son yüklenen hâli gösteriliyor; yenilenemedi.", "Showing the last loaded version; it could not be refreshed.")}
-        action={query.refetch ? { label: copy("Yenile", "Refresh"), onPress: () => { if (!query.isFetching) void query.refetch?.(); } } : undefined} />
+      <StatusLine tone="warning"
+        label={copy("Son yüklenen hâli gösteriliyor; yenilenemedi.", "Showing the last loaded version; it could not be refreshed.")}
+        action={query.refetch ? { label: copy("Yenile", "Refresh"), onPress: refresh } : undefined} />
     ) };
   }
-  // Without a network nothing can load or reconnect: say so once, centered, instead of spinning.
+  // Without a network nothing can load or reconnect: say so once instead of spinning.
   if (showOffline)
     return { skeleton: false, node: loading === "none" ? null : (
       <StateView
-        compact={compact}
-        illustration="offline"
+        size={stateSize()}
+        tone="warning"
         title={copy("Çevrimdışısın", "You're offline")}
         description={copy(
           "Wi-Fi’ye veya mobil veriye bağlan. Bağlantı gelince içerik kendiliğinden yüklenecek.",
@@ -195,30 +279,25 @@ function useQueryStatePresentation({
       skeleton: placeholder,
       label,
       // The placeholder alone would look like a first load that never ends.
-      lead: label && placeholder ? <Notice message={label} /> : undefined,
+      lead: label && placeholder && !pillReports ? <StatusLine label={label} busy /> : undefined,
       node: renderProgress(label ?? loadingLabel),
     };
   }
-  if (presentation === "paused" || waitingForLink)
+  if (presentation === "paused" || waitingForLink) {
+    const waitingSize = stateSize();
     return { skeleton: false, node: (
       <StateView
-        compact={compact}
-        illustration="unreachable"
+        size={waitingSize}
+        tone="warning"
         title={copy("Bağlantı bekleniyor", "Waiting for a connection")}
-        description={compact ? undefined : copy(
+        description={waitingSize !== "region" ? undefined : copy(
           "Bilgisayarına yeniden ulaşıldığında içerik kendiliğinden yüklenecek.",
           "This loads by itself when your computer is reachable again.",
         )}
-        action={{
-          label: copy("Bağlantıları yönet", "Manage connections"),
-          onPress: onManageConnections ?? (() => {
-            const navigate = () => router.navigate("/machines");
-            if (sheet) (sheet.requestCloseStackThen ?? sheet.requestCloseThen)(navigate);
-            else navigate();
-          }),
-        }}
+        action={{ label: copy("Bağlantıları yönet", "Manage connections"), onPress: manageConnections }}
       />
     ) };
+  }
   if (presentation === "error") {
     const retry =
       !repair && kind !== "unsupported" && query.refetch
@@ -228,9 +307,8 @@ function useQueryStatePresentation({
         : undefined;
     return { skeleton: false, node: (
       <StateView
-        compact={compact}
-        tone={readTimedOut ? "warning" : "danger"}
-        illustration={readTimedOut ? undefined : errorIllustration(kind, offline)}
+        size={stateSize()}
+        tone={readTimedOut || repair ? "warning" : "danger"}
         title={readTimedOut
           ? copy("Bilgisayardan zamanında yanıt gelmedi", "The computer took too long to respond")
           : errorTitle(kind, copy, offline)}
@@ -239,10 +317,11 @@ function useQueryStatePresentation({
       />
     ) };
   }
+  const illustration = emptyIllustration ?? (searching ? "search-empty" : undefined);
   return { skeleton: false, node: presentation === "empty" ? (
     <StateView
-      compact={compact}
-      illustration={emptyIllustration ?? (searching ? "search-empty" : undefined)}
+      size={stateSize(!!illustration)}
+      illustration={illustration}
       title={
         emptyTitle ??
         (typeof empty === "string" ? empty : copy("Henüz bir kayıt yok", "Nothing here yet"))

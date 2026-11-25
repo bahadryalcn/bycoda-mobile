@@ -128,12 +128,12 @@ describe("shared remote error copy", () => {
 
 describe("schema and provider failures", () => {
   const copy = (_tr: string, en: string) => en;
-  it.each(["You've hit your limit", "You've hit your weekly limit", "You’ve hit your monthly limit", "You have reached your session limit", "Weekly limit reached", "insufficient_quota", "usage_limit_reached"])("preserves %s while naming account/model recovery", async (error) => {
+  it.each(["You've hit your limit", "You've hit your weekly limit", "You’ve hit your monthly limit", "You have reached your session limit", "Weekly limit reached", "insufficient_quota", "usage_limit_reached"])("replaces %s with one localized line naming account/model recovery", async (error) => {
     const { friendlyProviderFailure } = await import("./error-message");
     const text = friendlyProviderFailure(error, copy);
-    expect(text).toContain(error);
-    expect(text).toContain("Open Model and reasoning");
-    expect(text).toContain("another account or model");
+    expect(text).toBe("Usage limit reached. Open Model and access to choose another account or model.");
+    expect(text).not.toContain("\n");
+    expect(friendlyProviderFailure(error, (tr: string) => tr)).toContain("Model ve erişim");
   });
   it.each(["Attachment size limit exceeded", "Rate limit exceeded: requests per second", "HTTP 429 Too Many Requests", "Jira rate_limit exceeded", "Network connection failed"])("keeps unrelated %s unchanged", async (error) => {
     const { friendlyProviderFailure } = await import("./error-message");

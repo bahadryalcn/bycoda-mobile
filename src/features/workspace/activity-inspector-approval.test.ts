@@ -14,7 +14,7 @@ vi.mock("@/state/queries", () => ({ hostKey: (machineId: string, key: unknown[])
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Body: Wrap, Row: Wrap, Badge: ({ label }: { label: string }) => createElement("span", null, label),
+  return { Body: Wrap, Row: Wrap, Badge: ({ label }: { label: string }) => createElement("span", null, label), StatusText: ({ label }: { label: string }) => createElement("span", null, label),
     ErrorText: ({ error }: { error: unknown }) => error ? createElement("p", null, String(error)) : null,
     Button: ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress(): void }) => createElement("button", { disabled, onClick: onPress }, label) };
 });

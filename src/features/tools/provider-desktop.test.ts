@@ -18,6 +18,8 @@ const state = vi.hoisted(() => ({
 vi.mock("@/ui/provider-account-kind", () => ({ ProviderAccountKind: () => null }));
 vi.mock("./provider-account-editor", () => ({ ProviderAccountEditor: () => null }));
 vi.mock("react-native", () => ({ View: "div" }));
+vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
 vi.mock("expo-router", () => ({ router: { navigate: state.navigate } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 const machine = () => ({
@@ -77,6 +79,10 @@ vi.mock("@/ui/primitives", () => {
     Body: Wrapper,
     Row: Wrapper,
     Badge: ({ label }: { label: string }) => createElement("span", null, label),
+    StatusText: ({ label }: { label: string }) => createElement("span", null, label),
+    StateView: ({ title }: { title: string }) => createElement("p", null, title),
+    IconButton: ({ label, disabled, onPress }: { label: string; disabled: boolean; onPress: () => void }) =>
+      createElement("button", { disabled, onClick: onPress }, label),
     NavigationRow: ({ label, onPress }: { label: string; onPress: () => void }) =>
       createElement("button", { onClick: onPress }, label),
     Disclosure: Wrapper,
@@ -95,17 +101,19 @@ vi.mock("@/ui/primitives", () => {
     }) => createElement("button", { disabled, onClick: onPress }, label),
     ScreenList: ({
       header,
+      actions,
       refreshState,
       data,
       renderItem,
     }: {
       header: import("react").ReactNode;
+      actions?: import("react").ReactNode;
       refreshState?: { onRefresh: () => unknown };
       data: unknown[];
       renderItem: (arg: { item: unknown }) => import("react").ReactNode;
     }) => {
       state.pull = refreshState?.onRefresh;
-      return createElement("div", null, header, ...data.map((item) => renderItem({ item })));
+      return createElement("div", null, actions, header, ...data.map((item) => renderItem({ item })));
     },
   };
 });

@@ -5,13 +5,11 @@ import { useIsFocused } from "expo-router/react-navigation";
 import Laptop from "lucide-react-native/icons/laptop";
 import Network from "lucide-react-native/icons/network";
 import Wifi from "lucide-react-native/icons/wifi";
-import { IconTile } from "@/ui/icon-tile";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { useMachines } from "@/state/machines";
-import { space } from "@/ui/tokens";
+import { iconSize, space } from "@/ui/tokens";
 import {
-  Badge,
   Body,
   ErrorNotice,
   FormActions,
@@ -19,11 +17,13 @@ import {
   Loading,
   NavigationGroup,
   NavigationRow,
+  RowIcon,
   Section,
   SectionHeader,
   Sheet,
   Stack,
   StateView,
+  StatusText,
 } from "@/ui/primitives";
 import { errorMessage } from "@/ui/error-message";
 import type { Computer } from "../account/contracts";
@@ -56,10 +56,10 @@ export function AccountComputersSection({ others }: { others?: ReactNode }) {
   }, [focused]);
 
   const otherWays = others ? (
-    <Stack>
+    <View style={{ gap: space.sm }}>
       <SectionHeader title={copy("Bağlanmanın diğer yolları", "Other ways to connect")} />
       {others}
-    </Stack>
+    </View>
   ) : null;
   // Most first-run accounts have no computers yet: a loading skeleton that then collapses would shift
   // the connect actions under the owner's finger, so the list appears only once it has rows.
@@ -71,7 +71,7 @@ export function AccountComputersSection({ others }: { others?: ReactNode }) {
           <NavigationRow
             label={copy("Bilgisayarlarını otomatik bulmak için giriş yap", "Sign in to find your computers automatically")}
             intent="navigate"
-            icon={<IconTile color={colors.muted}><Laptop size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
+            icon={<RowIcon glyph={Laptop} />}
             onPress={() => router.navigate("/account")}
           />
         </NavigationGroup>
@@ -106,14 +106,16 @@ export function AccountComputersSection({ others }: { others?: ReactNode }) {
                   key={item.deviceId}
                   label={item.name}
                   detail={`${platformNames[item.platform]} · ${online ? copy("Çevrimiçi", "Online") : copy("Çevrimdışı", "Offline")}`}
-                  icon={<IconTile color={colors.muted}><Laptop size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
+                  icon={<RowIcon glyph={Laptop} />}
                   trailing={
                     <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                      {kinds.lan ? <Wifi size={16} strokeWidth={2} color={colors.muted} /> : null}
-                      {kinds.tailscale ? <Network size={16} strokeWidth={2} color={colors.muted} /> : null}
-                      <Badge
+                      {kinds.lan ? <Wifi size={iconSize.status} strokeWidth={1.8} color={colors.muted} /> : null}
+                      {kinds.tailscale ? <Network size={iconSize.status} strokeWidth={1.8} color={colors.muted} /> : null}
+                      {/* Paired is the normal state (quiet text); an unpaired computer invites a connect. */}
+                      <StatusText
                         label={paired ? copy("Eşlenmiş", "Paired") : copy("Bağlan", "Connect")}
                         tone={paired ? "default" : "active"}
+                        dot={false}
                       />
                     </View>
                   }

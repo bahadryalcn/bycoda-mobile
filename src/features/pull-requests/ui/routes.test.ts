@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { PullRequestsScreen } from "./list-screen";
 import { PullRequestDetailScreen } from "./detail-screen";
 import { useInboxLocalScope } from "../../inbox/inbox-local-scope";
-const state = vi.hoisted(() => ({ params: {} as Record<string, string>, machine: "machine", visible: true, available: true, availabilityRetry: vi.fn(), itemRetry: vi.fn(), request: null as unknown, push: vi.fn(), back: vi.fn(), replace: vi.fn(), canGoBack: true, cached: [] as unknown[], readError: null as Error | null }));
+const state = vi.hoisted(() => ({ params: {} as Record<string, string>, machine: "machine", visible: true, available: true, availabilityRetry: vi.fn(), itemRetry: vi.fn(), request: null as unknown, push: vi.fn(), back: vi.fn(), replace: vi.fn(), canGoBack: true, cached: [] as unknown[], readError: null as Error | null, readEnabled: undefined as boolean | undefined }));
 const item = { provider: "github", kind: "pr", number: 7, repo: "owner/repo", projectPath: "/repo", title: "Source PR", state: "open", draft: false, updatedAt: "2026-11-17", url: "https://github.com/owner/repo/pull/7", labels: [], assignees: [] };
 /** Cache keys mirror useInboxRead: ["machine", id, "provider-inbox", "list", input]. */
 const listEntry = (projectId: string | undefined, items: unknown[]) => [["machine", "machine", "provider-inbox", "list", projectId ? { projectId, query: {} } : { query: {} }], { items, errors: {} }];
@@ -14,12 +14,16 @@ vi.mock("@/state/queries", () => ({ hostKey: (machineId: string | null, key: rea
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => state.params, router: { push: state.push, back: state.back, replace: state.replace, canGoBack: () => state.canGoBack }, Stack: { Screen: () => null } }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: state.machine, name: "Computer" }), useMachines: { getState: () => ({ activeId: state.machine, selectedProjectId: "unrelated-project" }) } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
+vi.mock("@/ui/no-computer", () => ({ NoComputerGate: () => createElement("p", null, "Connect a computer first") }));
+vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
+vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null, FilterButton: () => null, FilterSheet: () => null }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: { caption: {} } }) }));
+vi.mock("@/ui/tokens", () => ({ space: { sm: 8 } }));
 vi.mock("../../workspace/use-project-directory", () => ({ useProjectList: () => ({ isProjectVisible: (id: string) => state.visible && id === "project", data: [{ id: "project", name: "Project" }] }) }));
 vi.mock("../../inbox/provider-queries", () => ({
   useProviderInboxAvailability: () => ({ data: { available: state.available }, isSuccess: true, refetch: state.availabilityRetry }),
-  useInboxRead: (request: unknown) => {
-    state.request = request;
+  useInboxRead: (request: unknown, enabled?: boolean) => {
+    state.request = request; state.readEnabled = enabled;
     return { data: { items: [item], errors: {} }, error: state.readError, refetch: state.itemRetry, isFetching: false };
   },
 }));
@@ -29,12 +33,12 @@ vi.mock("../../inbox/provider-detail", () => ({ ProviderInboxDetail: ({ origin }
 vi.mock("../../inbox/provider-list", () => ({ ProviderInboxFeedback: () => null, ProviderInboxRow: ({ onOpen }: { onOpen: () => void }) => createElement("button", { onClick: onOpen }, "Open PR") }));
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Screen: Wrap, Stack: Wrap, Body: Wrap, Row: Wrap,
+  return { Screen: Wrap, Stack: Wrap, Body: Wrap, Row: Wrap, Skeleton: () => createElement("p", null, "Loading"),
     QueryState: ({ query, empty, emptyAction }: { query: { data?: unknown; error?: Error }; empty?: boolean; emptyAction?: { label: string; onPress: () => void } }) => query.error
       ? createElement("p", { role: "alert", "data-cache": query.data !== undefined }, query.error.message)
       : empty && emptyAction ? createElement("button", { onClick: emptyAction.onPress }, emptyAction.label) : null,
-    SelectField: () => null, SegmentedControl: () => null, ChoiceChip: () => null,
-    StateView: ({ title, action }: { title: string; action?: { label: string; onPress(): void } }) => createElement("div", null, title,
+    SelectField: () => null, SegmentedControl: () => null, ChoiceChip: () => null, ToggleField: () => null, NavigationGroup: Wrap,
+    StateView: ({ title, description, action }: { title: string; description?: string; action?: { label: string; onPress(): void } }) => createElement("div", null, title, description,
       action ? createElement("button", { onClick: action.onPress }, action.label) : null),
     ScreenList: ({ data, header, renderItem }: { data: unknown[]; header: ReactNode; renderItem: (row: { item: unknown }) => ReactNode }) => createElement("div", null, header, ...data.map((item, index) => createElement("div", { key: index }, renderItem({ item })))),
   };
@@ -138,4 +142,15 @@ it("offers Back for a detail that belongs to a different computer", async () => 
   await act(async () => action?.click());
   expect(state.back).toHaveBeenCalledOnce();
   expect(state.replace).not.toHaveBeenCalled();
+});
+it("runs the list's own scoped read for a cold-start detail and explains where to open it when the PR is not there", async () => {
+  state.params = { id: "7", repo: "owner/repo", projectPath: "/repo", machineId: "machine", projectId: "project" };
+  await mount();
+  expect(state.readEnabled).toBe(true);
+  expect(state.request).toMatchObject({ action: "list", input: { projectId: "project", query: { providers: ["github"], githubKinds: ["pr"] } } });
+  expect(container.textContent).toContain("Open it from the pull request list.");
+  state.cached = [listEntry("project", [item])];
+  await render();
+  expect(state.readEnabled).toBe(false);
+  expect(container.textContent).toContain("authorized:project");
 });

@@ -13,7 +13,7 @@ vi.mock("../../inbox/provider-queries", () => ({ useInboxRead: ({ action }: { ac
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Stack: Wrap, Row: Wrap, Body: Wrap, Disclosure: Wrap,
-    Badge: ({ label }: { label: string }) => createElement("span", null, label),
+    Badge: ({ label }: { label: string }) => createElement("span", null, label), StatusText: ({ label }: { label: string }) => createElement("span", null, label),
     QueryState: ({ query }: { query: { error?: Error } }) => createElement("span", null, query.error?.message),
     Field: ({ label, onChangeText }: { label: string; onChangeText: (value: string) => void }) => { state.changes.set(label, onChangeText); return null; },
     SelectField: ({ label, onChange }: { label: string; onChange: (value: string) => void }) => { state.changes.set(label, onChange); return null; },

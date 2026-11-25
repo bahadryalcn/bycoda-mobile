@@ -18,7 +18,7 @@ vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/layout", () => ({ ScreenChromeProvider: ({ children }: PropsWithChildren) => h("div", null, children) }));
 vi.mock("@/ui/use-list-scroll-memory", () => ({ useFilteredListScrollMemory: () => ({ listProps: {} }) }));
-vi.mock("@/ui/primitives", () => ({
+vi.mock("@/ui/primitives", () => ({ RowIcon: () => null, StateView: ({ title }: { title: string }) => h("p", null, title),
   Body: ({ children }: PropsWithChildren) => h("div", null, children), Button: () => null, QueryState: () => null,
   Disclosure: () => null, ErrorText: () => null, IdentifierField: () => null, SelectField: () => null,
   Sheet: ({ visible, onClose, children, returnFocusRef }: PropsWithChildren<{ visible: boolean; onClose: () => void; returnFocusRef?: unknown }>) => {
@@ -48,7 +48,7 @@ it("returns focus to the model row that opened the management picker", async () 
     onChange: vi.fn(),
   })));
   const trigger = editor.querySelector("button");
-  expect(trigger?.textContent).toBe("Model");
+  expect(trigger?.textContent).toBe("Agent and model");
   await act(async () => trigger?.click());
   expect(state.returnFocusRef).toMatchObject({ current: trigger });
   await act(async () => state.close?.());

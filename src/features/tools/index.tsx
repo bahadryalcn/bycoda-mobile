@@ -20,11 +20,38 @@ import { UsageScreen } from "./usage-screen";
 import { ProviderCenter } from "./provider-center";
 import { AccessCenter } from "./access-center";
 import { PrivateContentBoundary } from "@/ui/private-content";
+import { NoComputerGate } from "@/ui/no-computer";
+import { computerTools, isToolId, toolLabels } from "./tool-labels";
 
 export function HostToolScreen({ tool, projectId }: { tool: string; projectId?: string }) {
   if (tool === "providers") return <ProviderCenter />;
   if (tool === "access") return <AccessCenter />;
+  // Resources never depend on a project; usage can still be narrowed to one.
+  if (tool === "diagnostics" || (computerTools.has(tool) && !projectId)) return <ComputerToolScreen tool={tool as "usage" | "diagnostics"} />;
   return <ProjectHostToolScreen tool={tool} projectId={projectId} />;
+}
+
+/** Usage and computer resources read computer-level data, so they open without a project. */
+function ComputerToolScreen({ tool }: { tool: "usage" | "diagnostics" }) {
+  const copy = useCopy();
+  const machine = useActiveMachine();
+  const title = copy(...toolLabels[tool]);
+  const capabilities = tool === "usage"
+    ? ["usage.limits.read", "usage.cost.read", "usage.sessions.read"]
+    : ["resources.diagnostics"];
+  if (!machine) return <Screen title={title} scroll={false}><NoComputerGate /></Screen>;
+  if (!machine.capabilities) return (
+    <Screen title={title} scroll={false}><View style={{ flex: 1, paddingHorizontal: space.screen }}><ToolAvailabilityFeedback /></View></Screen>
+  );
+  if (!capabilities.some((capability) => machine.capabilities!.includes(capability))) return (
+    <Screen title={title} scroll={false}>
+      <View style={{ flex: 1 }}>
+        <Empty compact={false} illustration="permission" title={copy("Kullanılamıyor", "Unavailable")}
+          detail={copy("Bu bilgisayar bu aracı sunmuyor: bycoda eski olabilir veya araç bu sistemde yok.", "This computer doesn't offer this tool: bycoda may be outdated or the tool is unavailable here.")} />
+      </View>
+    </Screen>
+  );
+  return tool === "usage" ? <UsageScreen key={machine.id} /> : <DiagnosticsScreen key={machine.id} />;
 }
 function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: string }) {
   const copy = useCopy();
@@ -40,7 +67,7 @@ function ProjectHostToolScreen({ tool, projectId }: { tool: string; projectId?: 
   const supported = !!capability && machine?.capabilities?.includes(capability);
   const needsCapabilities = !!visibleProject && !!machine && !machine.capabilities;
   const canChooseProject = supported && !!projects.data?.length;
-  const toolName = ({ servers: copy("Geliştirme sunucuları", "Dev servers"), logs: copy("Çalışma günlükleri", "Runtime logs"), devices: copy("Cihazlar", "Devices"), browser: copy("Tarayıcı", "Browser"), terminals: copy("Terminaller", "Terminals"), diagnostics: copy("Tanılama", "Diagnostics"), usage: copy("Oturum kullanımı", "Session usage") } as Record<string, string>)[tool] ?? copy("Araçlar", "Tools");
+  const toolName = isToolId(tool) ? copy(...toolLabels[tool]) : copy("Araçlar", "Tools");
   if (!capability) return (
     <Screen title={copy("Araçlar", "Tools")} scroll={false}>
       <View style={{ flex: 1 }}>
@@ -101,7 +128,6 @@ function ToolAvailabilityFeedback() {
 function ProjectToolContent({ tool, project }: { tool: string; project: HostProject }) {
   if (tool === "servers") return <DevServersScreen project={project} />;
   if (tool === "logs") return <RuntimeLogsScreen project={project} />;
-  if (tool === "diagnostics") return <DiagnosticsScreen project={project} />;
   if (tool === "usage") return <UsageScreen project={project} />;
   if (tool === "devices") return <DevicesScreen project={project} />;
   if (tool === "browser") return <BrowserScreen project={project} />;

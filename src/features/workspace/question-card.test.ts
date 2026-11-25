@@ -42,7 +42,8 @@ vi.mock("panelui-native/components/questionnaire", async () => {
         children,
       ),
     {
-      Progress: () => createElement("span", null, "progress"),
+      Progress: ({ children }: { children?: (state: { current: number; total: number }) => string }) =>
+        createElement("span", null, children ? children({ current: 1, total: 3 }) : "progress"),
       Item: ({ name, multiple, children }: PropsWithChildren<{ name: string; multiple: boolean }>) =>
         createElement(ItemCtx.Provider, { value: { name, multiple } }, children),
       Question: Wrap,
@@ -84,6 +85,7 @@ vi.mock("@/ui/primitives", () => {
     Row: Wrapper,
     Disclosure: Wrapper,
     Badge: ({ label }: { label: string }) => createElement("span", null, label),
+    StatusText: ({ label }: { label: string }) => createElement("span", null, label),
     Field: ({
       label,
       value,
@@ -339,4 +341,20 @@ it("retains typed text and allows retry after a definitive command refusal", asy
   expect(container.querySelector("textarea")?.value).toBe("Keep my recovery steps");
   expect(container.textContent).toContain("Question is not ready");
   expect(container.textContent).toContain("Answer not sent");
+});
+
+it("localizes the progress label and keeps one way to give a custom answer", async () => {
+  await render({
+    question: {
+      requestId: 11,
+      callId: "call",
+      questions: [
+        { id: "first", prompt, allowCustom: true, multiSelect: false, options: [{ id: "a", label: "A" }, { id: "other", label: "Other" }] },
+        { id: "second", prompt, allowCustom: true, multiSelect: false, options: [{ id: "b", label: "B" }] },
+      ],
+    },
+  });
+  expect(container.textContent).toContain("Question {p0} of {p1}");
+  // The provider's own "Other" replaces the separate custom-answer disclosure.
+  expect(container.querySelectorAll('[aria-label="Your own answer"]').length).toBe(1);
 });

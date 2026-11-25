@@ -1,18 +1,19 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  ActionMenu,
   Body,
   Button,
   Disclosure,
   ErrorNotice,
   Loading,
-  MultiSelectField,
   Notice,
   Row,
-  Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
+import { useMobileTheme } from "@/ui/theme";
+import { space } from "@/ui/tokens";
 import { useHostMutation } from "@/state/queries";
 import type { HostTask } from "@/domain/types";
 import { taskBulkReason } from "./bulk-feedback";
@@ -22,7 +23,22 @@ import {
   type TaskBulkResult,
 } from "../../../../../src/features/tasks/model/taskBulkActions";
 
-export function TaskBulkActions({
+/** Row-level selection state a task list passes to its cards while selection mode is on. */
+export type TaskBulkSelection = {
+  active: boolean;
+  isSelected: (id: string) => boolean;
+  toggle: (id: string) => void;
+};
+
+/**
+ * Bulk task actions as an in-list selection mode: "Select" in the list header turns rows into
+ * checkable rows, and a bottom action bar offers Start, Retry, Stop and Delete for the selected
+ * count. Run, retry and result reporting are unchanged; destructive actions are confirmed.
+ *
+ * Returns the header entry (with the applied-filter context), the run feedback, the row
+ * selection and the bar; the list owns where each is placed.
+ */
+export function useTaskBulkActions({
   tasks,
   machineId,
   onBusy,
@@ -38,7 +54,10 @@ export function TaskBulkActions({
   context?: ReactNode;
 }) {
   const copy = useCopy();
-  const [open, setOpen] = useState(false);
+  const { colors } = useMobileTheme();
+  const insets = useSafeAreaInsets();
+  const [selecting, setSelecting] = useState(false);
+  // A selection session: approvals requested in one session never run in a later one.
   const opening = useRef<object | null>(null);
   const port = opening.current;
   useEffect(
@@ -47,13 +66,13 @@ export function TaskBulkActions({
     },
     [],
   );
-  const show = () => {
+  const enter = () => {
     opening.current = {};
-    setOpen(true);
+    setSelecting(true);
   };
-  const close = () => {
+  const exit = () => {
     opening.current = null;
-    setOpen(false);
+    setSelecting(false);
   };
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -68,13 +87,16 @@ export function TaskBulkActions({
   const remove = useHostMutation("tasks.delete");
   const start = useHostMutation("tasks.start");
   const move = useHostMutation("tasks.move");
-  const [seenTasks, setSeenTasks] = useState(tasks);
-  if (seenTasks !== tasks) {
+  // The list recomputes its visible tasks every render; compare the visible ids instead.
+  const visibleKey = tasks.map((task) => task.id).join("\u0000");
+  const [seenTasks, setSeenTasks] = useState(visibleKey);
+  if (seenTasks !== visibleKey) {
     // Prune during render (not derived each time) so a task that leaves and
     // later returns is not silently re-selected for a destructive bulk action.
-    setSeenTasks(tasks);
+    setSeenTasks(visibleKey);
     const ids = new Set(tasks.map((task) => task.id));
     if (!selected.every((id) => ids.has(id))) setSelected(selected.filter((id) => ids.has(id)));
+    if (!tasks.length && selecting) exit();
   }
   const retryIds = new Set(results.filter((row) => row.status === "failed").map((row) => row.task.id));
   const labels = {
@@ -147,7 +169,8 @@ export function TaskBulkActions({
         ),
         labels[operation],
         approve,
-        copy("İptal", "Cancel"),
+        copy("Vazgeç", "Cancel"),
+        operation === "delete" ? "destructive" : "default",
       );
     else approve();
   };
@@ -203,80 +226,67 @@ export function TaskBulkActions({
       ) : null}
     </>
   );
-  return (
-    <>
-      {tasks.length ? (
-        <Row style={{ justifyContent: "space-between", alignItems: "center" }}>
-          {context}
+  const locked = busy || refreshing || disabled;
+  const entry = tasks.length ? (
+    <Row style={{ justifyContent: "space-between", alignItems: "center" }}>
+      {context ?? <View />}
+      {!selecting ? (
+        <Button
+          label={copy("Seç", "Select")}
+          accessibilityLabel={copy("Görevleri seç", "Select tasks")}
+          tone="quiet"
+          flush
+          disabled={locked}
+          onPress={enter}
+        />
+      ) : null}
+    </Row>
+  ) : context;
+  const count = selected.length;
+  const bar = selecting ? (
+    <View
+      accessibilityRole="toolbar"
+      accessibilityLabel={copy("Toplu işlemler", "Bulk actions")}
+      style={{
+        gap: space.sm,
+        paddingHorizontal: space.screen,
+        paddingTop: space.sm,
+        paddingBottom: space.sm + insets.bottom,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderColor: colors.border,
+        backgroundColor: colors.background,
+      }}
+    >
+      <Row style={{ alignItems: "center", justifyContent: "space-between" }}>
+        <Body accessibilityLiveRegion="polite" style={{ flexShrink: 1 }}>
+          {count ? copy("{p0} görev seçili", "{p0} selected", { p0: count }) : copy("Görev seç", "Select tasks")}
+        </Body>
+        <Row style={{ gap: 0 }}>
           <Button
-            label={
-              copy("Toplu işlemler", "Bulk actions") +
-              (selected.length ? ` · ${selected.length}` : "")
-            }
-            accessibilityLabel={copy("Toplu işlemler", "Bulk actions")}
-            tone="secondary"
+            label={count === tasks.length ? copy("Seçimi temizle", "Clear selection") : copy("Tümünü seç", "Select all")}
+            tone="quiet"
             flush
-            disabled={disabled || busy || refreshing}
-            onPress={show}
+            disabled={locked}
+            onPress={() => setSelected(count === tasks.length ? [] : tasks.map((task) => task.id))}
           />
+          <Button label={copy("Bitti", "Done")} tone="quiet" flush disabled={busy} onPress={exit} />
         </Row>
-      ) : context}
-      {!open ? feedback : null}
-      <Sheet
-        visible={open}
-        title={copy("Toplu işlemler", "Bulk actions")}
-        size="full"
-        onClose={close}
-      >
-        {tasks.length ? (
-          <>
-            <MultiSelectField
-              label={copy("Görevleri seç", "Select tasks")}
-              values={selected}
-              options={tasks.map((task) => ({ value: task.id, label: task.title }))}
-              onChange={setSelected}
-              disabled={busy || refreshing || disabled}
-              searchable
-            />
-            <Row>
-              <Button
-                label={copy("Sonuçların tümünü seç", "Select all results")}
-                tone="quiet"
-                disabled={busy || refreshing || disabled}
-                onPress={() => setSelected(tasks.map((task) => task.id))}
-              />
-              <Button
-                label={copy("Seçimi temizle", "Clear selection")}
-                tone="quiet"
-                disabled={busy || refreshing || disabled || !selected.length}
-                onPress={() => setSelected([])}
-              />
-            </Row>
-            <Row>
-              <Button
-                label={labels.start}
-                tone="primary"
-                style={{ flex: 1 }}
-                disabled={busy || refreshing || disabled || !selected.length}
-                onPress={() => request("start")}
-              />
-              <ActionMenu
-                label={copy("Diğer işlemler", "More actions")}
-                actions={(["stop", "retry", "delete"] as const).map((operation) => ({
-                  key: operation,
-                  label: labels[operation],
-                  destructive: operation === "delete",
-                  disabled: busy || refreshing || disabled || !selected.length,
-                  onPress: () => request(operation),
-                }))}
-              />
-            </Row>
-          </>
-        ) : !busy && !refreshing && !results.length ? (
-          <Body muted>{copy("Eşleşen sonuç yok", "No matching results")}</Body>
-        ) : null}
-        {open ? feedback : null}
-      </Sheet>
-    </>
-  );
+      </Row>
+      <Row style={{ flexWrap: "wrap" }}>
+        <Button label={labels.start} tone="primary" style={{ flexGrow: 1 }} disabled={locked || !count} onPress={() => request("start")} />
+        <Button label={labels.retry} tone="secondary" style={{ flexGrow: 1 }} disabled={locked || !count} onPress={() => request("retry")} />
+        <Button label={labels.stop} tone="secondary" style={{ flexGrow: 1 }} disabled={locked || !count} onPress={() => request("stop")} />
+        <Button label={labels.delete} tone="danger" style={{ flexGrow: 1 }} disabled={locked || !count} onPress={() => request("delete")} />
+      </Row>
+    </View>
+  ) : null;
+  const selection: TaskBulkSelection = {
+    active: selecting,
+    isSelected: (id) => selected.includes(id),
+    toggle: (id) => {
+      if (locked) return;
+      setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+    },
+  };
+  return { entry, feedback, selection, bar };
 }

@@ -9,7 +9,10 @@ import CircleAlert from "lucide-react-native/icons/circle-alert";
 import { Body, Heading } from "./typography";
 import { Button } from "./buttons";
 import { Illustration } from "./illustrations";
+import { StatusLine } from "./status-line";
 import { useMobileTheme } from "./theme";
+import { isErrorArt, resolveStateSize } from "./state-model";
+import { iconSize } from "./tokens";
 import type { StateAction, StateTone, StateViewProps } from "./component-props";
 
 const toneIcons = { neutral: Inbox, info: Info, success: CircleCheck, warning: TriangleAlert, danger: CircleAlert };
@@ -31,42 +34,56 @@ function ActionButton({ action, tone, primary, inline = false }: { action: State
       busy={action.busy}
       reserveTouchTarget={action.reserveTouchTarget}
       tone={tone}
+      density={inline ? "compact" : undefined}
       style={inline ? undefined : primary ? uiStyles.stateAction : uiStyles.stateSecondaryAction}
     />
   );
 }
 
 /**
- * The one presentation for a state that owns its region: empty, first run, not connected,
- * unreachable, locked or a failed load with no data. Centered in the available space; give the
- * parent `flex: 1` (or a scroller with `flexGrow: 1`) so it can center vertically.
+ * The one presentation for a state: empty, first run, not connected, unreachable, locked or a
+ * failed load with no data. `region` centers in the available space (give the parent `flex: 1`
+ * or a scroller with `flexGrow: 1`); `compact` is an icon row for a section; `line` is one status
+ * line. Illustrations are for first run, unpaired and empty only: error art (error, unreachable,
+ * offline, locked) is drawn as the small tone icon so an error region stays within 200 pt.
  */
 export function StateView({
-  illustration, title, description, action, secondaryAction, compact = false, tone = "neutral", testID,
+  illustration, title, description, action, secondaryAction, compact = false, size, tone = "neutral", testID,
 }: StateViewProps) {
   const theme = useMobileTheme();
   const { uiStyles } = theme;
-  const inline = compact;
+  const resolved = resolveStateSize(size, compact);
+  if (resolved === "line")
+    return <View testID={testID}><StatusLine tone={tone} label={title} action={action} /></View>;
+  const art = illustration && !isErrorArt(illustration) ? illustration : undefined;
+  const inline = resolved === "compact";
   const Icon = (inline ? toneIcons : regionIcons)[tone];
   const palette = toneColors(tone, theme);
   const text = (
     <>
-      <Heading style={[uiStyles.stateTitle, inline && { textAlign: "left", fontSize: uiStyles.title.fontSize, lineHeight: uiStyles.title.lineHeight }]}>
+      <Heading style={[uiStyles.stateTitle, inline && (tone === "neutral" ? uiStyles.stateInlineQuiet : uiStyles.stateInlineTitle)]}>
         {title}
       </Heading>
       {description ? (
-        <Body style={[uiStyles.stateDescription, inline && { textAlign: "left" }]}>{description}</Body>
+        <Body accessibilityLabel={description} numberOfLines={inline ? 2 : art ? undefined : 3}
+          style={[uiStyles.stateDescription, inline && uiStyles.stateInlineDescription]}>{description}</Body>
       ) : null}
     </>
   );
+  // A section state reads like a row: a neutral one (empty) is quiet text, a toned one leads with
+  // its 16dp status glyph. No inbox art, no bold line, aligned with the section's rows.
   if (inline)
     return (
       <View testID={testID} style={uiStyles.stateInline}>
-        <Icon size={20} strokeWidth={2} color={palette.text} style={{ marginTop: 1 }} />
-        <View style={[uiStyles.grow, { gap: 4, alignItems: "flex-start" }]}>
+        {tone === "neutral" ? null : <Icon size={iconSize.status} strokeWidth={2} color={palette.text} style={{ marginTop: 2 }} />}
+        <View style={[uiStyles.grow, { gap: 2, alignItems: "flex-start" }]}>
           {text}
-          {action ? <View style={{ marginTop: 8 }}><ActionButton action={action} tone="primary" primary={false} inline /></View> : null}
-          {secondaryAction ? <ActionButton action={secondaryAction} tone="quiet" primary={false} inline /> : null}
+          {action || secondaryAction ? (
+            <View style={{ marginTop: 4, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
+              {action ? <ActionButton action={action} tone="primary" primary={false} inline /> : null}
+              {secondaryAction ? <ActionButton action={secondaryAction} tone="quiet" primary={false} inline /> : null}
+            </View>
+          ) : null}
         </View>
       </View>
     );
@@ -74,17 +91,17 @@ export function StateView({
     <EmptyState
       testID={testID}
       className="gap-0 p-0"
-      style={uiStyles.stateRegion}
+      style={[uiStyles.stateRegion, art && uiStyles.stateRegionArt]}
     >
       <EmptyState.Header style={uiStyles.stateColumn}>
-        {illustration ? (
-          <Illustration name={illustration} size={168} />
+        {art ? (
+          <Illustration name={art} size={168} />
         ) : (
           <View accessible={false} style={[uiStyles.stateIconTile, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <Icon size={24} strokeWidth={1.75} color={palette.text} />
+            <Icon size={22} strokeWidth={1.75} color={palette.text} />
           </View>
         )}
-        <View style={{ gap: 6, alignItems: "center", marginTop: 8 }}>{text}</View>
+        <View style={{ gap: 6, alignItems: "center", marginTop: art ? 8 : 4 }}>{text}</View>
       </EmptyState.Header>
       {action || secondaryAction ? (
         <EmptyState.Content style={[uiStyles.stateActions, { maxWidth: uiStyles.stateColumn.maxWidth, width: "100%" }]}>

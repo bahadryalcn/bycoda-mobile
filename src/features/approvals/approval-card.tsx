@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { useCopy } from "@/ui/copy";
-import { Badge, Body, Button, Card, Heading, Notice, Row } from "@/ui/primitives";
+import { Badge, Body, Button, Card, Heading, Notice, Row, StatusText } from "@/ui/primitives";
 import { space } from "@/ui/tokens";
 import { ApprovalDetails } from "./approval-details";
 import { approvalOpen, remainingTime, type ApprovalView } from "./approvals-model";
 import { approvalSignatureMatches } from "./approvals-signature";
 import { useNow } from "./use-approvals";
+
+/** Same wrapping pair as the filter sheet footer: equal widths, full width when text is large. */
+const DECISION_BUTTON = { flexGrow: 1, flexBasis: 140, alignSelf: "stretch" } as const;
 
 /** What this phone knows about its own answer for one approval. */
 export type LocalDecision = "sending" | "sent" | "uncertain" | "rejected";
@@ -49,7 +52,7 @@ export function ApprovalCard({
   const expired = approval.status === "expired" || (approval.status === "pending" && !open);
   const status =
     approval.status === "approved"
-      ? ([copy("Onaylandı", "Approved"), "success"] as const)
+      ? ([copy("Onaylandı", "Approved"), "default"] as const)
       : approval.status === "denied"
         ? ([copy("Reddedildi", "Denied"), "danger"] as const)
         : expired
@@ -69,8 +72,9 @@ export function ApprovalCard({
       <View style={{ gap: space.sm }}>
         <Heading>{approval.title}</Heading>
         <Row>
-          <Badge label={status[0]} tone={status[1]} />
-          {open && left ? <Badge label={copy("{p0} kaldı", "{p0} left", { p0: left })} /> : null}
+          {/* Only a request still waiting for the owner is a badge; a settled one reads as quiet status. */}
+          {status[1] === "warning" ? <Badge label={status[0]} tone="warning" /> : <StatusText label={status[0]} tone={status[1]} />}
+          {open && left ? <StatusText label={copy("{p0} kaldı", "{p0} left", { p0: left })} /> : null}
         </Row>
         <Body>{approval.message}</Body>
         {approval.details ? <ApprovalDetails details={approval.details} /> : null}
@@ -137,21 +141,24 @@ export function ApprovalCard({
                 )}
               />
             ) : null}
-            <Button
-              label={busy ? copy("Gönderiliyor…", "Sending…") : approval.confirmLabel || copy("Onayla", "Approve")}
-              tone="primary"
-              fullWidth
-              busy={busy}
-              disabled={held}
-              onPress={() => onDecide(approval, true)}
-            />
-            <Button
-              label={copy("Reddet", "Deny")}
-              tone="secondary"
-              fullWidth
-              disabled={held}
-              onPress={() => onDecide(approval, false)}
-            />
+            {/* One row: an equal-width pair that wraps to two full-width rows at large text. */}
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+              <Button
+                label={copy("Reddet", "Deny")}
+                tone="secondary"
+                disabled={held}
+                onPress={() => onDecide(approval, false)}
+                style={DECISION_BUTTON}
+              />
+              <Button
+                label={busy ? copy("Gönderiliyor…", "Sending…") : approval.confirmLabel || copy("Onayla", "Approve")}
+                tone="primary"
+                busy={busy}
+                disabled={held}
+                onPress={() => onDecide(approval, true)}
+                style={DECISION_BUTTON}
+              />
+            </View>
           </View>
         ) : null}
       </View>

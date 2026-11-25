@@ -35,6 +35,7 @@ export interface DiagnosticSendDeps {
   email(): Promise<string | null>;
   context(): FeedbackContext;
   transport: DiagnosticTransport;
+  review?: (report: DiagnosticReportCreate, send: () => Promise<DiagnosticSendResult>) => Promise<DiagnosticSendResult>;
   now(): Date;
 }
 
@@ -65,6 +66,7 @@ export async function runDiagnosticSend(
       context: deps.context(),
       now: deps.now(),
     });
+    if (report && deps.review) return await deps.review(report, () => sendDiagnosticReport(report, deps.transport));
     return await sendDiagnosticReport(report, deps.transport);
   } catch {
     return "failed";

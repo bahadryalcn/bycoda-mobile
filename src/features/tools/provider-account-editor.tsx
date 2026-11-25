@@ -9,6 +9,7 @@ import {
   Notice,
   SelectField,
   Sheet,
+  ScopeLine,
   Stack,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
@@ -93,8 +94,8 @@ export function ProviderAccountEditor({
       dirty={!!value && !value.pending && !value.finished}
     >
       <Stack>
+        <ScopeLine scope={{ computer: machine?.name }} />
         <Body>
-          {machine?.name ? `${machine.name} · ` : ""}
           {providerName(account.provider)} · {account.label}
         </Body>
         {!current ? <Notice tone="warning" message={unavailableMessage} /> : null}
@@ -220,7 +221,7 @@ export function ProviderAccountEditor({
             <ProviderAccountReview
               review={value?.pending || value?.finished ? undefined : review}
             />
-            <Disclosure label={copy("Ayrıntılar", "Details")}>
+            <Disclosure label={copy("Bu ayarlar neyi değiştirir", "What these settings change")}>
               <Body muted>
                 {copy(
                   "Ad ve renk bilgisayardaki hesap ayarlarını değiştirir. Varsayılan yalnız yeni konuşmalar içindir; açık konuşmalar hesabını korur.",

@@ -2,55 +2,26 @@ import { useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create, useStore } from "zustand";
 
-/** Phone-local custom order. Group key "" is the Others section; `flat` orders the ungrouped list view. */
-export type ProjectOrder = { groups: string[]; projects: Record<string, string[]>; flat: string[] };
-
-export const emptyProjectOrder: ProjectOrder = { groups: [], projects: {}, flat: [] };
-
-const maxIdLength = 200;
-const maxGroups = 200;
-const maxProjects = 2000;
-
-function ids(value: unknown, limit: number): string[] {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set<string>();
-  for (const item of value) {
-    if (typeof item === "string" && item.length <= maxIdLength) seen.add(item);
-    if (seen.size >= limit) break;
-  }
-  return [...seen];
-}
-
-export function normalizeProjectOrder(value: unknown): ProjectOrder {
-  const data = value && typeof value === "object" ? value as Partial<Record<keyof ProjectOrder, unknown>> : {};
-  const projects = data.projects && typeof data.projects === "object" && !Array.isArray(data.projects)
-    ? Object.entries(data.projects as Record<string, unknown>).filter(([key]) => key.length <= maxIdLength).slice(0, maxGroups)
-    : [];
-  return {
-    groups: ids(data.groups, maxGroups),
-    projects: Object.fromEntries(projects.map(([key, list]) => [key, ids(list, maxProjects)])),
-    flat: ids(data.flat, maxProjects),
-  };
-}
-
 export type ProjectDirectoryPreferences = {
   view: "grouped" | "list";
-  sort: "desktop" | "name" | "recent" | "custom";
-  order: ProjectOrder;
+  sort: "desktop" | "name" | "recent";
   fullPaths: boolean;
   collapsed: Record<string, boolean>;
   recent: Record<string, number>;
 };
 export const defaultProjectDirectoryPreferences: ProjectDirectoryPreferences = {
-  view: "grouped", sort: "desktop", fullPaths: false, collapsed: {}, recent: {}, order: emptyProjectOrder,
+  view: "grouped", sort: "desktop", fullPaths: false, collapsed: {}, recent: {},
 };
 const storageKey = "bycoda.mobile.project-directory.v1";
+/**
+ * Stored values from before the drag order was retired migrate here: the old "custom" sort reads as
+ * the computer's order, and the old `order` field is dropped (the next write no longer stores it).
+ */
 export function normalizeProjectDirectoryPreferences(value: unknown): ProjectDirectoryPreferences {
   const data = value && typeof value === "object" ? value as Partial<ProjectDirectoryPreferences> : {};
   return {
     view: data.view === "list" ? "list" : "grouped",
-    sort: data.sort === "name" || data.sort === "recent" || data.sort === "custom" ? data.sort : "desktop",
-    order: normalizeProjectOrder(data.order),
+    sort: data.sort === "name" || data.sort === "recent" ? data.sort : "desktop",
     fullPaths: data.fullPaths === true,
     collapsed: Object.fromEntries(Object.entries(data.collapsed && typeof data.collapsed === "object" ? data.collapsed : {}).filter(([, value]) => typeof value === "boolean")),
     recent: Object.fromEntries(Object.entries(data.recent && typeof data.recent === "object" ? data.recent : {})

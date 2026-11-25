@@ -1,4 +1,4 @@
-import { Badge } from "@/ui/primitives";
+import { Badge, StatusText } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import type { StatusProps } from "./types";
 
@@ -33,21 +33,26 @@ export function statusLabel(value: string, copy: (tr: string, en: string) => str
   return translated[value] ? copy(...translated[value]) : value.replaceAll("-", " ");
 }
 
+/**
+ * Record status. Normal and progressing states are quiet `StatusText` (running/planning carry the
+ * live tone and dot; finished work is muted); only states the user must act on or notice get a
+ * tinted `Badge`.
+ */
+export function statusTone(value: string): "danger" | "warning" | "live" | "default" {
+  return ["failed", "blocked"].includes(value)
+    ? "danger"
+    : ["review", "awaiting-approval", "needs-input"].includes(value)
+      ? "warning"
+      : ["running", "verifying", "planning", "active"].includes(value)
+        ? "live"
+        : "default";
+}
+
 export function Status({ value }: StatusProps) {
   const copy = useCopy();
-  const tone = ["failed", "blocked"].includes(value)
-    ? "danger"
-    : ["done", "succeeded", "completed", "finished"].includes(value)
-      ? "success"
-      : ["review", "awaiting-approval", "needs-input"].includes(value)
-        ? "warning"
-        : ["running", "verifying", "planning", "active"].includes(value)
-          ? "live"
-          : "default";
-  return (
-    <Badge
-      label={statusLabel(value, copy)}
-      tone={tone}
-    />
-  );
+  const tone = statusTone(value);
+  const label = statusLabel(value, copy);
+  return tone === "danger" || tone === "warning"
+    ? <Badge label={label} tone={tone} />
+    : <StatusText label={label} tone={tone} />;
 }

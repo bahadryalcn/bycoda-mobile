@@ -1,12 +1,13 @@
-import { View } from "react-native";
+import { Text, View } from "react-native";
 import { useState } from "react";
 import type { RemoteInboxItem } from "../../../../src/features/inbox/model/remoteInbox";
-import { Badge, Body, Button, Row, SectionHeader, Sheet, ScreenList, Stack } from "@/ui/primitives";
+import { Badge, Body, Button, Heading, NavigationRow, Row, SectionHeader, Sheet, ScreenList, Stack } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useLocale } from "@/i18n";
 import { useMobileTheme } from "@/ui/theme";
 import { radii, space } from "@/ui/tokens";
 import { providerStateLabel, providerStateTone } from "./provider-labels";
+import { ProviderState } from "./issue-record-row";
 import type { PrReviewContext, PrReviewLine } from "./provider-review-model";
 import { isTestFile } from "../pull-requests/model/list";
 
@@ -22,31 +23,39 @@ export function PrReviewSummary({ item, context, hideTests = false, onSelectFile
   return (
     <Stack>
       <Stack style={{ gap: space.xs }}>
-        <Body style={{ fontWeight: "700" }}>{item.title}</Body>
+        <Heading>{item.title}</Heading>
         <Row>
-          <Badge label={providerStateLabel(item.state, copy)} tone={providerStateTone(item.state)} />
+          <ProviderState label={providerStateLabel(item.state, copy)} tone={providerStateTone(item.state)} />
           {item.draft ? <Badge label={copy("Taslak", "Draft")} /> : null}
           {context ? <Badge label={`${shortHead(context.commitId)}`} /> : null}
         </Row>
         <Body muted>{`${item.repo || item.projectPath} #${item.number}`}</Body>
       </Stack>
       {context ? <>
-        <SectionHeader flush title={copy("Değişen dosyalar", "Files changed")} count={context.files.length} />
+        <SectionHeader title={copy("Değişen dosyalar", "Files changed")} count={context.files.length} />
         <Row>
           <Body style={{ color: semanticColors.success.text }}>{`+${numbers.format(context.additions)}`}</Body>
           <Body style={{ color: semanticColors.danger.text }}>{`−${numbers.format(context.deletions)}`}</Body>
         </Row>
         {context.files.length ? <Button tone="quiet" label={copy("Dosyaları göster", "Show files")} onPress={() => setFilesOpen(true)} /> : null}
         {filesOpen ? <Sheet visible size="full" scroll={false} title={copy("Değişen dosyalar", "Files changed")} onClose={() => setFilesOpen(false)}>
-          <ScreenList data={context.files.filter(file => !hideTests || !isTestFile(file.path))} keyExtractor={file => file.path} renderItem={({item: file}) => (
-              <View style={{ flexDirection: "row", gap: space.sm, paddingVertical: space.sm, alignItems: "flex-start" }}>
-                {onSelectFile ? <Button tone="quiet" label={file.path} onPress={() => { onSelectFile(file.path); setFilesOpen(false); }} /> : <Body mono style={{ flexShrink: 1, flexGrow: 1 }}>{file.path}</Body>}
-                <Body style={{ color: semanticColors.success.text }}>{`+${numbers.format(file.additions)}`}</Body>
-                <Body style={{ color: semanticColors.danger.text }}>{`−${numbers.format(file.deletions)}`}</Body>
-              </View>
-            )} />
+          <ScreenList data={context.files.filter(file => !hideTests || !isTestFile(file.path))} keyExtractor={file => file.path} renderItem={({item: file}) => {
+            const slash = file.path.lastIndexOf("/");
+            // One text run so the two totals never split across lines.
+            const stats = <Body numberOfLines={1} style={{ flexShrink: 0 }}>
+              <Text style={{ color: semanticColors.success.text }}>{`+${numbers.format(file.additions)}`}</Text>
+              {"  "}
+              <Text style={{ color: semanticColors.danger.text }}>{`−${numbers.format(file.deletions)}`}</Text>
+            </Body>;
+            // Name first, folder under it, change totals on the right: one scannable row per file.
+            return <NavigationRow separator label={slash >= 0 ? file.path.slice(slash + 1) : file.path} labelLines={2}
+              detail={slash >= 0 ? file.path.slice(0, slash) : undefined} detailLines={2} trailing={stats}
+              accessibilityLabel={`${file.path}. +${file.additions} −${file.deletions}`}
+              intent={onSelectFile ? "navigate" : "command"}
+              onPress={() => { if (onSelectFile) { onSelectFile(file.path); setFilesOpen(false); } }} />;
+          }} />
         </Sheet> : null}
-        <SectionHeader flush title={copy("İnceleme", "Review")} />
+        <SectionHeader title={copy("İnceleme", "Review")} />
       </> : null}
     </Stack>
   );

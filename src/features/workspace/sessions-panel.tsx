@@ -4,28 +4,22 @@ import { useHostReadActive } from "@/state/queries";
 import { HierarchyFrame, HierarchyWidthProvider } from "@/ui/hierarchy-frame";
 import { useMobileTheme } from "@/ui/theme";
 import { sameSessionListConnectionFailure } from "./session-list-feedback";
-import type { ProjectSessionsProps, SessionCreationDraft } from "./sessions-panel-types";
+import type { ProjectSessionsProps } from "./sessions-panel-types";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLatestCallback } from "./use-latest-callback";
 import { View } from "react-native";
-import { carryCrossDelegation } from "../../../../src/shared/model/host-contracts/delegation";
 import { space } from "@/ui/tokens";
 import { router } from "expo-router";
-import { useFormDraft } from "@/state/form-draft";
 import { useActiveMachine } from "@/state/machines";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import { useHostClient, useHostQuery } from "@/state/queries";
-import { useCreateSession } from "./use-create-session";
+import { NewSessionSheet } from "./new-session-sheet";
 import { useScreenContentInsets } from "@/ui/screen-content-insets";
-import { Body, Button, FormActions, Sheet, SearchField, ScreenList, QueryState } from "@/ui/primitives";
+import { Button, SectionHeader, SearchField, ScreenList, QueryState } from "@/ui/primitives";
 import { getQueryPresentation } from "@/ui/query-presentation";
 import { useCopy } from "@/ui/copy";
 import { SwipeActionsGroup } from "@/ui/swipe-actions";
-import { PermissionField } from "./agent-option-icons";
-import { selectedChoice } from "./provider-choices";
 import { SessionListRow } from "./session-list-row";
-import { CommandError, ErrorText } from "./shared";
-import { AgentModelFields } from "./agent-model-fields";
 import type { HostSessionSummary } from "./wire";
 import { filterSessionDirectory, toggleSessionDirectoryFolder } from "./session-directory";
 import { projectSessionRows, type ProjectSessionRow } from "./project-session-shelves";
@@ -85,12 +79,6 @@ function ProjectSessionsConnection({
     {},
   );
   const [creating, setCreating] = useState(initialCreating);
-  const form = useFormDraft<SessionCreationDraft>({ provider: undefined, model: "" });
-  const { provider, model } = form.values;
-  const [modelSettings, setModelSettings] = useState<Record<string, string>>({});
-  const [runtimeMode, setRuntimeMode] = useState<
-    "supervised" | "auto-accept-edits" | "auto" | "full-access"
-  >("supervised");
   const client = useHostClient();
   // Live project streams already deliver session summaries; poll the full list only when they
   // are down. The interval is re-evaluated after each fetch, so a dropped stream resumes 5s polling.
@@ -121,15 +109,6 @@ function ProjectSessionsConnection({
       ),
     [lifecycle.data],
   );
-  const { catalog, command, locked, choices, selection, canStart, create } = useCreateSession(
-    projectId,
-    {
-      cwd,
-      catalogEnabled: creating,
-      draft: { provider, accountId: form.values.accountId, model },
-    },
-  );
-  const { selectedProvider, selectedAccountId, models, selectedModel, bundled } = selection;
   const attentionNow = useSnoozeNow(useHostReadActive(), (sessions.data ?? []).map(session => session.snoozedUntil));
   const visible = filterSessionDirectory(
     (sessions.data ?? []).filter(
@@ -171,7 +150,7 @@ function ProjectSessionsConnection({
   const presentation = getQueryPresentation(listQuery, !visible.length);
   const showEmptyCreate = presentation === "empty" && !search.trim() && !archived;
   const openCreate = () => {
-    if (readable() && !locked) setCreating(true);
+    if (readable()) setCreating(true);
   };
   const listState = (
     <QueryState
@@ -191,7 +170,7 @@ function ProjectSessionsConnection({
               label: copy("Aramayı temizle", "Clear search"),
               onPress: () => setSearch(""),
             }
-          : showEmptyCreate && !locked
+          : showEmptyCreate
             ? {
                 label: copy("Yeni oturum", "New session"),
                 onPress: openCreate,
@@ -213,124 +192,22 @@ function ProjectSessionsConnection({
         ListHeaderComponent={
           <View style={[uiStyles.stack, { gap: space.sm }]}>
             {archived ? (
-              <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", columnGap: space.sm }}>
-                <Body accessibilityRole="header" style={{ flexShrink: 1 }}>
-                  {copy("Arşivlenmiş oturumlar", "Archived sessions")}
-                </Body>
-                <Button
+              <SectionHeader flush title={copy("Arşivlenmiş oturumlar", "Archived sessions")}
+                trailing={<Button
                   label={copy("Etkin oturumlar", "Active sessions")}
                   tone="quiet"
+                  density="compact"
                   onPress={() => { if (readable()) setArchived(false); }}
-                />
-              </View>
+                />} />
             ) : null}
-            {searchOpen ? (
-              <SearchField
-                label={copy("Oturum ara", "Search sessions")}
-                autoFocus
-                value={search}
-                onChangeText={setSearch}
-              />
-            ) : null}
-            {creating ? (
-              <Sheet
-                visible
-                size="form"
-                dismissible={!locked}
-                dirty={
-                  form.dirty ||
-                  Object.keys(modelSettings).length > 0 ||
-                  runtimeMode !== "supervised"
-                }
-                title={copy("Yeni oturum", "New session")}
-                onClose={() => {
-                  if (!locked) {
-                    setCreating(false);
-                    form.reset({ provider: undefined, accountId: undefined, model: "" });
-                    setModelSettings({});
-                    setRuntimeMode("supervised");
-                  }
-                }}
-              >
-                <View style={uiStyles.stack}>
-                  {cwd ? (
-                    <Body
-                      mono
-                      muted
-                      selectable
-                      style={uiStyles.caption}
-                    >{`${copy("Çalışma klasörü:", "Working folder:")} ${cwd}`}</Body>
-                  ) : null}
-                  <QueryState query={catalog} loading="inline" />
-                  {selectedProvider && catalog.data?.errors[selectedProvider] ? (
-                    <ErrorText error={catalog.data.errors[selectedProvider]} />
-                  ) : null}
-                  {bundled ? (
-                    <Body muted>
-                      {copy(
-                        "Yerleşik model listesi gösteriliyor. Kullanılabilirlik bilgisayarındaki sağlayıcıya bağlıdır.",
-                        "Showing bundled models. Availability depends on the provider on your computer.",
-                      )}
-                    </Body>
-                  ) : null}
-                  <AgentModelFields
-                    catalog={catalog.data}
-                    models={models}
-                    model={selectedModel}
-                    settings={modelSettings}
-                    sparseSettings
-                    provider={{
-                      choices,
-                      value: selectedChoice(choices, selectedProvider, selectedAccountId),
-                      onChange: (next) => {
-                        form.patch(
-                          next.provider === selectedProvider
-                            ? { accountId: next.accountId }
-                            : { provider: next.provider, accountId: next.accountId, model: "" },
-                        );
-                        if (next.provider !== selectedProvider) setModelSettings(previous => carryCrossDelegation(previous, {}));
-                      },
-                    }}
-                    disabled={locked}
-                    onChange={(next, settings) => {
-                      form.setField("model", next);
-                      setModelSettings(settings);
-                    }}
-                  />
-                  <PermissionField
-                    value={runtimeMode}
-                    disabled={locked}
-                    onChange={setRuntimeMode}
-                  />
-                  {runtimeMode === "supervised" ? (
-                    <Body muted style={uiStyles.caption}>
-                      {copy(
-                        "Başlangıçta komut ve dosya değişiklikleri için onay istenir. Oturum ayarlarından değiştirebilirsin.",
-                        "Commands and file changes ask for approval initially. You can change this in session settings.",
-                      )}
-                    </Body>
-                  ) : null}
-                  <CommandError
-                    error={command.error}
-                    onDismiss={() => command.reset()}
-                    onRecovered={(receipt) => {
-                      if (!readable()) return;
-                      command.reset();
-                      openSession(receipt.sessionId);
-                    }}
-                  />
-                  <FormActions
-                    submitLabel={copy("Oturumu başlat", "Start session")}
-                    tone="primary"
-                    disabled={!canStart}
-                    busy={command.isPending}
-                    onSubmit={() => {
-                      if (readable()) void create(openSession, { settings: modelSettings, runtimeMode });
-                    }}
-                  />
-                </View>
-              </Sheet>
-            ) : null}
+            {/* Always visible, like the Sessions tab; refresh is pull-to-refresh. */}
+            <SearchField
+              label={copy("Oturum ara", "Search sessions")}
+              value={search}
+              onChangeText={setSearch}
+            />
+            {/* The one new-session editor, with this project (and worktree folder) preselected. */}
+            <NewSessionSheet visible={creating} project={{ id: projectId, cwd }} onClose={() => setCreating(false)} />
           </View>
         }
         renderItem={({ item }) => {
@@ -348,6 +225,7 @@ function ProjectSessionsConnection({
             return (
               <SessionFolderRow
                 row={item}
+                projectId={projectId}
                 onToggle={() =>
                   setCollapsed((current) =>
                     toggleSessionDirectoryFolder(current, item, !!search.trim()),
@@ -392,7 +270,7 @@ function ProjectSessionsConnection({
       setSearchOpen(!searchOpen);
     },
     showCreateInHeader: !showEmptyCreate && (listQuery.data !== undefined || presentation === "error"),
-    createDisabled: locked,
+    createDisabled: false,
     create: openCreate,
     archived,
     toggleArchived: () => {

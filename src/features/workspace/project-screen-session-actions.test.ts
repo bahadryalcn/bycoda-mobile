@@ -42,8 +42,10 @@ vi.mock("@/ui/screen-content-insets", () => ({ useScreenContentInsets: () => ({ 
 vi.mock("@/ui/hierarchy-frame", () => ({ HierarchyWidthProvider: ({ children }: { children: ReactNode }) => children }));
 vi.mock("@/ui/primitives", () => ({
   Body: ({ children }: { children: ReactNode }) => h("h2", null, children),
+  SectionHeader: ({ title, trailing }: { title: string; trailing?: ReactNode }) => h("div", null, h("h2", null, title), trailing),
   Button: ({ label, onPress }: { label: string; onPress: () => void }) => h("button", { onClick: onPress }, label),
   Sheet: ({ title, children }: { title: string; children: ReactNode }) => h("section", { "aria-label": title }, children),
+  SearchField: () => null,
   FormActions: ({ submitLabel, onSubmit, disabled }: { submitLabel: string; onSubmit: () => void; disabled?: boolean }) =>
     h("button", { onClick: onSubmit, disabled }, submitLabel),
   ScreenList: ({ data, ListEmptyComponent, ListHeaderComponent }: { data: unknown[]; ListEmptyComponent?: ReactNode; ListHeaderComponent?: ReactNode }) =>
@@ -70,10 +72,9 @@ vi.mock("./session-folder-row", () => ({}));
 vi.mock("./session-list-row", () => ({}));
 vi.mock("./session-shelf-header", () => ({}));
 vi.mock("./shared", () => ({ CommandError: () => null }));
-vi.mock("./use-create-session", () => ({
-  useCreateSession: () => ({
-    selection: {}, choices: [], command: {}, catalog: {}, locked: fixture.locked, canStart: !fixture.locked, create: fixture.create,
-  }),
+vi.mock("./new-session-sheet", () => ({
+  NewSessionSheet: ({ visible, project }: { visible: boolean; project?: { id: string; cwd?: string } }) =>
+    visible ? h("section", { "data-new-session": project?.id }, "New session editor") : null,
 }));
 
 function renderProjectSessions() {
@@ -124,11 +125,6 @@ it("keeps Retry visible after a failed read without showing the empty state acti
   expect(view).not.toContain("<button>New session</button>");
 });
 
-it("does not offer another creation action while a session command is locked", () => {
-  fixture.locked = true;
-  expect(renderProjectSessions()).not.toContain("New session");
-});
-
 it("identifies the project archive and returns to active sessions directly from the list", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const container = document.createElement("div");
@@ -156,7 +152,7 @@ it("identifies the project archive and returns to active sessions directly from 
   }
 });
 
-it("retires a project creation panel and old callbacks after same-row re-pairing", async () => {
+it("opens the shared new-session editor for this project and retires it after re-pairing", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const container = document.createElement("div");
   const root = createRoot(container);
@@ -164,18 +160,16 @@ it("retires a project creation panel and old callbacks after same-row re-pairing
     projectId: "project", initialCreating: true, canReadProject: () => true,
     renderFrame: (content) => content,
   });
-  const start = () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Start session");
+  const editor = () => container.querySelector("[data-new-session]");
   try {
     await act(async () => root.render(panel()));
-    await act(async () => start()!.click());
-    const lateCreated = fixture.create.mock.calls[0][0];
+    expect(editor()?.getAttribute("data-new-session")).toBe("project");
     await act(async () => root.render(panel()));
-    expect(start()).toBeDefined();
+    expect(editor()).not.toBeNull();
 
     fixture.epoch++;
     await act(async () => root.render(panel()));
-    expect(start()).toBeUndefined();
-    await act(async () => lateCreated("old-session"));
+    expect(editor()).toBeNull();
     expect(fixture.navigate).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());

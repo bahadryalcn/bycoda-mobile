@@ -25,7 +25,7 @@ vi.mock("../voice-settings/call-voice-button", () => ({
 }));
 vi.mock("./assistant-home-hero", () => ({
   AssistantHomeLoading: () => createElement("div", { role: "progressbar", "data-assistant-orb": true }),
-  AssistantContextBadges: ({ machineName, scope }: { machineName: string; scope: string }) => createElement("span", null, `${machineName} ${scope}`),
+  AssistantContextLine: ({ machineName, scope }: { machineName: string; scope: string }) => createElement("span", null, `${machineName} ${scope}`),
   AssistantHomeHero: ({ name, machineName, scope, onOpen, onVoice, openDisabled, voiceDisabled }: { name: string; machineName: string; scope: string; onOpen(): void; onVoice(): void; openDisabled: boolean; voiceDisabled: boolean }) => createElement("section", { "data-hero": name, "data-scope": scope }, machineName,
     createElement("button", { onClick: onOpen, disabled: openDisabled }, "Open conversation"),
     createElement("button", { onClick: onVoice, disabled: voiceDisabled }, "Voice call")),
@@ -75,7 +75,8 @@ vi.mock("@/ui/primitives", () => {
     const [open, setOpen] = useState(false), [visited, setVisited] = useState(false);
     return createElement("details", { open }, createElement("summary", { onClick: (event: React.MouseEvent) => { event.preventDefault(); setVisited(true); setOpen(!open); } }, label), visited ? createElement("div", { hidden: !open }, children) : null);
   };
-  return { Body: Group, Row: Group, Screen: Group, Section: Group, Disclosure, Empty: () => null, Notice: () => null,
+  return { Body: Group, Row: Group, Screen: Group, Section: Group, NavigationGroup: Group, Disclosure, Empty: () => null, Notice: () => null,
+    SegmentedControl: ({ label, options }: { label: string; options: { value: string; label: string }[] }) => createElement("div", { role: "radiogroup", "aria-label": label }, ...options.map(option => createElement("span", { key: option.value }, option.label))),
     QueryState: ({ query, loading, renderLoading }: { query: { isPending?: boolean }; loading?: string; renderLoading?: (label: string) => React.ReactNode }) =>
       query.isPending ? (renderLoading?.("Loading…") ?? (loading === "content" ? createElement("div", { "data-skeleton": true }) : null)) : null,
     Button: ({ label, onPress, disabled }: { label: string; onPress(): void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label),
@@ -120,11 +121,14 @@ it("distinguishes normal and planning threads in the same project using the publ
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); const container = document.createElement("div"), root = createRoot(container);
   try {
     await act(async () => root.render(createElement(AssistantScreen)));
-    expect(container.querySelector('select[aria-label="Recent conversations"]')).toBeNull();
     expect(container.textContent).toContain("Work computer");
     expect([...container.querySelectorAll("button")].some(button => button.textContent === "Open conversation")).toBe(true);
     expect(container.querySelector("main > details > summary")).toBeNull();
+    // Switching conversations is navigation: the list is on the home, not in the settings sheet.
     await act(async () => container.querySelector<HTMLButtonElement>("[data-call-settings] button")!.click());
+    expect(container.querySelector('[data-call-settings] select[aria-label="Recent conversations"]')).toBeNull();
+    // Presence is on the home itself, not behind the gear.
+    expect(container.querySelector('main [role="radiogroup"][aria-label="My presence"]')).not.toBeNull();
     const options = [...container.querySelectorAll<HTMLSelectElement>('select[aria-label="Recent conversations"] option')];
     expect(options.map(option => option.value)).toEqual(["thread-conversation", "thread-planning"]);
     expect(options.map(option => option.textContent)).toEqual(["Product project · Conversation", "Product project · Planning"]);
@@ -202,8 +206,8 @@ it("opens and closes header settings without remounting the selected composer", 
     await act(async () => settings.querySelector("button")!.click());
     expect(settings.querySelector('select[aria-label="Conversation scope"]')).not.toBeNull();
     expect(settings.querySelector('select[aria-label="Recent conversations"]')).not.toBeNull();
-    expect(settings.textContent).toContain("My presence");
-    expect(settings.textContent).toContain("Stop Room");
+    expect(settings.textContent).not.toContain("My presence");
+    expect(settings.textContent).toContain("Pause the assistant's work");
     await act(async () => settings.querySelector("button")!.click());
     expect(settings.querySelector("section")).toBeNull();
     expect(container.querySelector('[data-composer="thread-conversation"]')).toBe(composer);

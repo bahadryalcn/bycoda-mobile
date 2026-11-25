@@ -174,13 +174,25 @@ export function AssistantComposer({
   const canSend = !callActive && enabled && sendable && draft.ready && recordReady && !unconfirmed && !matchingSpeech && busy === null && !!text.trim();
   return (
     <View style={{ gap: space.xs, paddingHorizontal: space.screen }}>
+      {/* One feedback slot above the field: the send's own state first, then a failure, then voice status.
+          Never more than one box, so the transcript keeps its room with the keyboard open. */}
       {unconfirmed ? (
         <Notice
           tone="warning"
-          message={copy(
-            "Mesajın ulaşıp ulaşmadığı doğrulanamadı. Aynı mesaj yeniden gönderilmeyecek; durumu kontrol et.",
-            "It could not be confirmed that your message arrived. It will not be sent again; check its status.",
-          )}
+          message={notice === "restarted"
+            ? copy(
+              "Bilgisayar yeniden başladığı için bu mesajın sonucu artık doğrulanamıyor. Konuşmada görünüyorsa iletildi; görünmüyorsa beklemeyi bırakıp yeniden yaz.",
+              "The computer restarted, so this message's result can no longer be confirmed. If it shows in the conversation it arrived; if not, stop waiting and write it again.",
+            )
+            : notice === "unknown"
+              ? copy(
+                "Bilgisayar henüz bir sonuç bildirmedi. Biraz sonra yeniden kontrol et.",
+                "The computer has not reported a result yet. Check again in a moment.",
+              )
+              : copy(
+                "Mesajın ulaşıp ulaşmadığı doğrulanamadı. Aynı mesaj yeniden gönderilmeyecek; durumu kontrol et.",
+                "It could not be confirmed that your message arrived. It will not be sent again; check its status.",
+              )}
         >
           <Row>
             <Button
@@ -199,8 +211,7 @@ export function AssistantComposer({
             />
           </Row>
         </Notice>
-      ) : null}
-      {notice === "refused" ? (
+      ) : notice === "refused" ? (
         <Notice
           tone="warning"
           message={copy(
@@ -208,28 +219,12 @@ export function AssistantComposer({
             "The computer did not accept the message. Your draft is kept; you can send it again.",
           )}
         />
-      ) : null}
-      {notice === "unknown" && unconfirmed ? (
-        <Notice
-          tone="info"
-          message={copy(
-            "Bilgisayar henüz bir sonuç bildirmedi. Biraz sonra yeniden kontrol et.",
-            "The computer has not reported a result yet. Check again in a moment.",
-          )}
-        />
-      ) : null}
-      {notice === "restarted" && unconfirmed ? (
-        <Notice
-          tone="info"
-          message={copy(
-            "Bilgisayar yeniden başladığı için bu mesajın sonucu artık doğrulanamıyor. Konuşmada görünüyorsa iletildi; görünmüyorsa beklemeyi bırakıp yeniden yaz.",
-            "The computer restarted, so this message's result can no longer be confirmed. If it shows in the conversation it arrived; if not, stop waiting and write it again.",
-          )}
-        />
-      ) : null}
-      {error ? <ErrorNotice error={error} /> : null}
-      {matchingSpeech && error ? <Button label={copy("Kaydet", "Save")} onPress={() => { void importSpeech(); }} /> : null}
-      <AssistantVoiceFeedback />
+      ) : error ? (
+        <>
+          <ErrorNotice error={error} />
+          {matchingSpeech ? <Button label={copy("Kaydet", "Save")} onPress={() => { void importSpeech(); }} /> : null}
+        </>
+      ) : <AssistantVoiceFeedback />}
       <ChatComposer
         value={text}
         onValueChange={(value) => draft.setValue({ text: value, speechIds: draft.valueRef.current?.speechIds ?? [] })}

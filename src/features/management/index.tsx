@@ -3,8 +3,9 @@ import { router } from "expo-router";
 import { useState, type ComponentType } from "react";
 import { View } from "react-native";
 import { useCopy } from "@/ui/copy";
-import { Empty, QueryState, SearchField, Screen, Skeleton } from "@/ui/primitives";
-import { useActiveMachine, useMachines } from "@/state/machines";
+import { Empty, SearchField, Screen } from "@/ui/primitives";
+import { NoComputerGate } from "@/ui/no-computer";
+import { useActiveMachine } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { Scope } from "./shared/scope";
 import { InitialProjectFilter, useLocalProjectScope } from "./shared/local-project-scope";
@@ -19,31 +20,6 @@ import { ToolDirectory } from "./tool-directory";
 import { isManagementSection, managementSections, type ManagementSection } from "./sections";
 import { useProjectList } from "../workspace/use-project-directory";
 
-function ManagementConnectionState() {
-  const copy = useCopy();
-  const ready = useMachines((state) => state.hydrated && !state.connectionPending);
-  const error = useMachines((state) => state.storageError);
-  return (
-    <View style={{ flex: 1 }}>
-      {error ? (
-        <QueryState query={{ error, refetch: () => useMachines.getState().hydrate() }} />
-      ) : !ready ? (
-        <Skeleton />
-      ) : (
-        <Empty
-          compact={false}
-          illustration="connect-computer"
-          title={copy("Önce bir bilgisayar bağlayın", "Connect a computer first")}
-          action={{
-            label: copy("Bilgisayar bağla", "Connect a computer"),
-            onPress: () => router.navigate("/machines"),
-          }}
-        />
-      )}
-    </View>
-  );
-}
-
 export function ManagementHome() {
   const copy = useCopy();
   const machine = useActiveMachine();
@@ -55,7 +31,7 @@ export function ManagementHome() {
   return (
     <Screen title={copy("Araçlar", "Tools")} context={machine ? <Scope allowAll projectId={selectedProjectId} onChange={setProjectId} /> : undefined} scroll={!!machine}>
       {!machine ? (
-        <ManagementConnectionState />
+        <NoComputerGate description={copy("Görevler, ekipler, otomasyonlar ve geliştirme araçları bağlı bilgisayarda çalışır.", "Tasks, crews, automations and developer tools run on a connected computer.")} />
       ) : (
         <>
           <SearchField
@@ -75,10 +51,11 @@ export function ManagementScreen({ section, initialProjectId }: ManagementScreen
   const copy = useCopy();
   const labels = isManagementSection(section) ? managementSections[section] : undefined;
   const title = labels ? copy(labels[0], labels[1]) : copy("Bölüm bulunamadı", "Section not found");
-  if (!machine)
+  // An unknown section is unknown with or without a computer.
+  if (!machine && labels)
     return (
       <Screen title={title} scroll={false}>
-        <ManagementConnectionState />
+        <NoComputerGate />
       </Screen>
     );
   const screens: Partial<Record<ManagementSection, ComponentType>> = {
@@ -90,7 +67,7 @@ export function ManagementScreen({ section, initialProjectId }: ManagementScreen
     inbox: InboxScreen,
     stewards: StewardsScreen,
   };
-  const Component = isManagementSection(section) ? screens[section] : undefined;
+  const Component = machine && isManagementSection(section) ? screens[section] : undefined;
   return Component ? (
     <InitialProjectFilter value={initialProjectId}>
       <Component key={`${connection.token}:${section}`} />

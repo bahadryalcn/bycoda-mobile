@@ -3,19 +3,22 @@ import { act, createElement, useEffect, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 const nav = vi.hoisted(() => ({ canGoBack: true, focused: true, unlocked: true, back: vi.fn(), replace: vi.fn(),
-  handleBack: vi.fn(), keyboardVisible: false, dismissKeyboard: vi.fn().mockResolvedValue(undefined) }));
+  handleBack: vi.fn(), keyboardVisible: false, dismissKeyboard: vi.fn().mockResolvedValue(undefined), fontScale: 1 }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("@/ui/primitives", () => ({
   HeaderBackButton: ({ onPress }: { onPress: () => void }) => createElement("button", { onClick: onPress }, "Back"),
+  PressableCard: ({ label, onPress, children }: { label: string; onPress: () => void; children: unknown }) =>
+    createElement("button", { "aria-label": label, onClick: onPress }, children as never),
 }));
 vi.mock("@/ui/provider-identity", () => ({ ProviderIcon: () => null }));
 vi.mock("@/ui/chat-controls", () => ({
   ChatAction: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label),
 }));
 vi.mock("lucide-react-native/icons/list", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("expo-router", () => ({
   router: { canGoBack: () => nav.canGoBack, back: nav.back, replace: nav.replace },
   useCanGoBack: () => nav.canGoBack,
@@ -29,8 +32,9 @@ vi.mock("react-native-keyboard-controller", () => ({ KeyboardController: {
 } }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, left: 0, right: 0, bottom: 0 }) }));
 vi.mock("react-native", () => ({
+  useWindowDimensions: () => ({ fontScale: nav.fontScale }),
   Text: ({ children }: PropsWithChildren) => createElement("span", null, children),
-  View: ({ children }: PropsWithChildren) => createElement("div", null, children),
+  View: ({ children, "aria-label": label }: PropsWithChildren<{ "aria-label"?: string }>) => createElement("div", { "aria-label": label }, children),
 }));
 import { SessionHeader, useTabletSessionBackFallback } from "./session-header";
 
@@ -100,7 +104,14 @@ it("keeps title, project and status in one header and the action state across st
     expect(container.querySelector("input")).toBe(input);
     expect(input.value).toBe("Preserved");
     expect(mounts).toBe(1);
+    nav.fontScale = 1.8;
+    await act(async () => render("Ready"));
+    expect(container.querySelector("input")).toBe(input);
+    expect(input.value).toBe("Preserved");
+    expect(container.textContent).toContain("Fix login");
+    expect(mounts).toBe(1);
   } finally {
+    nav.fontScale = 1;
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
   }
@@ -142,4 +153,19 @@ it("drops the back button beside a split list and offers the session list on a t
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
   }
+});
+
+it("makes an offline status line its own Refresh action", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const refresh = vi.fn();
+  await act(() => root.render(createElement(SessionHeader, { title: "Title", context: "Project", status: "Offline", tone: "warning", onRefresh: refresh })));
+  const status = container.querySelector('[aria-label="Project, Offline, Refresh"]') as HTMLButtonElement;
+  expect(status.tagName).toBe("BUTTON");
+  await act(() => status.click());
+  expect(refresh).toHaveBeenCalledOnce();
+  await act(() => root.render(createElement(SessionHeader, { title: "Title", context: "Project", status: "Ready", tone: "muted" })));
+  expect(container.querySelector('[aria-label="Project, Ready"]')!.tagName).toBe("DIV");
+  await act(() => root.unmount());
 });

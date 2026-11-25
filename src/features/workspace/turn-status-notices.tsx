@@ -1,6 +1,6 @@
 import { sessionRetryNotice } from "../../../../src/features/sessions/model/sessionIssue";
 import { useRef, useState } from "react";
-import { Button, Notice, Row } from "@/ui/primitives";
+import { StatusLine } from "@/ui/feedback";
 import { ChatStreaming } from "@/ui/chat-activity";
 import { useCopy } from "@/ui/copy";
 import { space } from "@/ui/tokens";
@@ -16,7 +16,10 @@ export function ThinkingPlaceholder() {
   );
 }
 
-/** The provider retries on its own; like desktop, Refresh re-reads the turn and Stop cancels it. */
+/**
+ * The provider retries on its own; one status line says so. Its action is Stop while the run can be
+ * cancelled, otherwise Refresh re-reads the turn. A failed re-read is a second quiet line.
+ */
 export function ProviderRetryNotice({
   provider,
   message,
@@ -54,32 +57,20 @@ export function ProviderRetryNotice({
     : copy("{p0} yeniden deniyor", "{p0} is retrying", { p0: provider });
   return (
     <View style={{ gap: space.xxs }}>
-      <Notice tone="warning" message={notice.detail ? `${title} · ${notice.detail}` : title}>
-        <Row style={{ gap: space.xs, justifyContent: "flex-end" }}>
-          <Button
-            label={refreshing ? copy("Yenileniyor…", "Refreshing…") : copy("Yenile", "Refresh")}
-            density="compact"
-            tone="quiet"
-            busy={refreshing}
-            onPress={refresh}
-          />
-          <Button
-            label={copy("Durdur", "Stop")}
-            density="compact"
-            tone="quiet"
-            busy={stopping}
-            disabled={disabled || refreshing}
-            onPress={onStop}
-          />
-        </Row>
-      </Notice>
+      <StatusLine
+        tone="warning"
+        busy={stopping || refreshing}
+        label={notice.detail ? `${title} · ${notice.detail}` : title}
+        action={
+          disabled
+            ? { label: copy("Yenile", "Refresh"), onPress: refresh }
+            : { label: copy("Durdur", "Stop"), onPress: onStop }
+        }
+      />
       {refreshFailed ? (
-        <Notice
+        <StatusLine
           tone="danger"
-          message={copy(
-            "Bilgiler yenilenemedi. Son alınan bilgiler gösteriliyor.",
-            "Could not refresh. Showing the last received information.",
-          )}
+          label={copy("Yenilenemedi; son bilgiler gösteriliyor.", "Could not refresh; showing the last information.")}
         />
       ) : null}
     </View>
@@ -96,9 +87,9 @@ export function InterruptedTurnNotice({
 }) {
   const copy = useCopy();
   return (
-    <Notice
+    <StatusLine
       tone="warning"
-      message={copy("Bu tur yarıda kesildi.", "This turn was cut off.")}
+      label={copy("Bu tur yarıda kesildi.", "This turn was cut off.")}
       action={disabled ? undefined : { label: copy("Devam et", "Continue"), onPress: onContinue }}
     />
   );

@@ -7,10 +7,11 @@ import Plus from "lucide-react-native/icons/plus";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useFormDraft } from "@/state/form-draft";
 import type { HostProject } from "@/domain/types";
-import { Body, Disclosure, ErrorText, Field, FormActions, IconButton, MutationState, NavigationRow, Notice, QueryState, Row, ScreenList, SearchField, Sheet, StatusText } from "@/ui/primitives";
+import { Badge, Body, Disclosure, ErrorText, Field, FormActions, IconButton, MutationState, NavigationRow, Notice, QueryState, Row, RowIcon, ScreenList, SearchField, Sheet, StatusText } from "@/ui/primitives";
 import { haptic } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
+import { iconSize } from "@/ui/tokens";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
 import { expectedPort, projectServers } from "./tool-model";
@@ -85,34 +86,41 @@ function DevServersScreenBody({ project }: { project: HostProject }) {
     <>
       <ScreenList<DevServer>
         title={copy("Geliştirme sunucuları", "Dev servers")}
-        subtitle={project.name}
+        scope={{ computer: machine?.name, project: project.name }}
         data={servers}
         keyExtractor={(server) => server.id}
         query={scan}
         actions={!canStartFromEmptyList ? (
           <IconButton label={copy("Sunucu başlat", "Start server")} disabled={start.isPending} onPress={openStartForm}>
-            <Plus size={22} strokeWidth={2.2} color={colors.accent} />
+            <Plus size={iconSize.action} strokeWidth={2} color={colors.accent} />
           </IconButton>
         ) : undefined}
         header={
           <>
             <Stack.Screen options={{ title: copy("Geliştirme sunucuları", "Dev servers") }} />
             <SearchField ref={searchInput} label={copy("Sunucu ara", "Search servers")} value={search} onChangeText={setSearch} />
-            <QueryState
+            {!scan.error && scan.data?.status === "error" ? <Notice tone="danger" message={scan.data.error ?? copy("Hata", "Error")} retrying={scan.isFetching} onRetry={() => { if (!scan.isFetching) void scan.refetch(); }} /> : null}
+
+          </>
+        }
+        ListEmptyComponent={
+          <QueryState size="region"
               query={scan}
               empty={!servers.length && scan.data?.status !== "error"}
               emptyTitle={
                 search.trim() && projectRows.length
                   ? copy("Eşleşen sonuç yok", "No matching results")
-                  : copy("Bu projede sunucu yok.", "No servers in this project.")
+                  : copy("Çalışan sunucu yok", "No servers running")
               }
+              emptyDetail={search.trim() && projectRows.length ? undefined : copy(
+                "Geliştirme sunucuları, uygulamanı bilgisayarında çalıştıran komutlardır (örneğin npm run dev).",
+                "Dev servers are the commands that run your app on the computer, such as npm run dev.",
+              )}
+              emptyIllustration={search.trim() && projectRows.length ? undefined : "inbox-empty"}
               emptyAction={search.trim() && projectRows.length ? {
                 label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch,
               } : { label: copy("Sunucu başlat", "Start server"), onPress: openStartForm, busy: start.isPending }}
             />
-            {!scan.error && scan.data?.status === "error" ? <Notice tone="danger" message={scan.data.error ?? copy("Hata", "Error")} retrying={scan.isFetching} onRetry={() => { if (!scan.isFetching) void scan.refetch(); }} /> : null}
-
-          </>
         }
         renderItem={({ item: server }) => {
           const stateLabel = server.state === "running" ? copy("Çalışıyor", "Running")
@@ -129,21 +137,22 @@ function DevServersScreenBody({ project }: { project: HostProject }) {
             metadata={ports || undefined}
             metadataLines={0}
             accessibilityLabel={[server.name, stateLabel, server.command, ports].filter(Boolean).join(". ")}
-            icon={<Server size={20} color={server.state === "running" ? colors.live : colors.muted} />}
-            supporting={<StatusText label={stateLabel} tone={server.state === "error" ? "danger" : server.state === "running" ? "active" : "default"} />}
+            icon={<RowIcon glyph={Server} />}
+            supporting={server.state === "error" ? <Badge label={stateLabel} tone="danger" /> : <StatusText label={stateLabel} tone={server.state === "running" ? "live" : "default"} />}
             onPress={() => setSelected(server)}
           />
           );
         }}
       />
       <Sheet visible={creating} title={copy("Sunucu başlat", "Start server")} dirty={form.dirty} dismissible={!start.isPending} onClose={() => setCreating(false)}>
-        <Body muted>{project.name}</Body>
-        <Field label={copy("Komut", "Command")} value={form.values.command} editable={!start.isPending} autoCapitalize="none" autoCorrect={false} multiline mono onChangeText={(command) => form.setField("command", command)} />
-        <Disclosure label={copy("Ayrıntılar", "Details")}>
+        <Body muted>{copy("{p0} projesinde, bilgisayarında çalışır.", "Runs on your computer in {p0}.", { p0: project.name })}</Body>
+        <Field label={copy("Komut", "Command")} placeholder="npm run dev" value={form.values.command} editable={!start.isPending} autoCapitalize="none" autoCorrect={false} multiline mono onChangeText={(command) => form.setField("command", command)} />
+        <Disclosure label={copy("Ek ayarlar", "More settings")}>
         <Body mono muted>{project.cwd}</Body>
-        <Field label={copy("Ad", "Name")} value={form.values.name} editable={!start.isPending} onChangeText={(name) => form.setField("name", name)} />
+        <Field label={copy("Ad", "Name")} placeholder={copy("İsteğe bağlı", "Optional")} value={form.values.name} editable={!start.isPending} onChangeText={(name) => form.setField("name", name)} />
         <Field
           label={copy("Port (isteğe bağlı)", "Port (optional)")}
+          placeholder="3000"
           value={form.values.port}
           editable={!start.isPending}
           keyboardType="number-pad"

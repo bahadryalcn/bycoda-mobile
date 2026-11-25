@@ -16,8 +16,8 @@ export function SessionShelfHeader({
   const { colors } = useMobileTheme();
   const copy = useCopy();
   const title = {
-    pinned: copy("Sabit", "Pinned"),
-    needs: copy("Senin için", "Needs you"),
+    pinned: copy("Sabitlenenler", "Pinned"),
+    needs: copy("Senden bekleyenler", "Needs you"),
     running: copy("Çalışıyor", "Working"),
     recent: copy("Son", "Recent"),
     snoozed: copy("Ertelenmiş", "Snoozed"),

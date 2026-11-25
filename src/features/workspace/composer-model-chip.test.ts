@@ -8,6 +8,7 @@ import type { HostSession } from "./wire";
 const fixture = vi.hoisted(() => ({
   switchAllowed: false,
   summary: "",
+  fontScale: 1,
   accounts: [{ id: "default", label: "Default account", color: "fixture" }],
   command: vi.fn(async () => ({ commandId: "fixture-command", sessionId: "session", revision: 1 })),
   run: vi.fn(async (action: () => Promise<unknown>) => action()),
@@ -27,21 +28,35 @@ vi.mock("@/ui/primitives", () => ({
   Notice: ({ message }: { message: string }) => createElement("div", null, message),
 }));
 vi.mock("@/ui/chat-controls", () => ({
-  ChatToolbarAction: ({ onPress, children, label, accessibilityLabel }: PropsWithChildren<{
-    onPress: () => void; label: string; accessibilityLabel: string;
-  }>) => createElement("button", { onClick: onPress, "aria-label": accessibilityLabel }, children, label),
+  ChatToolbarAction: ({ onPress, children, label, accessibilityLabel, hideLabel }: PropsWithChildren<{
+    onPress: () => void; label: string; accessibilityLabel: string; hideLabel?: boolean;
+  }>) => createElement("button", { onClick: onPress, "aria-label": accessibilityLabel }, children, hideLabel ? null : label),
 }));
+vi.mock("react-native", () => ({
+  View: ({ children }: PropsWithChildren) => createElement("span", null, children),
+  useWindowDimensions: () => ({ fontScale: fixture.fontScale }),
+}));
+vi.mock("lucide-react-native/icons/shield-alert", () => ({ default: () => createElement("i", { "data-full-access": true }) }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
+vi.mock("@/ui/tokens", () => ({ space: { xxs: 2 } }));
+const access = vi.hoisted(() => ({ props: undefined as undefined | { value: string; onChange: (mode: string) => void; disabled: boolean } }));
+vi.mock("./composer-access", () => ({
+  accessModeLabel: (mode: string) => mode,
+  ComposerAccessField: (props: NonNullable<typeof access.props>) => { access.props = props; return null; },
+}));
+vi.mock("./composer-context-meter", () => ({ ComposerContextSection: () => null }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./composer-model-mark", () => ({ ComposerModelMark: () => null }));
 vi.mock("./model-picker", () => ({
   ModelPicker: (props: ModelPickerProps) => {
     picker = props;
-    return null;
+    return props.extra ?? null;
   },
 }));
 vi.mock("./model-picker-model", () => ({ settingsSummary: () => fixture.summary }));
 vi.mock("./setting-labels", () => ({ settingLabels: () => ({}) }));
-vi.mock("./catalog", () => ({
+vi.mock("./catalog", async (importOriginal) => ({
+  activeSessionModel: (await importOriginal<typeof import("./catalog")>()).activeSessionModel,
   catalogProviders: () => fixture.switchAllowed ? ["claude", "codex"] : ["claude"],
   sessionCatalog: () => ({ models: { claude: [{ id: "model", name: "Research model" }], codex: [{ id: "codex:new", name: "New model" }] } }),
   sessionModel: () => ({ id: "model" }),
@@ -50,6 +65,7 @@ vi.mock("./catalog", () => ({
 }));
 
 import { ComposerModelChip } from "./composer-model-chip";
+import { openModelSheet } from "./composer-model-sheet";
 let root: Root, container: HTMLDivElement;
 const session = {
   projectId: "project",
@@ -67,13 +83,14 @@ const current = () => {
   if (!picker) throw new Error("Picker did not render");
   return picker;
 };
-const render = (blocked = false, value = session) =>
+const render = (blocked = false, value = session, iconOnly = false) =>
   act(() =>
-    root.render(createElement(ComposerModelChip, { session: value, blocked, onCommand: fixture.command })),
+    root.render(createElement(ComposerModelChip, { machineId: "machine", session: value, blocked, iconOnly, onCommand: fixture.command })),
   );
 beforeEach(() => {
   fixture.switchAllowed = false;
   fixture.summary = "";
+  fixture.fontScale = 1;
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   fixture.command.mockClear();
   fixture.run.mockClear();
@@ -87,8 +104,46 @@ it("keeps the model name visible and includes reasoning in the spoken label", as
   fixture.summary = "High";
   await render();
   const button = container.querySelector("button")!;
+  expect(button.textContent).toBe("Research model · High");
+  expect(button.getAttribute("aria-label")).toBe("Model and access: Research model · High. Access: auto");
+  fixture.fontScale = 1.8;
+  await render();
   expect(button.textContent).toBe("Research model");
-  expect(button.getAttribute("aria-label")).toBe("Model and reasoning: Research model · High");
+  expect(button.getAttribute("aria-label")).toBe("Model and access: Research model · High. Access: auto");
+});
+
+it("shows only the mark in a short slot and a warning glyph for full access, keeping the full spoken label", async () => {
+  await render(false, { ...session, session: { ...session.session, runtimeMode: "full-access" } } as HostSession, true);
+  const button = container.querySelector("button")!;
+  expect(button.textContent).toBe("");
+  expect(button.querySelector("[data-full-access]")).not.toBeNull();
+  expect(button.getAttribute("aria-label")).toBe("Model and access: Research model. Access: full-access");
+});
+
+it("keeps an access choice in the sheet draft and sends it only with Save", async () => {
+  fixture.accounts = [{ id: "gone", label: "Saved", color: "fixture" }];
+  try {
+    await render();
+    await act(() => container.querySelector("button")!.click());
+    expect(current().title).toBe("Model and access");
+    await act(async () => access.props!.onChange("supervised"));
+    expect(fixture.command).not.toHaveBeenCalled();
+    expect(current().dirty).toBe(true);
+    expect(access.props!.value).toBe("supervised");
+    await act(async () => current().onSave!());
+    expect(fixture.command).toHaveBeenCalledWith(expect.objectContaining({ type: "configure", runtimeMode: "supervised", model: "model" }));
+  } finally {
+    fixture.accounts = [{ id: "default", label: "Default account", color: "fixture" }];
+  }
+});
+
+it("opens the same sheet when another entry point requests it for this conversation", async () => {
+  await render();
+  expect(current().visible).toBe(false);
+  await act(async () => openModelSheet("other", "session"));
+  expect(current().visible).toBe(false);
+  await act(async () => openModelSheet("machine", "session"));
+  expect(current().visible).toBe(true);
 });
 
 it("keeps advisor, subagent and tool restrictions when changing provider", async () => {

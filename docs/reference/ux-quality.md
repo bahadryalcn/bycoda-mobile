@@ -91,10 +91,13 @@ write and completion. Keep the previous useful content on ordinary refresh
 failure when access remains valid; remove private data when access is lost.
 
 Connection state has one owner, the computer pill; no screen or app-chrome banner
-repeats it. A region with nothing to show (waiting, unreachable, access needed,
-unavailable) is one centered `StateView` with an illustration, a human title and
-at most one primary action. Shown data stays unmarked when a refresh fails or
-pauses. `Notice` is for feedback tied to an action or a contextual explanation.
+repeats it. Errors follow the severity policy in the design system (States): silent
+first (6 s grace with automatic retry), then a 24 pt status line, a toast for a quick
+action, a compact section state (96 pt) and a full region (200 pt for errors) only
+when a whole screen has nothing to show. One failing section per screen or sheet
+reports; others show one line. Errors never carry an illustration. Shown data stays
+unmarked when one refresh fails. `Notice` is for feedback tied to an action or a
+contextual explanation, clamped to two lines.
 
 Forms retain values on error. Field errors stay near their inputs; operation
 errors stay near the action. Long forms target a scrolling body with persistent

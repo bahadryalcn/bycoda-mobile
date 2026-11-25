@@ -12,7 +12,7 @@ vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/server", () => ({ default: () => null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
-vi.mock("@/ui/tokens", () => ({ colors: {} }));
+vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, colors: {} }));
 vi.mock("@/ui/motion", () => ({ haptic: { success: vi.fn() } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/state/machines", () => {
@@ -30,7 +30,7 @@ vi.mock("./dev-server-detail", () => ({ DevServerDetail: Detail }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled }: any) => createElement("button", { onClick: onPress, disabled }, label);
-  return { Body: Group, Row: Group, Disclosure: Group, StatusText: () => null, MutationState: () => null,
+  return { RowIcon: () => null, Badge: ({ label }: { label: string }) => createElement("span", null, label), Body: Group, Row: Group, Disclosure: Group, StatusText: () => null, MutationState: () => null,
     QueryState: ({ empty, emptyAction }: any) => empty && emptyAction ? createElement(Button, emptyAction) : null,
     Notice: () => null, IconButton: Button, NavigationRow: Button,
     ErrorText: ({ error }: any) => error ? createElement("p", null, error.message) : null,
@@ -38,7 +38,7 @@ vi.mock("@/ui/primitives", () => {
     Field: ({ label, value, onChangeText }: any) => createElement("input", { "aria-label": label, value, onChange: (e: any) => onChangeText(e.target.value) }),
     Sheet: ({ visible, children }: any) => visible ? createElement("aside", null, children) : null,
     FormActions: ({ submitLabel, onSubmit, feedback }: any) => { fixture.submit = onSubmit; return createElement("div", null, feedback, createElement(Button, { label: `Submit ${submitLabel}`, onPress: onSubmit })); },
-    ScreenList: ({ header, actions, data, renderItem }: any) => createElement("main", null, actions, fixture.hideHeader ? null : header, data.map((item: any) => createElement("div", { key: item.id }, renderItem({ item })))),
+    ScreenList: ({ header, actions, data, renderItem, ListEmptyComponent }: any) => createElement("main", null, actions, fixture.hideHeader ? null : header, data.length ? null : ListEmptyComponent, data.map((item: any) => createElement("div", { key: item.id }, renderItem({ item })))),
   };
 });
 import { DevServersScreen } from "./dev-servers-screen";

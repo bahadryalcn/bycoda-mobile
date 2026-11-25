@@ -78,7 +78,7 @@ export function TurnFooter({ turn }: { turn: Block }) {
     <View style={{ gap: space.xxs, paddingTop: space.xs }}>
       <Row style={{ flexWrap: "nowrap", gap: space.xs, minHeight: 24 }}>
         <Icon size={13} color={colors.muted} />
-        <Body muted numberOfLines={1} style={[typography.metadata, { flexShrink: 1 }]}>
+        <Body muted style={[typography.metadata, { flexShrink: 1 }]}>
           {completedAt != null ? `${label} · ${formatMessageTime(completedAt, locale, copy)}` : label}
         </Body>
         {metrics ? (

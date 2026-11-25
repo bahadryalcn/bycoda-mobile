@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { beforeEach, expect, it, vi } from "vitest";
 import { getQueryPresentation, type QueryLike } from "@/ui/query-presentation";
 const fixture = vi.hoisted(() => ({ push: vi.fn(), mutate: vi.fn(), projectId: null as string | null, providers: [] as unknown[], visible: true, catalog: undefined as unknown, goals: [] as unknown[], tasks: undefined as unknown, taskRefetch: vi.fn(() => Promise.resolve()), queries: [] as { key: unknown[]; method: string; options: { enabled?: boolean; interval?: () => number | false } }[], cards: [] as { goal: { id: string }; progress?: unknown; tasks?: unknown }[] }));
+vi.mock("react-native", () => ({ View: "div", useWindowDimensions: () => ({ fontScale: 1 }) }));
 vi.mock("expo-router", () => ({ router: { navigate: fixture.push } }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
@@ -29,7 +30,7 @@ vi.mock("./goals/goal-card", () => ({ GoalCard: (props: { goal: { id: string }; 
   return createElement("button", { onClick: () => props.onReplan(props.goal.id) }, "Revise plan");
 } }));
 vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null, FilterButton: () => null, FilterSheet: () => null }));
-vi.mock("@/ui/screen-list", () => ({ ScreenList: ({ header, actions, data, renderItem }: { header: React.ReactNode; actions: React.ReactNode; data: { id: string }[]; renderItem: (info: { item: { id: string } }) => React.ReactNode }) => createElement("main", null, createElement("nav", null, actions), header, ...data.map(item => createElement("section", { key: item.id }, renderItem({ item })))) }));
+vi.mock("@/ui/screen-list", () => ({ ScreenList: ({ header, actions, data, renderItem, ListEmptyComponent }: { header: React.ReactNode; actions: React.ReactNode; ListEmptyComponent?: React.ReactNode; data: { id: string }[]; renderItem: (info: { item: { id: string } }) => React.ReactNode }) => createElement("main", null, createElement("nav", null, actions), header, data.length ? null : ListEmptyComponent, ...data.map(item => createElement("section", { key: item.id }, renderItem({ item })))) }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Body: Group, Heading: Group, Button: () => null, Sheet: Group, MutationState: () => null, SelectField: () => null, SearchField: () => null, SearchToolbar: () => null,

@@ -1,10 +1,10 @@
+import { ManagementToolbar } from "./shared/collection-toolbar";
 import { useEditorRecord } from "./shared/use-editor-record";
-import { ScreenList } from "@/ui/screen-list";
+import { ManagementList } from "./shared/management-list";
 import { useRef, useState, type ComponentRef } from "react";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "./shared/search";
 import Plus from "lucide-react-native/icons/plus";
-import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
 
 import {
   Body,
@@ -14,8 +14,6 @@ import {
   Notice,
   QueryState,
   SearchField,
-  SearchToolbar,
-  SelectField,
   Sheet,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
@@ -34,6 +32,7 @@ import { AutomationCard } from "./automations/automation-card";
 import { savedAutomation, savedAutomationId } from "./automations/automation-feedback";
 import type { AutomationEditorFlow } from "./automations/types";
 import { useMobileTheme } from "@/ui/theme";
+import { iconSize } from "@/ui/tokens";
 
 export function AutomationsScreen() {
   const { colors } = useMobileTheme();
@@ -41,10 +40,12 @@ export function AutomationsScreen() {
   const locale = useLocale();
   const [search, setSearch] = useState("");
   const searchInput = useRef<ComponentRef<typeof SearchField>>(null);
-  const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
+  const clearSearch = () => {
+    setSearch("");
+    searchInput.current?.focus();
+  };
   type StateFilter = "all" | "enabled" | "paused";
   const [filter, setFilter] = useState<StateFilter>("all");
-  const [filterDraft, setFilterDraft] = useState<StateFilter | null>(null);
   const filterOptions: { value: StateFilter; label: string }[] = [
     { value: "all", label: copy("Tümü", "All") },
     { value: "enabled", label: copy("Etkin", "Enabled") },
@@ -75,12 +76,17 @@ export function AutomationsScreen() {
   );
   const [historyId, setHistoryId] = useState<string | null>(null);
   const busy = save.isPending || run.isPending || remove.isPending;
-  const scoped = query.data?.filter(item => !projectId || item.projectId === projectId);
+  const scoped = query.data?.filter((item) => !projectId || item.projectId === projectId);
   const presentation = getQueryPresentation(query);
-  const showCreateInHeader = !!scoped?.length &&
-    (presentation === "ready" || presentation === "stale-error");
-  const visible = scoped?.filter(item => (filter === "all" || (filter === "enabled") === item.enabled) && matchesSearch(item.name + " " + item.prompt, search, locale));
-  const projectReady = !projectId || (projects.directoryReady && projects.isProjectVisible(projectId));
+  const showCreateInHeader =
+    !!scoped?.length && (presentation === "ready" || presentation === "stale-error");
+  const visible = scoped?.filter(
+    (item) =>
+      (filter === "all" || (filter === "enabled") === item.enabled) &&
+      matchesSearch(item.name + " " + item.prompt, search, locale),
+  );
+  const projectReady =
+    !projectId || (projects.directoryReady && projects.isProjectVisible(projectId));
   const canCreate = projectReady && providers.length > 0 && !editor && !busy;
   const startNew = () => {
     if (!canCreate) return;
@@ -94,7 +100,7 @@ export function AutomationsScreen() {
         prompt: "",
         projectId: projectId ?? "",
         enabled: true,
-        scheduleKind: "daily",
+        scheduleKind: "weekdays",
         time: "09:00",
         minute: 0,
         dayOfWeek: 1,
@@ -102,63 +108,102 @@ export function AutomationsScreen() {
       },
     });
   };
+  const listState = (
+    <QueryState
+      size="region"
+      query={query}
+      empty={visible?.length === 0}
+      emptyTitle={
+        (search.trim() || filter !== "all") && scoped?.length
+          ? copy("Eşleşen sonuç yok", "No matching results")
+          : copy("Henüz otomasyon yok", "No automations yet")
+      }
+      emptyDetail={
+        (search.trim() || filter !== "all") && scoped?.length
+          ? undefined
+          : copy(
+              "Otomasyonlar bir istemi zamanlanmış olarak bilgisayarında çalıştırır.",
+              "Automations run a prompt on your computer on a schedule.",
+            )
+      }
+      emptyAction={
+        scoped?.length && (search.trim() || filter !== "all")
+          ? search.trim()
+            ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
+            : {
+                label: copy("Filtreleri temizle", "Clear filters"),
+                onPress: () => setFilter("all"),
+              }
+          : scoped?.length === 0 && canCreate
+            ? { label: copy("Yeni otomasyon", "New automation"), onPress: startNew }
+            : undefined
+      }
+    />
+  );
   return (
-    <ScreenList<HostAutomation>
+    <ManagementList<HostAutomation>
       title={copy("Otomasyonlar", "Automations")}
       query={query}
+      ListEmptyComponent={listState}
       data={visible ?? []}
       keyExtractor={(item) => item.id}
-      context={<Scope allowAll projectId={projectId} onChange={setProjectId} />}
-      actions={showCreateInHeader ? (
-        <IconButton
-          label={copy("Yeni otomasyon", "New automation")}
-          disabled={!canCreate}
-          onPress={startNew}
-        >
-          <Plus size={22} strokeWidth={2.2} color={colors.accent} />
-        </IconButton>
-      ) : undefined}
+      actions={
+        showCreateInHeader ? (
+          <IconButton
+            label={copy("Yeni otomasyon", "New automation")}
+            disabled={!canCreate}
+            onPress={startNew}
+          >
+            <Plus size={iconSize.action} strokeWidth={2} color={colors.accent} />
+          </IconButton>
+        ) : undefined
+      }
       header={
         <>
-          {!projectId ? (
-            <Body muted>
-              {copy(
-                "Projesiz otomasyonlar Room içinde çalışır.",
-                "Projectless automations run in Room.",
+          {!providers.length ? (
+            <>
+              {providerQuery.isLoading || providerQuery.error ? (
+                <QueryState query={providerQuery} loading="inline" />
+              ) : (
+                <AgentProviderPrerequisite />
               )}
-            </Body>
+            </>
           ) : null}
-          {!providers.length ? <>{providerQuery.isLoading || providerQuery.error ? <QueryState query={providerQuery} loading="inline" /> : <AgentProviderPrerequisite />}</> : null}
-          <FilterSheet
-            visible={filterDraft !== null}
-            onClose={() => setFilterDraft(null)}
-            onReset={() => setFilterDraft("all")}
-            onApply={() => { if (filterDraft !== null) setFilter(filterDraft); setFilterDraft(null); }}
-          >
-            <SelectField
-              label={copy("Duruma göre filtrele", "Filter by state")}
-              value={filterDraft ?? filter}
-              options={filterOptions}
-              onChange={setFilterDraft}
-            />
-          </FilterSheet>
-          <SearchToolbar
-            search={<SearchField ref={searchInput} label={copy("Otomasyonlarda ara", "Search automations")} value={search} onChangeText={setSearch} />}
-            actions={<FilterButton count={filter !== "all" ? 1 : 0} onPress={() => setFilterDraft(filter)} />}
+          <ManagementToolbar
+            project={<Scope allowAll projectId={projectId} onChange={setProjectId} />}
+            search={
+              <SearchField
+                placeholder={copy("Ara", "Search")}
+                ref={searchInput}
+                label={copy("Otomasyonlarda ara", "Search automations")}
+                value={search}
+                onChangeText={setSearch}
+              />
+            }
+            status={{
+              label: copy("Durum", "Status"),
+              value: filter,
+              unfilteredValue: "all",
+              options: filterOptions,
+              onChange: setFilter,
+            }}
           />
-          <AppliedFilters filters={[filter !== "all" && `${copy("Durum", "State")}: ${filterOptions.find((option) => option.value === filter)?.label}`]} />
 
-          {!editor && !visible?.some(item => item.id === savedAutomationId(save.variables)) && (
+          {!editor && !visible?.some((item) => item.id === savedAutomationId(save.variables)) && (
             <MutationState
               mutation={save}
               success={copy("Otomasyon kaydedildi.", "Automation saved.")}
             />
           )}
-          {!visible?.some(item => item.id === run.variables?.automationId) && <MutationState mutation={run} success={copy("Çalıştırma istendi.", "Run requested.")} />}
-          {!visible?.some(item => item.id === remove.variables?.automationId) && <MutationState
-            mutation={remove}
-            success={copy("Otomasyon silindi.", "Automation deleted.")}
-          />}
+          {!visible?.some((item) => item.id === run.variables?.automationId) && (
+            <MutationState mutation={run} success={copy("Çalıştırma istendi.", "Run requested.")} />
+          )}
+          {!visible?.some((item) => item.id === remove.variables?.automationId) && (
+            <MutationState
+              mutation={remove}
+              success={copy("Otomasyon silindi.", "Automation deleted.")}
+            />
+          )}
           {editor?.kind === "edit" && query.isSuccess && !draft && (
             <Notice
               tone="warning"
@@ -174,7 +219,11 @@ export function AutomationsScreen() {
             <Sheet
               visible
               size="form"
-              title={copy("Otomasyon ayrıntıları", "Automation details")}
+              title={
+                editor?.kind === "new"
+                  ? copy("Yeni otomasyon", "New automation")
+                  : copy("Otomasyonu düzenle", "Edit automation")
+              }
               onClose={() => {
                 if (!busy) setEditor(null);
               }}
@@ -193,26 +242,7 @@ export function AutomationsScreen() {
               />
             </Sheet>
           )}
-          <QueryState
-            query={query}
-            empty={visible?.length === 0}
-            emptyTitle={
-              (search.trim() || filter !== "all") && scoped?.length
-                ? copy("Eşleşen sonuç yok", "No matching results")
-                : copy("Henüz otomasyon yok", "No automations yet")
-            }
-            emptyDetail={(search.trim() || filter !== "all") && scoped?.length ? undefined
-              : copy("Otomasyonlar bir istemi zamanlanmış olarak bilgisayarında çalıştırır.", "Automations run a prompt on your computer on a schedule.")}
-            emptyAction={
-              scoped?.length && (search.trim() || filter !== "all")
-                ? search.trim()
-                  ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
-                  : { label: copy("Filtreleri temizle", "Clear filters"), onPress: () => setFilter("all") }
-                : scoped?.length === 0 && canCreate
-                  ? { label: copy("Yeni otomasyon", "New automation"), onPress: startNew }
-                  : undefined
-            }
-          />
+          {visible?.length ? listState : null}
         </>
       }
       renderItem={({ item: item }) => (

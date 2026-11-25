@@ -1,9 +1,8 @@
-import { useState } from "react";
 import { View } from "react-native";
 import Zap from "lucide-react-native/icons/zap";
 import { RingChart } from "panelui-native/components/ring-chart";
 import { ChatToolbarAction } from "@/ui/chat-controls";
-import { Body, Button, Notice, Sheet, Stack, StatusRow } from "@/ui/primitives";
+import { Body, Button, Disclosure, Stack, StatusRow } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import {
@@ -18,122 +17,136 @@ const RING = 22;
 const STROKE = 2;
 const BOLT = 11;
 
+/** The ring joins the composer toolbar only when the context window needs attention. */
+export function contextNeedsAttention(reading: ComposerContextReading | null | undefined): boolean {
+  return !!reading && contextTone(reading.ratio) !== "normal";
+}
+
 /**
- * Composer context ring, the phone counterpart of the desktop `ContextMeter`: the ring shows how
- * full the context window is; tapping it opens the usage details and Compact now.
+ * Composer context ring, the phone counterpart of the desktop `ContextMeter`. It is shown in the
+ * toolbar only in warning or danger tone and opens the model sheet, which holds the reading and
+ * Compact now.
  */
-export function ComposerContextMeter({
+export function ComposerContextRing({
+  reading,
+  onPress,
+}: {
+  reading: ComposerContextReading;
+  onPress: () => void;
+}) {
+  const copy = useCopy();
+  const title = copy("Bağlam kullanımı", "Context usage");
+  const { percent, tokens } = contextText(reading, copy);
+  return (
+    <ChatToolbarAction
+      label={title}
+      accessibilityLabel={`${title}: ${percent}. ${tokens}`}
+      hideLabel
+      reserveTouchTarget
+      onPress={onPress}
+    >
+      <ContextRing ratio={reading.ratio ?? 0} tone={contextTone(reading.ratio)} tps={reading.tps} bolt={!reading.empty} />
+    </ChatToolbarAction>
+  );
+}
+
+function contextText(reading: ComposerContextReading, copy: ReturnType<typeof useCopy>) {
+  return {
+    percent: reading.ratio === null ? copy("Bilinmiyor", "Unknown") : `${Math.round(reading.ratio * 100)}%`,
+    tokens: reading.empty
+      ? copy("Henüz bağlam kullanılmadı", "No context used yet")
+      : `${contextTokensLabel(reading)} ${copy("token", "tokens")}`,
+  };
+}
+
+/**
+ * The context reading inside the model sheet: one summary row, usage details behind a disclosure,
+ * and Compact now. Compaction is a command of its own, not part of the sheet's draft.
+ */
+export function ComposerContextSection({
   reading,
   compactDisabled,
+  compactReason,
   onCompact,
 }: {
   reading: ComposerContextReading;
-  /** A run or send is in progress; compaction waits for it. */
+  /** A run, send or unsaved choice is in progress; compaction waits for it. */
   compactDisabled: boolean;
+  compactReason?: string;
   onCompact?: () => void;
 }) {
   const copy = useCopy();
   const { semanticColors } = useMobileTheme();
-  const [open, setOpen] = useState(false);
-  const title = copy("Bağlam kullanımı", "Context usage");
-  const percent =
-    reading.ratio === null ? copy("Bilinmiyor", "Unknown") : `${Math.round(reading.ratio * 100)}%`;
-  const tokens = reading.empty
-    ? copy("Henüz bağlam kullanılmadı", "No context used yet")
-    : `${contextTokensLabel(reading)} ${copy("token", "tokens")}`;
+  const { percent, tokens } = contextText(reading, copy);
   const tone = contextTone(reading.ratio);
+  const details = reading.costUsd !== undefined || !reading.empty || !!reading.agents?.length || reading.apiMs !== undefined;
   return (
-    <>
-      <ChatToolbarAction
-        label={title}
-        accessibilityLabel={`${title}: ${percent}. ${tokens}`}
-        hideLabel
-        reserveTouchTarget
-        onPress={() => setOpen(true)}
-      >
-        <ContextRing ratio={reading.ratio ?? 0} tone={tone} tps={reading.tps} bolt={!reading.empty} />
-      </ChatToolbarAction>
-      <Sheet
-        visible={open}
-        title={title}
-        size="compact"
-        onClose={() => setOpen(false)}
-        footer={onCompact ? (
-          <Button
-            label={copy("Şimdi sıkıştır", "Compact now")}
-            tone="primary"
-            fullWidth
-            reserveTouchTarget
-            disabled={compactDisabled}
-            onPress={() => {
-              setOpen(false);
-              onCompact();
-            }}
-          />
-        ) : undefined}
-      >
-        <Stack>
-          <StatusRow label={copy("Dolu", "Used")}>
-            <Body
-              // A `color: undefined` entry overrides the themed text color (dark text on the dark sheet).
-              style={tone === "normal" ? { fontWeight: "600" } : { fontWeight: "600", color: semanticColors[tone].text }}
-            >
-              {percent}
-            </Body>
-          </StatusRow>
-          <Body muted selectable>
-            {tokens}
-          </Body>
-          {reading.costUsd !== undefined ? (
-            <StatusRow label={copy("Maliyet", "Cost")}>
-              <Body selectable>{formatContextCost(reading.costUsd)}</Body>
-            </StatusRow>
-          ) : null}
-          {reading.empty ? null : (
-            <StatusRow label={copy("Yanıt hızı", "Response speed")}>
-              <Body selectable>
-                {reading.tps === undefined ? copy("Yok", "Unavailable") : `${reading.tps.toFixed(1)} TPS`}
-              </Body>
-            </StatusRow>
-          )}
-          {reading.agents?.length ? (
-            <>
-              <Body style={{ fontWeight: "600" }}>
-                {copy("Alt ajanlar", "Subagents")} · {reading.agents.length}
-              </Body>
-              {reading.agents.map((agent) => (
-                <StatusRow key={agent.id} label={agent.name}>
-                  <Body
-                    selectable
-                    style={contextTone(agent.ratio) === "normal"
-                      ? undefined
-                      : { color: semanticColors[contextTone(agent.ratio) as "warning" | "danger"].text }}
-                  >
-                    {agent.used === undefined
-                      ? copy("Yok", "Unavailable")
-                      : `${agent.ratio !== null ? `${Math.round(agent.ratio * 100)}% · ` : ""}${contextTokensLabel({ ratio: agent.ratio, used: agent.used, window: agent.window, empty: false })}`}
-                  </Body>
-                </StatusRow>
-              ))}
-            </>
-          ) : null}
-          {reading.apiMs !== undefined ? (
-            <StatusRow label={copy("API süresi", "API time")}>
-              <Body selectable>{formatContextApiTime(reading.apiMs)}</Body>
-            </StatusRow>
-          ) : null}
-          {onCompact && compactDisabled ? (
-            <Notice
-              tone="info"
-              message={copy(
-                "Geçerli işlemin bitmesini bekleyin",
-                "Wait for the current operation to finish",
-              )}
-            />
-          ) : null}
-        </Stack>
-      </Sheet>
-    </>
+    <Stack>
+      <StatusRow label={copy("Bağlam", "Context")}>
+        <Body
+          selectable
+          // A `color: undefined` entry overrides the themed text color (dark text on the dark sheet).
+          style={tone === "normal" ? { fontWeight: "600" } : { fontWeight: "600", color: semanticColors[tone].text }}
+        >
+          {percent}
+        </Body>
+      </StatusRow>
+      <Body muted selectable>{tokens}</Body>
+      {details ? (
+        <Disclosure label={copy("Kullanım ayrıntıları", "Usage details")}>
+          <Stack>
+            {reading.costUsd !== undefined ? (
+              <StatusRow label={copy("Maliyet", "Cost")}>
+                <Body selectable>{formatContextCost(reading.costUsd)}</Body>
+              </StatusRow>
+            ) : null}
+            {reading.empty ? null : (
+              <StatusRow label={copy("Yanıt hızı", "Response speed")}>
+                <Body selectable>
+                  {reading.tps === undefined ? copy("Yok", "Unavailable") : `${reading.tps.toFixed(1)} TPS`}
+                </Body>
+              </StatusRow>
+            )}
+            {reading.agents?.length ? (
+              <>
+                <Body style={{ fontWeight: "600" }}>
+                  {copy("Alt ajanlar", "Subagents")} · {reading.agents.length}
+                </Body>
+                {reading.agents.map((agent) => (
+                  <StatusRow key={agent.id} label={agent.name}>
+                    <Body
+                      selectable
+                      style={contextTone(agent.ratio) === "normal"
+                        ? undefined
+                        : { color: semanticColors[contextTone(agent.ratio) as "warning" | "danger"].text }}
+                    >
+                      {agent.used === undefined
+                        ? copy("Yok", "Unavailable")
+                        : `${agent.ratio !== null ? `${Math.round(agent.ratio * 100)}% · ` : ""}${contextTokensLabel({ ratio: agent.ratio, used: agent.used, window: agent.window, empty: false })}`}
+                    </Body>
+                  </StatusRow>
+                ))}
+              </>
+            ) : null}
+            {reading.apiMs !== undefined ? (
+              <StatusRow label={copy("API süresi", "API time")}>
+                <Body selectable>{formatContextApiTime(reading.apiMs)}</Body>
+              </StatusRow>
+            ) : null}
+          </Stack>
+        </Disclosure>
+      ) : null}
+      {onCompact ? (
+        <Button
+          label={copy("Şimdi sıkıştır", "Compact now")}
+          tone="secondary"
+          reserveTouchTarget
+          disabled={compactDisabled}
+          onPress={onCompact}
+        />
+      ) : null}
+      {onCompact && compactDisabled && compactReason ? <Body muted>{compactReason}</Body> : null}
+    </Stack>
   );
 }
 

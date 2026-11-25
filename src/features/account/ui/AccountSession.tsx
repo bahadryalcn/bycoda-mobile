@@ -74,6 +74,16 @@ export function AccountSession({
       .catch((error: unknown) => {
         // device_revoked already signed this phone out inside the runtime.
         if (cancelled || (error instanceof AccountApiError && error.code === "device_revoked")) return;
+        // Diagnostics keep the server's reason; the account screen shows the owner-facing message.
+        console.warn("Device registration failed", error instanceof AccountApiError ? `${error.status} ${error.code}: ${error.message} (${error.requestId})` : String(error));
+        // TEMP-DIAG: token claims only (never the token).
+        void authRef.current.getToken().then((t) => {
+          if (!t) return console.warn("TEMP-DIAG token: none");
+          try {
+            const c = JSON.parse(globalThis.atob(t.split(".")[1]!.replace(/-/g, "+").replace(/_/g, "/")));
+            console.warn("TEMP-DIAG token", JSON.stringify({ iss: c.iss, azp: c.azp, aud: c.aud, exp: c.exp, iat: c.iat, now: Math.floor(Date.now() / 1000), sid: !!c.sid, v: c.v }));
+          } catch (e) { console.warn("TEMP-DIAG token parse", String(e)); }
+        }, (e) => console.warn("TEMP-DIAG getToken failed", String(e)));
         setRegisterError(error instanceof Error ? error : new Error(String(error)));
       });
     return () => {

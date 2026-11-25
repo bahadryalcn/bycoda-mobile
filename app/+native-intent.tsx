@@ -18,7 +18,20 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
   if (shareCallbackAddresses.has(path.split(/[?#]/, 1)[0])) return initial ? "/" : null;
   const target = rewriteSessionReferencePath(path);
   // A distinct `n` makes a repeated identical prompt link a new request for a warm screen.
-  return target.startsWith("/sessions?new=1&prompt=")
-    ? `${target}&n=link${Date.now().toString(36)}${promptLinks++}`
-    : target;
+  if (target.startsWith("/sessions?new=1&prompt=")) {
+    return `${target}&n=link${Date.now().toString(36)}${promptLinks++}`;
+  }
+  // Shell destinations can arrive as either host-style or path-style app URLs.
+  // Keep the widget session URL and extension/auth callback formats intact.
+  const shellRoute = /^bycoda:\/\/\/?((?:settings|sessions|tools|project)(?=[/?#]|$).*)$/.exec(target);
+  if (shellRoute) {
+    const route = `/${shellRoute[1]}`;
+    try {
+      decodeURI(route);
+    } catch {
+      return "/+not-found";
+    }
+    return route;
+  }
+  return target;
 }

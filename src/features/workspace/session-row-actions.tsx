@@ -16,6 +16,10 @@ import Undo2 from "lucide-react-native/icons/undo-2";
 import GitBranch from "lucide-react-native/icons/git-branch";
 import Pencil from "lucide-react-native/icons/pencil";
 import Square from "lucide-react-native/icons/square";
+import FolderInput from "lucide-react-native/icons/folder-input";
+import MoreHorizontal from "lucide-react-native/icons/ellipsis";
+import { showToast } from "@/ui/toast";
+import { ProjectOrganization } from "./project-organization";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { isReviewedMachine } from "@/state/reviewed-machine";
@@ -23,6 +27,7 @@ import { useHostClient, useHostMutation, useHostReadActive, hostKey } from "@/st
 import { RemoteHostError } from "@/remote/host-error";
 import {
   Badge,
+  StatusText,
   Body,
   ErrorText,
   FormActions,
@@ -53,7 +58,8 @@ import { SessionRowCopyMenu } from "./session-row-copy-menu";
 import { sessionCopyLink } from "./session-copy-model";
 import { sessionDisplayTitle } from "./session-title";
 
-type RowAction = SwipeRowAction & { detail?: string; opens?: boolean; group?: "primary" | "secondary" | "state" };
+/** Desktop session menu sections, in menu order: state, edit, copy (copy menu), manage, then destructive. */
+type RowAction = SwipeRowAction & { detail?: string; opens?: boolean; group?: "state" | "edit" | "copy" | "manage" };
 
 export type SessionRowActionsProps = {
   machineId: string;
@@ -81,10 +87,9 @@ export function SessionRowActions(props: SessionRowActionsProps) {
   const update = useHostMutation<HostSessionSummary>("sessions.update", ["sessions", projectId]);
   const remove = useHostMutation<{ deleted: true }>("sessions.delete", ["sessions", projectId]);
   const command = useCommands(["session", session.id, projectId]);
-  const lifecycle = useHostMutation<unknown>(
-    settled ? "sessions.lifecycle.unsettle" : "sessions.lifecycle.settle",
-    ["sessions-lifecycle"],
-  );
+  const settleMutation = useHostMutation<unknown>("sessions.lifecycle.settle", ["sessions-lifecycle"]);
+  const unsettleMutation = useHostMutation<unknown>("sessions.lifecycle.unsettle", ["sessions-lifecycle"]);
+  const lifecycle = settled ? unsettleMutation : settleMutation;
   const mounted = useRef(false),
     occupied = useRef(false),
     readController = useRef<AbortController | null>(null);
@@ -105,6 +110,8 @@ export function SessionRowActions(props: SessionRowActionsProps) {
     canRead();
   const writable = available && !!client && !!machine?.capabilities?.includes("sessions");
   const stopSupported = !!machine?.capabilities?.includes("transport.ws.sessions.v2");
+  const organizationSupported = !!machine?.capabilities?.includes("projects.organization.desktop.v1");
+  const [organizing, setOrganizing] = useState(false);
   const live = useRef({ props, connection, available, writable, stopSupported, access });
   live.current = { props, connection, available, writable, stopSupported, access };
   const [renameTitle, setRenameTitle] = useState(session.title);
@@ -223,6 +230,7 @@ export function SessionRowActions(props: SessionRowActionsProps) {
         }),
       ]);
       if (mounted.current) dismissPanel();
+      confirmResult(action, value);
     } catch (cause) {
       if (mounted.current) {
         setError(cause);
@@ -245,6 +253,40 @@ export function SessionRowActions(props: SessionRowActionsProps) {
     issued.current = value;
     showPanel(value, "actions");
     void run("archive", value);
+  };
+  const refresh = (machineKey: string) => Promise.all([
+    cache.invalidateQueries({ queryKey: hostKey(machineKey, ["project-summaries"]) }),
+    cache.invalidateQueries({ queryKey: hostKey(machineKey, ["sessions-lifecycle"]) }),
+    cache.invalidateQueries({ queryKey: hostKey(machineKey, ["session", session.id]) }),
+  ]);
+  /** Undo runs the inverse write only while the same reviewed computer connection is current. */
+  const undoWith = (value: Review, write: () => Promise<unknown>) => ({
+    label: copy("Geri al", "Undo"),
+    onPress: () => {
+      if (!value.connection.isCurrent() || !isReviewedMachine(value.connection.review, useMachines.getState())) return;
+      void write().then(
+        () => refresh(value.row.machineId),
+        () => showToast({ tone: "danger", message: copy("Geri alınamadı.", "Could not undo.") }),
+      );
+    },
+  });
+  const confirmResult = (action: "archive" | "delete" | "rename" | "stop", value: Review) => {
+    if (action === "archive") {
+      const wasArchived = value.row.archived;
+      showToast({
+        tone: "success",
+        message: wasArchived
+          ? copy("Oturum arşivden çıkarıldı", "Session unarchived")
+          : copy("Oturum arşivlendi", "Session archived"),
+        action: undoWith(value, () => value.update({
+          projectId: value.row.projectId,
+          sessionId: value.row.sessionId,
+          ...captureSessionAuthority(value.row),
+          archived: wasArchived,
+        })),
+      });
+    } else if (action === "delete") showToast({ tone: "success", message: copy("Oturum silindi", "Session deleted") });
+    else if (action === "rename") showToast({ tone: "success", message: copy("Oturum yeniden adlandırıldı", "Session renamed") });
   };
   const quick = async (kind: "pin" | "settle" | "unread" | "snooze", until?: number | null) => {
     if (!writable || occupied.current || held.current) return;
@@ -274,6 +316,36 @@ export function SessionRowActions(props: SessionRowActionsProps) {
         cache.invalidateQueries({ queryKey: hostKey(value.row.machineId, ["sessions-lifecycle"]) }),
       ]);
       if (mounted.current) dismissPanel();
+      if (kind === "pin") {
+        const wasPinned = !!session.pinned;
+        showToast({
+          tone: "success",
+          message: wasPinned ? copy("Sabitleme kaldırıldı", "Session unpinned") : copy("Oturum sabitlendi", "Session pinned"),
+          action: undoWith(value, () => value.update({
+            projectId, sessionId: session.id, pinned: wasPinned, ...captureSessionAuthority(session),
+          })),
+        });
+      } else if (kind === "settle") {
+        const wasSettled = !!settled;
+        const inverse = wasSettled ? settleMutation.mutateAsync : unsettleMutation.mutateAsync;
+        showToast({
+          tone: "success",
+          message: wasSettled ? copy("Raftan indirildi", "Session un-settled") : copy("Rafa kaldırıldı", "Session settled"),
+          action: undoWith(value, () => inverse({ sessionId: session.id })),
+        });
+      } else if (kind === "unread") {
+        showToast({
+          tone: "success",
+          message: session.unread
+            ? copy("Okundu olarak işaretlendi", "Marked as read")
+            : copy("Okunmadı olarak işaretlendi", "Marked as unread"),
+        });
+      } else {
+        showToast({
+          tone: "success",
+          message: until ? copy("Oturum ertelendi", "Session snoozed") : copy("Oturum uyandırıldı", "Session woken"),
+        });
+      }
     } catch (cause) {
       if (mounted.current) {
         setError(cause);
@@ -296,7 +368,8 @@ export function SessionRowActions(props: SessionRowActionsProps) {
   const actionState = sessionActionState(session, !!settled);
   const pin: RowAction = {
     key: "pin",
-    label: session.pinned ? copy("Sabiti kaldır", "Unpin") : copy("Sabitle", "Pin"),
+    group: "state",
+    label: session.pinned ? copy("Sabitlemeyi kaldır", "Unpin") : copy("Sabitle", "Pin"),
     icon: session.pinned ? <PinOff /> : <Pin />,
     disabled: blocked,
     onPress: () => void quick("pin"),
@@ -311,7 +384,7 @@ export function SessionRowActions(props: SessionRowActionsProps) {
   };
   const archiveAction: RowAction = {
     key: "archive",
-    group: "state",
+    group: "manage",
     label: archiveLabel,
     icon: session.archived ? <ArchiveRestore /> : <Archive />,
     disabled: blocked,
@@ -328,24 +401,46 @@ export function SessionRowActions(props: SessionRowActionsProps) {
   };
   const detailsAction: RowAction = {
     key: "details",
-    group: "secondary",
+    group: "manage",
     label: copy("Ayrıntılar", "Details"),
     icon: <Info />,
     opens: true,
     disabled: busy,
     onPress: () => open("details"),
   };
-  const rename: RowAction = { key: "rename", label: copy("Yeniden adlandır", "Rename"), icon: <Pencil />, disabled: blocked, opens: true, onPress: () => open("rename") };
-  const stop: RowAction = { key: "stop", group: "state", label: copy("Durdur", "Stop"), icon: <Square />, disabled: blocked, opens: true, onPress: () => open("stop") };
-  const swipeActions = [pin, settle, deleteAction];
+  const rename: RowAction = { key: "rename", group: "edit", label: copy("Yeniden adlandır", "Rename"), icon: <Pencil />, disabled: blocked, opens: true, onPress: () => open("rename") };
+  const stop: RowAction = { key: "stop", group: "manage", label: copy("Durdur", "Stop"), icon: <Square />, disabled: blocked, opens: true, onPress: () => open("stop") };
+  const more: RowAction = {
+    key: "more",
+    label: copy("Diğer", "More"),
+    icon: <MoreHorizontal />,
+    disabled: busy,
+    onPress: () => open("actions"),
+  };
+  // Swipe: one state-dependent primary action, then the same options sheet as long-press.
+  const swipeActions = [actionState.canSettle ? settle : pin, more];
+  const move: RowAction | null = organizationSupported ? {
+    key: "move",
+    group: "edit",
+    label: copy("Klasöre taşı", "Move to folder"),
+    icon: <FolderInput />,
+    opens: true,
+    disabled: blocked,
+    onPress: () => {
+      if (!available || occupied.current) return;
+      issued.current = null;
+      dismissPanel();
+      setOrganizing(true);
+    },
+  } : null;
   const attention = sessionAttentionActions(session);
   const snoozed = sessionIsSnoozed(session);
   const attentionActions: RowAction[] = [
-    ...(attention.unread ? [{ key: "unread", group: "secondary" as const,
+    ...(attention.unread ? [{ key: "unread", group: "edit" as const,
       label: session.unread ? copy("Okundu olarak işaretle", "Mark as read") : copy("Okunmadı olarak işaretle", "Mark as unread"),
       icon: session.unread ? <MailOpen /> : <Mail />, disabled: blocked,
       onPress: () => void quick("unread") }] : []),
-    ...(attention.snooze ? [{ key: "snooze", group: "secondary" as const,
+    ...(attention.snooze ? [{ key: "snooze", group: "edit" as const,
       label: snoozed ? copy("Şimdi uyandır", "Wake now") : copy("Ertele", "Snooze"), icon: <Clock />,
       disabled: blocked, opens: !snoozed,
       onPress: () => {
@@ -353,7 +448,11 @@ export function SessionRowActions(props: SessionRowActionsProps) {
         else if (review && presented.current === presentation && current(review)) showPanel(review, "snooze");
       } }] : []),
   ];
-  const sheetActions = [rename, pin, ...attentionActions, detailsAction, settle, archiveAction, ...(actionState.canStop && stopSupported ? [stop] : []), deleteAction];
+  // Desktop order: Settle, Pin, Rename, read state, Snooze, Move to folder, copy group, Details, Archive, Stop, Delete.
+  const sheetActions = [
+    settle, pin, rename, ...attentionActions, ...(move ? [move] : []),
+    detailsAction, archiveAction, ...(actionState.canStop && stopSupported ? [stop] : []), deleteAction,
+  ];
   const valid = !!review && current(review);
   const readAccess = useMemo(() => ({
     allowed: valid,
@@ -386,18 +485,9 @@ export function SessionRowActions(props: SessionRowActionsProps) {
         <Body style={uiStyles.caption}>{session.model || session.harness}</Body>
       </Row>
       <Row>
-        <Badge
-          label={status}
-          tone={
-            session.needsInput || session.status === "interrupted"
-              ? "warning"
-              : session.status === "running"
-                ? "live"
-                : session.issue === "failed" && session.status === "idle"
-                  ? "danger"
-                  : "default"
-          }
-        />
+        {session.needsInput || session.status === "interrupted" ? <Badge label={status} tone="warning" />
+          : session.issue === "failed" && session.status === "idle" ? <Badge label={status} tone="danger" />
+          : <StatusText label={status} tone={session.status === "running" ? "live" : "default"} />}
         <Body muted style={uiStyles.caption}>
           {copy("Güncellendi", "Updated")} · {relativeTime(session.updatedAt, copy)}
         </Body>
@@ -516,6 +606,14 @@ export function SessionRowActions(props: SessionRowActionsProps) {
           </Sheet>
         ) : null}
       </PrivateContentAccessProvider>
+      {organizing && available ? (
+        <ProjectOrganization
+          scope={{ machineId, sessionId: session.id }}
+          projectId={projectId}
+          initialEditor={{ kind: "sessionMove" }}
+          onClose={() => setOrganizing(false)}
+        />
+      ) : null}
     </>
   );
 }

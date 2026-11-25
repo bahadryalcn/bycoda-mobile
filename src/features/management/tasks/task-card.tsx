@@ -1,4 +1,5 @@
 import { agentPresentation } from "../shared/agent-presentation";
+import { TaskBrief } from "../shared/task-brief";
 import type { LucideIcon } from "lucide-react-native";
 import { RecordCard } from "@/ui/record-card";
 import { useMobileTheme } from "@/ui/theme";
@@ -18,10 +19,8 @@ import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import Trash2 from "lucide-react-native/icons/trash-2";
 import Square from "lucide-react-native/icons/square";
 import {
-  ActionMenu,
   Body,
   Button,
-  ErrorNotice,
   IconButton,
   MutationState,
   Row,
@@ -57,6 +56,7 @@ export function TaskCard({
   reorder,
   tasks,
   lifecycleReady,
+  selection,
 }: TaskCardProps) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
@@ -121,7 +121,8 @@ export function TaskCard({
       () => move.mutate({ taskId: task.id, to: "done" }),
       "default",
     );
-  // Rare or secondary actions live in the overflow menu; the card keeps only the next step.
+  // Rare or secondary actions live in the options menu (the "…" button and a long press), ordered
+  // state change first, then editing, then queue order, destructive last. The card keeps only the next step.
   const queueLabel =
     task.status === "done"
       ? copy("Yeniden çalıştır", "Run again")
@@ -140,6 +141,20 @@ export function TaskCard({
         disabled: busy || startUnavailable,
         onPress: () => start.mutate({ taskId: task.id }),
       },
+    moves.queue && {
+      key: "queue",
+      icon: glyph(ListPlus),
+      label: queueLabel,
+      disabled: busy || moves.queueBlocked,
+      onPress: () => move.mutate({ taskId: task.id, to: "queued" }),
+    },
+    moves.complete && !reviewingDelivery && {
+      key: "complete",
+      icon: glyph(Check),
+      label: copy("Tamamla", "Complete"),
+      disabled: busy,
+      onPress: complete,
+    },
     moves.finishWithFindings && {
       key: "finish-findings",
       icon: glyph(Check),
@@ -156,12 +171,51 @@ export function TaskCard({
           () => finish.mutate({ taskId: task.id, expectedUpdatedAt: task.updatedAt }),
         ),
     },
-    moves.complete && !reviewingDelivery && {
-      key: "complete",
-      icon: glyph(Check),
-      label: copy("Tamamla", "Complete"),
+    moves.edit && {
+      key: "edit",
+      icon: glyph(Pencil),
+      label: copy("Düzenle", "Edit"),
+      disabled: busy || editorOpen,
+      onPress: () => onEdit(task),
+    },
+    supported &&
+      task.status === "review" &&
+      !!task.branch &&
+      !task.merged && {
+        key: "delivery",
+        icon: glyph(GitMerge),
+        label: copy("Teslim hedefini değiştir", "Change delivery target"),
+        disabled: busy || editorOpen,
+        onPress: () => onDelivery(task),
+      },
+    supported &&
+      moves.recheck && {
+        key: "recheck",
+        icon: glyph(RefreshCw),
+        label: copy("İncelemeyi yenile", "Recheck review"),
+        disabled: busy,
+        onPress: () => recheck.mutate({ taskId: task.id }),
+      },
+    moves.toDo && {
+      key: "todo",
+      icon: glyph(Undo2),
+      label: copy("Yapılacaklara geri al", "Return to to-do"),
       disabled: busy,
-      onPress: complete,
+      onPress: () => move.mutate({ taskId: task.id, to: "todo" }),
+    },
+    queued && position > 0 && {
+      key: "up",
+      icon: glyph(ArrowUp),
+      label: copy("Sırada yukarı taşı", "Move up in queue"),
+      disabled: busy || !lifecycleReady,
+      onPress: () => changeOrder(-1),
+    },
+    queued && position >= 0 && position < ordered.length - 1 && {
+      key: "down",
+      icon: glyph(ArrowDown),
+      label: copy("Sırada aşağı taşı", "Move down in queue"),
+      disabled: busy || !lifecycleReady,
+      onPress: () => changeOrder(1),
     },
     task.source === "steward" &&
       task.status === "todo" && {
@@ -184,59 +238,6 @@ export function TaskCard({
             copy("Reddet", "Decline"),
             () => decline.mutate({ taskId: task.id }),
           ),
-      },
-    moves.queue && {
-      key: "queue",
-      icon: glyph(ListPlus),
-      label: queueLabel,
-      disabled: busy || moves.queueBlocked,
-      onPress: () => move.mutate({ taskId: task.id, to: "queued" }),
-    },
-    moves.edit && {
-      key: "edit",
-      icon: glyph(Pencil),
-      label: copy("Düzenle", "Edit"),
-      disabled: busy || editorOpen,
-      onPress: () => onEdit(task),
-    },
-    queued && {
-      key: "up",
-      icon: glyph(ArrowUp),
-      label: copy("Sırada yukarı taşı", "Move up in queue"),
-      disabled: busy || !lifecycleReady || position <= 0,
-      onPress: () => changeOrder(-1),
-    },
-    queued && {
-      key: "down",
-      icon: glyph(ArrowDown),
-      label: copy("Sırada aşağı taşı", "Move down in queue"),
-      disabled: busy || !lifecycleReady || position < 0 || position >= ordered.length - 1,
-      onPress: () => changeOrder(1),
-    },
-    supported &&
-      task.status === "review" &&
-      !!task.branch &&
-      !task.merged && {
-        key: "delivery",
-        icon: glyph(GitMerge),
-        label: copy("Teslim hedefini değiştir", "Change delivery target"),
-        disabled: busy || editorOpen,
-        onPress: () => onDelivery(task),
-      },
-    moves.toDo && {
-      key: "todo",
-      icon: glyph(Undo2),
-      label: copy("Yapılacaklara geri al", "Return to to-do"),
-      disabled: busy,
-      onPress: () => move.mutate({ taskId: task.id, to: "todo" }),
-    },
-    supported &&
-      moves.recheck && {
-        key: "recheck",
-        icon: glyph(RefreshCw),
-        label: copy("İncelemeyi yenile", "Recheck review"),
-        disabled: busy,
-        onPress: () => recheck.mutate({ taskId: task.id }),
       },
     !["running", "verifying"].includes(task.status) && {
       key: "delete",
@@ -299,13 +300,11 @@ export function TaskCard({
             </IconButton>
           ) : null}
           {stopAction}
-          <ActionMenu
-            label={copy("Görev işlemleri", "Task actions")}
-            busy={menuBusy}
-            actions={menu}
-          />
         </Row>
       }
+      actions={{ label: copy("Görev işlemleri", "Task actions"), busy: menuBusy, items: menu }}
+      selection={selection}
+      issues={[task.error, task.mergeError]}
       footer={
         showStart || reviewingDelivery && moves.complete && deliverySupported ||
         (moving && ["done", "queued"].includes(String(move.variables?.to))) ? (
@@ -347,7 +346,7 @@ export function TaskCard({
       }
       details={
         <>
-          <Body>{task.prompt}</Body>
+          <TaskBrief prompt={task.prompt} />
           {admissionWait?.reason ? (
             <Body muted>
               {copy("Bekliyor", "Waiting")}: {admissionWait.reason}
@@ -394,8 +393,6 @@ export function TaskCard({
       {reviewingDelivery && moves.complete && !deliverySupported ? (
         <Body muted>{copy("Bu özellik için bilgisayarındaki Bycoda’yı güncelle.", "Update Bycoda on your computer to use this feature.")}</Body>
       ) : null}
-      <ErrorNotice error={task.error} />
-      <ErrorNotice error={task.mergeError} />
       {move.variables?.taskId === task.id ? <MutationState mutation={move} /> : null}
       {remove.variables?.taskId === task.id ? <MutationState mutation={remove} /> : null}
       {finish.variables?.taskId === task.id ? <MutationState mutation={finish} /> : null}

@@ -21,6 +21,7 @@ vi.mock("@/state/queries", () => ({
     mutateAsync: async (params: unknown) => { state.requests.push({ method, params }); if (state.uncertain) throw { uncertain: true }; return { requiresForce: true }; } }),
 }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: { caption: {} } }) }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label);
@@ -28,7 +29,7 @@ vi.mock("@/ui/primitives", () => {
     Disclosure: Wrapper,
     FormActions: ({ submitLabel, onSubmit, disabled, busy, feedback }: { submitLabel: string; onSubmit: () => void; disabled?: boolean; busy?: boolean; feedback?: import("react").ReactNode }) => { state.submit = onSubmit; return createElement("div", null, feedback, createElement("button", { disabled: disabled || busy, onClick: onSubmit }, `Confirm ${submitLabel}`)); }, Body: Wrapper, Row: Wrapper, Sheet: Wrapper, NavigationGroup: Wrapper, CodePanel: Wrapper, CodeText: Wrapper,
     Button, QueryState: ({ query }: any) => query.error ? createElement("p", null, query.error.message) : null, MutationState: () => null, ErrorText: () => null, ToggleField: () => null,
-    StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message, onRetry }: any) => createElement("div", null, message, onRetry ? createElement(Button, { label: "Retry", onPress: onRetry }) : null),
+    StateView: ({ title, description }: any) => createElement("p", null, title, description), StatusLine: ({ label }: any) => createElement("p", null, label), Notice: ({ message, onRetry }: any) => createElement("div", null, message, onRetry ? createElement(Button, { label: "Retry", onPress: onRetry }) : null),
     ConfirmationCard: ({ confirmLabel, onConfirm, disabled }: { confirmLabel: string; onConfirm: () => void; disabled?: boolean }) => createElement(Button, { label: `Confirm ${confirmLabel}`, onPress: onConfirm, disabled }),
   };
 });

@@ -31,16 +31,18 @@ vi.mock("@/state/machines",()=>({useActiveMachine:()=>state.hasMachine?{id:state
 vi.mock("@/state/queries",()=>({useHostQuery:(_key:unknown,_method:unknown,_params:unknown,options:{enabled:boolean})=>{
  state.reads.push(options.enabled);return{data:{items:state.rows,externalProviderInboxAvailable:state.external,unavailableProjectIds:state.unavailable},isEnabled:state.enabled,fetchStatus:state.paused?"paused":"idle",error:state.error,refetch:state.refetch};
 }}));
+vi.mock("@/ui/no-computer",()=>({NoComputerState:()=>createElement("p",null,"Connect a computer first")}));
+vi.mock("../inbox/pending-approvals-row",()=>({PendingApprovalsRow:()=>null}));
 vi.mock("./shared/scope",()=>({Scope:()=>null}));
 vi.mock("./shared/status",()=>({Status:({value}:{value:string})=>createElement("span",null,value),statusLabel:(value:string)=>value}));
-vi.mock("../inbox/provider-inbox-screen",()=>({ProviderInboxScreen:()=>createElement("p",null,"Provider mode")}));
+vi.mock("../inbox/provider-inbox-screen",()=>({ProviderInboxScreen:({embedded}:{embedded:boolean})=>createElement("p",{"data-embedded":embedded},"Provider mode")}));
 vi.mock("../inbox/inbox-browse-memory-provider",()=>({InboxBrowseMemoryProvider:({children}:PropsWithChildren)=>children,useInboxBrowseMemory:()=>state.memory}));
 // The row is presentation; these tests cover the screen's scope, routing and retirement rules.
 vi.mock("../inbox/attention-row",()=>({AttentionRow:({item,onPress}:{item:{title:string};onPress:()=>void})=>{state.presses.set(item.title,onPress);return createElement("button",{onClick:onPress},item.title);}}));
 vi.mock("@/ui/primitives",()=>{
  const Wrap=({children}:PropsWithChildren)=>createElement("div",null,children);
  const Button=({label,onPress}:any)=>createElement("button",{onClick:onPress},label);
- return{Button,Body:Wrap,Row:Wrap,Stack:Wrap,SectionHeader:({title}:{title:string})=>createElement("h3",null,title),Badge:({label}:{label:string})=>createElement("span",null,label),
+ return{Button,Body:Wrap,Row:Wrap,Stack:Wrap,SectionHeader:({title}:{title:string})=>createElement("h3",null,title),Badge:({label}:{label:string})=>createElement("span",null,label), StatusText: ({ label }: { label: string }) => createElement("span", null, label),
  ActionMenu:({actions}:any)=>{state.actions=actions.filter(Boolean);return createElement("div",null,...state.actions.map(a=>createElement("button",{key:a.key,onClick:a.onPress},a.key)));},
  Sheet:({visible,children,onClose}:any)=>visible?createElement("aside",null,children,createElement("button",{onClick:onClose},"Close help")):null,Screen:Wrap,ScreenHeader:Wrap,StateView:({title,description}:{title:string;description?:string})=>createElement("p",null,title,description),
  QueryState:({query,empty}:{query:{error?:Error;data?:unknown};empty?:boolean})=>query.error && query.data === undefined?createElement("p",null,query.error.message):empty?createElement("p",null,"Nothing needs your attention"):null,
@@ -101,32 +103,9 @@ it("retires row and refresh callbacks on mode unmount",async()=>{
  await mount();const old=state.presses.get(row.title)!,refresh=state.bindings.refresh;await act(async()=>[...host.querySelectorAll("button")].find(b=>b.textContent==="Issues & PRs")!.click());await act(async()=>{old();refresh();});expect(state.push).not.toHaveBeenCalled();expect(state.select).not.toHaveBeenCalled();expect(state.refetch).not.toHaveBeenCalled();
 });
 it("shows computer recovery without reading or navigating when no machine is selected",async()=>{
- await mount();state.hasMachine=false;await render();expect(host.textContent).toContain("Choose a computer");expect(host.querySelector("main")!.getAttribute("data-count")).toBe("0");expect(state.reads.at(-1)).toBe(false);
+ await mount();state.hasMachine=false;await render();expect(host.textContent).toContain("Connect a computer first");expect(host.querySelector("main")!.getAttribute("data-count")).toBe("0");expect(state.reads.at(-1)).toBe(false);
 });
 
-it("opens reachable secondary help without a permanent help row and retains refresh",async()=>{
- await mount();expect(host.querySelector("aside")).toBeNull();await act(async()=>state.actions.find(a=>a.key==="help")!.onPress());
- expect(host.querySelector("aside")!.textContent).toContain("GitHub, GitLab, Jira, Linear, Azure");
- await act(async()=>[...host.querySelectorAll<HTMLButtonElement>("aside button")].find(b=>b.textContent==="Close help")!.click());expect(host.querySelector("aside")).toBeNull();
- await act(async()=>state.actions.find(a=>a.key==="refresh")!.onPress());expect(state.refetch).toHaveBeenCalledOnce();
-});
-it("opens the provider inbox from help and keeps the dedicated pull request route there",async()=>{
- await mount();
- const button=(label:string,selector="button")=>[...host.querySelectorAll<HTMLButtonElement>(selector)].find(b=>b.textContent===label);
- expect(button("Pull requests")).toBeUndefined();
- await act(async()=>state.actions.find(a=>a.key==="help")!.onPress());
- await act(async()=>button("Issues & PRs","aside button")!.click());
- expect(host.querySelector("aside")).toBeNull();
- expect(host.textContent).toContain("Provider mode");
- await act(async()=>button("Pull requests")!.click());
- expect(state.push).toHaveBeenCalledExactlyOnceWith("/pull-requests");
-});
-it("retires open help and its trigger across access loss and restoration",async()=>{
- await mount();const old=state.actions.find(a=>a.key==="help")!.onPress;await act(async()=>old());expect(host.querySelector("aside")).not.toBeNull();
- state.error=new RemoteHostError("machine","auth","Access unavailable");await render();expect(host.querySelector("aside")).toBeNull();
- state.error=null;await render();await act(async()=>old());expect(host.querySelector("aside")).toBeNull();
- await act(async()=>state.actions.find(a=>a.key==="help")!.onPress());expect(host.querySelector("aside")).not.toBeNull();
-});
 it("warns that a partial Host read may miss projects, keeps its rows usable and retries on the existing refresh",async()=>{
  state.unavailable=["slow-project"];await mount();
  expect(host.querySelector('[role="status"]')!.textContent).toContain("Some projects did not respond in time");
@@ -143,5 +122,5 @@ it.each([undefined,[]])("shows no partial warning for a complete or older Host r
  state.unavailable=unavailable;await mount();expect(host.querySelector('[role="status"]')).toBeNull();
 });
 it("omits external-provider guidance when that inbox is already available",async()=>{
- state.external=true;await mount();expect(state.actions.map(a=>a.key)).toEqual(["refresh"]);
+ state.external=true;await mount();expect(state.actions.map(a=>a.key)).toEqual([]);
 });

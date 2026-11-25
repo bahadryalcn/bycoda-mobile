@@ -21,7 +21,8 @@ export type FloatingTabBarProps = TabBarProps & {
   /** Measured navigation height including safe area; zero while keyboard hides it. */
   onInsetChange?: (height: number) => void;
   /** Session creation is a command, not another navigation destination. */
-  quickAction?: { label: string; optionsLabel: string; onPress(): void; onLongPress(): void };
+  quickAction?: { label: string; onPress(): void };
+  assistantAction?: ReactNode;
 };
 
 /** Badge value that draws an unread dot (desktop's rail dot) instead of a count pill. */
@@ -217,6 +218,7 @@ export function FloatingTabBar({
   navigateToTab,
   onInsetChange,
   quickAction,
+  assistantAction,
 }: FloatingTabBarProps) {
   const { colors } = useMobileTheme();
   const reducedMotion = useReducedMotionPreference();
@@ -234,18 +236,23 @@ export function FloatingTabBar({
     wide ? metrics.wideDockWidth : metrics.contentWidth,
     width - Math.max(insets.left, space.xs) - Math.max(insets.right, space.xs),
   );
-  const commandWidth = quickAction ? metrics.touchTarget + space.sm * 2 + 1 : 0;
+  const hasCommands = !!(quickAction || assistantAction);
+  const commandWidth =
+    (Number(!!quickAction) + Number(!!assistantAction)) * metrics.touchTarget +
+    (hasCommands ? space.sm * 2 + (bar ? 0 : 1) : 0);
+  // Icon-only phone items are a fixed 48 pt target whatever the text size; only labeled items
+  // grow with text, so only they budget by fontScale. Large text keeps all five phone destinations.
   const slots = Math.max(
-    2,
+    1,
     Math.floor(
       (available - space.sm * 2 - 2 - commandWidth) /
-        ((wide && !bar ? metrics.tabletRailWidth : metrics.touchTarget) * Math.max(1, fontScale)),
+        ((wide && !bar ? metrics.tabletRailWidth : metrics.touchTarget) * (labeled ? Math.max(1, fontScale) : 1)),
     ),
   );
   const overflow = slots < state.routes.length;
   const shown = overflow ? state.routes.slice(0, slots - 1) : state.routes;
   const hidden = overflow ? state.routes.slice(slots - 1) : [];
-  // Navigator content and toasts clear exactly the rendered navigation footprint.
+  // Toasts and the floating assistant clear the rendered navigation footprint.
   useEffect(() => {
     if (keyboard) onInsetChange?.(0);
     // A resize or preference change can remove the overflow while its sheet is open.
@@ -287,10 +294,7 @@ export function FloatingTabBar({
         pointerEvents="box-none"
         onLayout={({ nativeEvent: { layout } }) => onInsetChange?.(layout.height)}
         style={{
-          position: "absolute",
-          start: 0,
-          end: 0,
-          bottom: 0,
+          flexShrink: 0,
           paddingStart: Math.max(I18nManager.isRTL ? insets.right : insets.left, space.xs),
           paddingEnd: Math.max(I18nManager.isRTL ? insets.left : insets.right, space.xs),
           paddingTop: bar ? 0 : space.xs,
@@ -364,28 +368,24 @@ export function FloatingTabBar({
               />
             ) : null}
           </View>
+          {hasCommands ? (
+            <View
+              style={{
+                width: bar ? 0 : 1,
+                height: 24,
+                marginHorizontal: space.sm,
+                backgroundColor: colors.border,
+              }}
+            />
+          ) : null}
+          {assistantAction}
           {quickAction ? (
-            <>
-              <View
-                style={{
-                  width: bar ? 0 : 1,
-                  height: 24,
-                  marginHorizontal: space.sm,
-                  backgroundColor: colors.border,
-                }}
-              />
               <AnimatedPressable
                 pressScale={1}
                 pressOpacity={reducedMotion ? 1 : opacity.pressed}
                 accessibilityRole="button"
                 accessibilityLabel={quickAction.label}
-                accessibilityHint={quickAction.optionsLabel}
-                accessibilityActions={[{ name: "longpress", label: quickAction.optionsLabel }]}
-                onAccessibilityAction={({ nativeEvent }) => {
-                  if (nativeEvent.actionName === "longpress") quickAction.onLongPress();
-                }}
                 onPress={quickAction.onPress}
-                onLongPress={quickAction.onLongPress}
                 style={{
                   width: metrics.touchTarget,
                   minWidth: metrics.touchTarget,
@@ -407,7 +407,6 @@ export function FloatingTabBar({
                   <DockIcon name="new-session" color={colors.primaryText} />
                 </View>
               </AnimatedPressable>
-            </>
           ) : null}
         </View>
       </View>

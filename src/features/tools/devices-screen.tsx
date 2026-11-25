@@ -10,9 +10,10 @@ import { useActiveMachine } from "@/state/machines";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import type { HostProject } from "@/domain/types";
-import { Badge, Body, Disclosure, Row, IconButton, NavigationRow, QueryState, ScreenList, SearchField } from "@/ui/primitives";
+import { Body, Disclosure, Row, IconButton, NavigationRow, QueryState, RowIcon, ScreenList, SearchField, StatusText } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
+import { iconSize } from "@/ui/tokens";
 import { IssueSummary } from "@/ui/issue-summary";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { deviceAvailabilityIssues } from "./device-availability";
@@ -44,11 +45,49 @@ export function DevicesScreen({ project }: { project: HostProject }) {
   const currentScope = { machineId: machine?.id, projectId: project.id, reviewed: reviewedMachine(machine), connection };
   const isCurrentScope = (scope: DeviceScope) => scope.connection.isCurrent() && scope.projectId === project.id &&
     isReviewedMachine(scope.reviewed, { activeId: machine?.id ?? null, machines: machine ? [machine] : [] });
-  useEffect(() => { setSelected(undefined); setRuntime(undefined); }, [connection.token, machine?.id, machine?.endpoint, machine?.environmentId, machine?.lanKey, project.id]);
-  const listingInterval = selected || runtime ? undefined : 15_000;
+  // Devices whose start request is open or unanswered: shown as starting until the list says otherwise.
+  const [starting, setStarting] = useState<ReadonlySet<string>>(new Set());
+  const startTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  // A new connection or project must not inherit pending starts from a previous scope.
+  useEffect(() => {
+    setSelected(undefined);
+    setRuntime(undefined);
+    setStarting(new Set());
+    const timers = startTimers.current;
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
+    };
+  }, [connection.token, machine?.id, machine?.endpoint, machine?.environmentId, machine?.lanKey, project.id]);
+  const onBootChange = (deviceId: string, state: "pending" | "done" | "failed") => {
+    if (!connection.isCurrent()) return;
+    const timers = startTimers.current;
+    clearTimeout(timers.get(deviceId));
+    timers.delete(deviceId);
+    if (state === "done") setStarting((previous) => { const next = new Set(previous); next.delete(deviceId); return next; });
+    else setStarting((previous) => new Set(previous).add(deviceId));
+    // A start that never answered is reconciled by the refreshed list; stop waiting after a while.
+    if (state === "failed") timers.set(deviceId, setTimeout(() => {
+      setStarting((previous) => { const next = new Set(previous); next.delete(deviceId); return next; });
+    }, 60_000));
+    if (state !== "pending") refetchListing();
+  };
+  const listingInterval = starting.size ? 4_000 : selected || runtime ? undefined : 15_000;
   const status = useHostQuery<DeviceHostStatus>(["devices", "status"], "devices.status", { projectId: project.id }, { interval: listingInterval });
   const list = useHostQuery<{ devices: DeviceSummary[]; errors: string[] }>(["devices", "list"], "devices.list", { projectId: project.id }, { interval: listingInterval });
   const refetchListing = () => { void Promise.all([status.refetch(), list.refetch()]).catch(() => undefined); };
+  useEffect(() => {
+    const devices = list.data?.devices;
+    if (!devices) return;
+    setStarting((previous) => {
+      const next = new Set([...previous].filter((id) => !devices.find((device) => device.id === id)?.booted));
+      return next.size === previous.size ? previous : next;
+    });
+    setSelected((current) => {
+      const fresh = current && devices.find((device) => device.id === current.device.id);
+      return fresh && fresh.booted !== current.device.booted ? { ...current, device: fresh } : current;
+    });
+  }, [list.data]);
   const visible = (list.data?.devices ?? []).filter((device) => matchesSearch([device.name, device.platform, device.version].filter(Boolean).join(" "), search, locale));
   const refresh = usePullRefresh(() => Promise.all([status.refetch(), list.refetch()]));
   const partialErrors = (list.data?.errors ?? []).filter((error) => error.trim());
@@ -62,7 +101,7 @@ export function DevicesScreen({ project }: { project: HostProject }) {
     <>
     <ScreenList<DeviceSummary>
       title={copy("Cihazlar", "Devices")}
-      subtitle={[machine?.name, project.name].filter(Boolean).join(" · ")}
+      scope={{ computer: machine?.name, project: project.name }}
       data={visible}
       keyExtractor={(device) => device.id}
       query={list}
@@ -70,10 +109,10 @@ export function DevicesScreen({ project }: { project: HostProject }) {
       actions={<>
         <IconButton label={copy("Yenile", "Refresh")} busy={refresh.refreshing}
           disabled={status.isFetching || list.isFetching} onPress={() => { void refresh.onRefresh(); }}>
-          <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
+          <RefreshCw size={iconSize.action} strokeWidth={2} color={colors.accent} />
         </IconButton>
         <IconButton label={copy("Cihaz servisi", "Device service")} onPress={() => setRuntime(currentScope)}>
-          <Wrench size={20} color={colors.muted} />
+          <Wrench size={iconSize.action} strokeWidth={2} color={colors.muted} />
         </IconButton>
       </>}
       header={
@@ -81,47 +120,49 @@ export function DevicesScreen({ project }: { project: HostProject }) {
           <Stack.Screen options={{ title: copy("Cihazlar", "Devices") }} />
           <SearchField ref={searchInput} label={copy("Cihaz ara", "Search devices")} value={search} onChangeText={setSearch} />
           <QueryState query={status} loading="none" />
-          <QueryState
-            query={list}
-            empty={!visible.length && !partialErrors.length}
-            emptyTitle={
-              filtering
-                ? copy("Eşleşen sonuç yok", "No matching results")
-                : noPlatformAvailable
-                  ? copy("Bu bilgisayarda cihazlar listelenemiyor.", "Devices can't be listed on this computer.")
-                  : copy("Cihaz bulunamadı.", "No devices found.")
-            }
-            emptyDetail={filtering || noPlatformAvailable ? undefined
-              : copy("Bilgisayarda bir simülatör başlatın veya cihaz bağlayın, sonra yenileyin.", "Start a simulator or connect a device on this computer, then refresh.")}
-            emptyAction={filtering ? {
-              label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch,
-            } : { label: copy("Cihaz servisi", "Device service"), onPress: () => setRuntime(currentScope) }}
-          />
           {partialErrors.length ? <IssueSummary issues={availabilityIssues}
             details={availabilityIssues.length > 1 ? availabilityDetails : undefined}
             retrying={list.isFetching} onRetry={() => {
             if (!list.isFetching) void list.refetch();
-          }} /> : unavailablePlatforms.length ? <Disclosure label={copy("Ayrıntılar", "Details")}>
+          }} /> : unavailablePlatforms.length ? <Disclosure label={copy("Kullanılamayan platformlar", "Unavailable platforms")}>
             {availabilityDetails}
           </Disclosure> : null}
         </>
       }
+      ListEmptyComponent={
+        <QueryState size="region" emptyIllustration="inbox-empty"
+          query={list}
+        empty={!visible.length && !partialErrors.length}
+        emptyTitle={
+          filtering
+            ? copy("Eşleşen sonuç yok", "No matching results")
+            : noPlatformAvailable
+              ? copy("Bu bilgisayarda cihazlar listelenemiyor.", "Devices can't be listed on this computer.")
+              : copy("Cihaz bulunamadı.", "No devices found.")
+        }
+        emptyDetail={filtering || noPlatformAvailable ? undefined
+          : copy("Bilgisayarda bir simülatör başlatın veya cihaz bağlayın, sonra yenileyin.", "Start a simulator or connect a device on this computer, then refresh.")}
+        emptyAction={filtering ? {
+          label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch,
+        } : { label: copy("Cihaz servisi", "Device service"), onPress: () => setRuntime(currentScope) }}
+          />
+      }
       renderItem={({ item: device }) => {
         const kind = device.physical ? copy("Fiziksel cihaz", "Physical device") : copy("Simülatör", "Simulator");
-        const state = device.booted ? copy("Hazır", "Ready") : copy("Kapalı", "Off");
+        const state = device.booted ? copy("Hazır", "Ready") : starting.has(device.id) ? copy("Başlatılıyor", "Starting") : copy("Kapalı", "Off");
         const system = deviceSystemLabel(device);
-        // Identity on the first lines, state as a badge that wraps with the type so large text never clips.
+        // Identity on the first lines, state as quiet status text that wraps with the type so large text never clips.
         return <NavigationRow
           label={device.name}
           labelLines={2}
           detail={system || undefined}
           detailLines={2}
           supporting={<Row>
-            <Badge label={state} tone={device.booted ? "success" : "default"} />
+            <StatusText label={state} tone={device.booted ? "live" : starting.has(device.id) ? "active" : "default"} />
             <Body muted style={[uiStyles.caption, { flexShrink: 1 }]}>{kind}</Body>
           </Row>}
           accessibilityLabel={[device.name, system, kind, state].filter(Boolean).join(". ")}
-          icon={<Smartphone size={21} color={device.booted ? colors.live : colors.muted} />}
+          icon={<RowIcon glyph={Smartphone} />}
           onPress={() => setSelected({ ...currentScope, device })}
         />;
       }}
@@ -131,6 +172,8 @@ export function DevicesScreen({ project }: { project: HostProject }) {
       onClose={() => { setRuntime((current) => current === runtime ? undefined : current); refetchListing(); }} /> : null}
     {selected && isCurrentScope(selected) ? <DeviceViewer key={`${selected.machineId}:${selected.projectId}:${selected.device.id}`} projectId={selected.projectId} device={selected.device}
       canControl={status.data?.agentInstalled ?? false}
+      starting={starting.has(selected.device.id)}
+      onBootChange={onBootChange}
       onDevice={(device) => setSelected((current) => current === selected ? { ...current, device } : current)}
       onClose={() => { setSelected((current) => current === selected ? undefined : current); refetchListing(); }} /> : null}
     </PrivateContentAccessProvider>

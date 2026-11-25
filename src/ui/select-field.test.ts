@@ -2,11 +2,11 @@
 import { act, createElement as h, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import { SelectField, MultiSelectField } from "./select-field";
+import { AutocompleteField, SelectField, MultiSelectField } from "./select-field";
 import { PrivateContentAccessProvider } from "./private-access";
 import { SheetGuardContext } from "./sheet-guard-context";
 const s = vi.hoisted(() => ({ actions: new Map<string, () => void>(), primitives: new Map<string, any>(), search: undefined as undefined | ((value: string) => void),
-  locale: "en", options: [{ value: "a", label: "Alpha" }, { value: "b", label: "Beta" }] as { value: string; label: string; disabled?: boolean; group?: string }[],
+  locale: "en", fontScale: 1, options: [{ value: "a", label: "Alpha" }, { value: "b", label: "Beta" }] as { value: string; label: string; disabled?: boolean; group?: string }[],
   values: [] as string[], multiple: false, max: undefined as number | undefined, disabled: false, allowed: true, changes: [] as string[][] }));
 vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: { info: {}, danger: {} }, uiStyles: {} }) }));
 vi.mock("./use-reduced-motion", () => ({ useReducedMotionPreference: () => true }));
@@ -29,6 +29,7 @@ vi.mock("lucide-react-native/icons/search", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/square", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/square-check-big", () => ({ default: () => null }));
 vi.mock("react-native", () => ({
+  useWindowDimensions: () => ({ width: 402, height: 874, scale: 3, fontScale: s.fontScale }),
   StyleSheet: { hairlineWidth: 1 },
   Text: ({ children }: PropsWithChildren) => h("span", null, children), View: ({ children }: PropsWithChildren) => h("div", null, children),
   Pressable: ({ children, accessibilityLabel, accessibilityRole, onPress, disabled }: any) => {
@@ -44,7 +45,11 @@ vi.mock("./buttons", () => ({ Button: ({ label, onPress, disabled }: any) => { s
 const Search = ({ value, onChangeText }: any) => { s.search = onChangeText; return h("input", { value, onChange: (e: any) => onChangeText(e.target.value) }); };
 vi.mock("./fields", () => ({ Input: (props: any) => h(Search, props) }));
 vi.mock("./search-field", () => ({ SearchField: (props: any) => h(Search, props) }));
-vi.mock("./feedback", () => ({ Empty: ({ title, action }: any) => h("div", null, title, action ? h("button", { onClick: action.onPress }, action.label) : null) }));
+vi.mock("./feedback", () => ({
+  FieldError: ({ message }: any) => h("p", { role: "alert" }, message),
+  Empty: ({ title, action }: any) => h("div", null, title, action ? h("button", { onClick: action.onPress }, action.label) : null),
+  Loading: ({ label }: { label: string }) => h("p", { role: "status" }, label),
+}));
 vi.mock("./navigation-row", () => ({ useInNavigationGroup: () => false }));
 vi.mock("./dialogs", () => ({ Sheet: ({ visible, children, onClose, headerAction }: any) => {
   s.actions.set("Close", onClose); return visible ? h("section", null, headerAction, children) : null;
@@ -59,8 +64,17 @@ async function render(extra: { compact?: boolean } = {}) {
 }
 async function call(name: string) { await act(async () => s.actions.get(name)!()); }
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; vi.unstubAllGlobals();
-  s.actions.clear(); s.primitives.clear(); s.search = undefined; s.locale = "en"; s.options = [{ value: "a", label: "Alpha" }, { value: "b", label: "Beta" }];
+  s.actions.clear(); s.primitives.clear(); s.search = undefined; s.locale = "en"; s.fontScale = 1; s.options = [{ value: "a", label: "Alpha" }, { value: "b", label: "Beta" }];
   s.values = []; s.max = undefined; s.multiple = s.disabled = false; s.allowed = true; s.changes = [];
+});
+it("lets the label and selected value each take the full row at larger text sizes", async () => {
+  s.values = ["a"];
+  s.fontScale = 1.5;
+  await render();
+  const trigger = s.primitives.get("Choice: Alpha");
+  const labelAndValue = trigger.children[1];
+  expect(labelAndValue.props.style[1]).toMatchObject({ alignItems: "flex-start" });
+  expect(labelAndValue.props.style[1]).not.toHaveProperty("flexWrap");
 });
 it("keeps compact triggers and option rows at 48dp through PanelUI primitives", async () => {
   await render({ compact: true });
@@ -155,19 +169,27 @@ it("checks private authority before React commits", async () => {
   await render(); await call("Open"); const old = s.actions.get("Alpha")!; s.allowed = false;
   await act(async () => old()); expect(s.changes).toEqual([]);
 });
-it("expands options inline inside a Sheet instead of stacking a second sheet", async () => {
+it("opens a picker above the editor and leaves its draft untouched", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); container = document.createElement("div"); root = createRoot(container);
-  const guard = { register() {}, requestClose() {}, requestCloseThen() {} };
+  const guard = { register() {}, requestClose: vi.fn(), requestCloseThen: vi.fn() };
   await act(async () => root!.render(h(SheetGuardContext.Provider, { value: guard },
-    h(SelectField, { label: "Choice", options: s.options, onChange: (v: string) => s.changes.push([v]) }))));
+    h("article", null, h("textarea", { defaultValue: "Draft" }),
+      h(SelectField, { label: "Choice", options: s.options, onChange: (v: string) => s.changes.push([v]) })))));
+  const draft = container.querySelector("textarea")!;
+  draft.value = "Edited draft";
   await call("Open");
-  expect(container.querySelector("section")).toBeNull();
+  expect(container.querySelector("section main")).not.toBeNull();
   await call("Alpha");
   expect(s.changes).toEqual([["a"]]);
+  expect(container.querySelector("section")).toBeNull();
+  expect(container.querySelector("textarea")).toBe(draft);
+  expect(draft.value).toBe("Edited draft");
+  expect(guard.requestClose).not.toHaveBeenCalled();
+  expect(guard.requestCloseThen).not.toHaveBeenCalled();
   expect(container.textContent).not.toContain("Beta");
 });
 
-it.each([false, true])("closes and reopens an inline select from its trigger (multiple %s)", async (multiple) => {
+it.each([false, true])("closes and reopens a nested picker with a fresh query (multiple %s)", async (multiple) => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
   root = createRoot(container);
@@ -182,7 +204,7 @@ it.each([false, true])("closes and reopens an inline select from its trigger (mu
   expect(expanded()).toBe(true);
   await act(async () => s.search!("Beta"));
   const retiredOption = s.actions.get("Beta")!;
-  await call("Open");
+  await call("Close");
   expect(expanded()).toBe(false);
   expect(container.querySelector("input")).toBeNull();
   await call("Open");
@@ -190,4 +212,28 @@ it.each([false, true])("closes and reopens an inline select from its trigger (mu
   expect(container.querySelector("input")?.value).toBe("");
   await act(async () => retiredOption());
   expect(onChange).not.toHaveBeenCalled();
+});
+
+it("replaces pending remote suggestions and commits explicit free text once", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  container = document.createElement("div");
+  root = createRoot(container);
+  const onQueryChange = vi.fn(), onChange = vi.fn();
+  const show = (loading: boolean, options = s.options) => act(async () => root!.render(
+    h(AutocompleteField, { label: "Project", options, loading, onQueryChange, onChange, allowFreeText: true }),
+  ));
+  await show(false);
+  await call("Open");
+  const retired = s.actions.get("Alpha")!;
+  await act(async () => s.search!("New project"));
+  expect(onQueryChange.mock.calls).toEqual([[""], ["New project"]]);
+  await show(true);
+  expect(container.textContent).toContain("Loading options");
+  expect(container.textContent).not.toContain("Alpha");
+  await act(async () => retired());
+  expect(onChange).not.toHaveBeenCalled();
+  await show(false, []);
+  const choose = s.actions.get("Use “New project”")!;
+  await act(async () => { choose(); choose(); });
+  expect(onChange.mock.calls).toEqual([["New project"]]);
 });

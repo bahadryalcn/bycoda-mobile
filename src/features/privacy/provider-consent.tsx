@@ -22,11 +22,11 @@ import {
   Heading,
   Loading,
   Row,
+  RowIcon,
   Screen,
 } from "../../ui/primitives";
-import { IconTile } from "../../ui/icon-tile";
 import { enterItem } from "../../ui/motion";
-import { space } from "../../ui/tokens";
+import { gapIcon, space } from "../../ui/tokens";
 import { useCopy } from "../../ui/copy";
 import type { LegalDocumentId } from "../legal/legal-document";
 import { LegalDocumentSheet } from "../legal/legal-reader";
@@ -47,7 +47,7 @@ export async function revokeProviderConsent() {
 
 /** Keep navigation mounted; request-time guards protect the workspace beneath this overlay. */
 export function ProviderConsentGate({ children }: PropsWithChildren) {
-  const { colors } = useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const pathname = usePathname();
   const machine = useActiveMachine();
@@ -145,10 +145,8 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
                 />
                 <Animated.View entering={enterItem(0)}>
                   <Stack>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                      <IconTile color={colors.accent}>
-                        <Laptop size={18} strokeWidth={2} color={colors.accent} />
-                      </IconTile>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: gapIcon }}>
+                      <View accessible={false} style={uiStyles.rowLeading}><RowIcon glyph={Laptop} /></View>
                       <View style={{ flex: 1, gap: space.xxs }}>
                         <Body>{machine?.name ?? copy("Bilgisayar", "Computer")}</Body>
                         <Body muted>{machine?.endpoint}</Body>
@@ -158,10 +156,8 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
                 </Animated.View>
                 <Animated.View entering={enterItem(1)}>
                   <Stack>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                      <IconTile color={colors.success}>
-                        <ShieldCheck size={18} strokeWidth={2} color={colors.success} />
-                      </IconTile>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: gapIcon }}>
+                      <View accessible={false} style={uiStyles.rowLeading}><RowIcon glyph={ShieldCheck} /></View>
                       <Heading style={{ flex: 1 }}>
                         {copy("Gönderilenler", "What is sent")}
                       </Heading>
@@ -248,8 +244,8 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
                 </View>
                 <Body muted style={{ textAlign: "center" }}>
                   {copy(
-                    "İznini Ayarlar → Gizlilik ve veriler bölümünden geri çekebilirsin. Bilgisayarında zaten çalışan işler bağımsız olarak devam eder.",
-                    "Withdraw permission in Settings → Privacy & data. Work already running on your computer continues independently.",
+                    "İznini Ayarlar → Veriler ve gizlilik bölümünden geri çekebilirsin. Bilgisayarında zaten çalışan işler bağımsız olarak devam eder.",
+                    "Withdraw permission in Settings → Data and privacy. Work already running on your computer continues independently.",
                   )}
                 </Body>
               </>

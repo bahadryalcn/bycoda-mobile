@@ -23,3 +23,18 @@ it("keeps a CRLF pair on one raw page without duplicating a visible newline",()=
 it("uses displayed newline offsets without altering the original source",()=>{
  const raw="before\r\nEXACT\rafter",visible=selectionDisplayText(raw);expect(visible).toBe("before\nEXACT\nafter");expect(selectedExcerpt(visible,{start:7,end:12})).toBe("EXACT");expect(raw).toContain("\r\n");
 });
+import { quoteWithComment, sideQuestionUnsupported, translationQuestion, SIDE_QUESTION_LIMIT } from "./selected-text-model";
+it("adds the optional comment after the quote", () => {
+  expect(quoteWithComment("a\nb", "  ")).toBe("> a\n> b");
+  expect(quoteWithComment("a", " why? ")).toBe("> a\n\nwhy?");
+});
+it("bounds the isolated translation question to the Host limit", () => {
+  const question = translationQuestion("EXACT", "English")!;
+  expect(question).toContain("into English"); expect(question).toContain("> EXACT"); expect(question).toContain("translation only");
+  expect(translationQuestion("x".repeat(SIDE_QUESTION_LIMIT), "English")).toBeNull();
+});
+it("recognizes only an unsupported method as a reason for the draft fallback", () => {
+  expect(sideQuestionUnsupported({ kind: "unsupported" })).toBe(true);
+  expect(sideQuestionUnsupported({ kind: "timeout" })).toBe(false);
+  expect(sideQuestionUnsupported(null)).toBe(false);
+});

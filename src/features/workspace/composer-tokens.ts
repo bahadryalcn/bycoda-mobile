@@ -17,10 +17,10 @@ export function composerTokenAt(text: string, selection: { start: number; end: n
   let end = cursor; while (end < text.length && !/\s/.test(text[end]!)) end++;
   return { trigger, start, end, query };
 }
-export function replaceComposerToken(text: string, token: ComposerToken, label: string) {
+export function replaceComposerToken(text: string, token: ComposerToken, label: string, complete = true) {
   const value = `${token.trigger}${label}`;
   const suffix = text.slice(token.end);
-  const separator = /^\s/.test(suffix) ? "" : " ";
-  return { text: text.slice(0, token.start) + value + separator + suffix, cursor: token.start + value.length + (separator.length || (suffix.startsWith(" ") ? 1 : 0)) };
+  const separator = complete && !/^\s/.test(suffix) ? " " : "";
+  return { text: text.slice(0, token.start) + value + separator + suffix, cursor: token.start + value.length + (separator.length || (complete && suffix.startsWith(" ") ? 1 : 0)) };
 }
 export function mentionLabel(path: string) { return /\s/.test(path) ? `"${path.replace(/"/g, "\\\"")}"` : path; }

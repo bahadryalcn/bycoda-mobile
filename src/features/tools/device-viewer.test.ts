@@ -17,6 +17,7 @@ vi.mock("@/ui/theme", () => ({
   useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }),
 }));
 vi.mock("lucide-react-native/icons/house", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/ellipsis", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("@/state/machines", () => {
   const machine = () => ({ id: state.id, environmentId: "host" });
@@ -55,9 +56,14 @@ vi.mock("@/state/queries", () => ({
 vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
 vi.mock("@/ui/copy",() => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
-vi.mock("@/ui/tokens", () => ({ colors: {} }));
+vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, space: { sm: 8 }, colors: {} }));
 vi.mock("./device-runtime", () => ({ DeviceRuntime: () => null }));
 vi.mock("./device-preview", () => ({ DevicePreviewSheet: () => null }));
+vi.mock("@/ui/overflow-menu", () => ({
+  ActionMenu: ({ actions }: { actions: { key: string; label: string; disabled?: boolean; onPress: () => void }[] }) =>
+    createElement("div", null, actions.map((item) => createElement("button", { key: item.key, disabled: item.disabled, onClick: item.onPress }, item.label))),
+}));
+vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("@/ui/remote-frame", () => ({
   RemoteFrame: ({ onPress }: { onPress: (point: { x: number; y: number }) => void }) =>
     createElement("button", { onClick: () => onPress({ x: 10, y: 20 }) }, "Frame"),
@@ -73,7 +79,7 @@ vi.mock("@/ui/primitives", () => {
     disabled?: boolean;
     onPress: () => void;
   }) => createElement("button", { disabled, onClick: onPress }, label);
-  return {
+  return { StatusText: ({ label }: { label: string }) => createElement("span", null, label),
     NavigationRow: ({
       label,
       onPress,
@@ -84,10 +90,11 @@ vi.mock("@/ui/primitives", () => {
       disabled?: boolean;
     }) => createElement("button", { onClick: onPress, disabled }, label),
     Body: Wrapper,
-    Sheet: Wrapper,
+    Sheet: ({ children, footer }: PropsWithChildren<{ footer?: unknown }>) => createElement("div", null, children, footer as never),
     Row: Wrapper,
-    Disclosure: Wrapper,
-    NavigationGroup: Wrapper,
+    StatusLine: () => null,
+    Loading: () => null,
+    StateView: ({ title }: { title: string }) => createElement("span", null, title),
     QueryState: () => null,
     MutationState: () => null,
     Notice: () => null,
@@ -98,21 +105,12 @@ vi.mock("@/ui/primitives", () => {
     },
     Button,
     IconButton: Button,
-    ToggleField: ({
-      label,
-      value,
-      onChange,
-    }: {
-      label: string;
-      value: boolean;
-      onChange: (value: boolean) => void;
-    }) => createElement(Button, { label, onPress: () => onChange(!value) }),
   };
 });
 let root: ReturnType<typeof createRoot> | undefined;
 let container: HTMLDivElement;
 const onDevice = vi.fn();
-async function render(booted: boolean, extra: { canControl?: boolean; viewOnly?: boolean } = {}) {
+async function render(booted: boolean, extra: { canControl?: boolean; viewOnly?: boolean; starting?: boolean } = {}) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
   root = createRoot(container);
@@ -158,7 +156,6 @@ afterEach(async () => {
 });
 it("stale machine callbacks cannot capture or control the formerly selected device", async () => {
   await render(true);
-  await click("Control device");
   state.id = "other";
   await click("Frame");
   await click("Refresh screen");
@@ -176,10 +173,17 @@ it("late boot completion cannot replace the selected device after a machine swit
   expect(onDevice).not.toHaveBeenCalled();
 });
 
+it("keeps the start action unavailable when a boot is already tracked by the device list", async () => {
+  await render(false, { starting: true });
+  expect(container.textContent).toContain("Starting");
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "Boot device")).toBe(false);
+  expect(state.writes).toEqual([]);
+});
+
 it("keeps newer device text when an earlier Type text request completes", async () => {
   state.deferAction = true;
   await render(true);
-  await click("Control device");
+  await click("Text and apps");
   await act(async () => state.fields.get("Text")!.onChangeText("First text"));
   await click("Type text");
   await act(async () => state.fields.get("Text")!.onChangeText("New unsent text"));
@@ -195,7 +199,7 @@ it("keeps newer device text when an earlier Type text request completes", async 
 it("Live view slows on identical frames and a refresh or change returns to the base rate", async () => {
   await render(true);
   expect(state.options?.interval).toBeUndefined();
-  await click("Live view");
+  await click("Live");
   const poll = state.options!.interval!;
   const still = (index: number) => ({ mime: "image/png", base64: "AAAA", capturedAt: String(index) });
   expect(poll(still(0))).toBe(3_000);
@@ -211,8 +215,8 @@ it("view-only mode shows the screen without control, tools, boot or the enable-c
   await render(true, { canControl: false, viewOnly: true });
   const labels = [...container.querySelectorAll("button")].map((button) => button.textContent);
   expect(labels).toContain("Refresh screen");
-  expect(labels).toContain("Live view");
-  for (const hidden of ["Control device", "Home", "Open app", "Type text", "Press element"]) expect(labels).not.toContain(hidden);
+  expect(labels).toContain("Live");
+  for (const hidden of ["Control device", "Take control", "Home", "Text and apps", "Open app", "Type text", "Press element"]) expect(labels).not.toContain(hidden);
   await act(async () => root!.unmount());
   await render(false, { canControl: false, viewOnly: true });
   expect([...container.querySelectorAll("button")].map((button) => button.textContent)).not.toContain("Boot device");

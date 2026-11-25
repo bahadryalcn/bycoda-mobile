@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useMachines } from "@/state/machines";
 import { ActiveSessionsScreen } from "./active-sessions-screen";
+vi.mock("@/ui/no-computer", () => ({ NoComputerState: () => null, NoComputerGate: () => null }));
 
 vi.mock("@/ui/swipe-actions", () => ({
   SwipeActionsGroup: ({ children }: { children: ReactNode }) => children,
@@ -29,6 +30,9 @@ vi.mock("@/state/actions", () => ({ useAsyncAction: () => ({ isPending: false })
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/primitives", () => ({
   SearchToolbar: () => null,
+  Row: () => null,
+  ChoiceChip: () => null,
+  SectionHeader: () => null,
   SearchField: () => null,
   ScreenList: ({ data, renderItem }: {
     data: { key: string }[];

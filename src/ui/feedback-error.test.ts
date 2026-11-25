@@ -72,7 +72,8 @@ describe("shared feedback error rendering", () => {
     const query = renderQuery({ query: { error, status: "error" } });
     expect(query?.type).toBe(StateView);
     expect(query?.props.description).toBe(expected);
-    expect(query?.props.illustration).toBe("unreachable");
+    expect(query?.props.illustration).toBeUndefined();
+    expect(query?.props.tone).toBe("danger");
     expect(ErrorText({ error })?.type).toBe(FieldError);
   });
 
@@ -95,7 +96,7 @@ describe("shared feedback error rendering", () => {
     const refetch = vi.fn();
     const query = renderQuery({ query: { error, status: "error", refetch } });
     expect(query?.props.description).toBe(error.message);
-    expect(query?.props.illustration).toBe("error");
+    expect(query?.props.illustration).toBeUndefined();
     query?.props.action.onPress();
     expect(refetch).toHaveBeenCalledOnce();
   });
@@ -104,7 +105,7 @@ describe("shared feedback error rendering", () => {
     const error = new RemoteHostError("machine", "identity", "Identity changed.");
     const query = renderQuery({ query: { error, status: "error", refetch: vi.fn() } });
     expect(query?.props.action.label).toBe("Bağlantıları yönet");
-    expect(query?.props.illustration).toBe("locked");
+    expect(query?.props.tone).toBe("warning");
     query?.props.action.onPress();
     expect(router.navigate).toHaveBeenCalledWith("/machines");
   });

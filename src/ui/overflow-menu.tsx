@@ -5,18 +5,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MoreHorizontal from "lucide-react-native/icons/ellipsis";
 import CheckGlyph from "lucide-react-native/icons/check";
 import { Menu } from "panelui-native/components/menu";
-import { IconButton } from "./buttons";
+import { Button, IconButton } from "./buttons";
 import { useCopy } from "./copy";
 import { haptic } from "./motion";
 import { asWebElement } from "./overlay-web-focus";
 import { OverlayWebMenuContext } from "./overlay-web-menu-context";
 import { usePrivateContentAccess } from "./private-access";
-import { useMenuLifecycle } from "./use-menu-lifecycle";
+import { singleMenuAction, useMenuLifecycle } from "./use-menu-lifecycle";
 import { Sheet } from "./dialogs";
 import { NavigationGroup, NavigationRow } from "./navigation-row";
 import { Body } from "./typography";
 import { IconTile } from "./icon-tile";
-import { radii, space } from "./tokens";
+import { iconSize, radii, space } from "./tokens";
 
 export type MenuAction = {
   key: string;
@@ -29,9 +29,21 @@ export type MenuAction = {
   /** Shows a chevron: the action opens another surface rather than running a command. */
   opens?: boolean;
   destructive?: boolean;
+  /**
+   * `onPress` opens its own confirmation or review before anything changes. A lone destructive
+   * action with this flag is shown directly instead of behind a one-item menu.
+   */
+  reviewed?: boolean;
   disabled?: boolean;
   /** Shows a check mark; use for filter/sort choices. */
   selected?: boolean;
+  /**
+   * Row options group (for example "open", "organize", "copy"). Groups keep the order in which
+   * they first appear; destructive actions always form the last group. Omit for one group.
+   */
+  group?: string;
+  /** Shows progress on the row, for example while a copy is prepared. */
+  busy?: boolean;
 };
 
 /**
@@ -39,6 +51,11 @@ export type MenuAction = {
  * (with `subtitle`, usually the record name) listing icon-tile rows, destructive actions last;
  * web keeps a popover. The default trigger is a circular "…" button; pass `trigger` for a custom
  * IconButton (e.g. a filter glyph).
+ *
+ * A menu is never opened for one choice: when exactly one non-destructive action is left, it is
+ * rendered directly (its icon as a labelled icon button, otherwise a quiet text button) and the
+ * "…" trigger disappears. A lone destructive action keeps the menu as its deliberate second step
+ * unless it is `reviewed` (it opens its own confirmation), in which case it too is shown directly.
  */
 export function ActionMenu({
   label,
@@ -76,6 +93,8 @@ export function ActionMenu({
   const { open, available, onOpenChange, close, select } = useMenuLifecycle(items, access);
   const menuLabel = label || copy("Diğer işlemler", "More actions");
   if (!available) return null;
+  const only = singleMenuAction(items);
+  if (only) return <SingleAction item={only} busy={busy} reserveTouchTarget={reserveTouchTarget} onTriggerPress={onTriggerPress} access={access} />;
   return (
     <Menu open={open} onOpenChange={onOpenChange}>
       <Menu.Trigger>
@@ -142,14 +161,105 @@ export function ActionMenu({
   );
 }
 
-/** Splits into regular and destructive groups; destructive actions always come last. */
-export function groupMenuActions<T extends { destructive?: boolean }>(items: readonly T[]): T[][] {
-  const regular = items.filter((item) => !item.destructive);
-  const danger = items.filter((item) => item.destructive);
-  return [regular, danger].filter((group) => group.length > 0);
+/** A lone menu choice shown in place of the "…" trigger, with the same access check as a menu row. */
+function SingleAction({ item, busy, reserveTouchTarget, onTriggerPress, access }: {
+  item: MenuAction; busy?: boolean; reserveTouchTarget?: boolean; onTriggerPress?: () => void;
+  access: ReturnType<typeof usePrivateContentAccess>;
+}) {
+  const { colors, semanticColors } = useMobileTheme();
+  const run = () => {
+    if (item.disabled) return;
+    onTriggerPress?.();
+    if (!access.allowed || !access.check()) return;
+    haptic.select();
+    item.onPress();
+  };
+  const pending = !!(busy || item.busy);
+  if (isValidElement(item.icon)) {
+    return (
+      <IconButton label={item.detail ? `${item.label}. ${item.detail}` : item.label} busy={pending} disabled={item.disabled}
+        tone={item.destructive ? "danger" : "default"} reserveTouchTarget={reserveTouchTarget} onPress={run}>
+        {cloneElement(item.icon as ReactElement<{ size?: number; strokeWidth?: number; color?: string }>, {
+          size: iconSize.action, strokeWidth: 2, color: item.destructive ? semanticColors.danger.text : colors.accent,
+        })}
+      </IconButton>
+    );
+  }
+  return (
+    <Button tone={item.destructive ? "danger" : "quiet"} density="compact" label={item.label} accessibilityLabel={item.detail ? `${item.label}. ${item.detail}` : undefined}
+      selected={item.selected} busy={pending} disabled={item.disabled} reserveTouchTarget={reserveTouchTarget} onPress={run} />
+  );
 }
 
-function ActionRows({ items, onSelect }: { items: readonly MenuAction[]; onSelect(item: MenuAction): void }) {
+/**
+ * Splits into groups; destructive actions always come last. Items with a `group` key are grouped
+ * by it in first-appearance order; items without one share a single regular group.
+ */
+export function groupMenuActions<T extends { destructive?: boolean; group?: string }>(items: readonly T[]): T[][] {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    if (item.destructive) continue;
+    const key = item.group ?? "";
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+  const danger = items.filter((item) => item.destructive);
+  return [...groups.values(), danger].filter((group) => group.length > 0);
+}
+
+/**
+ * Shared row options sheet, opened by long-press on a list row (project, session, folder, record)
+ * and by the row's accessibility "Show options" action. Title names the kind of options
+ * ("Project options"), `subtitle` the record. Choosing an action closes the sheet first, then runs
+ * it, so the action can open its own sheet or confirmation. Swipe rails show a subset of the same
+ * actions. `children` render below the list (for example a result or failure line).
+ */
+export function RowOptionsSheet({
+  visible,
+  title,
+  subtitle,
+  actions,
+  onClose,
+  children,
+}: {
+  visible: boolean;
+  title: string;
+  /** Record the options act on; shown under the title. */
+  subtitle?: string;
+  actions: readonly (MenuAction | false | null | undefined)[];
+  onClose: () => void;
+  children?: ReactNode;
+}) {
+  const access = usePrivateContentAccess();
+  const items = actions.filter(Boolean) as MenuAction[];
+  const select = (item: MenuAction) => {
+    if (item.disabled) return;
+    onClose();
+    // A row whose private content was withdrawn while the sheet was open runs nothing.
+    if (!access.allowed || !access.check()) return;
+    item.onPress();
+  };
+  return (
+    <Sheet visible={visible && items.length > 0} title={title} size="compact" onClose={onClose}>
+      {subtitle ? <Body muted numberOfLines={2}>{subtitle}</Body> : null}
+      <ActionRows items={items} onSelect={select} />
+      {children}
+    </Sheet>
+  );
+}
+
+/**
+ * The grouped icon-tile action list used by `ActionMenu`, `RowOptionsSheet` and sheets that own
+ * extra panels (session actions). Each row runs its own `onPress`; destructive rows come last.
+ */
+export function ActionList({ actions, compact }: {
+  actions: readonly (MenuAction | false | null | undefined)[];
+  compact?: boolean;
+}) {
+  const items = actions.filter(Boolean) as MenuAction[];
+  return <ActionRows items={items} compact={compact} onSelect={(item) => { if (!item.disabled) item.onPress(); }} />;
+}
+
+function ActionRows({ items, onSelect, compact }: { items: readonly MenuAction[]; onSelect(item: MenuAction): void; compact?: boolean }) {
   const { colors, semanticColors } = useMobileTheme();
   return (
     <View style={{ gap: space.sm }}>
@@ -160,11 +270,13 @@ function ActionRows({ items, onSelect }: { items: readonly MenuAction[]; onSelec
               key={item.key}
               intent={item.opens ? "navigate" : "command"}
               label={item.label}
+              compact={compact}
               detail={item.detail}
               detailLines={0}
               detailSelectable={false}
               tone={item.destructive ? "danger" : undefined}
               disabled={item.disabled}
+              busy={item.busy}
               separator={index < group.length - 1}
               selected={item.selected}
               tintSelected={false}

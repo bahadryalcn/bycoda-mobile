@@ -1,5 +1,6 @@
 import { useInboxLocalScope } from "./inbox-local-scope";
 import { providerStateLabel, providerStateTone } from "./provider-labels";
+import { ProviderState } from "./issue-record-row";
 import { router } from "expo-router";
 import { getQueryPresentation } from "@/ui/query-presentation";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -24,8 +25,8 @@ import {
   Screen,
   Stack,
   Sheet,
-  ToggleField,
 } from "@/ui/primitives";
+import { useMobileTheme } from "@/ui/theme";
 import { PullRequestMetadata } from "../pull-requests/ui/metadata";
 import { confirmAction } from "@/ui/confirm";
 import { useCopy } from "@/ui/copy";
@@ -67,6 +68,7 @@ export function ProviderInboxDetail({
 }: ProviderInboxDetailProps) {
   const inboxScope = useInboxLocalScope();
   const copy = useCopy();
+  const { uiStyles } = useMobileTheme();
   const [item] = useState(incomingItem), [origin] = useState(incomingOrigin);
   const client = useHostClient();
   const cache = useQueryClient();
@@ -216,42 +218,47 @@ export function ProviderInboxDetail({
       {contentAvailable ? <>
         <Heading>{item.title}</Heading>
         <Row>
-          <Badge label={providerStateLabel(item.state, copy)} tone={providerStateTone(item.state)} />
+          <ProviderState label={providerStateLabel(item.state, copy)} tone={providerStateTone(item.state)} />
           {item.draft ? <Badge label={copy("Taslak", "Draft")} /> : null}
+          {details.data?.reviewDecision ? <Badge label={providerStateLabel(details.data.reviewDecision, copy)} /> : null}
         </Row>
-        <Body muted>{`${providerName(item.provider)} · ${item.identifier ?? `#${item.number}`}`}</Body>
-      </> : null}
-      <Row>
-        {!contentAvailable ? <Button
-          label={copy("Gelen kutusuna dön", "Back to inbox")}
-          disabled={busy}
-          tone="quiet" flush
-          onPress={requestClose}
-        /> : null}
-        {contentAvailable && /^https:\/\//i.test(item.url) ? (
-          <Button
-            label={copy("Serviste aç", "Open in provider")}
-            tone="quiet" flush
-            busy={openProvider.isPending}
-            onPress={openProviderLink}
+        <Body muted style={uiStyles.caption}>{[providerName(item.provider), item.identifier ?? `#${item.number}`, details.data?.author].filter(Boolean).join(" · ")}</Body>
+        {details.data?.headRefName && details.data.baseRefName ? <Body mono muted style={uiStyles.caption}>{details.data.headRefName} → {details.data.baseRefName}</Body> : null}
+        {/* One action row: the primary review path, a comment, and a menu for everything else. */}
+        <Row>
+          {reviewAvailable ? <Button tone="primary"
+            label={copy("Dosyalar ve inceleme", "Files and review")} disabled={busy || uncertain || !readAllowed} onPress={() => { if (readableNow() && !latest.current.busy && !latest.current.uncertain) setReviewing(true); }} /> : null}
+          <Button tone={reviewAvailable ? "quiet" : "primary"} label={form.values.body.trim() ? copy("Yorum taslağına dön", "Continue comment draft") : copy("Yorum ekle", "Add a comment")} disabled={busy || !writeAllowed} onPress={() => { if (editableNow()) setComposing(true); }} />
+          <ActionMenu
+            label={copy("Diğer işlemler", "More actions")}
+            busy={submission.isPending && pendingAction === "pr-action"}
+            actions={[
+              /^https:\/\//i.test(item.url) && { key: "open-provider", label: copy("Serviste aç", "Open in provider"), opens: true, disabled: openProvider.isPending, onPress: openProviderLink },
+              item.provider === "github" && item.kind === "pr" && {
+                key: "bots", label: showBotActivity ? copy("Bot etkinliğini gizle", "Hide bot activity") : copy("Bot etkinliğini göster", "Show bot activity"),
+                onPress: () => setShowBotActivity(!showBotActivity),
+              },
+              ...prActions.map((action) => ({
+                key: action,
+                label: providerActionLabel(action, copy),
+                disabled: busy || uncertain || !writeAllowed || (["merge", "squash", "rebase"].includes(action) && (!mergeContext.data?.headOid || mergeContext.isFetching || !!mergeContext.error)),
+                onPress: () => stateAction(action),
+              })),
+            ]}
           />
-        ) : null}
-        {contentAvailable && prActions.length ? <ActionMenu
-          label={copy("Diğer işlemler", "More actions")}
-          busy={submission.isPending && pendingAction === "pr-action"}
-          actions={[
-            ...prActions.map((action) => ({
-              key: action,
-              label: providerActionLabel(action, copy),
-              disabled: busy || uncertain || !writeAllowed || (["merge", "squash", "rebase"].includes(action) && (!mergeContext.data?.headOid || mergeContext.isFetching || !!mergeContext.error)),
-              onPress: () => stateAction(action),
-            })),
-          ]}
-        /> : null}
-      </Row>
+        </Row>
+      </> : (
+        <Row>
+          <Button
+            label={copy("Gelen kutusuna dön", "Back to inbox")}
+            disabled={busy}
+            tone="quiet" flush
+            onPress={requestClose}
+          />
+        </Row>
+      )}
       {contentAvailable ? <MutationState mutation={openProvider} /> : null}
-      {contentAvailable && (pendingAction === "reviewers" || pendingAction === "labels" || pendingAction === "reaction") ? <MutationState mutation={submission} /> : null}
-      {contentAvailable && pendingAction === "pr-action" ? <MutationState mutation={submission} /> : null}
+      {contentAvailable && (pendingAction === "reviewers" || pendingAction === "labels" || pendingAction === "reaction" || pendingAction === "pr-action") ? <MutationState mutation={submission} /> : null}
       {contentAvailable && mergeContext.error && mergeContext.error.message !== details.error?.message && mergeContext.error.message !== thread.error?.message && client?.machine.capabilities?.includes("inbox.review.v1") && item.provider === "github" && item.kind === "pr" && item.state.toLowerCase() === "open" && !item.draft ? <QueryState query={mergeContext} loading="none" /> : null}
       {scopeCurrent ? <QueryState query={{ ...availability, refetch: refreshConversation }} loading="none" onManageConnections={manageConnections} /> : null}
       {accessMessage || operationMessage ? <Notice tone={uncertain || desktopUnavailable ? "warning" : undefined}
@@ -267,17 +274,9 @@ export function ProviderInboxDetail({
         ))}
       </Row>
       </Disclosure> : null}
-      <QueryState query={{...details, refetch: sharedReadFailure ? refreshConversation : refreshDetails}} onManageConnections={manageConnections} />
+      <QueryState size="compact" query={{...details, refetch: sharedReadFailure ? refreshConversation : refreshDetails}} onManageConnections={manageConnections} />
       {details.data ? <ProviderInboxDescription details={details.data} /> : null}
-      {item.provider === "github" && item.kind === "pr" ? <>
-        <ToggleField label={copy("Bot etkinliğini göster", "Show bot activity")} value={showBotActivity} onChange={setShowBotActivity} />
-        <PullRequestMetadata input={input} canRead={contentAvailable} disabled={busy || uncertain || !writeAllowed} onCommand={submit} />
-      </> : null}
-      <Row>
-      {reviewAvailable ? <Button tone="primary"
-        label={copy("Dosyalar ve inceleme", "Files and review")} disabled={busy || uncertain || !readAllowed} onPress={() => { if (readableNow() && !latest.current.busy && !latest.current.uncertain) setReviewing(true); }} /> : null}
-      <Button tone={reviewAvailable ? "quiet" : "primary"} label={form.values.body.trim() ? copy("Yorum taslağına dön", "Continue comment draft") : copy("Yorum ekle", "Add a comment")} disabled={busy || !writeAllowed} onPress={() => { if (editableNow()) setComposing(true); }} />
-      </Row>
+      {item.provider === "github" && item.kind === "pr" ? <PullRequestMetadata input={input} canRead={contentAvailable} disabled={busy || uncertain || !writeAllowed} onCommand={submit} /> : null}
       </> : readAllowed ? <>
         <QueryState query={{...details, data: undefined, refetch: sharedReadFailure ? refreshConversation : refreshDetails}} onManageConnections={manageConnections} />
         {!sharedReadFailure ? <QueryState query={{...thread, data: undefined, refetch: refreshThread}} onManageConnections={manageConnections} /> : null}
@@ -300,18 +299,10 @@ export function ProviderInboxDetail({
 
 function ProviderInboxDescription({ details }: ProviderInboxDescriptionProps) {
   const copy = useCopy();
+  if (!details.body) return null;
   return (
-    <Stack>
-      <Body muted>{details.author}</Body>
-      <Disclosure label={copy("Açıklama", "Description")} defaultExpanded={(details.body?.length ?? 0) < 1200}>
-        <MessageText text={details.body || copy("Açıklama yok.", "No description.")} role="assistant" />
-      </Disclosure>
-      {details.headRefName && details.baseRefName ? (
-        <Body mono>
-          {details.headRefName} → {details.baseRefName}
-        </Body>
-      ) : null}
-      {details.reviewDecision ? <Badge label={providerStateLabel(details.reviewDecision, copy)} /> : null}
-    </Stack>
+    <Disclosure label={copy("Açıklama", "Description")} defaultExpanded={details.body.length < 1200}>
+      <MessageText text={details.body} role="assistant" />
+    </Disclosure>
   );
 }

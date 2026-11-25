@@ -90,7 +90,7 @@ vi.mock("@/ui/primitives", () => {
         feedback,
         button({ label: submitLabel, onPress: onSubmit, disabled, busy }),
       ),
-    Badge: ({ label }: { label: string }) => createElement("span", null, label),
+    Badge: ({ label }: { label: string }) => createElement("span", null, label), StatusText: ({ label }: { label: string }) => createElement("span", null, label),
     Notice: ({ message }: { message: string }) => createElement("p", null, message),
     StateView: ({ title }: { title: string }) => createElement("p", null, title),
     Button: ({

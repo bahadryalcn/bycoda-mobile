@@ -1,11 +1,41 @@
 import { expect, it } from "vitest";
-import { COMPOSER_FIELD_PADDING, COMPOSER_LINE_HEIGHT, COMPOSER_MAX_LINES, composerCollapsed, composerInputLimits, composerNeedsInlineActions, composerPrefixMaximum, composerSuggestionLimits } from "./chat-composer-model";
+import { COMPOSER_FIELD_PADDING, COMPOSER_LINE_HEIGHT, COMPOSER_MAX_LINES, MODEL_CHIP_LABEL_MIN, composerToolbarLayout, composerInputLimits, composerNeedsInlineActions, composerPrefixMaximum, composerSuggestionLimits } from "./chat-composer-model";
 
-it("collapses only an empty composer with nothing in progress", () => {
-  const idle = { toolbarOpen: false, hasContent: false, hasPrefix: false, suggesting: false, dictating: false };
-  expect(composerCollapsed(idle)).toBe(true);
-  for (const key of ["toolbarOpen", "hasContent", "hasPrefix", "suggesting", "dictating"] as const)
-    expect(composerCollapsed({ ...idle, [key]: true })).toBe(false);
+const ADD = 48, MIC_SEND = 48 * 2 + 4, MIC_STOP_SEND = 48 * 3 + 8;
+it.each([288, 328, 370, 398])("keeps the %i pt toolbar on one line and gives the model the rest", (toolbar) => {
+  for (const fontScale of [1, 2]) for (const trailing of [MIC_SEND, MIC_STOP_SEND]) {
+    const layout = composerToolbarLayout({ toolbar, leading: ADD, trailing, fontScale });
+    // Padding, Add, the trailing controls, two gaps and the model add up to the measured row.
+    expect(layout.model + 6 * 2 + ADD + trailing + 4 * 2).toBe(toolbar);
+    expect(layout.model).toBeGreaterThanOrEqual(48);
+    expect(layout.iconOnly).toBe(layout.model < MODEL_CHIP_LABEL_MIN * fontScale);
+  }
+});
+it("shows the model label on phones at default text and only the provider mark when the chip is short", () => {
+  const at = (toolbar: number, trailing: number, fontScale: number) =>
+    composerToolbarLayout({ toolbar, leading: ADD, trailing, fontScale }).iconOnly;
+  for (const width of [288, 328, 370, 398]) expect(at(width, MIC_SEND, 1)).toBe(false);
+  expect(at(288, MIC_STOP_SEND, 1)).toBe(true);
+  expect(at(328, MIC_STOP_SEND, 1)).toBe(false);
+  expect(at(288, MIC_SEND, 2)).toBe(true);
+  expect(at(328, MIC_SEND, 2)).toBe(true);
+  expect(at(370, MIC_SEND, 2)).toBe(false);
+  expect(at(398, MIC_SEND, 2)).toBe(false);
+  expect(at(398, MIC_STOP_SEND, 2)).toBe(true);
+});
+it("adds the status control only when the model keeps a touch target", () => {
+  const wide = composerToolbarLayout({ toolbar: 398, leading: ADD, trailing: MIC_STOP_SEND, status: true, fontScale: 1 });
+  expect(wide.showStatus).toBe(true);
+  expect(wide.model).toBe(398 - 12 - ADD - MIC_STOP_SEND - 8 - 52);
+  const narrow = composerToolbarLayout({ toolbar: 288, leading: ADD, trailing: MIC_STOP_SEND, status: true, fontScale: 1 });
+  expect(narrow.showStatus).toBe(false);
+  expect(narrow.model).toBeGreaterThanOrEqual(48);
+});
+it("handles unmeasured and invalid widths without negative space", () => {
+  for (const value of [0, NaN, -1, Infinity]) {
+    const layout = composerToolbarLayout({ toolbar: value, leading: value, trailing: value, status: true, fontScale: value });
+    expect(layout.model).toBeGreaterThanOrEqual(0);
+  }
 });
 
 it("places primary actions beside the editor when the measured controls cannot fit above Gboard", () => {

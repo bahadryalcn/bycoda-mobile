@@ -1,13 +1,10 @@
-import { cloneElement, isValidElement, type ReactElement } from "react";
-import { View } from "react-native";
-import { NavigationGroup, NavigationRow } from "@/ui/primitives";
-import { IconTile } from "@/ui/icon-tile";
-import { space } from "@/ui/tokens";
-import { useMobileTheme } from "@/ui/theme";
+import type { ReactElement } from "react";
+import { ActionList } from "@/ui/overflow-menu";
 
 export type SessionSheetAction = {
   key: string;
-  group?: "primary" | "secondary" | "state";
+  /** Desktop menu section; rows keep the order of the section's first appearance. */
+  group?: string;
   label: string;
   icon?: ReactElement<{ color?: string; size?: number }> | unknown;
   /** Why the action is unavailable, or what it does. */
@@ -20,44 +17,12 @@ export type SessionSheetAction = {
   onPress(): void;
 };
 
-/** Icon-tile command list for the session actions sheet; destructive items sit last in danger tone. */
+/** Session actions through the shared row options list; destructive items sit last in danger tone. */
 export function SessionActionList({ actions }: { actions: readonly SessionSheetAction[] }) {
-  const { colors, semanticColors } = useMobileTheme();
   return (
-    <View style={{ gap: space.sm }}>
-      {["primary", "secondary", "state", "danger"].map((key) => actions.filter(action =>
-        (action.destructive ? "danger" : action.group ?? "primary") === key,
-      )).filter(group => group.length).map((group, groupIndex) => (
-        <NavigationGroup key={groupIndex}>
-          {group.map((action, index) => (
-            <NavigationRow
-              key={action.key}
-              intent={action.opens ? "navigate" : "command"}
-              label={action.label}
-              compact
-              detail={action.detail}
-              detailLines={action.detail ? undefined : 0}
-              detailSelectable={false}
-              tone={action.destructive ? "danger" : undefined}
-              disabled={action.disabled}
-              busy={action.busy}
-              separator={index < group.length - 1}
-              onPress={action.onPress}
-              icon={
-                isValidElement<{ color?: string; size?: number; strokeWidth?: number }>(action.icon) ? (
-                  <IconTile>
-                    {cloneElement(action.icon, {
-                      size: 18,
-                      strokeWidth: 2,
-                      color: action.destructive ? semanticColors.danger.text : colors.muted,
-                    })}
-                  </IconTile>
-                ) : undefined
-              }
-            />
-          ))}
-        </NavigationGroup>
-      ))}
-    </View>
+    <ActionList
+      compact
+      actions={actions.map((action) => ({ ...action, icon: action.icon as ReactElement | undefined }))}
+    />
   );
 }

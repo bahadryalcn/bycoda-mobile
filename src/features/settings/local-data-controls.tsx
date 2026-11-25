@@ -3,11 +3,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import Animated from "react-native-reanimated";
+import { View } from "react-native";
 import ShieldOff from "lucide-react-native/icons/shield-off";
 import UserX from "lucide-react-native/icons/user-x";
 import Trash2 from "lucide-react-native/icons/trash";
-import type { ReactNode } from "react";
-import { IconTile } from "../../ui/icon-tile";
 import { useInfoHint } from "../../ui/info-hint";
 import { enterItem } from "../../ui/motion";
 import { space } from "../../ui/tokens";
@@ -22,6 +21,7 @@ import {
   Notice,
   ScreenList,
   SectionHeader,
+  SettingIcon,
   MutationState,
   NavigationGroup,
   NavigationRow,
@@ -40,27 +40,17 @@ import { clearMediaCache } from "@/ui/media-loader";
 import { reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { RecordCard } from "@/ui/record-card";
 import { useSheetGuard } from "@/ui/sheet-guard";
-import { useMobileTheme } from "../../ui/theme";
 
 type CleanupReview = { kind: "connections" | "drafts" | "consent"; machines: (ReviewedMachine & { name: string })[] };
 
-function tile(Glyph: typeof Trash2, color: string): ReactNode {
-  return (
-    <IconTile color={color}>
-      <Glyph size={18} strokeWidth={2} color={color} />
-    </IconTile>
-  );
-}
-
 export function LocalDataControls() {
-  const { colors } = useMobileTheme();
   const copy = useCopy();
   const state = useMachines();
   const deleteDraftsLabel = copy("Kaydedilmiş taslakları sil", "Delete saved drafts");
   const draftDeletionReason =
     state.machines.length > 0
       ? copy(
-          "Taslakları silmeden önce bilgisayar bağlantılarını kaldırın.",
+          "Taslakları silmeden önce bilgisayar bağlantılarını kaldır.",
           "Disconnect computers before deleting saved drafts.",
         )
       : undefined;
@@ -165,7 +155,7 @@ export function LocalDataControls() {
                     ) : "";
   const storageIssue = !state.hydrated || (state.connectionPending && !busy)
     ? <Skeleton label={copy("Kaydedilmiş bağlantılar yükleniyor…", "Loading saved connections…")} />
-    : state.storageError ? <StateView compact tone="warning" illustration="error" title={copy("Kaydedilmiş bağlantılar kullanılamıyor", "Saved connections are unavailable")} description={copy("Yeniden yüklemek için Bilgisayarlar’ı açın.", "Open Computers to reload them.")} action={{ label: copy("Bilgisayarlar", "Computers"), busy, onPress: () => requestCloseThen(() => router.navigate("/machines")) }} /> : null;
+    : state.storageError ? <StateView compact tone="warning" illustration="error" title={copy("Kaydedilmiş bağlantılar kullanılamıyor", "Saved connections are unavailable")} description={copy("Yeniden yüklemek için Bilgisayarlar’ı aç.", "Open Computers to reload them.")} action={{ label: copy("Bilgisayarlar", "Computers"), busy, onPress: () => requestCloseThen(() => router.navigate("/machines")) }} /> : null;
   const longReview = confirmation?.kind === "connections" && confirmation.machines.length > 6;
   const sectionHelp = copy(
     "Kayıtlı bilgisayarlar ve taslaklar yalnız bu telefonda tutulur. Telefondan kaldırmak bilgisayardaki cihaz iznini iptal etmez; telefon kaybolursa onu bilgisayardan ayrıca iptal et.",
@@ -173,33 +163,37 @@ export function LocalDataControls() {
   );
   const sectionInfo = useInfoHint(sectionHelp, "visible");
   const remainingComputers = confirmation?.machines.filter(machine => state.machines.some(current => current.id === machine.id)) ?? [];
-  const reviewIntro = <Stack>{storageIssue}<Body>{consequence}</Body>{stale ? <Notice tone="warning" message={copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden açın.", "Saved computers changed. Reopen this review to continue.")} /> : null}</Stack>;
+  const reviewIntro = <Stack>{storageIssue}<Body>{consequence}</Body>{stale ? <Notice tone="warning" message={copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden aç.", "Saved computers changed. Reopen this review to continue.")} /> : null}</Stack>;
   // Friendly identity only: internal computer and environment ids are never shown in this review.
   const computerRow = (item: CleanupReview["machines"][number]) => <RecordCard key={item.id} title={item.name} metadata={item.endpoint} />;
   return (
     <Stack style={{ gap: space.lg }}>
-      <SectionHeader flush title={copy("Bu telefondaki veriler", "Data on this phone")} trailing={sectionInfo.button} />
-      {sectionInfo.panel}
-      {!confirmation ? storageIssue : null}
-      <Animated.View entering={enterItem(0)}>
-        <NavigationGroup>
-          <NavigationRow
-            label={copy("Veri paylaşımı iznini geri çek", "Withdraw data sharing permission")}
-            icon={tile(ShieldOff, colors.warning)}
-            disabled={unavailable}
-            onPress={() => {
-              openReview("consent");
-            }}
-          />
-        </NavigationGroup>
-      </Animated.View>
+      <View style={{ gap: space.sm }}>
+        <SectionHeader title={copy("Bu telefondaki veriler", "Data on this phone")} trailing={sectionInfo.button} />
+        {sectionInfo.panel}
+        {!confirmation ? storageIssue : null}
+        <Animated.View entering={enterItem(0)}>
+          <NavigationGroup>
+            <NavigationRow
+              label={copy("Veri paylaşımı iznini geri çek", "Withdraw data sharing permission")}
+              intent="command"
+              icon={<SettingIcon glyph={ShieldOff} />}
+              disabled={unavailable}
+              onPress={() => {
+                openReview("consent");
+              }}
+            />
+          </NavigationGroup>
+        </Animated.View>
+      </View>
       <LocalDataCaches />
       <Animated.View entering={enterItem(1)} style={{ gap: space.sm }}>
         <NavigationGroup>
           <NavigationRow
             label={copy("Kaydedilmiş bilgisayarları kaldır", "Remove saved computers")}
             tone="danger"
-            icon={tile(UserX, colors.danger)}
+            intent="command"
+            icon={<SettingIcon glyph={UserX} tone="danger" />}
             disabled={unavailable || !state.machines.length}
             onPress={() => {
               openReview("connections");
@@ -209,7 +203,8 @@ export function LocalDataControls() {
             label={deleteDraftsLabel}
             accessibilityLabel={[deleteDraftsLabel, draftDeletionReason].filter(Boolean).join(". ")}
             tone="danger"
-            icon={tile(Trash2, colors.danger)}
+            intent="command"
+            icon={<SettingIcon glyph={Trash2} tone="danger" />}
             disabled={unavailable || state.machines.length > 0}
             onPress={() => {
               openReview("drafts");
@@ -228,8 +223,8 @@ export function LocalDataControls() {
             header={reviewIntro} renderItem={({ item }) => computerRow(item)} />
             : <Stack>{reviewIntro}{remainingComputers.map(computerRow)}</Stack> : <Body>{consequence}</Body>}
           {confirmation.kind !== "connections" ? storageIssue : null}
-          {confirmation.kind === "drafts" ? <Body muted>{copy("Bekleyen işlemler ve okunamayan mesaj taslakları kurtarma için saklanır. İncelemek için asıl bilgisayarı yeniden bağlayın.", "Pending operations and unreadable message drafts are kept for recovery. Reconnect the original computer to review them.")}</Body> : null}
-          {stale && confirmation.kind !== "connections" ? <Notice tone="warning" message={copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden açın.", "Saved computers changed. Reopen this review to continue.")} /> : null}
+          {confirmation.kind === "drafts" ? <Body muted>{copy("Bekleyen işlemler ve okunamayan mesaj taslakları kurtarma için saklanır. İncelemek için asıl bilgisayarı yeniden bağla.", "Pending operations and unreadable message drafts are kept for recovery. Reconnect the original computer to review them.")}</Body> : null}
+          {stale && confirmation.kind !== "connections" ? <Notice tone="warning" message={copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden aç.", "Saved computers changed. Reopen this review to continue.")} /> : null}
           <FormActions submitLabel={confirmation.kind === "consent"
                 ? copy("İzni geri çek", "Withdraw permission")
                 : confirmation.kind === "drafts"

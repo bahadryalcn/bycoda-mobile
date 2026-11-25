@@ -9,6 +9,7 @@ vi.mock("react-native", () => ({ Share: { share: vi.fn().mockResolvedValue({ act
 vi.mock("lucide-react-native/icons/share", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/link", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/copy", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/file-text", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/messages-square", () => ({ default: () => null }));
 vi.mock("@/state/actions", async () => {
   const { createSingleFlight } = await import("@/state/single-flight");
@@ -23,7 +24,7 @@ vi.mock("@/ui/use-clipboard-feedback", () => ({
   },
 }));
 vi.mock("./session-action-list", () => ({ SessionActionList: ({ actions }: { actions: SessionSheetAction[] }) => { state.actions = actions; return null; } }));
-import { SessionRowCopyMenu } from "./session-row-copy-menu";
+import { SessionRowCopyMenu, sessionMarkdownReference } from "./session-row-copy-menu";
 import { Share } from "react-native";
 
 let root: ReturnType<typeof createRoot> | undefined;
@@ -39,7 +40,7 @@ it("orders all groups and reads full conversation only on explicit copy", async 
     sessionId: "s", projectId: "p", title: "Title", link: "bycoda://session/v1/host/h/s", client: { request }, current: () => current, busy: false,
     actions: ["delete", "stop", "archive", "settle", "details", "pin", "rename"].map(key => ({ key, label: key, onPress() {} })),
   })));
-  expect(state.actions.map(action => action.key)).toEqual(["rename", "pin", "copy-link", "share", "copy-id", "copy-conversation", "details", "settle", "archive", "stop", "delete"]);
+  expect(state.actions.map(action => action.key)).toEqual(["settle", "pin", "rename", "copy-link", "copy-markdown", "copy-id", "copy-conversation", "share", "details", "archive", "stop", "delete"]);
   expect(request).not.toHaveBeenCalled();
   await act(async () => state.actions.find(action => action.key === "share")!.onPress());
   expect(Share.share).toHaveBeenCalledExactlyOnceWith({ title: "Title", message: "Title\nbycoda://session/v1/host/h/s" });
@@ -52,4 +53,10 @@ it("orders all groups and reads full conversation only on explicit copy", async 
   request.mockClear();
   await expect(state.prepare!()).rejects.toThrow("no longer available");
   expect(request).not.toHaveBeenCalled();
+});
+
+it("builds the desktop Markdown reference with an escaped title", () => {
+  expect(sessionMarkdownReference("Fix [bug] *now*", "bycoda://session/v1/host/h/s"))
+    .toBe("[Fix \\[bug\\] \\*now\\*](bycoda://session/v1/host/h/s)");
+  expect(sessionMarkdownReference("  ", "bycoda://x")).toBe("[Session](bycoda://x)");
 });

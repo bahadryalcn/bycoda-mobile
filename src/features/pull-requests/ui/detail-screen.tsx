@@ -3,12 +3,13 @@ import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { hostKey } from "@/state/queries";
-import { Screen, StateView } from "@/ui/primitives";
+import { Screen, Skeleton, StateView } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { ProviderInboxDetail } from "../../inbox/provider-detail";
-import { useProviderInboxAvailability } from "../../inbox/provider-queries";
+import { useInboxRead, useProviderInboxAvailability } from "../../inbox/provider-queries";
+import { providerInboxAccess } from "../../inbox/provider-model";
 import type { RemoteInboxItem, RemoteInboxList } from "../../../../../src/features/inbox/model/remoteInbox";
-import { matchPrItem, readPrRoute, type PrRouteTarget } from "../model/list";
+import { defaultPrFilters, matchPrItem, prListQuery, readPrRoute, type PrRouteTarget } from "../model/list";
 import { InboxLocalScopeContext } from "../../inbox/inbox-local-scope";
 import { useProjectList } from "../../workspace/use-project-directory";
 
@@ -21,6 +22,10 @@ export function PullRequestDetailScreen() {
   const scopeCurrent = machine?.id === params.machineId && (!projectId || projects.isProjectVisible(projectId));
   const verifiedMachine = scopeCurrent ? machine : null;
   const item = useCachedPrItem(verifiedMachine?.id ?? null, projectId, target);
+  // Deep link or cold start: nothing is cached yet, so run the list's own default read for this
+  // scope. Its result lands in the same list cache the row lookup above already watches.
+  const coldRead = !!verifiedMachine && !!target && !item && providerInboxAccess(availability).canRead;
+  const listRead = useInboxRead({ action: "list", input: { ...(projectId ? { projectId } : {}), query: prListQuery(defaultPrFilters) } }, coldRead);
   const title = copy("Pull request", "Pull request");
   const close = () => {
     if (router.canGoBack()) {
@@ -32,12 +37,18 @@ export function PullRequestDetailScreen() {
       router.replace("/");
     }
   };
+  if (coldRead && listRead.data === undefined && !listRead.error) return <>
+    <Stack.Screen options={{ title }} />
+    <Screen><Skeleton /></Screen>
+  </>;
   if (!verifiedMachine || !item) return <>
     <Stack.Screen options={{ title }} />
     <Screen>
       <StateView
-        illustration="unreachable"
+        size="region"
+        tone="warning"
         title={verifiedMachine ? copy("Pull request açılamadı", "Could not open pull request") : copy("Pull request erişimi kullanılamıyor", "Pull request access unavailable")}
+        description={verifiedMachine && target ? copy("Pull request listesinden aç.", "Open it from the pull request list.") : undefined}
         action={{
           label: router.canGoBack() ? copy("Geri dön", "Go back") : verifiedMachine ? copy("Pull request’ler", "Pull requests") : copy("Projeler", "Projects"),
           onPress: close,

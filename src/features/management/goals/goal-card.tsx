@@ -1,4 +1,5 @@
 import { RecordCard } from "@/ui/record-card";
+import { taskInstructionsSummary } from "../shared/task-brief";
 import { PlanSteps } from "@/ui/plan-steps";
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
@@ -9,7 +10,7 @@ import Square from "lucide-react-native/icons/square";
 import Trash2 from "lucide-react-native/icons/trash-2";
 import { View } from "react-native";
 import { space } from "@/ui/tokens";
-import { ActionMenu, Body, Button, ErrorNotice, IconButton, MutationState, Row } from "@/ui/primitives";
+import { Body, Button, IconButton, MutationState, Row } from "@/ui/primitives";
 import { joinMeta, RecordTrailing, useMenuGlyph, useRelativeTime } from "../shared/record-bits";
 import { useCopy } from "@/ui/copy";
 import { useActiveMachine } from "@/state/machines";
@@ -120,9 +121,10 @@ export function GoalCard({
         {active ? <IconButton label={copy("Epici durdur", "Cancel epic")} tone="danger" busy={cancelling} disabled={busy} onPress={stop}>
           <Square size={18} color={colors.danger} />
         </IconButton> : null}
-        <ActionMenu label={copy("Epic işlemleri", "Epic actions")}
-          busy={(!active && cancelling) || (remove.isPending && remove.variables?.goalId === goal.id)} actions={menu} />
       </RecordTrailing>}
+      actions={{ label: copy("Epic işlemleri", "Epic actions"),
+        busy: (!active && cancelling) || (remove.isPending && remove.variables?.goalId === goal.id), items: menu }}
+      issues={[goal.error, goal.planError]}
       footer={goal.status === "awaiting-approval" ? (
         <Button
           label={copy("Planı onayla", "Approve plan")}
@@ -161,15 +163,13 @@ export function GoalCard({
           <PlanSteps steps={goal.plan.tasks.map((task) => ({
             id: task.key,
             title: task.title,
-            description: task.prompt,
+            description: taskInstructionsSummary(task.prompt),
             metadata: [repeatsScope ? "" : task.project, task.dependsOn.length
               ? `${copy("Bağımlılıklar", "Depends on")}: ${task.dependsOn.join(", ")}` : ""].filter(Boolean).join(" · "),
           }))} />
         </View> : null}
       </>}
     >
-      <ErrorNotice error={goal.error} />
-      <ErrorNotice error={goal.planError} />
       {approve.variables?.goalId === goal.id ? <MutationState mutation={approve} /> : null}
       {cancel.variables?.goalId === goal.id ? <MutationState mutation={cancel} /> : null}
       {remove.variables?.goalId === goal.id ? <MutationState mutation={remove} /> : null}

@@ -1,12 +1,12 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useState } from "react";
 import { View } from "react-native";
-import ArrowLeft from "lucide-react-native/icons/arrow-left";
-import { Body, Button, IconButton, QueryState, Row } from "@/ui/primitives";
+import { Body, Button, QueryState, Row } from "@/ui/primitives";
 import { space, fontSize, lineHeight } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useDiffPreview } from "./use-diff-preview";
 import { useGitDiff } from "./git-queries";
+import { useProjectSubpage } from "./subpage-chrome";
 import type { GitDiffPanelProps } from "./git-types";
 import { GitDiffViewer } from "./git-diff-viewer";
 import { GitSelective } from "./git-selective";
@@ -23,8 +23,9 @@ export function GitDiffPanel({
   onReviewExit,
   children,
 }: GitDiffPanelProps) {
-  const { colors, uiStyles } = useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
+  useProjectSubpage(copy("Dosya farkı", "File diff"), onBack);
   const diff = useGitDiff(scope, selection);
   const [selecting, setSelecting] = useState(false);
   const textDiff = diff.data && !diff.data.binary && !diff.data.tooLarge ? diff.data : undefined;
@@ -32,13 +33,6 @@ export function GitDiffPanel({
   return (
       <View style={uiStyles.stack}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-          <IconButton
-            label={copy("Değişikliklere dön", "Back to changes")}
-            onPress={onBack}
-            disabled={busy}
-          >
-            <ArrowLeft size={18} color={colors.muted} />
-          </IconButton>
           <Body
             mono
             selectable={false}

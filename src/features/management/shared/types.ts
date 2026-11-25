@@ -4,6 +4,7 @@ export type AgentDraft = Pick<
   "harness" | "model" | "runtimeMode" | "maxRunMinutes" | "modelSettings" | "providerAccountId"
 >;
 export type AgentFieldsProps = {
+  part?: "settings";
   value: AgentDraft;
   onChange: (value: AgentDraft) => void;
   projectId?: string | null;
@@ -11,7 +12,11 @@ export type AgentFieldsProps = {
   onValidityChange?: (valid: boolean) => void;
   showRunLimit?: boolean;
 };
-export type ScopeProps = { allowAll?: boolean; projectId: string | null; onChange: (id: string | null) => void };
+export type ScopeProps = {
+  allowAll?: boolean;
+  projectId: string | null;
+  onChange: (id: string | null) => void;
+};
 export type ScopeChooser = { search: string } | null;
 export type StatusProps = { value: string };
 export type ManagementScreenProps = { section: string; initialProjectId?: string | null };

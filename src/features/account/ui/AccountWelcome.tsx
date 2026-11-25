@@ -17,7 +17,7 @@ export function AccountWelcome({ unavailable = false }: { unavailable?: boolean 
   const [step, setStep] = useState<SignInStep>("choose");
   return <>
     <OnboardingShell hidePages={step === "code"} pages={[
-      { key: "control", art: "guideWalk", title: copy("Agentların cebinde", "Your agents, in your pocket"),
+      { key: "control", art: "guideWalk", title: copy("Ajanların cebinde", "Your agents, in your pocket"),
         body: copy("Bilgisayarındaki oturumları telefondan başlat ve izle.", "Start and follow the sessions on your computer from your phone.") },
       { key: "respond", art: "serene", lightArt: "wave", title: copy("Hiçbir soruyu bekletme", "Never keep a question waiting"),
         body: copy("Onaylar ve sorular anında telefonuna gelir.", "Approvals and questions reach your phone right away.") },

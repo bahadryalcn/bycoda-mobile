@@ -43,7 +43,7 @@ vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => h("div", null, children);
   const Button = ({ label, onPress, disabled, busy }: any) => { state.actions.set(label, onPress); return h("button", { disabled: disabled || busy, onClick: onPress }, label); };
   return { Body: Wrapper, Row: Wrapper, Notice: ({ message }: any) => h("p", null, message), StateView: ({ title }: any) => h("p", null, title), Badge: ({ label }: any) => h("span", null, label), Button, IconButton: Button, ErrorText: () => null,
-    Sheet: ({ visible, title, children, footer }: any) => visible ? h("section", { "aria-label": title }, children, footer) : null,
+    Sheet: ({ visible, title, children, footer, onClose }: any) => visible ? h("section", { "aria-label": title }, h(Button, { label: "Close", onPress: onClose }), children, footer) : null,
     FormActions: ({ submitLabel, onSubmit, cancelLabel, onCancel, cancelDisabled }: any) => h("div", null, h(Button, { label: submitLabel, onPress: onSubmit }), onCancel ? h(Button, { label: cancelLabel, onPress: onCancel, disabled: cancelDisabled }) : null),
     SearchField: ({ label, value, onChangeText }: any) => { state.search = onChangeText; return h("input", { "aria-label": label, value, onChange: (event: any) => onChangeText(event.target.value) }); },
     SelectField: ({ label, value, onChange, options }: any) => { state.filters.set(label, onChange); return h("select", { "aria-label": label, value, onChange: (event: any) => onChange(event.target.value) }, options.map((option: any) => h("option", { key: option.value, value: option.value }, option.label))); },

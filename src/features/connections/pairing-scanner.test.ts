@@ -5,7 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const fixture = vi.hoisted(() => ({ permission: { granted: true, canAskAgain: true, status: "granted" } as { granted: boolean; canAskAgain: boolean; status: string } | null,
   refresh: vi.fn(), request: vi.fn(), focused: true, unlocked: true, camera: null as null | { onBarcodeScanned?: (result: {data: string}) => void; onMountError: () => void },
-  listeners: new Map<string, Set<(state: string) => void>>(), close: vi.fn(), paste: vi.fn(), code: vi.fn(), settings: vi.fn() }));
+  listeners: new Map<string, Set<(state: string) => void>>(), close: vi.fn(), paste: vi.fn(), code: vi.fn(), settings: vi.fn(),
+  options: {} as Record<string, unknown>, edgeBack: null as null | (() => void) }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/info-hint", () => ({ HintLabel: ({label}: {label: string}) => createElement("p", null, label) }));
@@ -13,7 +14,8 @@ vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
 vi.mock("@/ui/tokens", () => ({ colors: {}, radii: {}, space: {}, metrics: { entryWidth: 440 } }));
 vi.mock("@/state/security", () => ({ useSecurity: (selector: (value: unknown) => unknown) => selector({ status: fixture.unlocked ? "unlocked" : "locked" }) }));
 vi.mock("expo-router/react-navigation", () => ({ useIsFocused: () => fixture.focused }));
-vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
+vi.mock("expo-router", () => ({ Stack: { Screen: (props: { options: Record<string, unknown> }) => { fixture.options = props.options; return null; } } }));
+vi.mock("@/ui/in-screen-back", () => ({ InScreenBack: ({ active, onBack }: { active: boolean; onBack: () => void }) => { fixture.edgeBack = active ? onBack : null; return null; } }));
 vi.mock("lucide-react-native/icons/chevron-left", () => ({ default: () => null }));
 vi.mock("react-native-reanimated", () => ({ default: { View: ({children}: PropsWithChildren) => createElement("div", null, children) } }));
 vi.mock("react-native", () => ({
@@ -61,6 +63,21 @@ it("replaces initial camera loading with actionable permission-read recovery",as
  fixture.permission=null;fixture.refresh.mockRejectedValueOnce(new Error("Permission read failed"));await render();await settle();
  expect(container.textContent).toContain("Permission read failed");expect(container.textContent).not.toContain("Preparing camera…");
  fixture.permission={granted:true,canAskAgain:true,status:"granted"};await click("Retry");await settle();expect(fixture.refresh).toHaveBeenCalledTimes(2);expect(fixture.request).not.toHaveBeenCalled();
+});
+it("ends a permission read that never answers with the retry state, keeping paste usable",async()=>{
+ vi.useFakeTimers();
+ try{
+  fixture.permission=null;fixture.refresh.mockImplementationOnce(()=>new Promise(()=>undefined));await render();
+  expect(container.textContent).toContain("Preparing camera…");
+  await act(async()=>{await vi.advanceTimersByTimeAsync(8_000);});
+  expect(container.textContent).not.toContain("Preparing camera…");expect(container.textContent).toContain("timed out");
+  expect([...container.querySelectorAll("button")].map(b=>b.textContent)).toEqual(expect.arrayContaining(["Retry","Paste pairing code"]));
+ }finally{vi.useRealTimers();}
+});
+it("maps swipe-back to the pairing choices instead of leaving Computers",async()=>{
+ await render();await settle();
+ expect(fixture.options.gestureEnabled).toBe(false);
+ await act(async()=>fixture.edgeBack!());expect(fixture.close).toHaveBeenCalledOnce();
 });
 it.each(["back","paste","blur"])("ignores an already-delivered barcode handler after %s",async reason=>{
  await render();await settle();const old=fixture.camera!.onBarcodeScanned!;

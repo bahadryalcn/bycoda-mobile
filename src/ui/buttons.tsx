@@ -117,6 +117,8 @@ export function ChoiceChip({ label, selected, accessibilityLabel, onPress, disab
       aria-disabled={off}
       variant={variant}
       size={density === "compact" ? "md" : "xl"}
+      className="h-auto py-ui-xxs"
+      labelClassName="min-w-0 shrink"
       selected={selected}
       disabled={off}
       hitSlop={hitSlopFor(density === "compact" ? metrics.chipHeight : metrics.buttonHeight)}
@@ -124,7 +126,11 @@ export function ChoiceChip({ label, selected, accessibilityLabel, onPress, disab
         haptic.select();
         onPress();
       }}
-      style={[{ maxWidth: "100%", flexShrink: 1 }, fullWidth && { alignSelf: "stretch", justifyContent: "center" }, style]}
+      style={[
+        { maxWidth: "100%", flexShrink: 1, minHeight: density === "compact" ? metrics.chipHeight : metrics.buttonHeight },
+        fullWidth && { alignSelf: "stretch", justifyContent: "center" },
+        style,
+      ]}
       start={selected ? <Check size={14} strokeWidth={2.4} /> : undefined}
     >
       {label}

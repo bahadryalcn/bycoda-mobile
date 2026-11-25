@@ -31,11 +31,18 @@ vi.mock("@/ui/confirm", () => ({
   },
 }));
 vi.mock("expo-router", () => ({ router: { navigate: navigation.push } }));
-vi.mock("@/ui/record-card", () => ({
-  RecordCard: ({ title, status, metadata, children, footer, menu }: PropsWithChildren<{
-    title: string; status: import("react").ReactNode; metadata: string; footer: import("react").ReactNode; menu: import("react").ReactNode;
-  }>) => createElement("section", null, title, createElement("span", { "data-card-status": true }, status), metadata, children, footer, menu),
-}));
+vi.mock("lucide-react-native/icons/play", () => ({ default: () => null }));
+vi.mock("@/ui/record-card", async () => {
+  const { ActionMenu } = await import("@/ui/primitives");
+  return {
+    RecordCard: ({ title, status, metadata, children, footer, menu, actions, issues }: PropsWithChildren<{
+      title: string; status: import("react").ReactNode; metadata: string; footer: import("react").ReactNode; menu: import("react").ReactNode;
+      actions?: { items: unknown[] }; issues?: unknown[];
+    }>) => createElement("section", null, title, createElement("span", { "data-card-status": true }, status), metadata,
+      ...(issues ?? []).filter(Boolean).map((issue, index) => createElement("p", { key: `issue-${index}`, role: "alert" }, String(issue))),
+      children, footer, menu, actions ? createElement(ActionMenu as never, { actions: actions.items }) : null),
+  };
+});
 vi.mock("../shared/format", () => ({ stamp: (value: number) => String(value) }));
 vi.mock("../shared/status", () => ({ Status: ({ value }: { value: string }) => createElement("span", null, value) }));
 vi.mock("@/ui/primitives", () => {
@@ -45,7 +52,7 @@ vi.mock("@/ui/primitives", () => {
     ScreenList: ({ data, header, renderItem }: { data: HostAutomationRun[]; header: import("react").ReactNode; renderItem: (entry: { item: HostAutomationRun }) => import("react").ReactNode }) => createElement("div", null, header, data.map(item => createElement("div", { key: item.id }, renderItem({ item })))),
     ActionMenu: ({ actions }: { actions: Array<{ key: string; label: string; onPress: () => void } | false> }) =>
       actions.map(action => action && createElement("button", { key: action.key, onClick: action.onPress }, action.label)),
-    IconButton: () => null, MutationState: () => null,
+    IconButton: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label), MutationState: () => null,
     ErrorNotice: ({ error }: { error?: string }) => error ? createElement("p", { role: "alert" }, error) : null,
     ErrorText: ({ error }: { error?: string }) => error ? createElement("p", { role: "alert" }, error) : null,
     QueryState: ({ query: result }: { query: typeof query }) => result.error

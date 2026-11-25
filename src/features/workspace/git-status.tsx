@@ -11,7 +11,6 @@ import GitBranch from "lucide-react-native/icons/git-branch";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import {
   ActionMenu,
-  Badge,
   Body,
   Button,
   Card,
@@ -19,6 +18,8 @@ import {
   MutationState,
   PressableCard,
   Row,
+  RowIcon,
+  SectionHeader,
 } from "@/ui/primitives";
 import { pullRequestStateLabel } from "./git-link-pr-model";
 import { PullRequestStateBadge } from "./pull-request-state-badge";
@@ -32,6 +33,7 @@ import type {
   GitHeaderProps,
   GitOperationPanelProps,
 } from "./git-types";
+import { latestGitAction } from "./git-action-feedback-model";
 
 /** One compact branch row; tapping it opens the git actions sheet. */
 export function GitHeader({
@@ -61,7 +63,7 @@ export function GitHeader({
           marginHorizontal: 0, borderRadius: radii.control, backgroundColor: colors.raised,
         }}
       >
-        <GitBranch size={18} strokeWidth={2} color={colors.muted} />
+        <RowIcon glyph={GitBranch} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text numberOfLines={1} ellipsizeMode="middle" style={[uiStyles.label, { fontWeight: "700" }]}>{name}</Text>
           <GitSyncSummary index={index} />
@@ -106,26 +108,14 @@ export function GitActionFeedback({
 }: GitActionFeedbackProps) {
   useMobileTheme();
   const copy = useCopy();
-  return (
-    <>
-      <MutationState
-        mutation={action}
-        success={copy("Git işlemi tamamlandı.", "Git action completed.")}
-      />
-      <MutationState
-        mutation={extended}
-        success={copy("Çalışma klasörü güncellendi.", "Working folder updated.")}
-      />
-      <MutationState
-        mutation={createBranch}
-        success={copy("Dal oluşturuldu.", "Branch created.")}
-      />
-      <MutationState
-        mutation={switchBranch}
-        success={copy("Dal değiştirildi.", "Branch changed.")}
-      />
-    </>
-  );
+  const latest = latestGitAction([
+    { key: "action", mutation: action, success: copy("Git işlemi tamamlandı.", "Git action completed.") },
+    { key: "extended", mutation: extended, success: copy("Çalışma klasörü güncellendi.", "Working folder updated.") },
+    { key: "createBranch", mutation: createBranch, success: copy("Dal oluşturuldu.", "Branch created.") },
+    { key: "switchBranch", mutation: switchBranch, success: copy("Dal değiştirildi.", "Branch changed.") },
+  ]);
+  // One feedback owner for the Git action area: only the most recent action reports.
+  return latest ? <MutationState key={latest.key} mutation={latest.mutation} success={latest.success} /> : null;
 }
 
 export function GitOperationPanel({
@@ -184,10 +174,7 @@ export function GitConflictsPanel({
   const shown = expanded ? files : files.slice(0, CONFLICT_PREVIEW);
   return (
     <Card>
-      <Row>
-        <Heading>{copy("Çakışmalar", "Conflicts")}</Heading>
-        <Badge label={numbers.format(files.length)} tone="danger" />
-      </Row>
+      <SectionHeader flush title={copy("Çakışmalar", "Conflicts")} count={files.length} />
       <Body muted>
         {copy(
           "Commit öncesinde bu dosyalardaki çakışmaları çöz. Bir tarafı seçmek diğer tarafın değişikliklerini bırakır.",
@@ -200,7 +187,7 @@ export function GitConflictsPanel({
         return (
           <View key={file.relative} style={{ flexDirection: "row", alignItems: "center", gap: space.row, minHeight: 48 }}>
             <View style={[uiStyles.grow, { gap: space.xxs }]}>
-              <Body numberOfLines={2} ellipsizeMode="middle" style={{ fontWeight: "600" }}>
+              <Body numberOfLines={2} ellipsizeMode="middle" style={uiStyles.label}>
                 {normalized.slice(cut + 1)}
               </Body>
               {cut > 0 ? (
@@ -209,7 +196,6 @@ export function GitConflictsPanel({
                 </Body>
               ) : null}
             </View>
-            <Badge label={copy("Çakışma", "Conflict")} tone="danger" />
             <ActionMenu
               label={file.relative}
               busy={busy}

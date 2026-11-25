@@ -5,8 +5,8 @@ export const assistantVoiceRequested = (value: string | string[] | undefined) =>
 
 export function assistantOrbState(phase: AssistantCallPhase | "starting", muted: boolean, error: unknown): AssistantOrbState {
   if (error) return "error";
-  if (muted || phase === "muted") return "muted";
   if (phase === "starting" || phase === "sending") return "thinking";
+  if (phase === "listening" && muted) return "muted";
   return phase;
 }
 

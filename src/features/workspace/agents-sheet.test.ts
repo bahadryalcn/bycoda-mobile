@@ -25,15 +25,16 @@ vi.mock("react-native", () => ({
 vi.mock("lucide-react-native/icons/chevron-right", () => ({ default: () => null }));
 vi.mock("@/ui/agent-avatar", () => ({ AgentAvatar: () => null }));
 vi.mock("@/ui/typography", () => ({ Body: ({ children }: { children?: ReactNode }) => h("p", null, children) }));
-vi.mock("@/ui/feedback", () => ({ Badge: ({ label }: { label: string }) => h("span", null, label) }));
+vi.mock("@/ui/feedback", () => ({ Badge: ({ label }: { label: string }) => h("span", null, label), StatusText: ({ label }: { label: string }) => h("span", null, label) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
 vi.mock("@/ui/chat-controls", () => ({ ChatToolbarAction: ({ label, onPress }: { label: string; onPress: () => void }) => h("button", { onClick: onPress }, label) }));
 vi.mock("@/ui/primitives", () => ({
   Sheet: ({ title, headerAction, children }: { title: string; headerAction?: ReactNode; children?: ReactNode }) => h("section", null, h("h1", null, title), headerAction, children),
-  PressableCard: ({ label, onPress, children }: { label: string; onPress: () => void; children?: ReactNode }) => {
-    if (label.startsWith("Child session")) fixture.childTap = onPress;
-    return h("button", { "aria-label": label, onClick: onPress }, children);
+  NavigationRow: ({ label, accessibilityLabel, detail, metadata, trailing, onPress }: { label: string; accessibilityLabel?: string; detail?: string; metadata?: string; trailing?: ReactNode; onPress: () => void }) => {
+    const spoken = accessibilityLabel ?? label;
+    if (spoken.startsWith("Child session")) fixture.childTap = onPress;
+    return h("button", { "aria-label": spoken, onClick: onPress }, label, detail, metadata, trailing);
   },
   Empty: ({ title }: { title: string }) => h("p", null, title),
   StateView: ({ title }: { title: string }) => h("p", null, title),

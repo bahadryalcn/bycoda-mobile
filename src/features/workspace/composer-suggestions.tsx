@@ -1,71 +1,114 @@
-import { useMobileTheme } from "@/ui/theme";
-import { useEffect, useRef, useState } from "react";
-import { FlatList, View, useWindowDimensions } from "react-native";
-import { Item } from "panelui-native/components/item";
-import { Body, Button, ErrorText, Loading, Row } from "@/ui/primitives";
-import { radii, space } from "@/ui/tokens";
+import { useEffect, useRef, type ComponentType, type ComponentRef } from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
+import AtSign from "lucide-react-native/icons/at-sign";
+import Bot from "lucide-react-native/icons/bot";
+import File from "lucide-react-native/icons/file";
+import Folder from "lucide-react-native/icons/folder";
+import GitPullRequest from "lucide-react-native/icons/git-pull-request";
+import ListChecks from "lucide-react-native/icons/list-checks";
+import Notebook from "lucide-react-native/icons/notebook";
+import Server from "lucide-react-native/icons/server";
+import Sparkles from "lucide-react-native/icons/sparkles";
+import Terminal from "lucide-react-native/icons/terminal";
+import Users from "lucide-react-native/icons/users";
+import { Body, Button, ErrorText, Loading, NavigationGroup, NavigationRow, RowIcon, SectionHeader } from "@/ui/primitives";
+import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
-import type { ComposerSuggestion } from "./use-composer-catalog";
+import { useMobileTheme } from "@/ui/theme";
 import { useKeyCommand } from "../../../modules/bycoda-key-commands";
-import { movePaletteSelection } from "@/features/keyboard/keyboard-model";
+import type { ComposerGroup, ComposerSuggestion } from "./composer-catalog-model";
 
-export function ComposerSuggestions({ items, loading, error, trigger, selected: inputSelected, keyboardActive = false, onPick, onRetry, onClose, maximumHeight, compact }: { keyboardActive?: boolean; maximumHeight: number; compact: boolean; items: ComposerSuggestion[]; loading: boolean; error: unknown; trigger: string; selected: number; onPick: (item: ComposerSuggestion) => void; onRetry: () => void; onClose: () => void }) {
-  const { colors, uiStyles } = useMobileTheme();
+const glyphs: Record<ComposerSuggestion["kind"], ComponentType<{ size?: number; color?: string; strokeWidth?: number }>> = {
+  source: AtSign, file: File, folder: Folder, issue: ListChecks, pr: GitPullRequest,
+  crew: Users, agent: Bot, note: Notebook, server: Server, skill: Sparkles, command: Terminal, template: Notebook,
+};
+
+type Props = {
+  keyboardActive?: boolean;
+  maximumHeight: number;
+  items: ComposerSuggestion[];
+  loading: boolean;
+  error: unknown;
+  trigger: string;
+  query?: string;
+  selected?: string;
+  onMove: (direction: -1 | 1) => void;
+  onPick: (item: ComposerSuggestion) => void;
+  onRetry: () => void;
+  onClose: () => void;
+};
+
+export function ComposerSuggestions({
+  items, loading, error, trigger, query, selected, keyboardActive = false, onMove, onPick, onRetry, onClose, maximumHeight,
+}: Props) {
+  const { colors } = useMobileTheme();
   const copy = useCopy();
-  const [hardwareSelection, setHardwareSelection] = useState<{ items: ComposerSuggestion[]; index: number } | null>(null);
-  const selected = hardwareSelection?.items === items ? hardwareSelection.index : inputSelected;
-  const move = (direction: -1 | 1) => setHardwareSelection({ items, index: movePaletteSelection(selected, items.length, direction) });
-  const choose = () => { const item = items[Math.max(0, selected)]; if (item) onPick(item); };
-  const canNavigate = keyboardActive && items.length > 0;
-  const highlighted = items[selected];
-  useKeyCommand({ key: "ArrowDown", title: copy("Sonraki sonuç", "Next result"), enabled: canNavigate, priority: 20, textInput: true }, () => move(1));
-  useKeyCommand({ key: "ArrowUp", title: copy("Önceki sonuç", "Previous result"), enabled: canNavigate, priority: 20, textInput: true }, () => move(-1));
+  const first = items.find((item) => !item.unavailable);
+  const highlighted = items.find((item) => item.id === selected && !item.unavailable);
+  const canNavigate = keyboardActive && !!first;
+  useKeyCommand({ key: "ArrowDown", title: copy("Sonraki sonuç", "Next result"), enabled: canNavigate, priority: 20, textInput: true }, () => onMove(1));
+  useKeyCommand({ key: "ArrowUp", title: copy("Önceki sonuç", "Previous result"), enabled: canNavigate, priority: 20, textInput: true }, () => onMove(-1));
   useKeyCommand({ key: "Enter", title: copy("Seç", "Select"), enabled: canNavigate && !!highlighted, priority: 20, textInput: true }, () => { if (highlighted) onPick(highlighted); });
-  useKeyCommand({ key: "Tab", title: copy("Seç", "Select"), enabled: canNavigate, priority: 20, textInput: true }, choose);
+  useKeyCommand({ key: "Tab", title: copy("Seç", "Select"), enabled: canNavigate, priority: 20, textInput: true }, () => { if (highlighted ?? first) onPick((highlighted ?? first)!); });
   useKeyCommand({ key: "Escape", title: copy("Kapat", "Close"), enabled: keyboardActive, priority: 20, textInput: true }, onClose);
-  const { fontScale } = useWindowDimensions();
-  const list = useRef<FlatList<ComposerSuggestion>>(null);
-  const revealRetried = useRef(false);
-  const revealTarget = useRef({ selected, count: items.length });
-  revealTarget.current = { selected, count: items.length };
-  const title = trigger === "@" ? copy("Proje dosyaları", "Project files") : trigger === "$" ? copy("Beceriler", "Skills") : copy("Komutlar", "Commands");
+  const list = useRef<ComponentRef<typeof ScrollView>>(null);
+  const position = useRef(new Map<string, number>());
+  useEffect(() => { list.current?.scrollTo({ y: 0, animated: false }); }, [query, trigger]);
   useEffect(() => {
-    revealRetried.current = false;
-    if (selected >= 0 && selected < items.length)
-      list.current?.scrollToIndex({ index: selected, animated: false, viewPosition: 0 });
-  }, [selected, items, maximumHeight, compact, fontScale]);
-  return <View style={{ maxHeight: maximumHeight, minHeight: 0, flexShrink: 1, backgroundColor: colors.raised, borderRadius: radii.control, padding: compact ? space.xs : space.sm, gap: space.xs }}>
-    {!compact ? <Row style={{ justifyContent: "space-between" }}><Body muted style={uiStyles.caption}>{title}</Body><Button tone="quiet" density="compact" label={copy("Kapat", "Close")} onPress={onClose} /></Row> : null}
-    <FlatList ref={list} data={items} keyExtractor={(item) => item.id}
-      accessibilityLabel={title}
-      style={{ minHeight: 0, flexShrink: 1 }}
-      ListHeaderComponent={<View style={{gap:space.xs}}>
-        {loading && !error ? <Loading /> : null}<ErrorText error={error} />{error ? <Button label={copy("Yeniden dene", "Retry")} busy={loading} onPress={onRetry} /> : null}
-        {!loading && !error && !items.length ? <Body muted>{copy("Eşleşme yok", "No matches")}</Body> : null}
-      </View>}
-      keyboardShouldPersistTaps="always"
-      onScrollToIndexFailed={({ index, averageItemLength }) => {
-        list.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
-        if (!revealRetried.current) {
-          revealRetried.current = true;
-          requestAnimationFrame(() => {
-            if (revealTarget.current.selected === index && index < revealTarget.current.count)
-              list.current?.scrollToIndex({ index, animated: false, viewPosition: 0 });
-          });
-        }
-      }}
-      renderItem={({ item, index }) => {
-        const path = trigger === "@" ? item.name.replaceAll("\\", "/") : null;
-        const label = path ? path.slice(path.lastIndexOf("/") + 1) : `${trigger}${item.name}`;
-        const detail = path && path.includes("/") ? path : item.detail;
-        return <Item size="sm" variant={index === selected ? "muted" : "default"} className="min-h-12 gap-1"
-          accessibilityLabel={[`${trigger}${item.name}`, item.detail].filter(Boolean).join(". ")}
-          aria-selected={index === selected} onPress={() => onPick(item)}>
-          <Item.Content>
-            <Item.Title numberOfLines={2}>{label}</Item.Title>
-            {detail ? <Item.Description numberOfLines={2} ellipsizeMode="middle">{detail}</Item.Description> : null}
-          </Item.Content>
-        </Item>;
-      }} />
-  </View>;
+    if (selected && position.current.has(selected))
+      list.current?.scrollTo({ y: position.current.get(selected), animated: false });
+  }, [selected]);
+  const titles: Record<ComposerGroup, string> = {
+    sources: copy("Kaynaklar", "Sources"),
+    files: copy("Proje dosyaları", "Project files"),
+    issues: copy("Sorunlar", "Issues"),
+    pulls: copy("Pull request’ler", "Pull requests"),
+    crews: copy("Ekipler", "Crews"),
+    agents: copy("Ajanlar", "Agents"),
+    notes: copy("Notlar", "Notes"),
+    servers: copy("Sunucular", "Servers"),
+    commands: copy("Komutlar ve beceriler", "Commands and skills"),
+    skills: copy("Beceriler", "Skills"),
+    groups: copy("Beceri grupları", "Skill groups"),
+    templates: copy("Şablonlar", "Templates"),
+  };
+  const label = trigger === "@" ? copy("Bahsetmeler", "Mentions") : trigger === "$" ? titles.skills : titles.commands;
+
+  // The composer frame is already a ScrollView. This bounded collection avoids
+  // nesting a VirtualizedList under it, including when the keyboard is closed.
+  return (
+    <ScrollView ref={list} accessibilityLabel={label} onAccessibilityEscape={onClose}
+      style={{ maxHeight: maximumHeight, minHeight: 0, flexGrow: 0, flexShrink: 1, backgroundColor: colors.background,
+        borderTopColor: colors.separator, borderTopWidth: StyleSheet.hairlineWidth }}
+      keyboardShouldPersistTaps="always" nestedScrollEnabled scrollsToTop={false}
+      contentContainerStyle={{ paddingBottom: space.xs }}>
+      <NavigationGroup>
+        {items.map((item, index) => {
+          const group = item.group ?? "files";
+          const startsGroup = index === 0 || group !== (items[index - 1]?.group ?? "files");
+          const path = (item.kind === "file" || item.kind === "folder") ? item.path : undefined;
+          const leaf = path?.replace(/\/$/, "").split("/").at(-1);
+          const title = leaf ?? (item.kind === "skill" || item.kind === "command" ? `${trigger}${item.name}` : item.name);
+          const detail = [path?.includes("/") && path !== leaf ? path : item.detail, item.unavailable].filter(Boolean).join("\n");
+          return <View key={item.id} onLayout={(event) => { position.current.set(item.id, event.nativeEvent.layout.y); }}>
+            {startsGroup ? <SectionHeader title={titles[group]} /> : null}
+            <NavigationRow
+              label={title} detail={detail} detailLines={item.unavailable ? 0 : 3} detailSelectable={false}
+              icon={<RowIcon glyph={glyphs[item.kind]} />}
+              intent="select" selected={item.id === selected} disabled={!!item.unavailable} separator={false}
+              onPress={() => onPick(item)}
+            />
+          </View>;
+        })}
+      </NavigationGroup>
+      {loading || !!error || !items.length ? (
+        <View style={{ paddingHorizontal: space.sm, paddingVertical: space.xs, gap: space.xs }}>
+          {loading ? <Loading /> : null}
+          <ErrorText error={error} />
+          {error ? <Button label={copy("Yeniden dene", "Retry")} busy={loading} onPress={onRetry} /> : null}
+          {!loading && !error && !items.length ? <Body muted>{copy("Eşleşme yok", "No matches")}</Body> : null}
+        </View>
+      ) : null}
+    </ScrollView>
+  );
 }

@@ -43,7 +43,7 @@ import {
   GitHeader,
   GitOperationPanel,
 } from "./git-status";
-import { GroupedListRow, rowInset } from "./shared";
+import { GroupedListRow } from "./shared";
 import { gitReducer, initialGitState, type GitConfirmation } from "./workspace-state";
 import type { GitFileAction, GitScope, ProjectGitProps } from "./git-types";
 import { gitListRows, type GitChangeGroup, type GitListFilter, type GitListRow } from "./git-list-model";
@@ -98,6 +98,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
   const managementExit = useRef<(() => void) | null>(null);
   const [stashWrite, setStashWrite] = useState<{ scope: string; busy: boolean } | null>(null);
   const stashExit = useRef<(() => void) | null>(null);
+  const historyExit = useRef<(() => void) | null>(null);
   const stashScope = JSON.stringify([machine?.id, projectId, cwd, root]);
   const draftKey = "bycoda.mobile.git-draft.v1:" + JSON.stringify([machine?.id, projectId, cwd]);
   const draft = useLocalDraft<GitDraft>(draftKey, decodeDraft, encodeDraft);
@@ -144,7 +145,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
   const inSubview = !!selection || historyOpen || stashesOpen || managementOpen || !!conflictReview;
   // Leaves the innermost in-screen sub-view; false when the list itself is showing.
   const exitSubview = () => {
-    if (historyOpen) setHistoryOpen(false);
+    if (historyOpen) { if (historyExit.current) historyExit.current(); else setHistoryOpen(false); }
     else if (stashesOpen) stashExit.current?.();
     else if (managementOpen) managementExit.current?.();
     else if (gitReviewExit.current) gitReviewExit.current();
@@ -291,7 +292,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
     [data?.files, fileQuery, fileFilter, selection, collapsed],
   );
   if (historyOpen && root)
-    return <>{edge}<GitHistoryPanel key={JSON.stringify([machine?.id, projectId, cwd, root])} scope={scope} onClose={() => setHistoryOpen(false)} /></>;
+    return <>{edge}<GitHistoryPanel key={JSON.stringify([machine?.id, projectId, cwd, root])} scope={scope} onClose={() => setHistoryOpen(false)} registerExit={(exit) => { historyExit.current = exit; }} /></>;
   if (stashesOpen && root)
     return <>{edge}<GitStashes key={stashScope} scope={scope} onClose={() => setStashesOpen(false)}
       onBusyChange={(value) => setStashWrite((current) => !value && current?.scope !== stashScope ? current : { scope: stashScope, busy: value })}
@@ -346,15 +347,17 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
         query={index}
         header={
           <View style={uiStyles.stack}>
-            <GitHeader
-              index={data}
-              busy={busy || !draft.ready}
-              refreshing={index.isFetching}
-              onRefresh={() => { void index.refetch(); }}
-              onToggleBranches={showBranches}
-              linkedPr={prLink.linked}
-              onOpenActions={() => setMenuOpen(true)}
-            />
+            {!selection ? (
+              <GitHeader
+                index={data}
+                busy={busy || !draft.ready}
+                refreshing={index.isFetching}
+                onRefresh={() => { void index.refetch(); }}
+                onToggleBranches={showBranches}
+                linkedPr={prLink.linked}
+                onOpenActions={() => setMenuOpen(true)}
+              />
+            ) : null}
             {draftStatus}
             {index.error ? <QueryState query={index} loading="none" /> : null}
             {!state.confirmation && !branchPicker ? feedback : null}
@@ -494,7 +497,6 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
             <GroupedListRow
               first={index === 0 || rows[index - 1]?.kind === "group"}
               last={index === rows.length - 1 || rows[index + 1]?.kind === "group"}
-              inset={rowInset}
             >
               <GitFileSwipeRow
                 file={item.file}

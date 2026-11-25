@@ -1,18 +1,27 @@
+import { truncateGraphemes } from "../../../../../src/shared/lib/text/truncate";
+import { metrics, space } from "@/ui/tokens";
 import { agentPresentation } from "../shared/agent-presentation";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import type { HostInstance } from "react-native";
 import type { ReactNode } from "react";
 import type { HostModelCatalog } from "@/domain/types";
 import type { CrewAgent, CrewCandidate } from "@/remote/contracts/crews";
 import { useFormDraft } from "@/state/form-draft";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
-import { ModelRoutingGetResultSchema, type ModelRoutingState } from "../../../../../src/shared/model/host-contracts/model-routing";
+import {
+  ModelRoutingGetResultSchema,
+  type ModelRoutingState,
+} from "../../../../../src/shared/model/host-contracts/model-routing";
 import { modelRoutingPoolEntryIds } from "../../../../../src/shared/model/modelRoutingPools";
 import { useCopy } from "@/ui/copy";
 import { crewRoleOptions, crewCatalogState, type CrewCatalogRead } from "./presentation";
 import {
   Body,
   Button,
+  NavigationRow,
+  Sheet,
+  Input,
   Disclosure,
   ErrorText,
   Field,
@@ -26,7 +35,16 @@ import {
 } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { MemberLookFields } from "./member-look-fields";
-import { candidateFromCatalog, crewNameError, crewValidationMessage, memberValidation, memberValidationFeedback, memberRoutingPatch } from "./model";
+import { modelSettingLabels } from "../shared/model-setting-labels";
+import { settingLabel } from "../../workspace/agent-model-settings";
+import {
+  candidateFromCatalog,
+  crewNameError,
+  crewValidationMessage,
+  memberValidation,
+  memberValidationFeedback,
+  memberRoutingPatch,
+} from "./model";
 
 export function useRoleOptions() {
   const copy = useCopy();
@@ -44,6 +62,7 @@ export function MemberEditor({
   feedback,
   extraFields,
   extraDirty,
+  endAction,
   onSave,
   onClose,
 }: {
@@ -58,25 +77,53 @@ export function MemberEditor({
   feedback?: ReactNode;
   extraFields?: ReactNode;
   extraDirty?: boolean;
+  endAction?: ReactNode;
   onSave: (member: CrewAgent) => void;
   onClose: () => void;
 }) {
   const copy = useCopy();
+  const settingText = modelSettingLabels(copy);
   const form = useFormDraft(() => structuredClone(initial));
   const draft = form.values;
   const locked = busy || disabled;
   const machine = useActiveMachine();
   const [openingMachineId] = useState(machine?.id);
-  const routingSupported = machine?.id === openingMachineId && machine?.capabilities?.includes("models.routing.v1") === true;
-  const routing = useHostQuery<ModelRoutingState>(["modelRouting"], "modelRouting.get", {}, { enabled: routingSupported,
-    queryFn: async (client, signal) => ModelRoutingGetResultSchema.parse(await client.request("modelRouting.get", {}, { signal })).state });
+  const routingSupported =
+    machine?.id === openingMachineId &&
+    machine?.capabilities?.includes("models.routing.v1") === true;
+  const routing = useHostQuery<ModelRoutingState>(
+    ["modelRouting"],
+    "modelRouting.get",
+    {},
+    {
+      enabled: routingSupported,
+      queryFn: async (client, signal) =>
+        ModelRoutingGetResultSchema.parse(await client.request("modelRouting.get", {}, { signal }))
+          .state,
+    },
+  );
   const routingState = machine?.id === openingMachineId ? routing.data : undefined;
-  const binding = draft.selection === "fixed" ? "fixed" : draft.modelChoice?.kind === "pool" ? `pool:${draft.modelChoice.poolId}` : draft.modelChoice?.kind === "default" ? "default" : draft.modelChoice?.kind === "order" ? "order" : "legacy";
+  const binding =
+    draft.selection === "fixed"
+      ? "fixed"
+      : draft.modelChoice?.kind === "pool"
+        ? `pool:${draft.modelChoice.poolId}`
+        : draft.modelChoice?.kind === "default"
+          ? "default"
+          : draft.modelChoice?.kind === "order"
+            ? "order"
+            : "legacy";
   const roleBinding = routingState?.roles["crew.member"] ?? { kind: "order" as const };
   const effective = binding === "default" ? roleBinding : draft.modelChoice;
-  const activePool = effective?.kind === "pool" ? routingState?.pools.find(pool => pool.id === effective.poolId) : undefined;
+  const activePool =
+    effective?.kind === "pool"
+      ? routingState?.pools.find((pool) => pool.id === effective.poolId)
+      : undefined;
   const boundPoolId = draft.modelChoice?.kind === "pool" ? draft.modelChoice.poolId : undefined;
-  const poolMissing = boundPoolId !== undefined && !routingState?.pools.some(pool => pool.id === boundPoolId);
+  const poolMissing =
+    boundPoolId !== undefined && !routingState?.pools.some((pool) => pool.id === boundPoolId);
+  const [editingInstructions, setEditingInstructions] = useState(false);
+  const instructionsTrigger = useRef<HostInstance>(null);
   const [groups, setGroups] = useState((initial.groups ?? []).join(", "));
   const [nameTouched, setNameTouched] = useState(false);
   const [modelsTouched, setModelsTouched] = useState(false);
@@ -92,7 +139,11 @@ export function MemberEditor({
   const options = new Map(
     models.map((model) => [
       `${model.harness}/${model.id}`,
-      { value: `${model.harness}/${model.id}`, label: model.name, detail: agentPresentation(model.harness, "") },
+      {
+        value: `${model.harness}/${model.id}`,
+        label: model.name,
+        detail: agentPresentation(model.harness, ""),
+      },
     ]),
   );
   for (const candidate of draft.candidates)
@@ -121,17 +172,31 @@ export function MemberEditor({
       : {}),
   };
   const error = memberValidation(normalized);
+  const blockedReason = disabled
+    ? copy("Bu bilgisayarda düzenleme kullanılamıyor.", "Editing is unavailable on this computer.")
+    : crewValidationMessage(error, copy, true);
+  const instructionsLabel = copy("Talimatlar", "Instructions");
+  const instructionsPreview = truncateGraphemes(
+    draft.instructions.replace(/\s+/g, " ").trim(),
+    120,
+  );
   const nameError = nameTouched || submitted ? crewNameError(draft.name, copy, true) : undefined;
-  const modelError = (modelsTouched || submitted) && !draft.candidates.length
-    ? crewValidationMessage(error, copy, true) : undefined;
-  const visibleError = nameError || modelError ? undefined : memberValidationFeedback(normalized, copy, {
-    name: nameTouched, models: modelsTouched,
-    dirty: form.dirty || groups !== (initial.groups ?? []).join(", "), submitted,
-  });
+  const modelError =
+    (modelsTouched || submitted) && !draft.candidates.length
+      ? crewValidationMessage(error, copy, true)
+      : undefined;
+  const visibleError =
+    nameError || modelError
+      ? undefined
+      : memberValidationFeedback(normalized, copy, {
+          name: nameTouched,
+          models: modelsTouched,
+          dirty: form.dirty || groups !== (initial.groups ?? []).join(", "),
+          submitted,
+        });
   return (
     <Stack>
       {extraFields}
-      <Section title={copy("Üye", "Member")}>
       <Field
         label={copy("Üye adı", "Member name")}
         value={draft.name}
@@ -147,60 +212,140 @@ export function MemberEditor({
         disabled={locked}
         onChange={(role) => form.patch({ role })}
       />
-      <Field
-        label={copy("Talimatlar", "Instructions")}
-        value={draft.instructions}
-        multiline
-        editable={!locked}
-        onChangeText={(instructions) => form.patch({ instructions })}
+      <NavigationRow
+        ref={instructionsTrigger}
+        label={instructionsLabel}
+        detail={instructionsPreview || copy("Talimat ekle", "Add instructions")}
+        detailLines={2}
+        disabled={locked}
+        onPress={() => setEditingInstructions(true)}
       />
-      {groupsSupported && (
-        <Field
-          label={copy("Uzmanlık grupları", "Specialty groups")}
-          hint={copy("Virgülle ayırın", "Separate with commas")}
-          value={groups}
-          editable={!locked}
-          onChangeText={setGroups}
-        />
-      )}
-      </Section>
-      {lookSupported ? (
-        <Section title={copy("Kimlik ve görünüm", "Identity and look")}>
-          <MemberLookFields member={draft} disabled={locked} onPatch={form.patch} />
-        </Section>
+      {editingInstructions ? (
+        <Sheet
+          visible
+          size="full"
+          scroll={false}
+          title={instructionsLabel}
+          returnFocusRef={instructionsTrigger}
+          onClose={() => setEditingInstructions(false)}
+        >
+          <Stack
+            style={{
+              flex: 1,
+              width: "100%",
+              maxWidth: metrics.contentWidth,
+              alignSelf: "center",
+              paddingHorizontal: space.screen,
+              paddingTop: space.sm,
+              paddingBottom: space.lg,
+            }}
+          >
+            <Input
+              label={instructionsLabel}
+              fill
+              multiline
+              editable={!locked}
+              value={draft.instructions}
+              onChangeText={(instructions) => form.patch({ instructions })}
+            />
+          </Stack>
+        </Sheet>
       ) : null}
-      <Section title={copy("Model", "Model")}>
       <SelectField
         label={copy("Model kaynağı", "Model source")}
-        hint={copy("Otomatik seçim, bu üyenin aday listesinden bağımsız olarak bilgisayar sırası veya havuzundan uygun modeli seçebilir. Aşağıdaki adaylar bir izin filtresi değildir.", "Automatic routing can choose an eligible model from Host order or pool outside this member's candidate list. Candidates below are not an allowed-model filter.")}
+        hint={copy(
+          "Otomatik seçim, bu üyenin aday listesinden bağımsız olarak bilgisayar sırası veya havuzundan uygun modeli seçebilir. Aşağıdaki adaylar bir izin filtresi değildir.",
+          "Automatic routing can choose an eligible model from Host order or pool outside this member's candidate list. Candidates below are not an allowed-model filter.",
+        )}
         value={binding}
         disabled={locked || !routingSupported}
         options={[
           { value: "fixed", label: copy("Sabit model", "Fixed model") },
-          { value: "default", label: copy("Crew üyesi rolünü izle", "Follow crew member role") },
+          { value: "default", label: copy("Ekip üyesi rolünü izle", "Follow crew member role") },
           { value: "order", label: copy("Bilgisayar model sırası", "Host model order") },
-          ...(binding === "legacy" ? [{ value: "legacy", label: copy("Mevcut aday ayarı", "Existing candidate setting") }] : []),
-          ...(routingState?.pools ?? []).map(pool => ({ value: `pool:${pool.id}`, label: pool.name })),
-          ...(poolMissing && draft.modelChoice?.kind === "pool" ? [{ value: `pool:${draft.modelChoice.poolId}`, label: copy("Havuz henüz doğrulanmadı: {p0}", "Pool not yet verified: {p0}", { p0: draft.modelChoice.poolId }) }] : []),
+          ...(binding === "legacy"
+            ? [{ value: "legacy", label: copy("Mevcut aday ayarı", "Existing candidate setting") }]
+            : []),
+          ...(routingState?.pools ?? []).map((pool) => ({
+            value: `pool:${pool.id}`,
+            label: pool.name,
+          })),
+          ...(poolMissing && draft.modelChoice?.kind === "pool"
+            ? [
+                {
+                  value: `pool:${draft.modelChoice.poolId}`,
+                  label: copy("Havuz henüz doğrulanmadı: {p0}", "Pool not yet verified: {p0}", {
+                    p0: draft.modelChoice.poolId,
+                  }),
+                },
+              ]
+            : []),
         ]}
-        onChange={value => {
+        onChange={(value) => {
           if (value === "legacy") return;
           setModelsTouched(true);
-          form.patch(memberRoutingPatch(value.startsWith("pool:") ? { kind: "pool", poolId: value.slice(5) } : { kind: value as "fixed" | "default" | "order" }));
+          form.patch(
+            memberRoutingPatch(
+              value.startsWith("pool:")
+                ? { kind: "pool", poolId: value.slice(5) }
+                : { kind: value as "fixed" | "default" | "order" },
+            ),
+          );
         }}
       />
-      {binding !== "fixed" && binding !== "legacy" ? <>
-        {routingState ? <Body muted>{copy("Geçerli kaynak", "Current source")}: {effective?.kind === "pool" ? activePool?.name ?? (effective.poolId) : binding === "default" && roleBinding.kind === "fixed" ? agentPresentation(roleBinding.target.harness, roleBinding.target.model) : copy("Bilgisayar model sırası", "Host model order")}
-          {effective?.kind === "pool" && activePool ? ` · ${modelRoutingPoolEntryIds(routingState.pools, activePool.id).length}` : effective?.kind === "order" ? ` · ${routingState.entries.length}` : ""}</Body> : <Notice message={routing.isError ? copy("Model kaynağı okunamadı. Kayıtlı bağlantı korunur.", "Model source could not be read. Saved binding is preserved.") : copy("Model kaynağı henüz doğrulanmadı. Kayıtlı bağlantı korunur.", "Model source is not yet verified. Saved binding is preserved.")} />}
-        {routing.isError ? <Button label={copy("Model kaynağını yeniden oku", "Reload model source")} tone="quiet" onPress={() => { void routing.refetch().catch(() => {}); }} /> : null}
-      </> : null}
+      {binding !== "fixed" && binding !== "legacy" ? (
+        <>
+          {routingState ? (
+            <Body muted>
+              {copy("Geçerli kaynak", "Current source")}:{" "}
+              {effective?.kind === "pool"
+                ? (activePool?.name ?? effective.poolId)
+                : binding === "default" && roleBinding.kind === "fixed"
+                  ? agentPresentation(roleBinding.target.harness, roleBinding.target.model)
+                  : copy("Bilgisayar model sırası", "Host model order")}
+              {effective?.kind === "pool" && activePool
+                ? ` · ${modelRoutingPoolEntryIds(routingState.pools, activePool.id).length}`
+                : effective?.kind === "order"
+                  ? ` · ${routingState.entries.length}`
+                  : ""}
+            </Body>
+          ) : (
+            <Notice
+              message={
+                routing.isError
+                  ? copy(
+                      "Model kaynağı okunamadı. Kayıtlı bağlantı korunur.",
+                      "Model source could not be read. Saved binding is preserved.",
+                    )
+                  : copy(
+                      "Model kaynağı henüz doğrulanmadı. Kayıtlı bağlantı korunur.",
+                      "Model source is not yet verified. Saved binding is preserved.",
+                    )
+              }
+            />
+          )}
+          {routing.isError ? (
+            <Button
+              label={copy("Model kaynağını yeniden oku", "Reload model source")}
+              tone="quiet"
+              onPress={() => {
+                void routing.refetch().catch(() => {});
+              }}
+            />
+          ) : null}
+        </>
+      ) : null}
       {draft.selection === "fixed" ? (
         <SelectField
           searchable
           label={copy("Model", "Model")}
           value={draft.candidates[0]?.id}
           error={modelError}
-          hint={!draft.candidates.length ? copy("Bu üyeye bir model seçin.", "Choose a model for this member.") : undefined}
+          hint={
+            !draft.candidates.length
+              ? copy("Bu üyeye bir model seçin.", "Choose a model for this member.")
+              : undefined
+          }
           options={[...options.values()]}
           disabled={locked}
           onChange={(id) => {
@@ -219,7 +364,10 @@ export function MemberEditor({
           label={copy("Kayıtlı yedek adaylar", "Saved fallback candidates")}
           values={draft.candidates.map((row) => row.id)}
           error={modelError}
-          hint={copy("İlk aday sabit/yedek modeldir. Bu liste bilgisayar sırasını veya havuzunu sınırlamaz.", "First candidate is the fixed/fallback model. This list does not restrict Host order or pool.")}
+          hint={copy(
+            "İlk aday sabit/yedek modeldir. Bu liste bilgisayar sırasını veya havuzunu sınırlamaz.",
+            "First candidate is the fixed/fallback model. This list does not restrict Host order or pool.",
+          )}
           options={[...options.values()]}
           max={20}
           disabled={locked}
@@ -267,21 +415,41 @@ export function MemberEditor({
           ) : null}
         </>
       ) : null}
-      </Section>
-      <Disclosure label={draft.selection === "fixed" ? copy("Model ayarları", "Model settings") : copy("Yedek model ayarları", "Fallback model settings")}>
+      <Disclosure label={copy("Gelişmiş", "Advanced")}>
+        {groupsSupported && (
+          <Field
+            label={copy("Uzmanlık grupları", "Specialty groups")}
+            hint={copy("Virgülle ayırın", "Separate with commas")}
+            value={groups}
+            editable={!locked}
+            onChangeText={setGroups}
+          />
+        )}
+        {lookSupported ? (
+          <Section title={copy("Kimlik ve görünüm", "Identity and look")}>
+            <MemberLookFields member={draft} disabled={locked} onPatch={form.patch} />
+          </Section>
+        ) : null}
+
         {(draft.selection === "fixed" ? draft.candidates.slice(0, 1) : draft.candidates).map(
           (item) => (
             <Stack key={item.id}>
-              <Heading>{item.model}</Heading>
+              <Heading>
+                {models.find((model) => model.harness === item.harness && model.id === item.model)
+                  ?.name || item.model}
+              </Heading>
               {(
                 models.find((model) => model.harness === item.harness && model.id === item.model)
                   ?.settings ?? []
               ).map((setting) => (
                 <SelectField
                   key={setting.id}
-                  label={setting.label}
+                  label={settingText(settingLabel(setting))}
                   value={item.modelSettings[setting.id] ?? setting.value}
-                  options={setting.options}
+                  options={setting.options.map((option) => ({
+                    ...option,
+                    label: settingText(option.label),
+                  }))}
                   disabled={locked}
                   onChange={(value) =>
                     changeCandidate(item.id, {
@@ -296,7 +464,12 @@ export function MemberEditor({
       </Disclosure>
       <ErrorText error={visibleError} />
       <FormActions
-        feedback={feedback}
+        feedback={
+          <>
+            {feedback}
+            {!busy && blockedReason ? <Body muted>{blockedReason}</Body> : null}
+          </>
+        }
         submitLabel={copy("Kaydet", "Save")}
         busy={busy}
         disabled={locked || !!error}
@@ -308,6 +481,7 @@ export function MemberEditor({
         onCancel={requestClose}
         cancelDisabled={busy}
       />
+      {endAction}
     </Stack>
   );
 }

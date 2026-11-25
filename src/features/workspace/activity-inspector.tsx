@@ -1,14 +1,13 @@
 import { FlatList } from "react-native";
-import { Sheet, StateView } from "@/ui/primitives";
-import { ChatSummary, ChatToolbarAction } from "@/ui/chat-controls";
+import { NavigationRow, RowIcon, Sheet, StateView } from "@/ui/primitives";
+import { ChatToolbarAction } from "@/ui/chat-controls";
 import Terminal from "lucide-react-native/icons/terminal";
 import { useCopy } from "@/ui/copy";
-import { activityState, activityTitle } from "./transcript-model";
+import { activityListTitle, activityState } from "./transcript-model";
 import { TranscriptBlock } from "./transcript-block";
 import type { Block } from "./wire";
 import type { TranscriptBlockProps } from "./session-types";
-import { useMobileTheme } from "@/ui/theme";
-import { metrics } from "@/ui/tokens";
+import { metrics, space } from "@/ui/tokens";
 
 export type ActivityInspection = { ids: string[]; selectedId?: string; author?: string };
 
@@ -19,7 +18,6 @@ export function ActivityInspector({ blocks, inspection, onChange, live, ...props
   inspection: ActivityInspection;
   onChange: (value: ActivityInspection | null) => void;
 }) {
-  const { colors } = useMobileTheme();
   const copy = useCopy();
   const available = blocks.filter((block) => !block.internal);
   const index = available.findIndex((block) => block.id === inspection.selectedId);
@@ -41,13 +39,14 @@ export function ActivityInspector({ blocks, inspection, onChange, live, ...props
       onPress={() => onChange({ ...inspection, selectedId: undefined })} /> : undefined}>
     {selected ? <TranscriptBlock key={selected.id} block={selected} {...props} activityDetail />
       : inspectingAction ? <StateView compact title={copy("İşlem gösterilemiyor", "Action unavailable")} />
-      : <FlatList data={available} keyExtractor={(block) => block.id} style={{ flex: 1 }} contentContainerStyle={{ width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}
+      : <FlatList data={available} keyExtractor={(block) => block.id} style={{ flex: 1 }} contentContainerStyle={{ width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center", paddingHorizontal: space.screen }}
         ListEmptyComponent={<StateView compact title={copy("Gösterilecek işlem yok", "No actions to show")} />}
         initialNumToRender={12} maxToRenderPerBatch={12} windowSize={7}
-        renderItem={({ item, index: position }) => <ChatSummary
-          label={`${position + 1}. ${activityTitle(item) || copy("Araç işlemi", "Tool action")}`}
+        renderItem={({ item }) => <NavigationRow
+          label={activityListTitle(item) || copy("Araç işlemi", "Tool action")}
+          labelLines={2}
           detail={stateLabel(item)}
-          icon={<Terminal size={14} color={activityState(item) === "failed" ? colors.danger : colors.muted} />}
+          icon={<RowIcon glyph={Terminal} tone={activityState(item) === "failed" ? "danger" : undefined} />}
           onPress={() => onChange({ ...inspection, selectedId: item.id })} />} />}
   </Sheet>;
 }

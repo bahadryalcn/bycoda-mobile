@@ -12,7 +12,7 @@ import { haptic } from "../../ui/motion";
 import { useReducedMotionPreference } from "../../ui/use-reduced-motion";
 import { useMachines } from "../../state/machines";
 import { useAppPreferences } from "../navigation-prefs/app-preferences";
-import type { DockTabId } from "../navigation-prefs/tab-preferences";
+import { visibleDockTabs, type DockTabId } from "../navigation-prefs/tab-preferences";
 import { NewSessionSheet } from "./new-session-sheet";
 import { useInboxUnseenBadge, useRunningSessionBadge } from "./tab-activity-bridge";
 import { TAB_BADGE_DOT, TabBadge } from "../../ui/floating-tab-bar";
@@ -120,9 +120,7 @@ export function TabletRail() {
     { id: "manage", route: "/manage", icon: "tools", label: copy("Araçlar", "Tools") },
   ];
   // Same order and visibility as the phone dock; hidden tabs stay routable.
-  const items = preferences.tabs.order
-    .filter((id) => !preferences.tabs.hidden.includes(id))
-    .flatMap((id) => all.filter((item) => item.id === id));
+  const items = visibleDockTabs(preferences.tabs).flatMap((id) => all.filter((item) => item.id === id));
   const isActive = (route: RailRoute) =>
     pathname === route || (route === "/chats" && pathname.startsWith("/session/"));
   const go = (route: RailRoute) => {

@@ -17,6 +17,9 @@ vi.mock("@/state/machines", async () => {
   const useMachines = create<any>(() => ({ activeId: "machine", machines: [] })); f.store = useMachines;
   return { useMachines, useActiveMachine: () => useMachines((s: any) => s.machines.find((m: any) => m.id === s.activeId)) };
 });
+vi.mock("react-native", () => ({ View: ({ children }: { children?: unknown }) => children as never }));
+vi.mock("@/ui/overflow-menu", () => ({ ActionMenu: ({ actions }: any) => createElement("div", null, actions.map((a: any) => createElement("button", { key: a.key, disabled: a.disabled, onClick: a.onPress }, a.label))) }));
+vi.mock("lucide-react-native/icons/ellipsis", () => ({ default: () => null }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
 vi.mock("lucide-react-native/icons/smartphone", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/house", () => ({ default: () => null }));
@@ -25,7 +28,7 @@ vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: nu
 vi.mock("@/ui/copy",() => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
-vi.mock("@/ui/tokens", () => ({ colors: {}, space: {} }));
+vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, colors: {}, space: {} }));
 vi.mock("@/ui/issue-summary", () => ({ IssueSummary: () => null }));
 const device = { id: "device", name: "Device", platform: "android" as const, version: "16", physical: false, booted: true };
 vi.mock("@/state/queries", () => ({
@@ -50,7 +53,7 @@ vi.mock("@/ui/remote-frame", async () => {
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled }: any) => { if (label === "Home") f.home = onPress; return createElement("button", { onClick: onPress, disabled }, label); };
-  return { StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children), Body: Wrap, Row: Wrap, Stack: Wrap, Sheet: ({children,onClose}:any)=>createElement("div",null,children,createElement(Button,{label:"Close",onPress:onClose})), Disclosure: Wrap, NavigationGroup: Wrap,
+  return { ScopeLine: () => null, RowIcon: () => null, StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children), Body: Wrap, Row: Wrap, Stack: Wrap, Sheet: ({children,onClose,footer}:any)=>createElement("div",null,children,footer,createElement(Button,{label:"Close",onPress:onClose})), Disclosure: Wrap, NavigationGroup: Wrap,
     Badge: () => null, StatusText: () => null, StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: () => null, MutationState: () => null, QueryState: () => null, ErrorText: () => null, Loading: () => null,
     Button, IconButton: Button, NavigationRow: Button,
     FormActions: ({onSubmit,submitLabel}:any) => { f.confirm = onSubmit; return createElement(Button,{label:submitLabel,onPress:onSubmit}); },
@@ -87,7 +90,7 @@ it.each(["endpoint","lanKey","environmentId","activeId"])("retires service confi
   expect(f.writes).toEqual([{method:"devices.start",params:{projectId:"project"}}]);
 });
 it("rejects a captured device-control callback after credential A/B/A",async()=>{
-  await render(createElement(DeviceViewer,{projectId:"project",device,canControl:true,onDevice:f.onDevice,onClose:vi.fn()}));await click("Control device");const old=f.home;
+  await render(createElement(DeviceViewer,{projectId:"project",device,canControl:true,onDevice:f.onDevice,onClose:vi.fn()}));const old=f.home;
   await aba("lanKey",old);expect(f.writes).toEqual([]);
 });
 it("rejects late boot completion after endpoint A/B/A",async()=>{
@@ -95,7 +98,7 @@ it("rejects late boot completion after endpoint A/B/A",async()=>{
   await aba("endpoint");await act(async()=>f.finishBoot({...device,id:"late-device"}));expect(f.onDevice).not.toHaveBeenCalled();
 });
 it("retains viewer input for name churn and closes the old viewer for connection A/B/A",async()=>{
-  await render(createElement(DevicesScreen,{project:{id:"project",name:"Project",cwd:"/project"}as any}));await click("Device");await act(async()=>f.editText("Retained device text"));
+  await render(createElement(DevicesScreen,{project:{id:"project",name:"Project",cwd:"/project"}as any}));await click("Device");await click("Text and apps");await act(async()=>f.editText("Retained device text"));
   const input=node.querySelector('input[aria-label="Text"]')!;
   const access=f.frameAccess;
   await act(async()=>{const machine=f.store.getState().machines[0];f.store.setState({machines:[{...machine,name:"Renamed"}]});});

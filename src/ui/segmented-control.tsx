@@ -69,7 +69,8 @@ export function SegmentedControl<T extends string>({
     >
       <Tabs.List
         accessibilityLabel={label}
-        className="min-w-0 overflow-hidden rounded-control bg-fill p-ui-xxs"
+        className="min-w-0 items-stretch overflow-hidden rounded-control bg-fill p-ui-xxs"
+        indicatorClassName="top-ui-xxs bottom-ui-xxs"
       >
         {options.map((option) => (
           <Tabs.Trigger
@@ -77,7 +78,7 @@ export function SegmentedControl<T extends string>({
             value={option.value}
             disabled={disabled || option.disabled}
             {...{ hitSlop: hitSlopFor(metrics.controlHeight) }}
-            className="min-h-control min-w-touch flex-1 basis-0 shrink rounded-control bg-transparent border-0 shadow-none px-ui-xs"
+            className="min-h-control min-w-touch flex-1 basis-0 shrink self-stretch justify-center rounded-control bg-transparent border-0 shadow-none px-ui-xs"
           >
             <Body
               selectable={false}
@@ -88,7 +89,7 @@ export function SegmentedControl<T extends string>({
               }}
               style={{
                 fontSize: compact ? fontSize.small : fontSize.control,
-                fontWeight: value === option.value ? "700" : "500",
+                fontWeight: "500",
                 color: value === option.value ? colors.text : colors.muted,
                 textAlign: "center",
                 minWidth: 0,

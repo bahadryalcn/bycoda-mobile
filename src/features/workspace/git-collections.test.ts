@@ -23,6 +23,7 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/tokens", () => ({ space: {}, colors: {} }));
 vi.mock("@/ui/typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: () => null }));
+vi.mock("./subpage-chrome", () => ({ useProjectSubpage: () => undefined }));
 vi.mock("lucide-react-native/icons/git-branch", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/check", () => ({ default: () => null }));
 vi.mock("./shared", () => ({ rowInset: 16, relativeTime: () => "now", GroupedListRow: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
@@ -53,7 +54,7 @@ vi.mock("@/ui/primitives", async () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled, busy }: any) => createElement("button", { onClick: onPress, disabled: disabled || busy }, label);
   const Input = ({ label, value, onChangeText, ref }: any) => createElement("input", { "aria-label": label, value, ref, onChange: (e: any) => onChangeText(e.target.value) });
-  return { QueryState, Body: Group, CodeText: Group, Badge: Group, Row: Group, IconButton: Button, Disclosure: Group, Button, NavigationRow: Button, SearchField: Input, IdentifierField: Input,
+  return { QueryState, Body: Group, CodeText: Group, Badge: Group, StatusText: ({ label }: { label: string }) => createElement("span", null, label), RowIcon: () => null, ScreenHeading: ({ title, onBack }: { title: string; onBack: () => void }) => createElement("button", { onClick: onBack }, title), Row: Group, IconButton: Button, Disclosure: Group, Button, NavigationRow: Button, SearchField: Input, IdentifierField: Input,
     FieldError: ({ error }: { error?: string }) => error ? createElement("p", null, error) : null,
     ConfirmationCard: () => null,
     Sheet: ({ children, footer }: any) => createElement("section", null, children, footer),

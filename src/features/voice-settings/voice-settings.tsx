@@ -1,45 +1,61 @@
 import { useEffect, useRef, useState } from "react";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { PreferenceStorageNotice } from "@/ui/preference-storage-notice";
-import { View } from "react-native";
 import AudioLines from "lucide-react-native/icons/audio-lines";
-import { Button, ConfirmationCard, ErrorNotice, NavigationGroup, NavigationRow, Notice, QueryState, SectionHeader, SettingIcon, Sheet, Stack, ValueRow } from "@/ui/primitives";
-import { useSheetGuard } from "@/ui/sheet-guard";
-import { space } from "@/ui/tokens";
+import { ActionMenu, Body, Button, ConfirmationCard, Disclosure, ErrorNotice, NavigationGroup, NavigationRow, QueryState, ScopeLine, Section, SettingIcon, StateView, StatusText, ValueRow } from "@/ui/primitives";
 import { formatBytes } from "../settings/local-data-sizes";
+import { SettingsPage } from "../settings/settings-page";
 import { downloadPercent, modelBusy, modelRowState, parseLocalModels, parseModelJob, type LocalVoiceModel, type ModelAction } from "./voice-models-model";
-import { speechSummary, VoiceChoices } from "./voice-choices";
+import { ConversationStyleGroup, DictationGroup, speechSummary, VoiceGroup } from "./voice-choices";
 import { useVoicePreferences } from "./voice-preferences";
 import { MicrophonePriority } from "./microphone-priority";
+import { MicrophoneAccessRow } from "./microphone-access";
 
-/** Settings → Voice: speech recognition, the assistant's voice, this computer's models and microphone priority. */
+/** Where Settings → Voice assistant lives; the settings index and the assistant's settings both link here. */
+export const VOICE_SETTINGS_ROUTE = "/settings/voice";
+
+/**
+ * The value of the Voice assistant row. It never claims a connection that does not exist: without a
+ * computer it says what to do, with one it names the speaker (one fact, no joined pair).
+ */
+export function useVoiceSettingsSummary() {
+  const copy = useCopy();
+  const { preferences } = useVoicePreferences();
+  const machine = useActiveMachine();
+  if (!machine) return copy("Bilgisayar bağla", "Connect a computer");
+  return copy("Ses: {p0}", "Voice: {p0}", { p0: speechSummary(preferences.speech, preferences.speaker, copy) });
+}
+
+/** Settings index row: opens the Voice assistant page. */
 export function VoiceSettings() {
   const copy = useCopy();
-  const [open, setOpen] = useState(false);
-  const { preferences } = useVoicePreferences();
-  const computer = useActiveMachine()?.name;
+  const summary = useVoiceSettingsSummary();
   return (
-    <>
-      <NavigationRow
-        label={copy("Ses", "Voice")}
-        icon={<SettingIcon glyph={AudioLines} />}
-        detail={`${speechSummary(preferences.speech, preferences.speaker, copy)} · ${preferences.engine === "openai" ? "OpenAI" : preferences.engine === "xai" ? "Grok" : preferences.engine === "cloud" ? "OpenRouter" : computer ?? copy("Bağlı bilgisayar", "Connected computer")}`}
-        onPress={() => setOpen(true)}
-      />
-      <Sheet visible={open} title={copy("Ses", "Voice")} size="form" onClose={() => setOpen(false)}>
-        {open ? <VoiceSettingsBody /> : null}
-      </Sheet>
-    </>
+    <NavigationRow
+      label={copy("Sesli asistan", "Voice assistant")}
+      icon={<SettingIcon glyph={AudioLines} />}
+      detail={summary}
+      onPress={() => router.push(VOICE_SETTINGS_ROUTE as Href)}
+    />
   );
 }
 
-function VoiceSettingsBody() {
+/** Settings → Voice assistant: Microphone, Voice, Dictation and Conversation style, as the desktop groups them. */
+export function VoiceSettingsScreen() {
   const copy = useCopy();
-  const { requestCloseThen } = useSheetGuard({});
+  return (
+    <SettingsPage title={copy("Sesli asistan", "Voice assistant")}>
+      <VoiceSettingsBody />
+    </SettingsPage>
+  );
+}
+
+export function VoiceSettingsBody() {
+  const copy = useCopy();
   const machine = useActiveMachine();
   const connection = useConnectionScope();
   const hydratedMachines = useMachines((state) => state.hydrated);
@@ -48,24 +64,44 @@ function VoiceSettingsBody() {
   const { preferences, hydrated, storageError: preferenceError, retry: retryPreference } = useVoicePreferences();
   const localSupported = machine?.capabilities?.includes("voice.local.v1") === true;
   const waitingForComputer = !hydratedMachines || (!machine && connectionPending);
+  const ready = !!machine && !storageError && !waitingForComputer;
+  // Screen's own gap spaces the groups; the computer these choices serve is the page's scope line.
   return (
-    <Stack>
+    <>
+      {ready ? <ScopeLine scope={{ computer: machine.name }} /> : null}
       <PreferenceStorageNotice error={preferenceError} retry={retryPreference} />
       {storageError || waitingForComputer ? (
         <QueryState query={{ error: storageError, isLoading: waitingForComputer }} loading="content" />
       ) : !machine ? (
-        <Button
-          label={copy("Bilgisayar bağla", "Connect a computer")}
-          onPress={() => requestCloseThen(() => router.navigate("/machines"))}
-        />
-      ) : <VoiceChoices showStorageNotice={false} />}
-      <MicrophonePriority order={preferences.micOrder} disabled={!hydrated} />
-      {machine && !storageError && !waitingForComputer
-        ? <LocalModels key={connection.token} supported={localSupported} computer={machine.name} current={connection.isCurrent} />
-        : null}
-    </Stack>
+        <StateView compact illustration="connect-computer"
+          title={copy("Ses için bağlı bir bilgisayar gerekir", "Voice needs a connected computer")}
+          description={copy("Konuşmanı tanıyan ve asistanı seslendiren bilgisayardır.", "The computer recognizes your speech and gives the assistant its voice.")}
+          action={{ label: copy("Bilgisayar bağla", "Connect a computer"), onPress: () => router.navigate("/machines") }} />
+      ) : null}
+      {ready ? <VoiceGroup /> : null}
+      <Section title={copy("Mikrofon", "Microphone")}>
+        <NavigationGroup>
+          <MicrophonePriority order={preferences.micOrder} disabled={!hydrated} />
+          <MicrophoneAccessRow />
+        </NavigationGroup>
+      </Section>
+      {ready ? <>
+        <DictationGroup />
+        <ConversationStyleGroup />
+        <LocalModels key={connection.token} supported={localSupported} computer={machine.name} current={connection.isCurrent} />
+        <Body muted>{copy(
+          "Uyandırma sözcüklerini ve dikte sözlüğünü masaüstündeki Ses ayarlarından düzenleyebilirsin.",
+          "Manage wake phrases and the dictation dictionary in Voice settings on desktop.",
+        )}</Body>
+      </> : null}
+    </>
   );
 }
+
+/**
+ * Dictation → Transcription models on the computer: one group, one row per model. Download is the row
+ * action when a model is missing; Test and Remove sit in the row's menu once it is installed.
+ */
 function LocalModels({ supported, computer, current }: { supported: boolean; computer: string; current(): boolean }) {
   const copy = useCopy();
   const [confirming, setConfirming] = useState<LocalVoiceModel | null>(null);
@@ -104,49 +140,54 @@ function LocalModels({ supported, computer, current }: { supported: boolean; com
       }
       case "testing": return copy("Sınanıyor…", "Testing…");
       case "removing": return copy("Kaldırılıyor…", "Removing…");
-      case "installed": return copy("Yüklü", "Installed");
+      case "installed": return copy("{p0} üzerinde yüklü", "Installed on {p0}", { p0: computer });
       case "failed": return job.detail ?? copy("İşlem başarısız", "Action failed");
       default: return copy("Yüklü değil", "Not installed");
     }
   };
+  const activeModel = working ? models.data?.find(model => model.id === job.id) : undefined;
   return (
-    <Stack>
-      <SectionHeader title={copy("{p0} üzerindeki ses modelleri", "Voice models on {p0}", { p0: computer })} />
-      {!supported ? <Notice message={copy("Ses modelleri için {p0} üzerindeki bycoda’yı güncelleyin.", "Update bycoda on {p0} for voice models.", { p0: computer })} /> : <>
-        {setup.data?.state === "installing" ? <Notice tone="info" message={copy("Ses kurulumu sürüyor.", "Voice setup is running.")} /> : null}
+    <Disclosure
+      label={copy("Yazıya dökme modelleri", "Transcription models")}
+      defaultExpanded={working}
+      detail={activeModel ? `${activeModel.label} · ${label(activeModel)}` : undefined}
+    >
+      {!supported ? <StateView size="compact" title={copy("Ses modelleri için {p0} üzerindeki bycoda’yı güncelleyin.", "Update bycoda on {p0} for voice models.", { p0: computer })} /> : <>
+        {setup.data?.state === "installing" ? <StatusText tone="live" label={copy("Ses kurulumu sürüyor.", "Voice setup is running.")} /> : null}
         <QueryState query={models} loading="inline" compact />
-        {models.data?.map((model) => {
-          const state = modelRowState(model, job);
-          const working = state === "downloading" || state === "testing" || state === "removing";
-          return (
-            <Stack key={model.id} style={{ gap: 0 }}>
-              <NavigationGroup>
-                <ValueRow label={model.sizeBytes ? `${model.label} · ${formatBytes(model.sizeBytes)}` : model.label}
-                  value={modelRowState(model, job) === "installed" ? copy("{p0} üzerinde yüklü", "Installed on {p0}", { p0: computer }) : label(model)} />
-              </NavigationGroup>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm, paddingTop: space.sm }}>
-                {working ? <Button label={copy("İptal", "Cancel")} tone="quiet" busy={cancel.isPending} onPress={() => {
-                  if (current()) void cancel.mutateAsync({}).catch(() => undefined);
-                }} />
-                  : model.installed ? <>
-                    <Button label={copy("Sına", "Test")} tone="quiet" disabled={busy} onPress={() => run(model, "test")} />
-                    <Button label={copy("Kaldır", "Remove")} tone="danger" disabled={busy} onPress={() => setConfirming(model)} />
-                  </> : <Button label={copy("{p0} üzerine indir", "Download to {p0}", { p0: computer })} disabled={busy} onPress={() => run(model, "download")} />}
-              </View>
-              {confirming?.id === model.id ? (
-                <ConfirmationCard
-                  message={copy("{p0}, {p1} üzerinden silinsin mi? Yeniden indirmek gerekir.", "Remove {p0} from {p1}? You would need to download it again.", { p0: model.label, p1: computer })}
-                  cancelLabel={copy("Vazgeç", "Cancel")}
-                  confirmLabel={copy("Kaldır", "Remove")}
-                  onCancel={() => setConfirming(null)}
-                  onConfirm={() => { setConfirming(null); run(model, "delete"); }}
-                />
-              ) : null}
-            </Stack>
-          );
-        })}
+        {models.data?.length ? <NavigationGroup>
+          {models.data.map((model) => {
+            const state = modelRowState(model, job);
+            const rowWorking = state === "downloading" || state === "testing" || state === "removing";
+            const name = model.sizeBytes ? `${model.label} · ${formatBytes(model.sizeBytes)}` : model.label;
+            const trailing = rowWorking
+              ? <Button label={copy("İptal", "Cancel")} tone="quiet" density="compact" busy={cancel.isPending} onPress={() => {
+                if (current()) void cancel.mutateAsync({}).catch(() => undefined);
+              }} />
+              : model.installed
+                ? <ActionMenu label={copy("{p0} işlemleri", "{p0} actions", { p0: model.label })} actions={[
+                  { key: "test", label: copy("Sına", "Test"), disabled: busy, onPress: () => run(model, "test") },
+                  { key: "remove", label: copy("Kaldır", "Remove"), destructive: true, disabled: busy, onPress: () => setConfirming(model) },
+                ]} />
+                : <Button label={copy("İndir", "Download")} tone="quiet" density="compact" disabled={busy}
+                  accessibilityLabel={copy("{p0} modelini {p1} üzerine indir", "Download {p0} to {p1}", { p0: model.label, p1: computer })}
+                  onPress={() => run(model, "download")} />;
+            return <ValueRow key={model.id} label={name} trailing={trailing}>
+              <Body muted>{label(model)}</Body>
+            </ValueRow>;
+          })}
+        </NavigationGroup> : null}
+        {confirming ? (
+          <ConfirmationCard
+            message={copy("{p0}, {p1} üzerinden silinsin mi? Yeniden indirmek gerekir.", "Remove {p0} from {p1}? You would need to download it again.", { p0: confirming.label, p1: computer })}
+            cancelLabel={copy("Vazgeç", "Cancel")}
+            confirmLabel={copy("Kaldır", "Remove")}
+            onCancel={() => setConfirming(null)}
+            onConfirm={() => { const model = confirming; setConfirming(null); run(model, "delete"); }}
+          />
+        ) : null}
         {action.error ? <ErrorNotice error={action.error} /> : null}
       </>}
-    </Stack>
+    </Disclosure>
   );
 }

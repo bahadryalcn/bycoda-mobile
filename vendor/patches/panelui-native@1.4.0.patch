@@ -410,3 +410,31 @@ index 94864740b54b904558974319c655946c1db09a3b..59bdc70deb3632ceb9c25d5169843f78
            {token.text}
          </Text>
        ))}
+diff --git a/lib/module/theme/use-theme.js b/lib/module/theme/use-theme.js
+index 6ea2f49..31887e4 100644
+--- a/lib/module/theme/use-theme.js
++++ b/lib/module/theme/use-theme.js
+@@ -137,7 +137,8 @@ export function useThemeMode() {
+     theme
+   } = useUniwind();
+   const family = findFamily(theme);
+-  const mode = theme === family.dark ? 'dark' : 'light';
++  // An app-registered dark theme ("<name>-dark") is dark even though PanelUI does not list it.
++  const mode = theme === family.dark || theme.endsWith('-dark') ? 'dark' : 'light';
+   return {
+     /** The active theme family. */
+     family,
+diff --git a/src/theme/use-theme.ts b/src/theme/use-theme.ts
+index 1e18f97..76de243 100644
+--- a/src/theme/use-theme.ts
++++ b/src/theme/use-theme.ts
+@@ -166,7 +166,8 @@ export function useTheme() {
+ export function useThemeMode() {
+   const { theme } = useUniwind();
+   const family = findFamily(theme);
+-  const mode: ThemeMode = theme === family.dark ? 'dark' : 'light';
++  // An app-registered dark theme ("<name>-dark") is dark even though PanelUI does not list it.
++  const mode: ThemeMode = theme === family.dark || theme.endsWith('-dark') ? 'dark' : 'light';
+ 
+   return {
+     /** The active theme family. */

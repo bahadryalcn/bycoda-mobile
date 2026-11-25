@@ -9,6 +9,7 @@ export const PERIODIC_RETRY_BACKOFF_MS: Record<Exclude<DiagnosticSendResult, "se
   "rate-limited": 24 * HOUR_MS,
   "not-configured": 24 * HOUR_MS,
   empty: 24 * HOUR_MS,
+  declined: 24 * HOUR_MS,
 };
 
 export interface PeriodicDiagnosticsDeps {

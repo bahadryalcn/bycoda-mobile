@@ -1,0 +1,7 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["BycodaTextSelectionModule"] },
+  "android": {
+    "modules": ["expo.modules.bycodatextselection.BycodaTextSelectionModule"]
+  }
+}

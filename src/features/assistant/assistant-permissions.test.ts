@@ -8,17 +8,21 @@ import type { AssistantMobileClient } from "./assistant-client";
 
 const sheetGuard = vi.hoisted(() => vi.fn());
 vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: sheetGuard }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/limit-presets", async () =>
   (await import("@/ui/limit-presets.fixture")).limitFieldDoubles((await import("@/ui/primitives")).NumberField as never));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {
-    Disclosure: Group,
+    FormActions: ({ submitLabel, onSubmit, disabled }: { submitLabel: string; onSubmit(): void; disabled: boolean }) =>
+      createElement("button", { onClick: onSubmit, disabled }, submitLabel),
     Section: Group,
     Stack: Group,
     MultiSelectField: () => null,
     Notice: ({ message }: { message: string }) => createElement("p", null, message),
+    StateView: ({ title }: { title: string }) => createElement("p", null, title),
+    Body: Group,
     Button: ({ label, onPress, disabled }: { label: string; onPress(): void; disabled: boolean }) =>
       createElement("button", { onClick: onPress, disabled }, label),
     ToggleField: ({
@@ -189,12 +193,12 @@ it("keeps new policies local until explicit Save, using defaults and the opening
     urgentNotificationRepeats: undefined,
     urgentNotificationIntervalMinutes: undefined,
   } as unknown as AssistantProfile);
-  expect(input("Urgent notification repeats").value).toBe("2");
-  expect(input("Urgent notification repeat interval (minutes)").value).toBe("30");
+  expect(input("Urgent reminders").value).toBe("2");
+  expect(input("Reminder interval (minutes)").value).toBe("30");
   expect(sheetGuard).toHaveBeenLastCalledWith({ dirty: false, pending: false });
-  await click("Keep computer awake while away");
-  await edit("Urgent notification repeats", "0");
-  await edit("Urgent notification repeat interval (minutes)", "1440");
+  await click("Keep awake while away");
+  await edit("Urgent reminders", "0");
+  await edit("Reminder interval (minutes)", "1440");
   expect(f.updateProfile).not.toHaveBeenCalled();
   expect(sheetGuard).toHaveBeenLastCalledWith({ dirty: true, pending: false });
   await click("Save preferences");
@@ -211,15 +215,15 @@ it("keeps new policies local until explicit Save, using defaults and the opening
 it("blocks empty, fractional and out-of-range numeric values instead of coercing them", async () => {
   const f = await fixture();
   for (const value of ["", "11", "-1", "1.5"]) {
-    await edit("Urgent notification repeats", value);
+    await edit("Urgent reminders", value);
     expect(button("Save preferences").disabled).toBe(true);
   }
-  await edit("Urgent notification repeats", "10");
+  await edit("Urgent reminders", "10");
   for (const value of ["", "0", "1441", "1.5"]) {
-    await edit("Urgent notification repeat interval (minutes)", value);
+    await edit("Reminder interval (minutes)", value);
     expect(button("Save preferences").disabled).toBe(true);
   }
-  await edit("Urgent notification repeat interval (minutes)", "1");
+  await edit("Reminder interval (minutes)", "1");
   await click("Save preferences");
   expect(f.updateProfile).toHaveBeenCalledWith(
     7,
@@ -286,18 +290,18 @@ it("does not dispatch or refresh another source after a connection change during
 });
 it("holds uncertain Save until explicit reload and retains edits across a profile version conflict", async () => {
   const f = await fixture();
-  await edit("Urgent notification repeats", "8");
+  await edit("Urgent reminders", "8");
   await f.render({ ...opening, version: 8 });
-  expect(input("Urgent notification repeats").value).toBe("8");
+  expect(input("Urgent reminders").value).toBe("8");
   expect(button("Save preferences").disabled).toBe(true);
   await f.render();
   f.updateProfile.mockRejectedValueOnce(new Error("Lost acknowledgement"));
   await click("Save preferences");
   await click("Save preferences");
   expect(f.updateProfile).toHaveBeenCalledTimes(1);
-  expect(input("Urgent notification repeats").value).toBe("8");
+  expect(input("Urgent reminders").value).toBe("8");
   await click("Load current preferences");
-  expect(input("Urgent notification repeats").value).toBe("2");
+  expect(input("Urgent reminders").value).toBe("2");
   await f.render({ ...opening, version: 9 });
   expect(button("Save preferences").disabled).toBe(false);
 });

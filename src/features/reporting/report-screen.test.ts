@@ -18,7 +18,7 @@ vi.mock("react-native-reanimated",()=>({default:{View:({children}:PropsWithChild
 vi.mock("@/ui/consent-field",()=>({ConsentField:()=>null}));
 vi.mock("@/ui/primitives",()=>{
  const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);
- return {Body:Wrapper,NavigationGroup:Wrapper,NavigationRow:()=>null,Disclosure:()=>null,Section:Wrapper,Button:()=>null,ToggleField:()=>null,SelectField:()=>null,useSuccessToast:()=>()=>"",
+ return {Body:Wrapper,NavigationGroup:Wrapper,NavigationRow:()=>null,RowIcon:()=>null,Disclosure:()=>null,Section:Wrapper,Button:()=>null,ToggleField:()=>null,SelectField:()=>null,useSuccessToast:()=>()=>"",
  StateView:({title,description}:{title:string;description:string})=>createElement("p",{"data-state-view":true},title," ",description),
  Screen:({children,footer}:PropsWithChildren<{footer:import("react").ReactNode}>)=>createElement("main",null,createElement("article",null,children),createElement("footer",null,footer)),
  Field:({label,error,hint,maxLength,onBlur}:{label:string;error?:string;hint?:string;maxLength?:number;onBlur?:()=>void})=>createElement("section",{"data-field":label,"data-max":maxLength,"data-hint":hint,tabIndex:0,onBlur},error),
@@ -35,13 +35,18 @@ const render=()=>act(async()=>root!.render(createElement(ContentReportScreen)));
 const button=(label:string,last=false)=>{const found=[...(last ? container.querySelector("aside")! : container).querySelectorAll("button")].filter(item=>item.textContent===label);return last?found.at(-1)!:found[0];};
 beforeEach(async()=>{vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);discardContentReport();fixture.sender=null;fixture.locked=false;fixture.submits=[];container=document.createElement("div");root=createRoot(container);await render();});
 afterEach(async()=>{await act(async()=>root?.unmount());root=undefined;vi.unstubAllGlobals();});
-it("shows the unavailable service once and keeps task actions outside form content",async()=>{
- await act(async()=>useContentReport.setState({error:"service"}));
+it("replaces the form with one unavailable state when no service is configured",async()=>{
+ expect(container.querySelector("[data-state-view]")?.textContent).toContain("Reports can’t be sent right now");
+ expect(container.querySelector('[data-field="Description"]')).toBeNull();
+ expect(button("Send")).toBeUndefined();
+});
+it("keeps an existing draft readable but locked, with Close as the action, when no service is configured",async()=>{
+ await act(async()=>{updateContentReport({description:"Draft from a message"});useContentReport.setState({error:"service"});});
  const message="Reporting is not available yet. Your draft is kept while this app remains running.";
  expect([...container.querySelectorAll("p")].filter(p=>p.textContent===message)).toHaveLength(1);
- expect(button("Done").disabled).toBe(false);
+ expect(button("Close").disabled).toBe(false);
  expect(button("Send")).toBeUndefined();
- expect(button("Discard draft")).toBeUndefined();
+ expect(button("Discard draft")).toBeDefined();
 });
 it("replaces the editor with a permanent acknowledgement after delivery",async()=>{
  await act(async()=>{updateContentReport({description:"Reviewed report"});useContentReport.setState({status:"sent",receiptId:"receipt-one"});});
@@ -65,6 +70,7 @@ it("keeps the reviewed draft and offers an explicit retry with the same request 
  expect(useContentReport.getState().draft.description).toBe("");
 });
 it("acknowledges the receipt on Done so Report content can be used again", async () => {
+  fixture.sender = vi.fn(async (requestId) => ({ requestId, reportId: "receipt" }));
   await act(async () => useContentReport.setState({ status: "sent", receiptId: "receipt-one" }));
   const done = fixture.submits.filter((action) => action.label === "Done").at(-1)!.run;
   await act(async () => button("Done").click());
@@ -111,6 +117,7 @@ it("never sends from a retained callback after the screen unmounts",async()=>{
  const submit=fixture.submits.filter(x=>x.label==="Send").at(-1)!.run;await act(async()=>root!.unmount());root=undefined;await act(async()=>submit());expect(fixture.sender).not.toHaveBeenCalled();
 });
 it("keeps only the must-see privacy warning inline; the full explanation sits behind the info icon",async()=>{
+ fixture.sender=vi.fn(async requestId=>({requestId,reportId:"receipt"}));await render();
  expect(container.textContent).toContain("Do not add access keys, pairing codes, private files or personal information.");
  expect(container.textContent).not.toContain("kept only in memory");
 });

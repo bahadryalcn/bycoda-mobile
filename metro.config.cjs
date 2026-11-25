@@ -45,9 +45,11 @@ config.resolver.extraNodeModules = {
 const resolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   const name = moduleName.endsWith("?raw") ? moduleName.slice(0, -4) : moduleName;
+  // The desktop crews mention barrel also exports web-only avatar UI; shared models need only its model exports.
+  const shim = /crews\/public\/mentions$/.test(name) ? path.resolve(__dirname, "src/shims/crews-mentions.ts") : null;
   // Node theme generation needs an explicit .ts import; Metro must select the Android reader.
-  const target = platform === "android" && name.endsWith("/bycoda-system-colors/index.ts")
-    ? name.replace(/\.ts$/, ".android.ts") : name;
+  const target = shim ?? (platform === "android" && name.endsWith("/bycoda-system-colors/index.ts")
+    ? name.replace(/\.ts$/, ".android.ts") : name);
   return (resolveRequest ?? context.resolveRequest)(context, target, platform);
 };
 const themedConfig = withUniwindConfig(config, {

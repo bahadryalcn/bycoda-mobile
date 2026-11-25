@@ -8,8 +8,8 @@ import { useMobileTheme } from "@/ui/theme";
 import { useCopy } from "@/ui/copy";
 import { space } from "@/ui/tokens";
 
-const SampleChat = lazy(() =>
-  import("@/ui/component-gallery-chat").then((module) => ({ default: module.GalleryChat })),
+const TourSample = lazy(() =>
+  import("@/ui/component-gallery-chat").then((module) => ({ default: module.TourSampleSheet })),
 );
 const ComponentGallery = lazy(() =>
   import("@/ui/component-gallery").then((module) => ({ default: module.ComponentGallery })),
@@ -20,6 +20,9 @@ export function DemoScreen() {
   const { colors } = useMobileTheme();
   const copy = useCopy();
   const [sample, setSample] = useState(false);
+  const [gallery, setGallery] = useState(false);
+  const sheetOpen = sample || gallery;
+  const galleryTitle = copy("Bileşen galerisi", "Component gallery");
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
   return (
     <>
@@ -27,7 +30,12 @@ export function DemoScreen() {
       <OnboardingShell
         compactPages
         top={
-          <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
+          <View
+            accessibilityElementsHidden={sheetOpen}
+            importantForAccessibility={sheetOpen ? "no-hide-descendants" : "auto"}
+            pointerEvents={sheetOpen ? "none" : "box-none"}
+            style={{ flexDirection: "row", justifyContent: "flex-end", opacity: sheetOpen ? 0 : 1 }}
+          >
             <IconButton label={copy("Kapat", "Close")} onPress={close}>
               <X size={22} strokeWidth={2} color={colors.text} />
             </IconButton>
@@ -36,7 +44,7 @@ export function DemoScreen() {
         pages={[
           { key: "projects", art: "wave", title: copy("Tüm projelerin elinin altında", "Every project at hand"),
             body: copy("Bilgisayarındaki projeler ve oturumlar tek listede.", "Your computer's projects and sessions in one list.") },
-          { key: "live", art: "think", title: copy("Agentı canlı izle", "Watch your agent work live"),
+          { key: "live", art: "think", title: copy("Ajanını canlı izle", "Watch your agent work live"),
             body: copy("Her adımı, aracı ve onayı geldiği anda gör.", "See each step, tool and approval as it happens.") },
           { key: "voice", art: "serene", lightArt: "child", title: copy("Sesinle yönet", "Steer it with your voice"),
             body: copy("Konuş; sesin bilgisayarında yazıya dökülür.", "Speak; your computer turns it into text.") },
@@ -49,15 +57,27 @@ export function DemoScreen() {
             onPress={() => router.replace({ pathname: "/machines", params: { start: "scan" } })} />
           <Button label={copy("Örnek AI oturumunu aç", "Open the example AI session")} tone="quiet" fullWidth
             onPress={() => setSample(true)} />
+          {/* Development only: the gallery stays out of the sample so the dev build shows what users see. */}
+          {__DEV__ ? <Button label={galleryTitle} tone="quiet" fullWidth onPress={() => setGallery(true)} /> : null}
         </View>
       </OnboardingShell>
       {sample ? (
-        <Sheet visible title={copy("Kişisel web sitesi", "Personal website")} onClose={() => setSample(false)}>
+        <Suspense
+          fallback={
+            <Sheet visible title={copy("Kişisel web sitesi", "Personal website")} onClose={() => setSample(false)}>
+              <Skeleton variant="content" />
+            </Sheet>
+          }
+        >
+          <TourSample onClose={() => setSample(false)} />
+        </Suspense>
+      ) : null}
+      {__DEV__ && gallery ? (
+        <Sheet visible title={galleryTitle} onClose={() => setGallery(false)}>
           <Suspense fallback={<Skeleton variant="content" />}>
-            <SampleChat scenario="tour" />
-            {__DEV__ ? <ComponentGallery /> : null}
+            <ComponentGallery />
           </Suspense>
-          {__DEV__ ? <Button label="Workspace fixtures" tone="quiet" onPress={() => router.navigate("./dev-workspace")} /> : null}
+          <Button label={copy("Çalışma alanı test verileri", "Workspace fixtures")} tone="quiet" onPress={() => router.navigate("./dev-workspace")} />
         </Sheet>
       ) : null}
     </>

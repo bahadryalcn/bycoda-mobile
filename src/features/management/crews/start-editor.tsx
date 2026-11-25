@@ -94,7 +94,7 @@ export function StartCrewEditor({
           !supported || submitted || start.isPending || !prompt.trim() || prompt.length > 12000
         }
         cancelDisabled={start.isPending}
-        cancelLabel={copy("Kapat", "Close")}
+        cancelLabel={copy("Vazgeç", "Cancel")}
         onCancel={requestClose}
         onSubmit={() =>
           confirmAction(

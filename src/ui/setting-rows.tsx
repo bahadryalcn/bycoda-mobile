@@ -1,11 +1,10 @@
-import type { ComponentType, ReactNode } from "react";
-import { IconTile } from "./icon-tile";
+import type { ReactNode } from "react";
 import { View } from "react-native";
 import { useMobileTheme } from "./theme";
 import { Body } from "./typography";
 import { SegmentedControl } from "./segmented-control";
 import { useInfoHint } from "./info-hint";
-import { useInNavigationGroup } from "./navigation-row";
+import { RowIcon, useInNavigationGroup } from "./navigation-row";
 import type { SelectionOption } from "./selection-model";
 import { gapIcon, metrics, space } from "./tokens";
 
@@ -68,7 +67,7 @@ export function SegmentedRow<T extends string>({
   return (
     <SettingRowFrame>
       <View style={{ flexDirection: "row", alignItems: "center", gap: gapIcon }}>
-        {icon}
+        {icon ? <View style={uiStyles.rowLeading}>{icon}</View> : null}
         {/* The label takes the free width: shrink-wrapped, Samsung's font measured it one word
             narrow, wrapped the last word and clipped that second line. */}
         <Body style={[uiStyles.label, uiStyles.grow]}>{label}</Body>
@@ -80,8 +79,11 @@ export function SegmentedRow<T extends string>({
   );
 }
 
-/** A read-only label with a current value (sizes, status) and/or a trailing control. Values wrap instead of truncating. */
-export function ValueRow({ label, value, icon, trailing }: { label: string; value?: string; icon?: ReactNode; trailing?: ReactNode }) {
+/**
+ * A read-only label with a current value (sizes, status) and/or a trailing control. Values wrap instead of truncating.
+ * `children` sit under the label/value line inside the same row, e.g. a meter for a share of capacity.
+ */
+export function ValueRow({ label, value, icon, trailing, children }: { label: string; value?: string; icon?: ReactNode; trailing?: ReactNode; children?: ReactNode }) {
   const { uiStyles } = useMobileTheme();
   return (
     <SettingRowFrame>
@@ -90,27 +92,15 @@ export function ValueRow({ label, value, icon, trailing }: { label: string; valu
         accessibilityLabel={value ? `${label}: ${value}` : label}
         style={{ flexDirection: "row", alignItems: "center", gap: gapIcon }}
       >
-        {icon}
+        {icon ? <View style={uiStyles.rowLeading}>{icon}</View> : null}
         <Body style={[uiStyles.label, uiStyles.grow]}>{label}</Body>
         {value ? <Body muted style={{ flexShrink: 1, textAlign: "right", fontVariant: ["tabular-nums"] }}>{value}</Body> : null}
         {trailing}
       </View>
+      {children}
     </SettingRowFrame>
   );
 }
 
-/**
- * 32dp icon well for a settings row's leading slot; pass a lucide glyph component. Neutral by default;
- * `tone="danger"` matches a destructive row's label so the glyph does not read as a safe action.
- */
-export function SettingIcon({ glyph: Glyph, tone }: {
-  glyph: ComponentType<{ size?: number; strokeWidth?: number; color?: string }>; tone?: "danger";
-}) {
-  const { colors, semanticColors } = useMobileTheme();
-  const color = tone ? semanticColors[tone].text : colors.muted;
-  return (
-    <IconTile color={color}>
-      <Glyph size={18} strokeWidth={2} color={color} />
-    </IconTile>
-  );
-}
+/** Settings rows use the shared list-row glyph (`RowIcon`): no tile, 20dp, muted. */
+export const SettingIcon = RowIcon;

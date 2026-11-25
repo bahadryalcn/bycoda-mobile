@@ -163,7 +163,7 @@ it("shows pending crews without claiming the list is empty", async () => {
   try {
     expect(view.container.textContent).toContain("Loading crews");
     expect(view.container.textContent).not.toContain("No crews yet");
-    expect(fixture.selects.get("Worker type")?.disabled).toBe(true);
+    expect(fixture.selects.has("Worker type")).toBe(false);
     expect(fixture.mutate).not.toHaveBeenCalled();
   } finally {
     await view.close();

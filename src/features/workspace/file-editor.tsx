@@ -8,7 +8,7 @@ import { useAsyncAction } from "@/state/actions";
 import { useActiveMachine } from "@/state/machines";
 import { useHostClient, useHostMutation, useHostQuery } from "@/state/queries";
 import {
-  Badge,
+  StatusText,
   Body,
   Button,
   ConfirmationCard,
@@ -199,7 +199,7 @@ export function FileEditor({ projectId, cwd, root, path, onBack, onDraftGuard, h
           {path}
         </Body>
         {!binary && edit && draft.ready ? (
-          dirty ? <UnsavedBadge /> : <Badge label={copy("Kaydedildi", "Saved")} />
+          dirty ? <UnsavedBadge /> : <StatusText label={copy("Kaydedildi", "Saved")} />
         ) : null}
       </Row>
       {confirmation?.kind === "leave" ? (

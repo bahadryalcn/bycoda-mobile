@@ -1,7 +1,7 @@
 import { useMobileTheme } from "./theme";
 import { scrollKeyboardDismissMode } from "./scroll-keyboard";
 import { createContext, use, useMemo, useCallback, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { KeyboardAvoidingView, KeyboardAwareScrollView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body } from "./typography";
@@ -13,6 +13,7 @@ import { PageHeader } from "panelui-native/components/page-header";
 import { surfaceClasses } from "./design-system";
 import { usePullRefresh } from "./use-pull-refresh";
 import { HeaderBackButton } from "./header-back-button";
+import { ScopeLine, type PageScope } from "./scope-line";
 import { FormActionScrollOwner } from "./form-action-context";
 import { screenFooterLimits } from "./screen-footer-model";
 import { ConnectionFeedbackScope } from "./connection-feedback-scope";
@@ -27,9 +28,9 @@ export type { HeaderIdentityProps } from "./screen-chrome";
 export { useScreenContentInsets } from "./screen-content-insets";
 
 /** Suppressed native titles must not leave an empty padded content header behind. */
-export function useScreenHeading(props: { title?: string; subtitle?: string; context?: ReactNode; actions?: ReactNode; onBack?: () => void }) {
+export function useScreenHeading(props: { title?: string; subtitle?: string; scope?: PageScope; context?: ReactNode; actions?: ReactNode; onBack?: () => void }) {
   const chrome = useScreenChrome();
-  const visible = props.subtitle || props.context || props.actions || (props.onBack && !chrome.nativeTitle) || (props.title && (!chrome.nativeTitle || chrome.headerAccessory));
+  const visible = props.subtitle || props.scope?.computer || props.scope?.project || props.context || props.actions || (props.onBack && !chrome.nativeTitle) || (props.title && (!chrome.nativeTitle || chrome.headerAccessory));
   return visible ? <ScreenHeading {...props} /> : null;
 }
 
@@ -60,8 +61,10 @@ export function ScreenChromeProvider({
 }
 
 /** One identity/context/action row. Native title ownership never hides commands. */
-export function ScreenHeading({ title, subtitle, context, actions, onBack }: {
+export function ScreenHeading({ title, subtitle, scope, context, actions, onBack }: {
   title?: string; subtitle?: string; context?: ReactNode; actions?: ReactNode;
+  /** Which computer/project the page acts on; shares the row with `actions`. */
+  scope?: PageScope;
   /** In-screen back (no native header); the shared HeaderBackButton leads the heading. */
   onBack?: () => void;
 }) {
@@ -72,19 +75,22 @@ export function ScreenHeading({ title, subtitle, context, actions, onBack }: {
   const customIdentity = showTitle && chrome.headerIdentity;
   const accessory = title ? chrome.headerAccessory : undefined;
   const back = !!onBack && !chrome.nativeTitle;
-  if (!showTitle && !subtitle && !context && !actions && !accessory && !back) return null;
+  const scoped = !!(scope?.computer || scope?.project);
+  if (!showTitle && !subtitle && !scoped && !context && !actions && !accessory && !back) return null;
   return (
-    <PageHeader variant="page" align="start" className="bg-transparent" style={uiStyles.pageHeading}>
+    <PageHeader variant="page" align="start" className="bg-transparent"
+      style={[uiStyles.pageHeading, !showTitle && !back && !actions && !accessory && { minHeight: 0 }]}>
       {back ? <HeaderBackButton onPress={onBack!} /> : null}
-      {showTitle || subtitle || context ? (
+      {showTitle || subtitle || scoped || context ? (
         <PageHeader.Content className="p-0 gap-0" style={[uiStyles.pageIdentity, { flexBasis: 120 * Math.max(1, fontScale) }]}>
           {customIdentity ? customIdentity({ title: title!, subtitle }) : (
             <>
               {showTitle ? <PageHeader.Title selectable style={uiStyles.pageTitle}>{title}</PageHeader.Title> : null}
+              {scoped ? <ScopeLine scope={scope!} /> : null}
               {subtitle ? <PageHeader.Description selectable style={uiStyles.caption}>{subtitle}</PageHeader.Description> : null}
             </>
           )}
-          {context ? (showTitle || subtitle ? <View style={uiStyles.pageContext}>{context}</View> : context) : null}
+          {context ? (showTitle || subtitle || scoped ? <View style={uiStyles.pageContext}>{context}</View> : context) : null}
         </PageHeader.Content>
       ) : null}
       {accessory}
@@ -143,6 +149,7 @@ export function Screen({
   children,
   title,
   subtitle,
+  scope,
   context,
   scroll = true,
   query,
@@ -158,7 +165,7 @@ export function Screen({
   const insets = useSafeAreaInsets();
   const content = useScreenContentInsets();
   const chrome = use(ScreenChrome);
-  const heading = useScreenHeading({ title, subtitle, context, actions, onBack });
+  const heading = useScreenHeading({ title, subtitle, scope, context, actions, onBack });
   const keyboardVisible = useKeyboardState(state => state.isVisible);
   const { height, fontScale } = useWindowDimensions();
   const [frameHeight, measureFrame] = useScreenHeight(height);
@@ -313,7 +320,6 @@ export function Stack({ children, style }: ContainerProps) {
   );
 }
 
-/** 12/16 semibold muted label, optional count and trailing control, then a hairline. */
 /**
  * Android measures this label a few percent narrower than it draws it, so a short multi-word title
  * that fits was re-broken and its second line clipped. Short titles are kept on one line with
@@ -323,32 +329,43 @@ export function sectionTitleText(text: string): string {
   return text.length <= 32 ? text.replace(/ /g, String.fromCharCode(0xa0)) : text;
 }
 
+/** A count is shown as a quiet number only when there is something to count. */
+export function sectionCountText(count: number | undefined): string | undefined {
+  return count === undefined || !Number.isFinite(count) || count <= 0 ? undefined : String(count);
+}
+
+/**
+ * The one section header: 12/16 semibold muted label, an optional quiet count (never "(0)"), and a
+ * trailing control (info, filter, action) aligned at the end. No rule; spacing separates groups.
+ */
 export function SectionHeader({ title, count, trailing, flush }: {
   title: string; count?: number; trailing?: ReactNode;
-  /** The parent already separates groups (Section inside Screen), so add no lead-in. */
+  /** First header of a container with nothing above it (sheet top): drop the group lead-in. */
   flush?: boolean;
 }) {
   const { uiStyles } = useMobileTheme();
+  const countText = sectionCountText(count);
   return (
-    <View style={[uiStyles.sectionHeader, flush && { paddingTop: 0, paddingBottom: 0 }]}>
-      {/* The title wraps fully; the rule only takes what is left (never below space.lg). See
-          sectionTitleText for why short titles use no-break spaces. */}
-      <Body selectable={false} accessibilityRole="header" style={[uiStyles.sectionLabel, { flexShrink: 1, minWidth: 0, paddingEnd: space.sm }]}>
-        {sectionTitleText(count === undefined ? title : `${title} (${count})`)}
+    <View style={[uiStyles.sectionHeader, flush && { paddingTop: 0 }]}>
+      <Body selectable={false} accessibilityRole="header"
+        accessibilityLabel={countText ? `${title}, ${countText}` : title}
+        style={[uiStyles.sectionLabel, { flexShrink: 1, minWidth: 0 }]}>
+        {sectionTitleText(title)}
+        {countText ? <Text style={uiStyles.sectionCount}>{` ${countText}`}</Text> : null}
       </Body>
-      <View accessible={false} style={[uiStyles.separator, { flexGrow: 1, flexShrink: 0, flexBasis: space.lg }]} />
-      {trailing}
+      {trailing ? <View style={uiStyles.sectionTrailing}>{trailing}</View> : null}
     </View>
   );
 }
 
+/** A titled group of rows. Inside a Screen the parent gap plus the header lead-in make the group rhythm. */
 export function Section({ title, children }: SectionProps) {
   useMobileTheme();
   return (
-    <Stack style={{ gap: space.sm }}>
-      <SectionHeader title={title} flush />
+    <View style={{ gap: space.sm }}>
+      <SectionHeader title={title} />
       {children}
-    </Stack>
+    </View>
   );
 }
 

@@ -54,6 +54,10 @@ export type ModelPickerProps = {
   unavailableAccount?: boolean;
   /** Status shown above the lists, e.g. why choices are locked. */
   notice?: ReactNode;
+  /** Sheet title; session editors that include access name it "Model and access". */
+  title?: string;
+  /** Further fields of the same draft after the model list (access, context reading). */
+  extra?: ReactNode;
   /**
    * The computer's model catalogue. With it the sheet offers bycoda's own Agents (advisor, subagents
    * and image models from any provider) instead of the provider's native advisor settings.
@@ -85,6 +89,8 @@ export function ModelPicker({
   saveDisabled,
   unavailableAccount,
   notice,
+  title,
+  extra,
   catalog,
   onChange,
 }: ModelPickerProps) {
@@ -149,7 +155,7 @@ export function ModelPicker({
   return (
     <Sheet
       visible={visible}
-      title={copy("Model", "Model")}
+      title={title ?? copy("Model", "Model")}
       size="form"
       onClose={close}
       dirty={dirty}
@@ -264,6 +270,7 @@ export function ModelPicker({
             />
           )}
         </View>
+        {extra}
         {groups.map(({ group, items }) => (
           <Disclosure key={group} label={label(SETTING_GROUP_TITLE[group])}>
             <View style={{ gap: space.lg }}>{items.map(field())}</View>

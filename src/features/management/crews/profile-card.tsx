@@ -6,11 +6,10 @@ import Pencil from "lucide-react-native/icons/pencil";
 import Trash2 from "lucide-react-native/icons/trash-2";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
-import { ActionMenu, Badge, Body, MutationState } from "@/ui/primitives";
+import { Body, MutationState, StatusText } from "@/ui/primitives";
 import { RecordCard } from "@/ui/record-card";
-import { joinMeta, RecordTrailing, useMenuGlyph } from "../shared/record-bits";
+import { joinMeta, useMenuGlyph } from "../shared/record-bits";
 import { handleLabel } from "./identity-model";
-import { MemberAvatars } from "./member-avatars";
 import { memberModelSource } from "./model";
 
 /** A library member: role badge, provider mark, model and its edit/delete menu. */
@@ -31,20 +30,17 @@ export function CrewProfileCard({ value, roleLabel, busy, editorOpen, machineId,
   return (
     <RecordCard
       title={value.name}
-      status={<Badge label={roleLabel(value.role)} />}
+      status={<StatusText label={roleLabel(value.role)} />}
       metadata={joinMeta([
         handleLabel(value.handle),
         memberModelSource(value, copy) ?? (candidate && agentPresentation(candidate.harness, candidate.model)),
         value.projectId ? copy("Bu proje", "This project") : copy("Bilgisayar geneli", "Host-wide"),
       ])}
-      preview={value.instructions ? <Body muted numberOfLines={2}>{value.instructions}</Body> : null}
-      details={<Body>{value.instructions}</Body>}
-      menu={
-        <RecordTrailing>
-          <ActionMenu
-            label={copy("Kütüphane üyesi işlemleri", "Library member actions")}
-            busy={remove.isPending && remove.variables?.agentId === value.id}
-            actions={[
+      details={value.instructions ? <Body>{value.instructions}</Body> : undefined}
+      actions={{
+            label: copy("Kütüphane üyesi işlemleri", "Library member actions"),
+            busy: remove.isPending && remove.variables?.agentId === value.id,
+            items: [
               { key: "edit", icon: glyph(Pencil), label: copy("Düzenle", "Edit"), disabled: busy || editorOpen,
                 onPress: () => onEdit(value) },
               { key: "delete", icon: glyph(Trash2, true), label: copy("Sil", "Delete"), destructive: true,
@@ -62,10 +58,8 @@ export function CrewProfileCard({ value, roleLabel, busy, editorOpen, machineId,
                         remove.mutate({ projectId, agentId: value.id });
                     },
                   ) },
-            ]}
-          />
-        </RecordTrailing>
-      }
+            ],
+      }}
     >
       {remove.variables?.agentId === value.id ? <MutationState mutation={remove} /> : null}
     </RecordCard>

@@ -6,6 +6,8 @@ export type SessionSettingsProps = {
   disabled: boolean;
   onCommand: (params: Record<string, unknown>) => Promise<unknown>;
   onUpdated: () => void;
+  /** Opens the one "Model and access" editor (the composer's model sheet). */
+  onOpenModel?: () => void;
 };
 type EditableSession = HostSession["session"];
 export type SessionSettingsDraft = Pick<EditableSession, "title" | "model" | "modelSettings"> & {

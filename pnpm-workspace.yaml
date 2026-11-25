@@ -19,5 +19,6 @@ minimumReleaseAgeExclude:
 patchedDependencies:
   expo-secure-store@58.0.2: modules/bycoda-host-socket/patches/expo-secure-store@58.0.2.patch
   expo-sharing@58.0.23: vendor/patches/expo-sharing@58.0.23.patch
+  expo-router@58.0.31: vendor/patches/expo-router@58.0.31.patch
   expo-widgets@58.0.27: vendor/patches/expo-widgets@58.0.27.patch
   panelui-native@1.4.0: vendor/patches/panelui-native@1.4.0.patch

@@ -10,6 +10,7 @@ vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Body: Group, Section: Group, Row: Group, Sheet: Group, ErrorNotice: () => null,
     Badge: ({ label }: { label: string }) => createElement("span", null, label),
+    StatusText: ({ label }: { label: string }) => createElement("span", null, label),
     Button: ({ label, onPress, disabled }: { label: string; onPress(): void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label), FormActions: () => null };
 });
 import { AssistantJobsSection } from "./assistant-jobs-section";

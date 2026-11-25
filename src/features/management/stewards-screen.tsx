@@ -1,3 +1,4 @@
+import { ManagementToolbar } from "./shared/collection-toolbar";
 import { useRef, useState, type ComponentRef } from "react";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "./shared/search";
@@ -16,7 +17,7 @@ import {
   SearchField,
   Sheet,
 } from "@/ui/primitives";
-import { ScreenList } from "@/ui/screen-list";
+import { ManagementList } from "./shared/management-list";
 import { Scope } from "./shared/scope";
 import { useLocalProjectScope } from "./shared/local-project-scope";
 import { AgentProviderPrerequisite } from "./shared/agent-provider-prerequisite";
@@ -26,6 +27,7 @@ import { StewardCard } from "./stewards/steward-card";
 import { savedStewardId } from "./stewards/steward-feedback";
 import { StewardEditor } from "./stewards/steward-editor";
 import { useMobileTheme } from "@/ui/theme";
+import { iconSize } from "@/ui/tokens";
 
 export function StewardsScreen() {
   const { colors } = useMobileTheme();
@@ -36,8 +38,17 @@ export function StewardsScreen() {
   const { providers, query: providerQuery } = useAgentProviders(projectId);
   const supported = machine?.capabilities?.includes("stewards") === true;
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
   const searchInput = useRef<ComponentRef<typeof SearchField>>(null);
-  const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
+  const filterOptions = [
+    { value: "all", label: copy("Tümü", "All") },
+    { value: "enabled", label: copy("Etkin", "Enabled") },
+    { value: "paused", label: copy("Duraklatılmış", "Paused") },
+  ];
+  const clearSearch = () => {
+    setSearch("");
+    searchInput.current?.focus();
+  };
   const [editor, setEditor] = useState<HostStewardInput | null>(null);
   const query = useHostQuery<HostSteward[]>(
     ["stewards"],
@@ -49,21 +60,30 @@ export function StewardsScreen() {
   const run = useHostMutation("stewards.runNow", ["stewards"]);
   const remove = useHostMutation("stewards.delete", ["stewards"]);
   const busy = save.isPending || run.isPending || remove.isPending;
-  const scoped = (query.data ?? []).filter(item => !projectId || item.projectId === projectId);
-  const rows = scoped.filter(item => matchesSearch(`${item.focus} ${item.model} ${item.projectId}`, search, locale));
+  const scoped = (query.data ?? []).filter((item) => !projectId || item.projectId === projectId);
+  const rows = scoped.filter(
+    (item) =>
+      (filter === "all" || item.enabled === (filter === "enabled")) &&
+      matchesSearch(`${item.focus} ${item.model} ${item.projectId}`, search, locale),
+  );
   const existingSteward = projectId
     ? query.data?.find((item) => item.projectId === projectId)
     : undefined;
   const presentation = getQueryPresentation(query);
-  const canCreate = supported && presentation === "ready" && query.data !== undefined &&
-    !!projectId && !!providers.length && !busy && !editor && !existingSteward;
-  const showEditInHeader = supported && existingSteward &&
-    (presentation === "ready" || presentation === "stale-error");
+  const canCreate =
+    supported &&
+    presentation === "ready" &&
+    query.data !== undefined &&
+    !!projectId &&
+    !!providers.length &&
+    !busy &&
+    !editor &&
+    !existingSteward;
+  const showEditInHeader =
+    supported && existingSteward && (presentation === "ready" || presentation === "stale-error");
   const create = () => {
     if (!canCreate || !projectId) return;
-    const { maxRunMinutes: _minutes, ...agent } = initialAgent(
-      providers,
-    );
+    const { maxRunMinutes: _minutes, ...agent } = initialAgent(providers);
     setEditor({
       ...agent,
       id: identifier(),
@@ -80,13 +100,45 @@ export function StewardsScreen() {
       dayOfWeek: 1,
     });
   };
+  const listState = (
+    <QueryState
+      size="region"
+      query={query}
+      empty={!!query.data && !rows.length}
+      emptyTitle={
+        (search.trim() || filter !== "all") && scoped.length
+          ? copy("Eşleşen sonuç yok", "No matching results")
+          : copy("Henüz proje sorumlusu yok", "No project stewards yet")
+      }
+      emptyDetail={
+        scoped.length
+          ? undefined
+          : copy(
+              "Proje sorumlusu projeyi düzenli inceler ve yeni görevler önerir.",
+              "A project steward reviews the project on a schedule and proposes new tasks.",
+            )
+      }
+      emptyAction={
+        (search.trim() || filter !== "all") && scoped.length
+          ? search.trim()
+            ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
+            : {
+                label: copy("Filtreleri temizle", "Clear filters"),
+                onPress: () => setFilter("all"),
+              }
+          : !scoped.length && canCreate
+            ? { label: copy("Yeni proje sorumlusu", "New project steward"), onPress: create }
+            : undefined
+      }
+    />
+  );
   return (
-    <ScreenList<HostSteward>
+    <ManagementList<HostSteward>
       title={copy("Proje sorumluları", "Project stewards")}
       query={supported ? query : undefined}
+      ListEmptyComponent={supported ? listState : undefined}
       data={rows}
       keyExtractor={(item) => item.id}
-      context={<Scope allowAll projectId={projectId} onChange={setProjectId} />}
       actions={
         showEditInHeader ? (
           <IconButton
@@ -94,7 +146,7 @@ export function StewardsScreen() {
             onPress={() => setEditor(existingSteward)}
             disabled={busy || !!editor}
           >
-            <Pencil size={22} strokeWidth={2.2} color={colors.accent} />
+            <Pencil size={iconSize.action} strokeWidth={2} color={colors.accent} />
           </IconButton>
         ) : undefined
       }
@@ -119,24 +171,37 @@ export function StewardsScreen() {
                   )}
                 </Body>
               ) : !existingSteward && !providers.length ? (
-                <>{providerQuery.isLoading || providerQuery.error ? <QueryState query={providerQuery} loading="inline" /> : <AgentProviderPrerequisite />}</>
+                <>
+                  {providerQuery.isLoading || providerQuery.error ? (
+                    <QueryState query={providerQuery} loading="inline" />
+                  ) : (
+                    <AgentProviderPrerequisite />
+                  )}
+                </>
               ) : null}
-              <SearchField
-                ref={searchInput}
-                value={search}
-                onChangeText={setSearch}
-                label={copy("Odak veya modelde ara", "Search steward focus and model")}
-                placeholder={copy("Sorumlularda ara", "Search stewards")}
+              <ManagementToolbar
+                project={<Scope allowAll projectId={projectId} onChange={setProjectId} />}
+                search={
+                  <SearchField
+                    placeholder={copy("Ara", "Search")}
+                    ref={searchInput}
+                    value={search}
+                    onChangeText={setSearch}
+                    label={copy("Odak veya modelde ara", "Search steward focus and model")}
+                  />
+                }
+                status={{
+                  label: copy("Durum", "Status"),
+                  value: filter,
+                  unfilteredValue: "all",
+                  options: filterOptions,
+                  onChange: setFilter,
+                }}
               />
-              {!rows.some(
-                (item) => item.id === savedStewardId(save.variables),
-              ) ? (
+              {!rows.some((item) => item.id === savedStewardId(save.variables)) ? (
                 <MutationState
                   mutation={save}
-                  success={copy(
-                    "Proje sorumlusu kaydedildi.",
-                    "Project steward saved.",
-                  )}
+                  success={copy("Proje sorumlusu kaydedildi.", "Project steward saved.")}
                 />
               ) : null}
               {!rows.some((item) => item.id === run.variables?.stewardId) ? (
@@ -148,43 +213,18 @@ export function StewardsScreen() {
               {!rows.some((item) => item.id === remove.variables?.stewardId) ? (
                 <MutationState mutation={remove} />
               ) : null}
-              <QueryState
-                query={query}
-                empty={!!query.data && !rows.length}
-                emptyTitle={
-                  search.trim() && scoped.length
-                    ? copy("Eşleşen sonuç yok", "No matching results")
-                    : copy(
-                        "Henüz proje sorumlusu yok",
-                        "No project stewards yet",
-                      )
-                }
-                emptyDetail={
-                  scoped.length
-                    ? undefined
-                    : copy(
-                        "Proje sorumlusu projeyi düzenli inceler ve yeni görevler önerir.",
-                        "A project steward reviews the project on a schedule and proposes new tasks.",
-                      )
-                }
-                emptyAction={
-                  search.trim() && scoped.length
-                    ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
-                    : !scoped.length && canCreate
-                      ? { label: copy("Yeni proje sorumlusu", "New project steward"), onPress: create }
-                      : undefined
-                }
-              />
+              {rows?.length ? listState : null}
             </>
           )}
           {editor ? (
             <Sheet
               visible
               size="form"
-              title={copy(
-                "Proje sorumlusu ayrıntıları",
-                "Project steward details",
-              )}
+              title={
+                !("updatedAt" in editor)
+                  ? copy("Yeni proje sorumlusu", "New project steward")
+                  : copy("Proje sorumlusu", "Project steward")
+              }
               onClose={() => setEditor(null)}
             >
               <StewardEditor

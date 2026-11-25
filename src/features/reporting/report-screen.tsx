@@ -1,4 +1,3 @@
-import { useMobileTheme } from "@/ui/theme";
 import { useLayoutEffect, useRef, useState } from "react";
 import { randomUUID } from "expo-crypto";
 import { reportSender } from "./report-config";
@@ -7,10 +6,10 @@ import { assertAppAccess } from "@/state/security";
 import { useCopy } from "@/ui/copy";
 import { useInfoHint } from "@/ui/info-hint";
 import { ConsentField } from "@/ui/consent-field";
+import { View } from "react-native";
 import Animated from "react-native-reanimated";
 import Flag from "lucide-react-native/icons/flag";
-import { Body, Disclosure, ErrorText, Field, NavigationGroup, NavigationRow, Screen, Section, SelectField, Sheet, FormActions, Notice, StateView, ToggleField } from "@/ui/primitives";
-import { IconTile } from "@/ui/icon-tile";
+import { Body, ErrorText, Field, NavigationGroup, NavigationRow, RowIcon, Screen, Section, SelectField, Sheet, FormActions, Notice, StateView, ToggleField } from "@/ui/primitives";
 import { enterItem } from "@/ui/motion";
 import {
   maxReportDescription,
@@ -27,16 +26,7 @@ import {
   useContentReport,
 } from "./report-store";
 
-function tile(Glyph: typeof Flag, color: string) {
-  return (
-    <IconTile color={color}>
-      <Glyph size={18} strokeWidth={2} color={color} />
-    </IconTile>
-  );
-}
-
 export function ContentReportScreen() {
-  const { colors } = useMobileTheme();
   const copy = useCopy();
   const privacyInfo = useInfoHint(copy(
     "Yalnızca açıklaman ve eklemeyi seçtiğin alıntı incelenmek üzere bycoda’ya gönderilir. Hesap ve bilgisayar bilgilerin eklenmez, bu yüzden bycoda sana yanıt veremez. Bu taslak yalnızca bellekte tutulur; uygulama sonlandırılırsa kaybolur.",
@@ -57,7 +47,7 @@ export function ContentReportScreen() {
   useLayoutEffect(() => { active.current = true; return () => { active.current = false; reviewOwner.current = null; }; }, []);
   const closeReview = () => { reviewOwner.current = null; retired.current = true; setDiscarding(null); };
   const staleReview = !!discarding && (!reviewCurrent || retired.current);
-  const title = copy("İçerik bildir", "Report content");
+  const title = copy("İçerik şikâyet et", "Report content");
   const doneLabel = copy("Tamam", "Done");
   const close = () => { if (router.canGoBack()) router.back(); else router.replace("/settings"); };
   if (status === "sent") {
@@ -71,7 +61,7 @@ export function ContentReportScreen() {
         <RouterStack.Screen options={{ title }} />
         <StateView
           illustration="success"
-          title={copy("Bildirim alındı.", "Report received.")}
+          title={copy("Şikâyet alındı.", "Report received.")}
           description={receiptId ? copy("Referans: {p0}", "Reference: {p0}", { p0: receiptId }) : undefined}
         />
       </Screen>
@@ -104,7 +94,7 @@ export function ContentReportScreen() {
     sendBlockedDescription: copy("Göndermek için bir açıklama yaz.", "Write a description to enable Send."),
     sendBlockedConsent: copy("Göndermek için gönderim onayını işaretle.", "Tick the consent below to enable Send."),
     service: copy(
-      "Bildirim hizmeti henüz kullanılamıyor. Taslağın uygulama açıkken korunur.",
+      "Şikâyet hizmeti henüz kullanılamıyor. Taslağın uygulama açıkken korunur.",
       "Reporting is not available yet. Your draft is kept while this app remains running.",
     ),
     send: copy(
@@ -112,9 +102,26 @@ export function ContentReportScreen() {
       "Delivery could not be confirmed. Your draft is kept; you can retry.",
     ),
   };
+  // Without a configured service nothing can be sent: say so instead of offering an editable form.
+  // A draft that already exists (from a transcript action) stays readable and can be discarded.
+  if (!reportSender && !hasDraft) return (
+    <Screen scroll={false}>
+      <RouterStack.Screen options={{ title }} />
+      <View style={{ flex: 1 }}>
+        <StateView
+          size="region"
+          illustration="permission"
+          title={copy("Şikâyet şu anda gönderilemiyor", "Reports can’t be sent right now")}
+          description={copy("Bu sürümde şikâyet hizmeti yapılandırılmamış.", "The reporting service is not set up in this version.")}
+          action={{ label: copy("Geri dön", "Go back"), onPress: close }}
+        />
+      </View>
+    </Screen>
+  );
+  const locked = busy || !reportSender;
   return (
     <Screen footer={<FormActions
-      submitLabel={!reportSender ? doneLabel : error === "send" ? copy("Yeniden dene", "Retry") : copy("Gönder", "Send")}
+      submitLabel={!reportSender ? copy("Kapat", "Close") : error === "send" ? copy("Yeniden dene", "Retry") : copy("Gönder", "Send")}
       disabled={!!reportSender && !!validation} busy={busy}
       feedback={error === "send" ? <Notice tone="danger" message={errorLabels.send} />
         : disabledReason ? <Notice message={disabledReason === "consent" ? errorLabels.sendBlockedConsent : errorLabels.sendBlockedDescription} />
@@ -134,10 +141,10 @@ export function ContentReportScreen() {
         <NavigationGroup>
           <SelectField
             variant="row"
-            icon={tile(Flag, colors.danger)}
-            label={copy("Bildirim nedeni", "Report reason")}
+            icon={<RowIcon glyph={Flag} />}
+            label={copy("Şikâyet nedeni", "Report reason")}
             value={draft.reason}
-            disabled={busy}
+            disabled={locked}
             options={reportReasons.map((reason) => ({ value: reason, label: reasonLabels[reason] }))}
             onChange={(reason) => updateContentReport({ reason })}
           />
@@ -151,7 +158,7 @@ export function ContentReportScreen() {
           value={draft.description}
           maxLength={maxReportDescription}
           multiline
-          editable={!busy}
+          editable={!locked}
           onChangeText={(description) => updateContentReport({ description })}
           onBlur={() => setDescriptionTouched(true)}
         />
@@ -162,7 +169,7 @@ export function ContentReportScreen() {
         <ToggleField
           label={copy("İçerikten alıntı ekle", "Include a content excerpt")}
           value={draft.includeExcerpt}
-          disabled={busy}
+          disabled={locked}
           onChange={(includeExcerpt) => updateContentReport({ includeExcerpt, consent: false })}
         />
       </NavigationGroup>
@@ -176,7 +183,7 @@ export function ContentReportScreen() {
           value={draft.excerpt}
           maxLength={maxReportExcerpt}
           multiline
-          editable={!busy}
+          editable={!locked}
           onChangeText={(excerpt) => updateContentReport({ excerpt, consent: false })}
         />
       ) : null}
@@ -192,18 +199,16 @@ export function ContentReportScreen() {
       <ErrorText error={error === "consent"} message={errorLabels.consent} />
       </Section> : null}
       <Body muted>{warning}</Body>
-      <Disclosure label={copy("Bildirim ve gizlilik", "Reporting & privacy")}>
-        <NavigationGroup>
-          <NavigationRow
-            label={copy("Gizlilik politikası", "Privacy policy")}
-            trailing={privacyInfo.button}
-            onPress={() => router.push("/legal/privacy")}
-          />
-        </NavigationGroup>
-        {privacyInfo.panel}
-      </Disclosure>
+      <NavigationGroup>
+        <NavigationRow
+          label={copy("Gizlilik politikası", "Privacy policy")}
+          trailing={privacyInfo.button}
+          onPress={() => router.push("/legal/privacy")}
+        />
+      </NavigationGroup>
+      {privacyInfo.panel}
       <Sheet visible={!!discarding} size="compact" title={copy("Taslağı sil", "Discard draft")} onClose={closeReview}>
-        <Body>{copy("Bu bildirim taslağı silinsin mi?", "Discard this report draft?")}</Body>
+        <Body>{copy("Bu şikâyet taslağı silinsin mi?", "Discard this report draft?")}</Body>
         {staleReview ? <Notice tone="warning" message={copy("Taslak değişti. Silmeden önce yeniden incele.", "The draft changed. Review it again before discarding.")} /> : null}
         <FormActions submitLabel={copy("Taslağı sil", "Discard draft")} tone="danger" disabled={busy || staleReview}
           cancelLabel={copy("Taslağı koru", "Keep draft")} onCancel={closeReview}

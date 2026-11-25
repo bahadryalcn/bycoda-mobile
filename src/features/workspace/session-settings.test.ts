@@ -1,9 +1,8 @@
 // @vitest-environment happy-dom
-import { act, createElement, type ComponentProps, type PropsWithChildren } from "react";
+import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { AgentModelFields } from "./agent-model-fields";
 import type { HostSession } from "./wire";
 
 const fixture = vi.hoisted(() => ({
@@ -11,13 +10,10 @@ const fixture = vi.hoisted(() => ({
   update: vi.fn(async (_input: unknown): Promise<unknown> => undefined),
   discard: undefined as undefined | (() => void),
   machineId: "machine-a",
-  switchAllowed: false,
   close: undefined as undefined | (() => void),
-  model: undefined as undefined | ComponentProps<typeof AgentModelFields>,
   title: undefined as
     | undefined
     | { value: string; onChangeText(value: string): void; onBlur(): void },
-  accountId: undefined as string | undefined,
   storage: new Map<string, string>(),
 }));
 vi.mock("@react-native-async-storage/async-storage", () => ({
@@ -38,48 +34,22 @@ vi.mock("@/state/machines", () => ({
   useActiveMachine: () => ({
     id: fixture.machineId,
     environmentId: "environment",
-    providers: ["claude", "codex"],
-    capabilities: fixture.switchAllowed ? ["sessions.harnessSwitch"] : [],
   }),
 }));
 vi.mock("@/state/queries", () => ({
   useHostMutation: () => ({ mutateAsync: fixture.update, isPending: false }),
 }));
-vi.mock("@/state/model-catalog", () => ({
-  useModelCatalog: () => ({
-    data: { accounts: { claude: [{ id: "default", label: "Personal" }] }, errors: {} },
-  }),
-}));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
-vi.mock("./catalog", () => ({
-  catalogProviders: () => ["claude", "codex"],
-  sessionCatalog: () => ({
-    models: {
-      claude: [
-        { id: "original", name: "Original" },
-        { id: "new", name: "New" },
-      ],
-      codex: [{ id: "codex:new", name: "Codex new" }],
-    },
-  }),
-  sessionModel: () => ({ id: "original" }),
-  sessionSettings: (_model: unknown, value: unknown) => value,
-  modelDefaults: () => ({}),
-}));
-vi.mock("./agent-model-fields", () => ({
-  AgentModelFields: (props: ComponentProps<typeof AgentModelFields>) => {
-    fixture.model = props;
-    return null;
-  },
-}));
-vi.mock("./agent-option-icons", () => ({ PermissionField: () => null }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {
     Row: Group,
     Section: Group,
+    NavigationGroup: Group,
+    NavigationRow: ({ label, detail, disabled, onPress }: { label: string; detail?: string; disabled?: boolean; onPress(): void }) =>
+      createElement("button", { disabled, onClick: onPress, title: detail }, label),
     FormActions: ({ onSubmit, disabled }: { onSubmit(): void; disabled?: boolean }) =>
       createElement("button", { disabled, onClick: onSubmit }, "Save"),
     Sheet: ({
@@ -125,6 +95,7 @@ vi.mock("@/ui/primitives", () => {
 import { SessionSettings } from "./session-settings";
 let root: Root, container: HTMLDivElement, cache: QueryClient;
 const close = vi.fn();
+const openModel = vi.fn();
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.useFakeTimers();
@@ -132,11 +103,9 @@ beforeEach(() => {
   fixture.update.mockReset().mockResolvedValue(undefined);
   fixture.storage.clear();
   fixture.machineId = "machine-a";
-  fixture.switchAllowed = false;
-  fixture.accountId = undefined;
-  fixture.model = undefined;
   fixture.title = undefined;
   close.mockClear();
+  openModel.mockClear();
   container = document.createElement("div");
   root = createRoot(container);
   cache = new QueryClient({
@@ -160,7 +129,7 @@ async function render(
       id: "session",
       title: "Original title",
       harness: "claude",
-      providerAccountId: fixture.accountId,
+      providerAccountId: undefined,
       model: overrides.model ?? "original",
       modelSettings: overrides.settings ?? {},
       runtimeMode: "supervised",
@@ -178,20 +147,13 @@ async function render(
           onClose: close,
           onCommand: fixture.command,
           onUpdated: () => {},
+          onOpenModel: openModel,
         }),
       ),
     ),
   );
 }
 
-it("keeps independent delegation and tool restrictions when changing provider in session settings", async () => {
-  fixture.switchAllowed = true;
-  const settings = { crossSubagents: "auto", crossAdvisor: "null", crossSubagentMaxEffort: "high", crewTools: "[]" };
-  await render({ settings });
-  await act(() => fixture.model!.provider!.onChange(fixture.model!.provider!.choices.find(choice => choice.provider === "codex")!));
-  expect(fixture.model!.settings).toMatchObject(settings);
-  expect(fixture.command).not.toHaveBeenCalled();
-});
 const flush = () =>
   act(async () => {
     await vi.advanceTimersByTimeAsync(600);
@@ -202,59 +164,44 @@ const save = () =>
       .find((button) => button.textContent === "Save")!
       .click();
   });
-it("keeps edits local through timer, blur and close, then submits once on Save", async () => {
+it("keeps title edits local through timer, blur and close, then submits once on Save", async () => {
   await render();
-  await act(async () => fixture.model!.onChange("new", { effort: "high" }));
   await act(async () => fixture.title!.onChangeText("Draft title"));
   await flush();
   await act(async () => fixture.title!.onBlur?.());
   await act(async () => fixture.close!());
-  expect(fixture.command).not.toHaveBeenCalled();
   expect(fixture.update).not.toHaveBeenCalled();
   expect(close).not.toHaveBeenCalled();
   await save();
-  expect(fixture.command).toHaveBeenCalledOnce();
+  expect(fixture.command).not.toHaveBeenCalled();
+  expect(fixture.update).toHaveBeenCalledOnce();
   expect(fixture.update).toHaveBeenCalledWith(
     expect.objectContaining({ title: "Draft title", authorityGeneration: 3 }),
   );
-});
-it("retains failed configuration for explicit Save retry", async () => {
-  fixture.command.mockRejectedValueOnce(new Error("Configuration refused"));
-  await render();
-  await act(async () => fixture.model!.onChange("new", { effort: "high" }));
-  await save();
-  await flush();
-  expect(fixture.command).toHaveBeenCalledOnce();
-  expect(fixture.model!.model).toBe("new");
-  await flush();
-  expect(fixture.command).toHaveBeenCalledOnce();
-  await save();
-  expect(fixture.command).toHaveBeenCalledTimes(2);
-});
-it("keeps removed accounts explicit until repaired and saved", async () => {
-  fixture.accountId = "removed";
-  await render();
-  expect(fixture.model!.provider!.value!.label).toBe("Account unavailable");
-  await act(async () => fixture.model!.provider!.onChange(fixture.model!.provider!.choices[0]!));
-  await flush();
-  expect(fixture.command).not.toHaveBeenCalled();
-  await save();
-  expect(fixture.command).toHaveBeenCalledWith(
-    expect.objectContaining({ providerAccountId: null }),
-  );
+  expect(close).toHaveBeenCalledOnce();
 });
 
-it("restores unsaved model, effort and title after unmount without a Host write", async () => {
+it("has one editor for model and access: the row closes settings and opens the shared model sheet", async () => {
   await render();
-  await act(async () => fixture.model!.onChange("new", { effort: "high" }));
+  const row = () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Model and access")!;
+  expect(row().title).toBe("original");
+  expect(container.textContent).not.toContain("Compact context");
+  await act(async () => fixture.title!.onChangeText("Unsaved"));
+  expect(row().disabled).toBe(true);
+  await act(async () => fixture.title!.onChangeText("Original title"));
+  await act(async () => row().click());
+  expect(close).toHaveBeenCalledOnce();
+  expect(openModel).toHaveBeenCalledOnce();
+  expect(fixture.command).not.toHaveBeenCalled();
+});
+
+it("restores an unsaved title after unmount without a Host write", async () => {
+  await render();
   await act(async () => fixture.title!.onChangeText("Retained draft"));
   await act(async () => root.unmount());
   root = createRoot(container);
   await render();
-  expect(fixture.model!.model).toBe("new");
-  expect(fixture.model!.settings).toEqual({ effort: "high" });
   expect(fixture.title!.value).toBe("Retained draft");
-  expect(fixture.command).not.toHaveBeenCalled();
   expect(fixture.update).not.toHaveBeenCalled();
 });
 
@@ -268,58 +215,36 @@ it("clears durable draft after an explicitly confirmed discard", async () => {
   expect(close).toHaveBeenCalledOnce();
   expect(fixture.update).not.toHaveBeenCalled();
 });
-it("blocks repeated Save and dismissal until configuration settles", async () => {
-  let finish!: () => void;
-  fixture.command.mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        finish = () => resolve(undefined);
-      }),
-  );
-  await render();
-  await act(async () => fixture.model!.onChange("new", {}));
-  await save();
-  await save();
-  await act(async () => fixture.close!());
-  expect(close).not.toHaveBeenCalled();
-  expect(fixture.command).toHaveBeenCalledOnce();
-  await act(async () => finish());
-  expect(close).toHaveBeenCalledOnce();
-  expect(fixture.storage.size).toBe(0);
-});
-it("retains partial-success title draft and retries only failed title RPC", async () => {
+
+it("retains a failed title for explicit Save retry", async () => {
   fixture.update.mockRejectedValueOnce(new Error("Title refused"));
   await render();
-  await act(async () => fixture.model!.onChange("new", {}));
   await act(async () => fixture.title!.onChangeText("Retained title"));
   await save();
   expect(close).not.toHaveBeenCalled();
-  expect(fixture.command).toHaveBeenCalledOnce();
   expect(fixture.update).toHaveBeenCalledOnce();
   await save();
-  expect(fixture.command).toHaveBeenCalledOnce();
   expect(fixture.update).toHaveBeenCalledTimes(2);
   expect(close).toHaveBeenCalledOnce();
 });
-it("preserves restored draft but blocks stale authority or changed Host model", async () => {
+
+it("blocks a restored title draft after the session authority changed", async () => {
   await render();
-  await act(async () => fixture.model!.onChange("new", {}));
+  await act(async () => fixture.title!.onChangeText("Stale"));
   await act(async () => root.unmount());
   root = createRoot(container);
-  await render({ generation: 4, model: "desktop-model" });
-  expect(fixture.model!.model).toBe("new");
+  await render({ generation: 4 });
+  expect(fixture.title!.value).toBe("Stale");
   await save();
-  expect(fixture.command).not.toHaveBeenCalled();
+  expect(fixture.update).not.toHaveBeenCalled();
   expect(container.textContent).toContain("Session changed.");
 });
-it("blocks running and changed-machine configuration", async () => {
+
+it("blocks Save after the active computer changes", async () => {
   await render();
-  await act(async () => fixture.model!.onChange("new", {}));
-  await render({ status: "running" });
-  await save();
-  expect(fixture.command).not.toHaveBeenCalled();
+  await act(async () => fixture.title!.onChangeText("Other"));
   fixture.machineId = "machine-b";
   await render();
   await save();
-  expect(fixture.command).not.toHaveBeenCalled();
+  expect(fixture.update).not.toHaveBeenCalled();
 });

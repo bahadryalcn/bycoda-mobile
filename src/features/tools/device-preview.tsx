@@ -22,7 +22,7 @@ import {
   Stack,
   ToggleField,
 } from "@/ui/primitives";
-import { space } from "@/ui/tokens";
+import { iconSize, space } from "@/ui/tokens";
 import { RemoteFrame } from "@/ui/remote-frame";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useCopy } from "@/ui/copy";
@@ -322,7 +322,7 @@ export function DevicePreviewSheet({
                 void refresh.onRefresh();
               }}
             >
-              <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
+              <RefreshCw size={iconSize.action} strokeWidth={2} color={colors.accent} />
             </IconButton>
           </Row>
           {!job && status.isError ? (

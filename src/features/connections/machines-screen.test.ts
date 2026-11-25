@@ -13,13 +13,13 @@ vi.mock("@/ui/screen-list", () => ({
 vi.mock("@/ui/theme", () => ({ useMobileTheme: vi.fn(() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, args?: Record<string, string>) => en.replace(/\{(\w+)\}/g, (match, key) => args?.[key] ?? match) }));
 vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
-vi.mock("@/ui/tokens", () => ({ colors: {}, metrics: {}, space: {} }));
+vi.mock("@/ui/tokens", () => ({ colors: {}, metrics: {}, space: {}, iconSize: {} }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
 vi.mock("@/ui/brand", () => ({ LegalLinks: () => null }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: () => null }));
 vi.mock("@/ui/machine-bar", () => ({ useMachineStatus: () => ({ phase: "disconnected", status: "Disconnected", reason: "Computer is offline." }) }));
 vi.mock("./active-computer-status", () => ({ ActiveComputerStatus: () => createElement("span", null, "Active"), RetryConnectionRow: () => null }));
-vi.mock("expo-router", () => ({ router: { canDismiss: () => true, back: fixture.navigate, dismissAll: fixture.navigate, dismissTo: fixture.navigate, replace: fixture.navigate, navigate: fixture.navigate }, useLocalSearchParams: () => ({ start: fixture.start, returnToPrevious: fixture.returnToPrevious }), Stack: { Screen: ({options}: {options: {gestureEnabled: boolean; headerLeft?: () => import("react").ReactNode; headerRight?: () => import("react").ReactNode}}) => { fixture.options = options; return createElement("header", null, options.headerLeft?.(), options.headerRight?.()); } } }));
+vi.mock("expo-router", () => ({ router: { canGoBack: () => fixture.canGoBack, canDismiss: () => true, back: fixture.navigate, dismissAll: fixture.navigate, dismissTo: fixture.navigate, replace: fixture.navigate, navigate: fixture.navigate }, useCanGoBack: () => fixture.canGoBack, useLocalSearchParams: () => ({ start: fixture.start, returnToPrevious: fixture.returnToPrevious }), Stack: { Screen: ({options}: {options: {gestureEnabled: boolean; headerLeft?: () => import("react").ReactNode; headerRight?: () => import("react").ReactNode}}) => { fixture.options = options; return createElement("header", null, options.headerLeft?.(), options.headerRight?.()); } } }));
 vi.mock("expo-router/react-navigation", () => ({ useIsFocused: () => true }));
 vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
@@ -42,7 +42,7 @@ vi.mock("./pairing-scanner", () => ({ PairingScanner: () => null }));
 const fixture = vi.hoisted(() => ({ kind: "choices", adding: false, reset: vi.fn(), remove: vi.fn(),
   start: undefined as string | undefined, begin: vi.fn(),
   returnToPrevious: undefined as string | undefined,
-  navigate: vi.fn(), message: undefined as string | undefined,
+  navigate: vi.fn(), canGoBack: false, message: undefined as string | undefined,
   busy: false, dirty: false, cancel: vi.fn(), hardwareBack: null as (() => boolean) | null,
   options: undefined as {gestureEnabled:boolean; headerLeft?: () => import("react").ReactNode} | undefined,
   state: { hydrated: true, storageError: null as string | null, connectionPending: false, activeId: "first",
@@ -67,6 +67,7 @@ vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {
     StatusText: ({ label }: { label: string }) => createElement("span", null, label),
+    RowIcon: () => null,
     Badge: ({ label }: { label: string }) => createElement("span", null, label),
     Body: Wrapper,
     Stack: Wrapper,
@@ -224,6 +225,15 @@ it("selects an inactive computer with one tap and shows the new selection withou
     fixture.state.activeId = "first";
     fixture.message = undefined;
     vi.unstubAllGlobals();
+  }
+});
+
+it("keeps the shared back button when opened from Settings without a pairing draft", () => {
+  fixture.canGoBack = true;
+  try {
+    expect(renderToStaticMarkup(createElement(MachinesScreen))).toContain(">Back</button>");
+  } finally {
+    fixture.canGoBack = false;
   }
 });
 

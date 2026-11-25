@@ -22,12 +22,16 @@ vi.mock("@/ui/state-view", () => ({ StateView: ({ title, description, action, se
 vi.mock("@/ui/toast", () => ({ showToast: () => undefined, useToastAvailable: () => false, useSuccessToast: () => () => undefined }));
 vi.mock("./inbox-browse-memory-provider",()=>({useInboxBrowseMemory:()=>fixture.memory}));
 vi.mock("expo-router", () => ({ router: { push: fixture.route } }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => undefined }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: { caption: {} } }) }));
 vi.mock("@/i18n", () => ({ useLocale: () => fixture.locale }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, params?: Record<string, string | number>) => en.replace(/\{(\w+)\}/g, (key, name: string) => String(params?.[name] ?? key)) }));
 vi.mock("../management/shared/record-bits", () => ({ useRelativeTime: () => () => "" }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ capabilities: [] }), useMachines:{getState:()=>({activeId:fixture.active,selectedProjectId:fixture.project})} }));
 vi.mock("../management/common", () => ({ Scope: () => null }));
+vi.mock("lucide-react-native/icons/git-pull-request", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/square-kanban", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/plug", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("./jira-board-screen", () => ({ ProviderJiraBoards: () => null }));
 vi.mock("./provider-queries", () => ({
   useProviderInboxAvailability: () => ({ data: { available: fixture.available }, isSuccess: fixture.success, error: fixture.error, refetch: fixture.availabilityRetry }),
@@ -71,7 +75,7 @@ vi.mock("@/ui/primitives", async () => {
   const { QueryState } = await import("@/ui/query-state");
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress }: any) => {fixture.presses.set(label,onPress);return createElement("button", { onClick: onPress }, label);};
-  return { Badge: ({ label }: any) => createElement("span", null, label), Body: Wrap, Row: Wrap, Stack: Wrap, Disclosure: Wrap,
+  return { Badge: ({ label }: any) => createElement("span", null, label), StatusText: ({ label }: any) => createElement("span", null, label), Body: Wrap, Row: Wrap, Stack: Wrap, Disclosure: Wrap,
     NavigationGroup: Wrap, Button, StateView: ({ title, description }: any) => createElement("p", null, title, description), NavigationRow: Button, Notice: ({ message }: any) => createElement("p", null, message),
     Empty: ({ title }: any) => createElement("p", null, title),
     ActionMenu: ({ actions }: any) => createElement("div", null, ...actions.filter(Boolean).map((action: any) => createElement(Button, { key: action.key, ...action }))),
@@ -146,7 +150,7 @@ it.each([0, 1, 1284])("labels the %s returned records with an active-locale coun
   fixture.locale = "tr";
   fixture.list = Array.from({ length: count }, (_, index) => ({ ...fixture.list[0], number: index + 1, title: `Item ${index + 1}` }));
   await render();
-  expect(container.querySelector("[data-applied-filters]")?.textContent).toContain(`Items: ${new Intl.NumberFormat("tr").format(count)}`);
+  expect(container.querySelector("[data-applied-filters]")?.textContent).toContain(`${new Intl.NumberFormat("tr").format(count)} items`);
 });
 it("clears an empty filter result without changing filters before Apply", async () => {
   fixture.empty = true; await render(); expect(fixture.request.assignedToMe).toBe(false);

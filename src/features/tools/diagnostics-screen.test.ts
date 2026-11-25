@@ -15,7 +15,7 @@ vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }))
 vi.mock("panelui-native/components/meter", () => ({ Meter: () => null }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Body: Group, Section: Group, Stack: Group, NavigationGroup: Group, Disclosure: Group, QueryState: () => null, ToggleField: () => null,
+  return { Body: Group, Section: Group, Stack: Group, NavigationGroup: Group, Disclosure: Group, QueryState: () => null, ToggleField: ({ label, value, onChange }: any) => createElement("button", { onClick: () => onChange(!value) }, label), ValueRow: () => null,
     ActionMenu: ({ actions }: { actions: { label: string; onPress: () => void }[] }) => createElement("nav", null, actions.map(action => createElement("button", { key: action.label, onClick: action.onPress }, action.label))),
     Screen: ({ actions, refreshState, children }: any) => { fixture.refresh = refreshState; return createElement("main", null, actions, children); },
     IconButton: ({ label, onPress, busy, disabled }: any) => createElement("button", { onClick: onPress, disabled, "data-busy": String(!!busy), "aria-label": label }),
@@ -25,12 +25,12 @@ vi.mock("@/ui/primitives", () => {
 import { DiagnosticsScreen } from "./diagnostics-screen";
 let root: ReturnType<typeof createRoot> | undefined;
 afterEach(() => { act(() => root?.unmount()); root = undefined; fixture.fetching = false; fixture.refetch.mockReset().mockResolvedValue({}); vi.unstubAllGlobals(); });
-it("keeps polling quiet and shares manual toolbar/pull refresh flight", async () => {
+it("keeps polling quiet, offers auto refresh as a direct toggle (no one-item menu) and shares manual toolbar/pull refresh flight", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const node = document.createElement("div"); root = createRoot(node);
-  const render = () => act(() => root!.render(createElement(DiagnosticsScreen, { project: { id: "project", name: "Project" } as any })));
+  const render = () => act(() => root!.render(createElement(DiagnosticsScreen)));
   fixture.fetching = true; await render(); expect(node.querySelector("button")!.dataset.busy).toBe("false"); expect(fixture.refresh.refreshing).toBe(false);
-  expect(fixture.interval).toBeUndefined();
+  expect(fixture.interval).toBeUndefined(); expect(node.querySelector("nav")).toBeNull();
   await act(() => [...node.querySelectorAll("button")].find(button => button.textContent === "Auto refresh")!.click());
   expect(fixture.interval).toBe(10_000);
   await act(() => [...node.querySelectorAll("button")].find(button => button.textContent === "Auto refresh")!.click());

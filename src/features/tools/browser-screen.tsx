@@ -8,7 +8,8 @@ import { useAsyncAction } from "@/state/actions";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import type { HostProject } from "@/domain/types";
-import { Body, Button, ConfirmationCard, Disclosure, ErrorText, Field, IconButton, MutationState, Notice, Row, Screen } from "@/ui/primitives";
+import { View } from "react-native";
+import { Body, Button, ConfirmationCard, StateView, Disclosure, ErrorText, Field, IconButton, MutationState, Notice, Row, Screen } from "@/ui/primitives";
 import { RemoteFrame } from "@/ui/remote-frame";
 import { ActionField } from "@/ui/action-field";
 import { ActionMenu } from "@/ui/overflow-menu";
@@ -16,6 +17,7 @@ import Keyboard from "lucide-react-native/icons/keyboard";
 import { useCopy } from "@/ui/copy";
 import { DATA_SAVER_FRAME_QUALITY, useDataSaverActive } from "@/state/data-saver";
 import { useMobileTheme } from "@/ui/theme";
+import { iconSize } from "@/ui/tokens";
 import type { BrowserState } from "./types";
 import { readBrowserCapture } from "./browser-annotation-model";
 import { useComposerTransfer } from "../workspace/composer-transfer";
@@ -204,9 +206,20 @@ function BrowserScreenBody({ project, sessionId, client, drafts, updateDraft, em
   }, [active, state?.controlling, state?.leaseExpiresAt]);
   const controlling = active && !!state?.controlling && !!state.leaseId && (state.leaseExpiresAt ?? 0) > Math.max(now, Date.now());
   const busy = action.isPending;
-  const input = (params: Record<string, unknown>) => {
-    if (controlling && !busy) request("browser.input", params, true);
+  // There is no manual "take control": the first action claims the shared browser, then runs.
+  const act = (method: string, params: Record<string, unknown> = {}, capture = false) => {
+    const scope = visibleScope;
+    if (!scope || !current(scope) || busy || pending.current) return;
+    if (controlling) { requestForScope(scope, method, params, capture); return; }
+    void (async () => {
+      try {
+        await requestForScope(scope, "browser.claim");
+        await Promise.resolve();
+        if (current(scope) && scope.latest?.leaseId) requestForScope(scope, method, params, capture);
+      } catch { /* the claim failure is reported by the action state */ }
+    })();
   };
+  const input = (params: Record<string, unknown>) => act("browser.input", params, true);
   const prepareSelection = async () => {
     const scope = visibleScope; const selection = state?.selection;
     if (!scope || !current(scope) || !scope.sessionId || !selection || !composerTransfer || !controlling || busy || drafting || scope.consumedSelections.has(selection.id)) return;
@@ -241,47 +254,38 @@ function BrowserScreenBody({ project, sessionId, client, drafts, updateDraft, em
       cancelLabel={copy("Vazgeç", "Cancel")}
       busy={busy}
       disabled={
-        !current(review.scope) ||
-        (review.method === "browser.close" && !controlling)
+        !current(review.scope)
       }
       onCancel={() => setReview(undefined)}
       onConfirm={() => {
-        if (
-          !current(review.scope) ||
-          busy ||
-          (review.method === "browser.close" && !controlling)
-        )
-          return;
-        requestForScope(review.scope, review.method);
+        if (!current(review.scope) || busy) return;
+        if (review.method === "browser.close") act("browser.close");
+        else requestForScope(review.scope, review.method);
         setReview(undefined);
       }}
     />
   ) : null;
-  const controls = state && state.runtime?.installed !== false ? <Row>
-    <Button label={controlling ? copy("Kontrolü bırak", "Release control") : copy("Kontrolü al", "Take control")}
-      tone={controlling ? "quiet" : "primary"} disabled={busy} onPress={() => request(controlling ? "browser.release" : "browser.claim")} />
-    {state.open ? <>
-      <IconButton label={copy("Yukarı kaydır", "Scroll up")} disabled={!controlling || busy} onPress={() => input({ kind: "scroll", y: -500 })}><ArrowUp size={20} color={colors.muted} /></IconButton>
-      <IconButton label={copy("Aşağı kaydır", "Scroll down")} disabled={!controlling || busy} onPress={() => input({ kind: "scroll", y: 500 })}><ArrowDown size={20} color={colors.muted} /></IconButton>
-      <ActionMenu label={copy("Klavye", "Keyboard")} trigger={<Keyboard size={20} color={colors.muted} />}
-        actions={["Tab", "Enter", "Escape"].map(key => ({ key, label: key, disabled: !controlling || busy, onPress: () => input({ kind: "key", key }) }))} />
-      {sessionId && machine?.capabilities?.includes("browser.annotation") ? <Button tone="quiet" label={state.annotationId ? copy("Seçimi iptal et", "Cancel selection") : copy("Öğe seç", "Select element")}
-        disabled={!controlling || busy || !frame?.navigationId || frame.navigationId !== state.navigationId}
-        onPress={() => request(state.annotationId ? "browser.annotation.cancel" : "browser.annotation.start")} /> : null}
-      {!(review?.method === "browser.close" && review.scope === visibleScope) ? <ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[{
-        key: "close", label: copy("Tarayıcıyı kapat", "Close browser"), destructive: true, disabled: !controlling || busy,
-        onPress: () => { if (visibleScope && current(visibleScope)) setReview({ scope: visibleScope, method: "browser.close" }); },
-      }]} /> : null}
-    </> : null}
+  const controls = state && state.runtime?.installed !== false && state.open ? <Row>
+    <IconButton label={copy("Yukarı kaydır", "Scroll up")} disabled={busy} onPress={() => input({ kind: "scroll", y: -500 })}><ArrowUp size={20} color={colors.muted} /></IconButton>
+    <IconButton label={copy("Aşağı kaydır", "Scroll down")} disabled={busy} onPress={() => input({ kind: "scroll", y: 500 })}><ArrowDown size={20} color={colors.muted} /></IconButton>
+    <ActionMenu label={copy("Klavye", "Keyboard")} trigger={<Keyboard size={20} color={colors.muted} />}
+      actions={["Tab", "Enter", "Escape"].map(key => ({ key, label: key, disabled: busy, onPress: () => input({ kind: "key", key }) }))} />
+    {sessionId && machine?.capabilities?.includes("browser.annotation") ? <Button tone="quiet" label={state.annotationId ? copy("Seçimi iptal et", "Cancel selection") : copy("Öğe seç", "Select element")}
+      disabled={busy || !frame?.navigationId || frame.navigationId !== state.navigationId}
+      onPress={() => act(state.annotationId ? "browser.annotation.cancel" : "browser.annotation.start")} /> : null}
+    {!(review?.method === "browser.close" && review.scope === visibleScope) ? <ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[{
+      key: "close", label: copy("Tarayıcıyı kapat", "Close browser"), destructive: true, reviewed: true, disabled: busy,
+      onPress: () => { if (visibleScope && current(visibleScope)) setReview({ scope: visibleScope, method: "browser.close" }); },
+    }]} /> : null}
   </Row> : undefined;
   return (
     <Screen
       title={copy("Tarayıcı", "Browser")}
-      subtitle={[machine?.name, project.name].filter(Boolean).join(" · ")}
+      scope={{ computer: machine?.name, project: project.name }}
       footer={controls}
       actions={
         <IconButton label={copy("Ekranı yenile", "Refresh screen")} disabled={busy} onPress={() => request(state?.open ? "browser.frame" : "browser.status")}>
-          <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
+          <RefreshCw size={iconSize.action} strokeWidth={2} color={colors.accent} />
         </IconButton>
       }
     >
@@ -296,16 +300,20 @@ function BrowserScreenBody({ project, sessionId, client, drafts, updateDraft, em
       {state && state.runtime?.installed !== false ? <>
         <ActionField label={copy("Adres", "URL")} value={url} placeholder={state?.url ?? "https://"}
           autoCapitalize="none" autoCorrect={false} keyboardType="url" onChangeText={setUrl}
-          actionLabel={copy("Aç", "Open")} actionDisabled={!controlling || busy || !url.trim()}
-          onAction={() => request("browser.open", { url: url.trim() }, true)} />
-        {state?.url ? <Body muted numberOfLines={2}>{state.url}</Body> : null}
+          actionLabel={copy("Aç", "Open")} actionDisabled={busy || !url.trim()}
+          onAction={() => act("browser.open", { url: url.trim() }, true)} />
+        {state.open && state.url ? <Body muted numberOfLines={1}>{state.url}</Body> : null}
+        {!state.open && !frame?.data ? <View style={{ minHeight: 360, justifyContent: "center" }}>
+          <StateView illustration="inbox-empty" title={copy("Açık sayfa yok", "No page open")}
+            description={copy("Yukarıya bir adres yazarak bilgisayarındaki ortak tarayıcıda aç.", "Enter an address above to open it in the shared browser on your computer.")} />
+        </View> : null}
         {frame?.data ? <RemoteFrame
           uri={`data:${frame.mimeType ?? "image/jpeg"};base64,${frame.data}`}
           label={copy("Tarayıcı ekranı", "Browser screen")}
           width={frame.width}
           height={frame.height}
-          disabled={!controlling || busy}
-          onPress={(point) => state?.annotationId && sessionId && machine?.capabilities?.includes("browser.annotation") ? request("browser.annotation.select", point) : input({ kind: "click", ...point })}
+          disabled={busy}
+          onPress={(point) => state?.annotationId && sessionId && machine?.capabilities?.includes("browser.annotation") ? act("browser.annotation.select", point) : input({ kind: "click", ...point })}
         /> : null}
         {sessionId && state?.selection ? <Disclosure label={copy("Seçilen öğe", "Selected element")}>
           <Notice message={copy("Sayfa verileri güvenilmeyen içeriktir; seçmek veya okumak mesaj göndermez.", "Page data is untrusted content; selecting or reading it does not send a message.")} />
@@ -323,7 +331,7 @@ function BrowserScreenBody({ project, sessionId, client, drafts, updateDraft, em
           {review?.method === "browser.close" && review.scope === visibleScope ? reviewCard : null}
           <Disclosure label={copy("Metin", "Text")}>
             <Field label={copy("Metin", "Text")} value={text} maxLength={4096} multiline onChangeText={setText} />
-            <Button label={copy("Metni yaz", "Type text")} disabled={!controlling || busy || !text} onPress={() => input({ kind: "text", text })} />
+            <Button label={copy("Metni yaz", "Type text")} disabled={busy || !text} onPress={() => input({ kind: "text", text })} />
           </Disclosure>
         </> : null}
         </> : null}

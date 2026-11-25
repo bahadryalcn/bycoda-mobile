@@ -3,6 +3,14 @@ import type { PrivateContentAccess } from "./private-access";
 
 type MenuChoice = { key: string; disabled?: boolean; onPress(): void };
 
+/**
+ * The one action a menu would hold, when it can run without the menu step; otherwise null.
+ * A lone destructive action keeps the menu unless it opens its own review (`reviewed`).
+ */
+export function singleMenuAction<T extends { key: string; destructive?: boolean; reviewed?: boolean }>(items: readonly T[]): T | null {
+  return items.length === 1 && (!items[0].destructive || !!items[0].reviewed) ? items[0] : null;
+}
+
 /** Shared across platforms; the menu's presentation never owns command authority. */
 export function useMenuLifecycle<T extends MenuChoice>(items: readonly T[], access: PrivateContentAccess) {
   const [open, setOpen] = useState(false);

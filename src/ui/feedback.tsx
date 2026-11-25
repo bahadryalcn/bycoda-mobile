@@ -1,7 +1,7 @@
 import { decorativeSvgProps } from "./accessibility";
 import { useMobileTheme } from "./theme";
 import { useState } from "react";
-import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Badge as PanelBadge } from "panelui-native/components/badge";
 import { Spinner } from "panelui-native/components/spinner";
 import { Alert } from "panelui-native/components/alert";
@@ -68,8 +68,11 @@ export function Badge({ label, tone = "default", icon: Icon }: BadgeProps) {
   );
 }
 
-/** Row status: readable semibold text with an optional dot; critical state can wrap. */
-export function StatusText({ label, tone = "default", dot = true }: {
+/**
+ * Row status. The normal state is quiet muted text without a dot; other tones add their colour and a
+ * 6dp dot. Use a tinted `Badge` only for an exception the user must notice (failed, needs you).
+ */
+export function StatusText({ label, tone = "default", dot = tone !== "default" }: {
   label: string; tone?: "default" | SemanticTone | "live" | "active"; dot?: boolean;
 }) {
   const { colors, semanticColors, uiStyles } = useMobileTheme();
@@ -242,10 +245,16 @@ export function ErrorNotice({ error, onRetry, retryLabel, retrying, message, act
   );
 }
 
+/** A notice message longer than this many lines collapses behind "Details". */
+export const NOTICE_COLLAPSED_LINES = 2;
+
 export function Notice({ tone = "info", message, children, onRetry, retryLabel, retrying, action }: NoticeProps) {
   const { semanticColors, uiStyles } = useMobileTheme();
   const { fontScale } = useWindowDimensions();
   const copy = useCopy();
+  // Measured on an unclamped hidden copy; iOS reports only the visible lines of a clamped text.
+  const [measured, setMeasured] = useState<{ message: string; lines: number } | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const semantic = semanticColors[tone];
   const Icon =
     tone === "danger"
@@ -256,6 +265,8 @@ export function Notice({ tone = "info", message, children, onRetry, retryLabel, 
           ? CircleCheck
           : Info;
   const recovery = action ?? (onRetry ? { label: retryLabel ?? copy("Yeniden dene", "Retry"), onPress: onRetry } : undefined);
+  const long = measured?.message === message && measured.lines > NOTICE_COLLAPSED_LINES;
+  const open = expanded === message;
   return (
     <Alert
       variant={tone === "danger" ? "destructive" : "default"}
@@ -268,7 +279,24 @@ export function Notice({ tone = "info", message, children, onRetry, retryLabel, 
       <View style={uiStyles.noticeRow}>
         <View style={[uiStyles.noticeMessage, { flexBasis: 128 * Math.max(1, fontScale) }]}>
           <Icon size={16} strokeWidth={2} color={semantic.text} style={{ marginTop: 2 }} />
-          <Body style={[uiStyles.grow, uiStyles.noticeText]}>{message}</Body>
+          <View style={uiStyles.grow}>
+            <Body accessibilityLabel={message} numberOfLines={open ? undefined : NOTICE_COLLAPSED_LINES}
+              style={uiStyles.noticeText}>{message}</Body>
+            <Body accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden
+              onTextLayout={({ nativeEvent }) => setMeasured((current) =>
+                current?.message === message && current.lines === nativeEvent.lines.length
+                  ? current : { message, lines: nativeEvent.lines.length })}
+              style={[uiStyles.noticeText, uiStyles.noticeMeasure]}>{message}</Body>
+            {long ? (
+              <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }}
+                hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                onPress={() => setExpanded(open ? null : message)} style={{ alignSelf: "flex-start" }}>
+                <Text style={[uiStyles.statusLineAction, { color: semantic.text }]}>
+                  {open ? copy("Daha az", "Less") : copy("Ayrıntılar", "Details")}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
         {recovery ? <Button density="compact" tone="quiet" label={recovery.label}
           busy={!action && retrying}
@@ -279,3 +307,5 @@ export function Notice({ tone = "info", message, children, onRetry, retryLabel, 
     </Alert>
   );
 }
+
+export { StatusLine } from "./status-line";

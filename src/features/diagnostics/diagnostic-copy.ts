@@ -14,6 +14,8 @@ export function useDiagnosticResultText() {
         return copy("Tanılama günlüklerini göndermek bu derlemede kullanılamıyor.", "Sending diagnostic logs is not available in this build.");
       case "empty":
         return copy("Gönderilecek günlük yoktu.", "There were no logs to send.");
+      case "declined":
+        return copy("Veri paylaşımı iptal edildi.", "Data sharing canceled.");
       case "failed":
         return copy("Tanılama günlükleri gönderilemedi.", "Could not send the diagnostic logs.");
     }

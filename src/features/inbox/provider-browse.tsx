@@ -1,11 +1,15 @@
 import { InboxLocalScopeContext, useInboxLocalScope } from "./inbox-local-scope";
 import { useMobileTheme } from "@/ui/theme";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { useActiveMachine } from "@/state/machines";
 import { ProviderJiraBoards } from "./jira-board-screen";
 import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
 import { SearchField, SearchToolbar } from "@/ui/search-field";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import GitPullRequest from "lucide-react-native/icons/git-pull-request";
+import Kanban from "lucide-react-native/icons/square-kanban";
+import Plug from "lucide-react-native/icons/plug";
+import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { ActionMenu, Button, Notice, QueryState, Sheet, StateView, ToggleField, NavigationGroup } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
@@ -113,7 +117,7 @@ export function ProviderInboxBrowse({ origin, embedded = false, openJira = false
   const unavailableWithoutCause = scopeCurrent && !readAllowed && !availability.error && availability.data?.available === true && getQueryPresentation(availability) === "ready";
   const accessFeedback = <>
     {!scopeCurrent || unavailableWithoutCause ? <>
-      <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")} description={accessMessage} />
+      <StateView tone="warning" title={copy("Bağlantı bekleniyor", "Waiting for a connection")} description={accessMessage} />
       {unavailableWithoutCause ? <Button tone="quiet" label={copy("Yenile","Refresh")} onPress={()=>{void refresh();}} /> : null}
     </> : <QueryState query={{...availability, refetch: refresh}}
       empty={availability.data?.available === false} emptyIllustration="connect-computer" emptyTitle={copy("Bilgisayardaki Bycoda açık olmalı", "Open Bycoda on your computer")}
@@ -154,14 +158,17 @@ export function ProviderInboxBrowse({ origin, embedded = false, openJira = false
                   detail: origin.projectId ? undefined : copy("Jira için proje seç", "Select a project for Jira"),
                   disabled: !origin.projectId,
                   opens: true,
+                  icon: <Kanban />,
                   onPress: () => { if (canBrowse() && origin.projectId) setJiraBoards(true); },
                 },
+                { key: "pull-requests", label: copy("Pull request’ler", "Pull requests"), icon: <GitPullRequest />, opens: true,
+                  onPress: () => { if (canBrowse()) router.push("/pull-requests" as Href); } },
                 hasFilters && rows.length > 0 && { key: "clear-filters", ...clearFilters },
-                {key:"connections",label:copy("Bağlı servisler","Connected services"),onPress:()=>{if(canBrowse())setConnectionsOpen(true);}},
-                {key:"refresh",label:copy("Yenile","Refresh"),disabled:items.isFetching,onPress:()=>{void retryItems();}},
+                {key:"connections",label:copy("Bağlı servisler","Connected services"),icon:<Plug />,opens:true,onPress:()=>{if(canBrowse())setConnectionsOpen(true);}},
+                {key:"refresh",label:copy("Yenile","Refresh"),icon:<RefreshCw />,disabled:items.isFetching,onPress:()=>{void retryItems();}},
               ]} />
             </>} />
-          <AppliedFilters result={!awaitingSearch && items.data ? copy("Kayıtlar: {p0}", "Items: {p0}", { p0: new Intl.NumberFormat(locale).format(items.data.items.length) }) : undefined}
+          <AppliedFilters result={!awaitingSearch && items.data ? copy("{p0} kayıt", "{p0} items", { p0: new Intl.NumberFormat(locale).format(items.data.items.length) }) : undefined}
             filters={[assigned&&copy("Yalnız bana atananlar","Assigned to me only"),all&&copy("Kapalı kayıtları da göster","Include closed items")]} />
           <QueryState query={{...items,refetch:retryItems}} empty={empty} searching={searching || hasFilters} emptyIllustration="inbox-empty"
             emptyTitle={searching ? copy("Eşleşen sonuç yok", "No matching results") : hasFilters

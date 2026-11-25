@@ -15,7 +15,7 @@ export function providerActionLabel(action: string, copy: Copy) {
   const labels: Record<string, string> = {
     draft: copy("Taslağa çevir", "Convert to draft"),
     ready: copy("İncelemeye hazır", "Ready for review"),
-    close: copy("Kapat", "Close"),
+    close: copy("Pull request’i kapat", "Close pull request"),
     reopen: copy("Yeniden aç", "Reopen"),
     merge: copy("Birleştir", "Merge"),
     squash: copy("Tek commit ile birleştir", "Squash and merge"),
@@ -33,7 +33,15 @@ export function providerStateLabel(state: string, copy: Copy) {
     APPROVED: copy("Onaylandı", "Approved"),
     CHANGES_REQUESTED: copy("Değişiklik istendi", "Changes requested"),
   };
-  return labels[state.toUpperCase()] ?? state;
+  return labels[state.toUpperCase()] ?? humanizeState(state);
+}
+
+/** Jira and other providers send workflow names as written ("DEVELOPMENT IN PROGRESS"); show them in sentence case. */
+export function humanizeState(state: string) {
+  const text = state.replace(/_/g, " ").trim();
+  if (!text || text !== text.toUpperCase() || text === text.toLowerCase()) return text;
+  const lower = text.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
 /** Tone for a provider workflow state; unknown states stay neutral. */

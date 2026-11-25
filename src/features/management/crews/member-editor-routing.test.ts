@@ -7,6 +7,7 @@ import type { CrewAgent } from "@/remote/contracts/crews";
 
 const state = vi.hoisted(() => ({
   fields: new Map<string, { label?: string; value?: string; onChange?: (value: string) => void; onChangeText?: (value: string) => void; options?: { value: string; label: string }[] }>(),
+  openInstructions: undefined as (() => void) | undefined,
   submit: undefined as (() => void) | undefined,
   read: vi.fn(),
 }));
@@ -19,7 +20,8 @@ vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const field = (props: { label: string }) => { state.fields.set(props.label, props); return null; };
   return { Body: wrapper, Stack: wrapper, Heading: wrapper, Section: wrapper, Disclosure: wrapper, Notice: () => null,
-    Button: () => null, ErrorText: () => null, Field: field, SelectField: field, MultiSelectField: field,
+    NavigationRow: ({ onPress }: { onPress: () => void }) => { state.openInstructions = onPress; return null; },
+    Input: field, Sheet: wrapper, Button: () => null, ErrorText: () => null, Field: field, SelectField: field, MultiSelectField: field,
     FormActions: ({ disabled, onSubmit }: { disabled: boolean; onSubmit: () => void }) => { state.submit = disabled ? undefined : onSubmit; return null; } };
 });
 let root: ReturnType<typeof createRoot> | undefined;
@@ -35,6 +37,8 @@ it("exposes public Host routing binding and preserves it on instruction edits un
   expect(state.fields.get("Model source")?.options).toContainEqual({ value: "pool:team", label: "Team pool" });
   expect(state.fields.has("Allowed models")).toBe(false);
   expect((state.fields.get("Model source") as { hint?: string }).hint).toContain("not an allowed-model filter");
+  expect(state.fields.has("Instructions")).toBe(false);
+  await act(async () => state.openInstructions!());
   await act(async () => state.fields.get("Instructions")!.onChangeText!("Owner edited instructions"));
   act(() => state.submit!());
   expect(save.mock.calls[0][0]).toMatchObject({ instructions: "Owner edited instructions", modelChoice: { kind: "pool", poolId: "team" } });

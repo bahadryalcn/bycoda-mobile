@@ -1,6 +1,6 @@
 import { View } from "react-native";
 import { Avatar } from "panelui-native/components/avatar";
-import { Body, ErrorNotice, Heading, Loading, NavigationGroup, NavigationRow, Screen, Section, SettingIcon, Stack, StateView, Skeleton } from "@/ui/primitives";
+import { Body, ErrorNotice, Heading, Loading, NavigationGroup, NavigationRow, Screen, SettingIcon, Stack, Skeleton } from "@/ui/primitives";
 import LogOut from "lucide-react-native/icons/log-out";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
@@ -11,11 +11,23 @@ import { graphemes } from "../../../../../src/shared/lib/text/truncate";
 import { ActivitySection } from "./ActivitySection";
 import { DevicesSection } from "./DevicesSection";
 import { ManageAccountSection } from "./ManageAccountSection";
-import { PushSection } from "./PushSection";
 import { AccountWelcome } from "./AccountWelcome";
 import { useAccount } from "./account-context";
 import { useAccountMe } from "./use-account-me";
 import { useGracedReadError } from "./use-graced-read-error";
+import { AccountApiError } from "../contracts/errors";
+
+/** Says why this phone could not join the account when the server gave a reason the owner can act on. */
+function registrationMessage(error: Error, copy: ReturnType<typeof useCopy>) {
+  if (error instanceof AccountApiError && error.code === "conflict" && /device limit/i.test(error.message))
+    return copy(
+      "Hesabındaki cihaz sınırı dolu. Aşağıdan kullanmadığın bir cihazın oturumunu kapat, sonra yeniden dene.",
+      "Your account has reached its device limit. Sign out a device you no longer use below, then retry.",
+    );
+  if (error instanceof AccountApiError && error.code === "forbidden")
+    return copy("Bu hesapta telefon kaydı açık değil.", "Phones are not enabled for this account.");
+  return copy("Bu telefon hesaba kaydedilemedi.", "This phone could not be registered to your account.");
+}
 
 function Profile() {
   const copy = useCopy();
@@ -46,7 +58,7 @@ function Profile() {
   );
 }
 
-/** Mobile account entry, profile, devices, active time, notifications and sign out. */
+/** Mobile account entry, profile, devices, active time and sign out. Notifications live on Settings → Notifications. */
 export function AccountScreen() {
   const copy = useCopy();
   const account = useAccount();
@@ -65,17 +77,15 @@ export function AccountScreen() {
     return <AccountWelcome />;
   return (
     <Screen title={title}>
-      <Stack>
-        {account.registerError ? (
-          <ErrorNotice error={account.registerError} onRetry={account.retryRegistration} message={copy("Bu telefon hesaba kaydedilemedi.", "This phone could not be registered to your account.")} />
-        ) : null}
-        <Profile />
-        <DevicesSection />
-        <ActivitySection />
-        <PushSection />
-        <ManageAccountSection />
-        <ErrorNotice error={signOut.error} message={copy("Çıkış yapılamadı.", "Could not sign out.")} />
-        <NavigationGroup>
+      {account.registerError ? (
+        <ErrorNotice error={account.registerError} onRetry={account.retryRegistration} message={registrationMessage(account.registerError, copy)} />
+      ) : null}
+      <Profile />
+      <DevicesSection />
+      <ActivitySection />
+      <ManageAccountSection />
+      <ErrorNotice error={signOut.error} message={copy("Çıkış yapılamadı.", "Could not sign out.")} />
+      <NavigationGroup>
         <NavigationRow
           intent="command"
           tone="danger"
@@ -95,8 +105,7 @@ export function AccountScreen() {
             )
           }
         />
-        </NavigationGroup>
-      </Stack>
+      </NavigationGroup>
     </Screen>
   );
 }

@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { View } from "react-native";
-import { Body, ErrorNotice, Loading, Notice, Screen, Section, Stack, StateView, ToggleField, Skeleton } from "@/ui/primitives";
+import { ErrorNotice, Loading, NavigationGroup, Notice, Section, Stack, StateView, ToggleField, Skeleton } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { TimeField } from "@/ui/time-field";
 import { HoursOverview } from "@/ui/week-hours";
@@ -16,8 +15,8 @@ import { useGracedReadError } from "./use-graced-read-error";
 
 const KEY = ["account", "notification-settings"] as const;
 const CHANNELS: { channel: Extract<NotificationChannel, "push" | "in_app">; tr: string; en: string }[] = [
-  { channel: "push", tr: "Bu telefona bildirim", en: "Push to phones" },
-  { channel: "in_app", tr: "Uygulama içi", en: "In app" },
+  { channel: "push", tr: "Hesabından bu telefona", en: "From your account to phones" },
+  { channel: "in_app", tr: "Hesabından uygulama içinde", en: "From your account in the app" },
 ];
 
 /** Each saved control has its own id, so its pending and failed state never leaks to another row. */
@@ -49,8 +48,12 @@ function sameQuiet(a: QuietHours | null, b: QuietHours | null) {
   return a.start === b.start && a.end === b.end;
 }
 
-/** Event x channel toggles that matter on a phone (push, in app), quiet hours and push detail text. */
-export function NotificationSettingsScreen() {
+/**
+ * Settings → Notifications, the account part: event x channel toggles that matter on a phone (push,
+ * in app), the mandatory security alerts, push detail text and quiet hours. Rendered inside the one
+ * Notifications page; each toggle saves on its own.
+ */
+export function AccountNotificationSettings() {
   const copy = useCopy();
   const { status, runtime, device, registerError, retryRegistration } = useAccount();
   const saves = useNotificationSaves(KEY);
@@ -68,15 +71,14 @@ export function NotificationSettingsScreen() {
   const settingsError = useGracedReadError(settings);
   const labels: Record<NotificationEventKey, string> = {
     "account.new_device_sign_in": copy("Yeni cihazdan giriş", "Sign-in from a new device"),
-    "agent.finished": copy("Agent tamamlandı", "Agent finished"),
-    "agent.failed": copy("Agent başarısız oldu", "Agent failed"),
-    "approval.pending": copy("Onay bekliyor", "Approval pending"),
+    "agent.finished": copy("Ajan işini bitirdiğinde", "Agent finished"),
+    "agent.failed": copy("Ajan başarısız olduğunda", "Agent failed"),
+    "approval.pending": copy("Onay beklediğinde", "Approval pending"),
     "summary.daily": copy("Günlük özet", "Daily summary"),
     "announcement.published": copy("Duyurular", "Announcements"),
     "account.deletion_scheduled": copy("Hesap silme zamanlandı", "Account deletion scheduled"),
     "account.phone_connect_approved": copy("Telefon bağlantısı onaylandı", "Phone connection approved"),
   };
-  const title = copy("Bildirim ayarları", "Notification settings");
   const data = settings.data;
   const hasQuiet = !!data?.quietHours;
   const [quiet, setQuiet] = useState<QuietDraft>({ on: false, start: "22:00", end: "07:00" });
@@ -101,33 +103,34 @@ export function NotificationSettingsScreen() {
     else if (quietValid(next)) commitQuiet({ start: next.start, end: next.end, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
   }
 
+  const accountTitle = copy("Hesabından", "From your account");
+  if (status === "unavailable") return null;
   if (status === "loading" || (status === "signedIn" && (!runtime || !device))) {
     return (
-      <Screen title={title}>
+      <Section title={accountTitle}>
         {registerError ? (
           <ErrorNotice
             error={registerError}
             onRetry={retryRegistration}
             message={copy("Bu telefon hesaba kaydedilemedi.", "This phone could not be registered to your account.")}
           />
-        ) : <Loading centered immediate />}
-      </Screen>
+        ) : <Loading immediate />}
+      </Section>
     );
   }
   if (status !== "signedIn")
     return (
-      <Screen title={title}>
-        <View style={{ flex: 1, justifyContent: "center" }}>
-          <StateView
-            title={copy("Bildirim ayarlarını yönetmek için giriş yap", "Sign in to manage notification settings")}
-            action={{ label: copy("Giriş yap", "Sign in"), onPress: () => router.navigate("/account") }}
-          />
-        </View>
-      </Screen>
+      <Section title={accountTitle}>
+        <StateView
+          compact
+          title={copy("Hesap bildirimleri için giriş yap", "Sign in for account notifications")}
+          action={{ label: copy("Giriş yap", "Sign in"), onPress: () => router.navigate("/account") }}
+        />
+      </Section>
     );
+  // Sections sit directly in the page so they share its group rhythm.
   return (
-    <Screen title={title}>
-      <Stack>
+    <>
         <ErrorNotice error={settingsError} onRetry={() => void settings.refetch()} message={copy("Ayarlar alınamadı.", "Settings could not be loaded.")} />
         {failedCount > 0 ? (
           <Notice
@@ -144,7 +147,7 @@ export function NotificationSettingsScreen() {
           <>
             {CHANNELS.map(({ channel, tr, en }) => (
               <Section key={channel} title={copy(tr, en)}>
-                <Stack>
+                <NavigationGroup>
                   {OPTIONAL_EVENTS.map((event) => {
                     const control = preferenceControl(event.key, channel);
                     return (
@@ -158,17 +161,18 @@ export function NotificationSettingsScreen() {
                       />
                     );
                   })}
-                </Stack>
+                </NavigationGroup>
               </Section>
             ))}
             <Section title={copy("Güvenlik bildirimleri", "Security alerts")}>
-              <Stack>
+              <NavigationGroup>
                 {MANDATORY_EVENTS.map((event) => (
                   <ToggleField key={event.key} label={labels[event.key]} detail={copy("Güvenlik için zorunlu; kapatılamaz.", "Required for security; it cannot be turned off.")} value disabled onChange={() => undefined} />
                 ))}
-              </Stack>
+              </NavigationGroup>
             </Section>
             <Section title={copy("Bildirim ayrıntıları", "Push details")}>
+              <NavigationGroup>
               <ToggleField
                 label={copy("Bildirimde ayrıntıları göster", "Show details in push text")}
                 help={copy("Kapalıyken bildirimler genel bir metin içerir.", "When off, notifications carry generic text.")}
@@ -177,16 +181,19 @@ export function NotificationSettingsScreen() {
                 disabled={busy(PUSH_DETAILS.id)}
                 onChange={(value) => saves.save(PUSH_DETAILS, value, put)}
               />
+              </NavigationGroup>
             </Section>
             <Section title={copy("Sessiz saatler", "Quiet hours")}>
               <Stack>
-                <ToggleField
-                  label={copy("Sessiz saatleri kullan", "Use quiet hours")}
-                  detail={failedText(QUIET.id)}
-                  value={quiet.on}
-                  disabled={busy(QUIET.id)}
-                  onChange={(on) => editQuiet({ ...quiet, on })}
-                />
+                <NavigationGroup>
+                  <ToggleField
+                    label={copy("Sessiz saatleri kullan", "Use quiet hours")}
+                    detail={failedText(QUIET.id)}
+                    value={quiet.on}
+                    disabled={busy(QUIET.id)}
+                    onChange={(on) => editQuiet({ ...quiet, on })}
+                  />
+                </NavigationGroup>
                 {quiet.on ? (
                   <>
                     <TimeField label={copy("Başlangıç (SS:DD)", "Start (HH:MM)")} value={quiet.start} onChange={(start) => editQuiet({ ...quiet, start })} disabled={busy(QUIET.id)} />
@@ -202,7 +209,6 @@ export function NotificationSettingsScreen() {
             </Section>
           </>
         )}
-      </Stack>
-    </Screen>
+    </>
   );
 }

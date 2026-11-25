@@ -14,18 +14,19 @@ const state = vi.hoisted(() => {
       ...(method === "browser.annotation.select" || method === "browser.annotation.read" ? { selection: value.selection } : {}), runtime: { installed: value.installed, installing: false, version: "1" } };
   } }; return Object.assign(value, { draftCallbacks });
 });
+vi.mock("react-native", () => ({ View: ({ children }: { children?: unknown }) => children as never }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => createElement("div", {"data-native-route-title":true}) } }));
 vi.mock("lucide-react-native/icons/arrow-down", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/arrow-up", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/keyboard", () => ({ default: () => null }));
-vi.mock("@/ui/tokens", () => ({ colors: {} }));
+vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, colors: {} }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/remote-frame", () => ({ RemoteFrame: ({ onPress }: { onPress?: (point: { x: number; y: number }) => void }) => createElement("button", { onClick: () => onPress?.({ x: 10, y: 20 }) }, "Browser frame") }));
-vi.mock("@/ui/action-field", () => ({ ActionField: ({ value, onChangeText }: { value: string; onChangeText: (value: string) => void }) => {
+vi.mock("@/ui/action-field", () => ({ ActionField: ({ value, onChangeText, onAction, actionDisabled }: { value: string; onChangeText: (value: string) => void; onAction?: () => void; actionDisabled?: boolean }) => {
   state.draftCallbacks.set("URL draft", onChangeText);
-  return createElement("input", { "aria-label": "URL draft", value, onChange: (e: { target: { value: string } }) => onChangeText(e.target.value) });
+  return createElement("div", null, createElement("input", { "aria-label": "URL draft", value, onChange: (e: { target: { value: string } }) => onChangeText(e.target.value) }), createElement("button", { disabled: actionDisabled, onClick: onAction }, "Open"));
 } }));
 vi.mock("@/ui/overflow-menu", () => ({ ActionMenu: ({ actions }: { actions: { key: string; label: string; disabled?: boolean; onPress: () => void }[] }) => createElement("div", null,
   actions.map(action => createElement("button", { key: action.key, disabled: action.disabled, onClick: action.onPress }, action.label))) }));
@@ -44,6 +45,7 @@ vi.mock("@/ui/primitives", () => {
   const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
   return { Body: Wrapper, Screen: ({ children, actions, footer }: PropsWithChildren<{ actions?: import("react").ReactNode; footer?: import("react").ReactNode }>) => createElement("div", null, actions, children, createElement("footer", null, footer)), Row: Wrapper, Disclosure: Wrapper,
     Field: ({ label, value, onChangeText }: any) => createElement("input", { "aria-label": label, value, onChange: (e: any) => onChangeText(e.target.value) }), ErrorText: () => null, MutationState: () => null,
+    StateView: ({ title }: { title: string }) => createElement("p", null, title),
     Notice: ({ message }: { message: string }) => createElement("p", null, message), Button, IconButton: Button,
     ConfirmationCard: ({ message, tone, disabled, onConfirm, onCancel }: { message?: string; tone?: string; disabled?: boolean; onConfirm: () => void; onCancel: () => void }) => createElement("div", { "data-confirmation-tone": tone }, createElement("p", null, message), createElement(Button, { label: "Confirm", disabled, onPress: onConfirm }), createElement(Button, { label: "Cancel", onPress: onCancel })) };
 });
@@ -61,7 +63,7 @@ it("reads on open, and setup downloads require separate reviewed confirmation", 
 it("close preserves the reviewed lease and project and requires impact confirmation", async () => {
   state.open = true; state.installed = true; await render(); await click("Close browser"); expect(state.requests).toHaveLength(1); expect(container.textContent?.match(/affecting other viewers/g)).toHaveLength(1); expect(container.querySelector("[data-confirmation-tone]")?.getAttribute("data-confirmation-tone")).toBe("danger");
   expect(container.textContent).not.toContain("Close browser");
-  expect(container.querySelector("footer")?.textContent).toContain("Release control");
+  expect(container.querySelector("footer")?.textContent).toContain("Scroll up");
   expect(container.querySelector("footer")?.textContent).not.toContain("affecting other viewers");
   await click("Confirm"); expect(state.requests[1]).toEqual({ method: "browser.close", params: { projectId: "project", leaseId: "lease" } });
 });
@@ -178,7 +180,7 @@ it("waits for a replaced client's late claim to release before the new scope rea
   state.client = { machine, endpoint: state.endpoint, request: async (method: string) => {
     oldMethods.push(method); return method === "browser.claim" ? new Promise(resolve => { claim = resolve; }) : response;
   } };
-  await render(); await click("Take control");
+  await render(); await inputDraft("URL draft", "https://late.invalid"); await click("Open");
   state.client = { machine, endpoint: state.endpoint, request: async (method: string) => { newMethods.push(method); return response; } };
   await rerender(); expect(newMethods).toEqual([]);
   await act(async () => claim({ ...response, open: true, controlling: true, leaseId: "late-lease", leaseExpiresAt: Date.now() + 60_000 }));
@@ -187,3 +189,17 @@ it("waits for a replaced client's late claim to release before the new scope rea
 });
 
 it("leaves the parent navigator title alone when embedded in a session sheet",async()=>{await render();expect(container.querySelector("[data-native-route-title]")).not.toBeNull();await act(async()=>root!.render(createElement(BrowserScreen,{project:{id:"project",name:"Project",cwd:"/fixture"},embedded:true})));expect(container.querySelector("[data-native-route-title]")).toBeNull();});
+it("claims the shared browser on the first action instead of asking the user to take control", async () => {
+  state.installed = true; const machine = state.client.machine; const methods: string[] = [];
+  state.client = { machine, endpoint: state.endpoint, request: async (method: string, params: unknown) => {
+    methods.push(method); state.requests.push({ method, params });
+    const claimed = method !== "browser.status";
+    return { open: method === "browser.open", controlling: claimed, leaseId: claimed ? "lease" : undefined, leaseExpiresAt: Date.now() + 60_000, navigationId: "nav", runtime: { installed: true, installing: false } };
+  } };
+  await render();
+  expect(container.textContent).toContain("No page open");
+  expect(container.textContent).not.toContain("Take control");
+  await inputDraft("URL draft", "https://example.invalid"); await click("Open");
+  expect(methods.slice(0, 3)).toEqual(["browser.status", "browser.claim", "browser.open"]);
+  expect(state.requests.find((row) => row.method === "browser.open")?.params).toMatchObject({ leaseId: "lease", url: "https://example.invalid" });
+});

@@ -9,6 +9,7 @@ import FolderTree from "lucide-react-native/icons/folder-tree";
 import GitPullRequest from "lucide-react-native/icons/git-pull-request";
 import CircleDot from "lucide-react-native/icons/circle-dot";
 import Bot from "lucide-react-native/icons/bot";
+import Pin from "lucide-react-native/icons/pin";
 import { Body, PressableCard } from "@/ui/primitives";
 import { SessionRowStatus } from "./session-row-status";
 import { sessionRowBadge } from "./session-row-status-model";
@@ -75,6 +76,7 @@ export const SessionListRow = memo(function SessionListRow({
   );
   const draftLabel = copy("Taslak", "Draft");
   const { fontScale } = useWindowDimensions();
+  const large = fontScale > 1;
   const title = sessionDisplayTitle(session.title, copy("Yeni oturum", "New session"));
   const running = session.status === "running";
   // Run transitions are observed where the row sees them; a finish while away turns Done.
@@ -122,7 +124,7 @@ export const SessionListRow = memo(function SessionListRow({
     projectName,
     status.label,
     hasDraft ? draftLabel : undefined,
-    session.pinned ? copy("Sabit", "Pinned") : undefined,
+    session.pinned ? copy("Sabitlendi", "Pinned") : undefined,
     ancestors?.join(" / "),
     session.model ? sessionModelLabel({ harness: session.harness, model: session.model }) : providerName(session.harness),
     session.branch
@@ -161,66 +163,65 @@ export const SessionListRow = memo(function SessionListRow({
               backgroundColor: selected ? colors.selected : undefined,
             }}
           >
-            <View
-              style={{
-                flexDirection: "row",
-                flexWrap: "wrap",
-                alignItems: "flex-start",
-                gap: space.row,
-              }}
-            >
+            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.row }}>
               <View style={{ paddingTop: space.xxs, flexShrink: 0 }}>
                 <ProviderIcon provider={session.harness} size={20} />
-              </View>
-              <View style={{ flex: 1, minWidth: 120, gap: space.xxs }}>
-                <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.xs }}>
-                  <Body
-                    selectable={false}
-                    numberOfLines={fontScale > 1 ? undefined : 2}
-                    style={[uiStyles.label, { fontWeight: session.unread ? "700" : "600", flexShrink: 1 }]}
-                  >
-                    {title}
-                  </Body>
-                  {session.unread ? (
-                    <View accessible={false} style={{ width: space.sm, height: space.sm, borderRadius: space.sm, marginTop: space.xs, backgroundColor: colors.accent }} />
-                  ) : null}
-                  {managedLabel ? (
-                    <View style={{ paddingTop: space.xxs }}>
-                      <Bot {...decorativeSvgProps} size={14} color={colors.info} />
-                    </View>
-                  ) : null}
-                </View>
-                {snoozed ? <Body muted style={uiStyles.caption}>{copy("Uyanma zamanı", "Wakes at")} · {dateStamp(session.snoozedUntil ?? undefined)}</Body> : null}
-                {showProject ? (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs + 2 }}>
-                    <ProjectIcon appearance={projectAppearance} size={14} box={16} />
-                    <Body
-                      selectable={false}
-                      muted
-                      numberOfLines={fontScale > 1 ? undefined : 1}
-                      style={[uiStyles.caption, { flex: 1, minWidth: 0 }]}
-                    >
-                      {projectName}
-                    </Body>
-                  </View>
+                {/* Unread marks the identity, so it never moves with a wrapping title. */}
+                {session.unread ? (
+                  <View accessible={false} style={{
+                    position: "absolute", top: 0, end: -space.xxs, width: space.sm + space.xxs, height: space.sm + space.xxs,
+                    borderRadius: space.sm, backgroundColor: colors.accent, borderWidth: 2, borderColor: colors.background,
+                  }} />
                 ) : null}
-                {meta || workItem ? (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs + 2 }}>
-                    {session.branch ? (
-                      <BranchIcon {...decorativeSvgProps} size={12} color={colors.muted} />
-                    ) : null}
+              </View>
+              <View style={{ flex: 1, minWidth: 0, gap: space.xxs }}>
+                {/* The stamp shares only the title line; meta lines below use the full width. */}
+                <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.xs }}>
+                  <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "flex-start", gap: space.xs }}>
                     <Body
                       selectable={false}
-                      muted
-                      numberOfLines={fontScale > 1 ? undefined : 1}
-                      style={[uiStyles.caption, { flex: 1, minWidth: 0 }]}
+                      numberOfLines={large ? undefined : 2}
+                      style={[uiStyles.label, { fontWeight: session.unread ? "700" : "600", flexShrink: 1 }]}
                     >
-                      {meta}
+                      {title}
                     </Body>
+                    {session.pinned ? (
+                      <View style={{ paddingTop: space.xxs }}>
+                        <Pin {...decorativeSvgProps} size={13 * Math.min(fontScale, 1.6)} color={colors.muted} />
+                      </View>
+                    ) : null}
+                    {managedLabel ? (
+                      <View style={{ paddingTop: space.xxs }}>
+                        <Bot {...decorativeSvgProps} size={14 * Math.min(fontScale, 1.6)} color={colors.info} />
+                      </View>
+                    ) : null}
+                  </View>
+                  {large ? null : <View style={{ flexShrink: 0, paddingTop: space.xxs }}>{stamp}</View>}
+                </View>
+                {large ? <View style={{ flexDirection: "row" }}>{stamp}</View> : null}
+                {snoozed ? <Body muted style={uiStyles.caption}>{copy("Uyanma zamanı", "Wakes at")} · {dateStamp(session.snoozedUntil ?? undefined)}</Body> : null}
+                {showProject || meta || workItem ? (
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space.xs + 2, rowGap: space.xxs }}>
+                    {showProject ? (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 1, minWidth: 0, maxWidth: "100%" }}>
+                        <ProjectIcon appearance={projectAppearance} size={14} box={16} />
+                        <Body selectable={false} muted numberOfLines={large ? undefined : 1} style={[uiStyles.caption, { flexShrink: 1 }]}>
+                          {projectName}
+                        </Body>
+                      </View>
+                    ) : null}
+                    {meta ? (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 1, minWidth: 0, maxWidth: "100%" }}>
+                        {session.branch ? (
+                          <BranchIcon {...decorativeSvgProps} size={12 * Math.min(fontScale, 1.6)} color={colors.muted} />
+                        ) : null}
+                        <Body selectable={false} muted numberOfLines={large ? undefined : 1} style={[uiStyles.caption, { flexShrink: 1 }]}>
+                          {meta}
+                        </Body>
+                      </View>
+                    ) : null}
                     {workItem ? (
-                      <View
-                        style={{ flexDirection: "row", alignItems: "center", gap: space.xxs, flexShrink: 0 }}
-                      >
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: space.xxs, flexShrink: 0 }}>
                         {workItem.kind === "pr" ? (
                           <GitPullRequest {...decorativeSvgProps} size={12} color={colors.muted} />
                         ) : (
@@ -233,9 +234,6 @@ export const SessionListRow = memo(function SessionListRow({
                     ) : null}
                   </View>
                 ) : null}
-              </View>
-              <View style={{ flexShrink: 0, alignItems: "flex-end", gap: space.xs }}>
-                {stamp}
               </View>
             </View>
           </PressableCard>

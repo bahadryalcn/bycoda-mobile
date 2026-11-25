@@ -27,7 +27,7 @@ export function AgentDefaultsSettings({ current, enabled }: { current(): boolean
     },
   });
   return <Disclosure label={copy("Ajan varsayılanları", "Agent defaults")}>
-    {!supported ? <Notice message={copy("Ajan varsayılanlarını düzenlemek için bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer to edit agent defaults.")} /> : <>
+    {!supported ? <Notice message={copy("Ajan varsayılanlarını düzenlemek için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer to edit agent defaults.")} /> : <>
       <QueryState query={query} />
       {query.data && current() ? <AgentDefaultsEditor initial={query.data} current={currentSupported} archive={archive} currentArchive={currentArchive} onReload={async () => {
         const result = await query.refetch();
@@ -102,7 +102,7 @@ function AgentDefaultsEditor({ initial, current, archive, currentArchive, onRelo
         onChange={setDays}
       />
     </> : null}
-    {!valid ? <Notice tone="warning" message={copy("0 ile 3650 arasında tam gün girin.", "Enter a whole number of days from 0 to 3650.")} /> : null}
+    {!valid ? <Notice tone="warning" message={copy("0 ile 3650 arasında tam gün gir.", "Enter a whole number of days from 0 to 3650.")} /> : null}
     {failure ? <Notice tone="danger" message={failure} /> : null}
     {held ? <Notice tone="warning" message={copy("Kaydetme doğrulanamadı. Tekrar göndermeden güncel ayarları yükleyin; düzenlemeler sıfırlanır.", "Save was not confirmed. Load current settings before sending again; edits will reset.")} /> : null}
     <FormActions placement="inline" submitLabel={copy("Ajan varsayılanlarını kaydet", "Save agent defaults")} busy={busy} disabled={blocked || !dirty || !valid} onSubmit={() => void submit()} />

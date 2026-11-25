@@ -1,3 +1,4 @@
+import type { PageScope } from "./scope-line";
 import type { ComponentType, PropsWithChildren, ReactNode, RefObject, Ref } from "react";
 import type {
   StyleProp,
@@ -53,6 +54,8 @@ export type InputProps = TextInputProps & {
 export type ScreenProps = PropsWithChildren<{
   title?: string;
   subtitle?: string;
+  /** Which computer/project the page acts on: one quiet glyph-led line beside the heading actions. */
+  scope?: PageScope;
   /** Current task scope in the shared heading, preserved under a native title. */
   context?: ReactNode;
   /** Trailing actions in the shared page heading. */
@@ -151,10 +154,28 @@ export type StateViewProps = {
   action?: StateAction;
   /** Quiet alternative below the primary action. */
   secondaryAction?: StateAction;
-  /** Inline, left-aligned variant (icon row) for small sub-sections. With an illustration it stays centered but smaller. */
+  /** Inline, left-aligned variant (icon row) for small sub-sections. Same as `size="compact"`. */
   compact?: boolean;
+  /**
+   * `line`: one status line (24 pt). `compact`: icon row for a section (96 pt, 128 pt with an action).
+   * `region`: centered state that owns a whole screen, list or sheet body. Wins over `compact`.
+   */
+  size?: StateSize;
   tone?: StateTone;
   testID?: string;
+};
+
+export type StateSize = "line" | "compact" | "region";
+
+/** One line of status: icon + text + optional text action, no fill, about 24 pt. */
+export type StatusLineProps = {
+  tone?: "neutral" | "info" | "warning" | "danger" | "success";
+  label: string;
+  /** Replaces the icon with a small spinner while the described work runs. */
+  busy?: boolean;
+  action?: { label: string; onPress: () => void };
+  /** Overrides the tone ink on a fixed-color surface such as the media viewer. */
+  color?: string;
 };
 
 export type EmptyProps = {
@@ -195,8 +216,15 @@ export type NoticeProps = PropsWithChildren<{
 
 export type QueryStateProps = {
   query: QueryLike;
-  /** Uses inline feedback when the query owns a section of a form or sheet. */
+  /** Uses inline feedback when the query owns a section of a form or sheet. Same as `size="compact"`. */
   compact?: boolean;
+  /**
+   * Failure, waiting and empty presentation size. By default the first failing query of a Screen or
+   * Sheet reports the failure (`region` when it draws a list/content placeholder or centered spinner,
+   * `compact` for inline/none loading) and later failing sections show one `line`.
+   * Pass `region` when this query owns the whole screen body, `compact` for a section.
+   */
+  size?: StateSize;
   /** Overrides the default nearest-Sheet guarded close and connection navigation. */
   onManageConnections?: () => void;
   /** Joins a route-wide connection notice for reads from the same computer. */

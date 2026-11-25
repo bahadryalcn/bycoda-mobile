@@ -5,8 +5,10 @@ import {
   Body,
   Row,
   Stack,
+  StatusText,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { useMobileTheme } from "@/ui/theme";
 import { IssueSummary } from "@/ui/issue-summary";
 import { providerName } from "./provider-model";
 import { useRelativeTime } from "../management/shared/record-bits";
@@ -25,25 +27,22 @@ export function ProviderConnections({ providers, onRetry, retrying }: ProviderCo
     <>
       <Stack>
         {providers.map((provider) => (
-          <Row key={provider.provider}>
-          <Body style={{ flex: 1, minWidth: 0, fontWeight: "600" }}>{providerName(provider.provider)}</Body>
-          <Badge
-            label={copy(
-              provider.connected ? "bağlı" : "bağlı değil",
-              provider.connected ? "connected" : "disconnected",
-            )}
-            tone={provider.connected ? "success" : "default"}
-          />
+          <Row key={provider.provider} style={{ flexWrap: "nowrap", minHeight: 48 }}>
+            <Body style={{ flex: 1, minWidth: 0 }}>{providerName(provider.provider)}</Body>
+            {/* Connected is a green badge; a missing account is a muted word with the way to fix it below. */}
+            {provider.connected
+              ? <Badge tone="success" label={copy("Bağlı", "Connected")} />
+              : <StatusText label={copy("Bağlı değil", "Not connected")} />}
           </Row>
         ))}
       </Stack>
       <IssueSummary issues={providers.filter((provider) => provider.error).map((provider) => `${providerName(provider.provider)}: ${provider.error}`)}
         onRetry={onRetry} retrying={retrying} />
-      {!providers.some((provider) => provider.connected) ? (
+      {providers.some((provider) => !provider.connected) ? (
         <Body muted>
           {copy(
-            "Hesapları bilgisayarındaki Bycoda ayarlarından bağla.",
-            "Connect accounts in Bycoda settings on your computer.",
+            "Hesapları bilgisayarındaki Bycoda ayarlarından bağla; burada yalnızca durumu görünür.",
+            "Connect accounts in Bycoda settings on your computer; only their status shows here.",
           )}
         </Body>
       ) : null}
@@ -53,13 +52,14 @@ export function ProviderConnections({ providers, onRetry, retrying }: ProviderCo
 
 export function ProviderInboxFeedback({ result, onRetry, retrying }: ProviderInboxFeedbackProps) {
   const copy = useCopy();
+  const { uiStyles } = useMobileTheme();
   return (
     <>
       <IssueSummary issues={Object.entries(result.errors).map(([provider, error]) =>
         `${providerName(provider)}: ${error}\n${copy("Bu servisin kayıtları güncel olmayabilir.", "This provider’s items may be out of date.")}`)}
         onRetry={onRetry} retrying={retrying} />
       {result.omittedProjects?.length ? (
-        <Body muted>
+        <Body muted style={uiStyles.caption}>
           {copy(
             "{p0} proje bu listede gösterilmiyor. Kapsamdan bir proje seçerek kayıtlarını görebilirsin.",
             "{p0} projects are not shown in this list. Choose one in the scope to see its items.",

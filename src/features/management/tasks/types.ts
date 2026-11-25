@@ -30,4 +30,6 @@ export type TaskCardProps = {
   reorder: ReturnType<typeof useHostMutation>;
   tasks: HostTask[];
   lifecycleReady: boolean;
+  /** Present while the list is in selection mode. */
+  selection?: { selected: boolean; onToggle: () => void };
 };

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, createElement as h, type ReactNode } from "react";
+import { act, createElement as h, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ComposerSuggestions } from "./composer-suggestions";
@@ -13,14 +13,26 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/primitives", () => ({
   Body: () => null, Button: () => null, ErrorText: () => null, Loading: () => null,
-  Row: ({ children }: { children: ReactNode }) => h("div", null, children),
+  NavigationGroup: ({ children }: { children: ReactNode }) => h("div", null, children),
+  NavigationRow: () => null, RowIcon: () => null, SectionHeader: () => null,
 }));
 vi.mock("react-native", () => ({
-  useWindowDimensions: () => ({ fontScale: 1 }),
+  StyleSheet: { hairlineWidth: 1 },
   View: ({ children }: { children: ReactNode }) => h("div", null, children),
-  FlatList: () => null,
+  ScrollView: ({ children }: { children: ReactNode }) => h("div", null, children),
 }));
-vi.mock("panelui-native/components/item", () => ({ Item: () => null }));
+vi.mock("react-native-svg", () => ({ Svg: () => null, default: () => null }));
+vi.mock("lucide-react-native/icons/at-sign", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/bot", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/file", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/folder", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/git-pull-request", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/list-checks", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/notebook", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/server", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/sparkles", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/terminal", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/users", () => ({ default: () => null }));
 
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
@@ -38,10 +50,17 @@ const press = (key: string) => {
   const command = commands.get(key);
   if (command?.enabled) command.run();
 };
-const render = (items: ComposerSuggestion[], onPick = vi.fn(), onClose = vi.fn()) => act(async () => root.render(h(ComposerSuggestions, {
-  items, onPick, onClose, keyboardActive: true, maximumHeight: 200, compact: false,
-  trigger: "@", selected: -1, loading: false, error: null, onRetry: () => {},
-})));
+const render = (items: ComposerSuggestion[], onPick = vi.fn(), onClose = vi.fn()) => {
+  function Fixture() {
+    const [selected, select] = useState<string>();
+    return h(ComposerSuggestions, {
+      items, onPick, onClose, keyboardActive: true, maximumHeight: 200,
+      trigger: "@", selected, onMove: () => select(items.find((item) => !item.unavailable)?.id),
+      loading: false, error: null, onRetry: () => {},
+    });
+  }
+  return act(async () => root.render(h(Fixture)));
+};
 
 it("keeps Enter in the editor until a suggestion is highlighted", async () => {
   const onPick = vi.fn();
@@ -62,4 +81,11 @@ it("leaves cursor keys to the editor when there are no matches and keeps Escape 
   expect(commands.get("Tab")?.enabled).toBe(false);
   await act(async () => press("Escape"));
   expect(onClose).toHaveBeenCalledOnce();
+});
+
+it("Tab skips unavailable desktop entries", async () => {
+  const onPick = vi.fn();
+  await render([{ ...file, id: "unavailable", unavailable: "Available on desktop" }, file], onPick);
+  await act(async () => press("Tab"));
+  expect(onPick).toHaveBeenCalledExactlyOnceWith(file);
 });

@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { AccountState } from "./account-context";
 import { defaultNotificationSettings, type NotificationSettings } from "../contracts";
-import { NotificationSettingsScreen } from "./NotificationSettingsScreen";
+import { AccountNotificationSettings } from "./NotificationSettingsScreen";
 
 const fixture = vi.hoisted(() => ({
   account: undefined as AccountState | undefined,
@@ -27,7 +27,7 @@ vi.mock("./use-notification-saves", () => ({ useNotificationSaves: () => ({ pend
 vi.mock("@/ui/primitives", () => {
   const wrap = ({ children }: PropsWithChildren) => h("section", null, children);
   return {
-    Body: wrap, Screen: wrap, Section: wrap, Stack: wrap, ToggleField: () => null,
+    Body: wrap, Screen: wrap, Section: wrap, Stack: wrap, NavigationGroup: wrap, ToggleField: () => null,
     Notice: ({ message }: { message: string }) => h("p", { role: "alert" }, message),
     Loading: () => h("p", { role: "status" }, "Loading"),
     Skeleton: () => h("p", { role: "status" }, "Loading preferences"),
@@ -48,7 +48,7 @@ it("keeps an equal quiet-hours range local and saves the corrected schedule", as
   fixture.save.mockClear();
   const button = (label: string) => [...container.querySelectorAll("button")].find(item => item.textContent === label)!;
   try {
-    await act(async () => root.render(h(NotificationSettingsScreen)));
+    await act(async () => root.render(h(AccountNotificationSettings)));
     expect(container.textContent).toContain("Schedule preview");
     await act(async () => button("Start (HH:MM)").click());
     expect(container.querySelector('[role="alert"]')?.textContent).toBe("Start and end times must differ.");
@@ -80,7 +80,7 @@ function render(status: AccountState["status"], registerError: Error | null = nu
     retryRegistration: fixture.retryRegistration,
     signOut: async () => undefined,
   };
-  return renderToStaticMarkup(h(NotificationSettingsScreen));
+  return renderToStaticMarkup(h(AccountNotificationSettings));
 }
 
 describe("notification settings access", () => {
@@ -98,5 +98,11 @@ describe("notification settings access", () => {
 
   it("offers sign-in when the account is signed out", () => {
     expect(render("signedOut")).toContain("<button>Sign in</button>");
+  });
+});
+
+describe("account part of the Notifications page", () => {
+  it("renders nothing when this build has no account sign-in", () => {
+    expect(render("unavailable")).toBe("");
   });
 });

@@ -1,33 +1,31 @@
 import { scrollKeyboardDismissMode } from "./scroll-keyboard";
 import { useMobileTheme } from "./theme";
-import { useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ChevronsUpDown from "lucide-react-native/icons/chevrons-up-down";
-import { FlatList, StyleSheet, Text, View, type HostInstance } from "react-native";
+import { FlatList, StyleSheet, View, useWindowDimensions, type HostInstance } from "react-native";
 import { AnimatedPressable } from "panelui-native/primitives/animated-pressable";
 import Check from "lucide-react-native/icons/check";
-import { DisclosureChevron } from "./disclosure-motion";
 import Square from "lucide-react-native/icons/square";
 import CheckSquare from "lucide-react-native/icons/square-check-big";
 import { Sheet } from "./dialogs";
-import { SheetGuardContext } from "./sheet-guard-context";
 import { Body } from "./typography";
 import { Button } from "./buttons";
 import { SearchField } from "./search-field";
-import { Empty } from "./feedback";
+import { Empty, FieldError, Loading } from "./feedback";
 import { useLocale } from "@/i18n";
 import { usePrivateContentAccess, type PrivateContentAccess } from "./private-access";
 import { normalizeSearch } from "./search-matching";
 import { useFilteredListScrollMemory } from "./use-list-scroll-memory";
 import { useCopy } from "./copy";
 import { useReducedMotionPreference } from "./use-reduced-motion";
-import { HintLabel, UnitHint, isUnitHint } from "./info-hint";
+import { InfoHint, UnitHint, isUnitHint } from "./info-hint";
 import { useInNavigationGroup } from "./navigation-row";
 import { SectionHeader } from "./layout";
 import { metrics, opacity, radii, space, gapIcon } from "./tokens";
 import { filterSelection, selectionLabels, toggleSelection, type SelectionOption } from "./selection-model";
 
-/** Inline option lists stay inside the sheet scroller; a longer list asks for a search. */
-const INLINE_LIMIT = 60;
+const SEARCH_THRESHOLD = 6;
+const NO_OPTIONS: readonly never[] = [];
 
 type SelectionFieldOption<T extends string> = SelectionOption<T> & { icon?: ReactNode };
 
@@ -52,6 +50,27 @@ type MultiSelectProps<T extends string> = CommonProps<T> & {
   onChange: (values: T[]) => void;
   max?: number;
 };
+
+type AutocompleteBehavior<T extends string> = {
+  freeValue?: (text: string) => T;
+  loading?: boolean;
+  /** When supplied, the caller filters and publishes results for the latest query. */
+  onQueryChange?: (query: string) => void;
+};
+export type AutocompleteFieldProps = Omit<SelectProps<string>, "searchable"> &
+  Omit<AutocompleteBehavior<string>, "freeValue"> & { allowFreeText?: boolean };
+
+export function AutocompleteField({ allowFreeText, loading, onQueryChange, ...props }: AutocompleteFieldProps) {
+  return (
+    <SelectionField
+      {...props}
+      searchable
+      values={props.value === undefined ? [] : [props.value]}
+      onChange={([value]) => props.onChange(value!)}
+      autocomplete={{ freeValue: allowFreeText ? (text) => text : undefined, loading, onQueryChange }}
+    />
+  );
+}
 
 export function SelectField<T extends string>(props: SelectProps<T>) {
   useMobileTheme();
@@ -85,17 +104,17 @@ function SelectionField<T extends string>({
   error,
   variant = "field",
   icon,
-}: MultiSelectProps<T> & { multiple?: boolean }) {
+  autocomplete,
+}: MultiSelectProps<T> & { multiple?: boolean; autocomplete?: AutocompleteBehavior<T> }) {
   const { colors, semanticColors, uiStyles } = useMobileTheme();
+  const stackSummary = useWindowDimensions().fontScale > 1 && !hideLabel;
   const copy = useCopy();
   const reducedMotion = useReducedMotionPreference();
   const locale = useLocale(), access = usePrivateContentAccess();
-  // Inside a Sheet the options expand under the trigger: one overlay, one scroll owner.
-  const inSheet = useContext(SheetGuardContext) !== null;
   const trigger = useRef<HostInstance>(null);
   const mounted = useRef(false);
   useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  const [opening, setOpening] = useState<{ access: PrivateContentAccess } | null>(null);
+  const [opening, setOpening] = useState<{ access: PrivateContentAccess; selected: ReadonlySet<T> } | null>(null);
   const open = !!opening;
   const [search, setSearch] = useState("");
   const optionLabels = useMemo(
@@ -112,13 +131,30 @@ function SelectionField<T extends string>({
   const summary = labels.length
     ? `${labels.slice(0, limit).join(", ")}${labels.length > limit ? ` +${labels.length - limit}` : ""}`
     : (placeholder ?? copy("Seç…", "Select…"));
-  const filtered = useMemo(() => filterSelection(options, search, locale), [options, search, locale]);
-  const searchEnabled = (searchable ?? options.length > 6) || !!search;
-  const available = !disabled && access.allowed && access.check() && (!opening || opening.access.allowed && opening.access.check());
+  const searchEnabled = (searchable ?? options.length > SEARCH_THRESHOLD) || !!search;
+  const remote = !!autocomplete?.onQueryChange;
+  const loading = !!autocomplete?.loading;
   const searchKey = normalizeSearch(search, locale);
+  const customValue = autocomplete?.freeValue?.(search.trim());
+  const freeEntry = !!customValue && !options.some(option => option.value === customValue || option.label === customValue)
+    ? customValue
+    : "";
+  const filtered = useMemo(() => {
+    if (!opening || loading) return NO_OPTIONS;
+    const matches = remote || !searchKey ? options : filterSelection(options, search, locale);
+    if (searchKey || matches.length <= SEARCH_THRESHOLD || !opening.selected.size || matches.some(option => option.group)) {
+      return matches;
+    }
+    // Keep the initial selection near the top without moving rows as a multi-picker is edited.
+    return [
+      ...matches.filter(option => opening.selected.has(option.value)),
+      ...matches.filter(option => !opening.selected.has(option.value)),
+    ];
+  }, [opening, loading, remote, searchKey, options, search, locale]);
+  const available = !disabled && access.allowed && access.check() && (!opening || opening.access.allowed && opening.access.check());
   // Only an open panel needs option identity to retire stale events; a closed trigger must not serialise every option on each render.
-  const signature = open ? JSON.stringify([searchKey, locale, values, options.map(option => [option.value, option.label, option.detail, option.disabled, option.group, option.searchKeywords])]) : "";
-  const view = useMemo(() => ({}), [opening, available, signature, multiple, max]);
+  const signature = open ? JSON.stringify([remote ? search : searchKey, locale, values, options.map(option => [option.value, option.label, option.detail, option.disabled, option.group, option.searchKeywords])]) : "";
+  const view = useMemo(() => ({}), [opening, available, signature, multiple, max, loading, freeEntry]);
   const input = useMemo(() => ({}), [opening, available]);
   const live = useRef({ opening, view, input, available, access, values, onChange, filtered });
   live.current = { opening, view, input, available, access, values, onChange, filtered };
@@ -127,14 +163,19 @@ function SelectionField<T extends string>({
   const close = () => { if (mounted.current && opening && live.current.opening === opening) { live.current.opening = null; setOpening(null); } };
   const activateTrigger = () => {
     if (!mounted.current || live.current.opening !== opening || !live.current.available || !live.current.access.allowed || !live.current.access.check()) return;
-    if (opening) {
-      if (inSheet) close();
-      return;
-    }
-    const next = { access: live.current.access }; live.current.opening = next; setSearch(""); setOpening(next);
+    if (opening) return;
+    const next = { access: live.current.access, selected: new Set(live.current.values) };
+    live.current.opening = next;
+    setSearch("");
+    setOpening(next);
+    autocomplete?.onQueryChange?.("");
   };
   useLayoutEffect(() => { if (opening && !available) close(); }, [opening, available]);
-  const changeSearch = (value: string) => { if (current() && live.current.input === input) setSearch(value); };
+  const changeSearch = (value: string) => {
+    if (!current() || live.current.input !== input) return;
+    setSearch(value);
+    autocomplete?.onQueryChange?.(value);
+  };
   const clearSearch = () => { if (live.current.view === view) changeSearch(""); };
   const clearSelection = () => { if (current() && live.current.view === view) live.current.onChange([]); };
   const choose = (value: T) => {
@@ -144,15 +185,19 @@ function SelectionField<T extends string>({
     live.current.onChange(multiple ? toggleSelection(live.current.values, value, max) : [value]);
     if (!multiple) close();
   };
+  const chooseFreeEntry = () => {
+    if (!current() || live.current.view !== view || !freeEntry || loading) return;
+    close();
+    live.current.onChange([freeEntry]);
+  };
   const position = useFilteredListScrollMemory<SelectionFieldOption<T>>(searchKey, open && available, filtered.length, { suspended: !open || !available });
   const row = variant === "row";
   const grouped = useInNavigationGroup();
-  const inline = inSheet && open && available;
-  const gutter = inSheet ? 0 : space.screen;
   const controls = searchEnabled || multiple ? (
-    <View style={[uiStyles.header, { paddingHorizontal: gutter, flexShrink: 0 }]}>
+    <View style={[uiStyles.header, { paddingHorizontal: space.screen, paddingBottom: space.xs, flexShrink: 0 }]}>
       {searchEnabled ? <SearchField
         label={copy("Seçenek ara", "Search options")}
+        autoCapitalize="none"
         value={search} onChangeText={changeSearch} /> : null}
       {multiple ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.row, minHeight: 34 }}>
@@ -165,14 +210,18 @@ function SelectionField<T extends string>({
             <Button density="compact" disabled={!available}
               label={copy("Seçimi temizle", "Clear selection")} onPress={clearSelection} />
           ) : null}
-          {inSheet ? <Button density="compact" tone="quiet" label={copy("Tamam", "Done")} onPress={close} /> : null}
         </View>
       ) : null}
     </View>
   ) : null;
-  const empty = <Empty compact
-    title={options.length ? copy("Eşleşen seçenek yok.", "No matching options.") : copy("Kullanılabilir seçenek yok.", "No options available.")}
-    action={searchKey ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined} />;
+  const empty = loading
+    ? <Loading label={copy("Seçenekler yükleniyor", "Loading options")} immediate />
+    : freeEntry ? undefined : (
+      <Empty compact
+        title={searchKey ? copy("Eşleşen seçenek yok.", "No matching options.") : copy("Kullanılabilir seçenek yok.", "No options available.")}
+        action={searchKey ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined}
+      />
+    );
   const renderOption = (item: SelectionFieldOption<T>) => {
     const selected = values.includes(item.value);
     const off = !available || !!item.disabled ||
@@ -198,7 +247,7 @@ function SelectionField<T extends string>({
           paddingHorizontal: space.md,
           paddingVertical: space.sm,
           borderRadius: radii.control,
-          backgroundColor: "transparent",
+          backgroundColor: selected ? colors.fill : "transparent",
           ...(off ? { opacity: opacity.disabled } : {}),
         }}
       >
@@ -221,11 +270,10 @@ function SelectionField<T extends string>({
         <SectionHeader title={item.group} />
       </View>
     ) : null;
-  const shown = filtered.slice(0, INLINE_LIMIT);
+  const showHint = !row && !hideLabel && !!hint && !isUnitHint(hint);
   return (
     <View style={row ? undefined : [uiStyles.field, (error || isUnitHint(hint)) && { paddingBottom: space.xs }]}>
-      {!hideLabel && !row ? <HintLabel label={label} help={hint} /> : null}
-      {row ? (
+      <View style={showHint ? { flexDirection: "row", alignItems: "center", gap: space.xs } : undefined}>
         <AnimatedPressable
           pressScale={1}
           pressOpacity={reducedMotion ? 1 : opacity.pressed}
@@ -238,115 +286,58 @@ function SelectionField<T extends string>({
           aria-disabled={!available}
           disabled={!available}
           onPress={activateTrigger}
-          style={{
-            minHeight: metrics.rowHeightProject,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: gapIcon,
-            paddingHorizontal: grouped ? space.sm : 0,
-            marginHorizontal: grouped ? -space.sm : 0,
-            paddingVertical: space.row,
-            backgroundColor: "transparent",
-            ...(!available ? { opacity: opacity.disabled } : {}),
-          }}
+          style={[
+            !row && uiStyles.input,
+            row && {
+              paddingHorizontal: grouped ? space.sm : 0,
+              marginHorizontal: grouped ? -space.sm : 0,
+              paddingVertical: space.row,
+            },
+            compact && !row && { paddingVertical: space.xxs },
+            !row && (open || error) && {
+              borderColor: error ? semanticColors.danger.border : colors.accent,
+            },
+            !available && { opacity: opacity.disabled },
+            showHint && uiStyles.grow,
+            {
+              minHeight: row || !compact ? metrics.rowHeightProject : metrics.touchTarget,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: gapIcon,
+              minWidth: 0,
+            },
+          ]}
         >
-          {icon}
-          <View style={[uiStyles.grow, { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm }]}>
-            <Body selectable={false} style={[uiStyles.label, { flexGrow: 1, flexShrink: 1, flexBasis: 104 }]}>
-              {label}
-            </Body>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexShrink: 1, maxWidth: "100%" }}>
+          <SelectionIcon>{icon}</SelectionIcon>
+          <View style={[uiStyles.grow, stackSummary
+            ? { alignItems: "flex-start", gap: space.xxs }
+            : { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs }]}>
+            {!hideLabel ? (
+              <Body selectable={false} style={[uiStyles.label, !stackSummary && { flexGrow: 1, flexShrink: 1, flexBasis: 104 }]}>
+                {label}
+              </Body>
+            ) : null}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 1, maxWidth: "100%", flexGrow: hideLabel ? 1 : 0 }}>
               <SelectionIcon>{selectedIcon}</SelectionIcon>
-              <Body selectable={false} muted style={{ flexShrink: 1 }}>{summary}</Body>
+              <Body selectable={false} muted={!hideLabel || !labels.length} style={{ flexShrink: 1 }}>{summary}</Body>
             </View>
           </View>
-          <ChevronsUpDown size={15} strokeWidth={2.2} color={colors.tertiary} />
+          <ChevronsUpDown size={16} strokeWidth={2} color={colors.tertiary} />
         </AnimatedPressable>
-      ) : null}
-      {/* Settings rows share NavigationRow's inset separator inside a group. */}
+        {showHint ? <InfoHint text={hint} /> : null}
+      </View>
       {row && grouped ? <View accessible={false} style={uiStyles.separator} /> : null}
-      {!row ? (
-      <AnimatedPressable
-        pressScale={1}
-        pressOpacity={reducedMotion ? 1 : opacity.pressed}
-        className="min-h-12 rounded-lg border border-input bg-background"
-        ref={trigger}
-        accessibilityRole="combobox"
-        accessibilityLabel={`${label}: ${labels.length ? labels.join(", ") : summary}`}
-        accessibilityHint={error ?? hint}
-        accessibilityState={{ expanded: open && available, disabled: !available }}
-        aria-expanded={open && available}
-        aria-disabled={!available}
-        disabled={!available}
-        hitSlop={compact ? { top: 8, bottom: 8, left: 0, right: 0 } : undefined}
-        onPress={activateTrigger}
-        style={[
-          uiStyles.input,
-          compact && {
-            minHeight: metrics.touchTarget,
-            paddingVertical: space.xxs,
-            borderColor: colors.separator,
-          },
-          error && { borderColor: semanticColors.danger.border },
-          open && { borderColor: colors.accent },
-          !available && { opacity: opacity.disabled },
-          {
-            flexDirection: "row",
-            alignItems: "center",
-            gap: space.sm,
-          },
-        ]}
-      >
-        <SelectionIcon>{selectedIcon}</SelectionIcon>
-        <Body selectable={false} muted={!labels.length} style={uiStyles.grow}>
-          {summary}
-        </Body>
-        <DisclosureChevron
-          expanded={open}
-          size={16}
-          color={colors.muted}
-          closedAngle={90}
-          openAngle={270}
-        />
-      </AnimatedPressable>
-      ) : null}
-      {error ? (
-        <Text selectable accessibilityRole="alert" style={uiStyles.error}>
-          {error}
-        </Text>
-      ) : <UnitHint hint={hint} />}
-      {inline ? (
-        <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border,
-          borderRadius: radii.control, backgroundColor: colors.panel, paddingBottom: space.xs, marginTop: space.xs }}>
-          {controls}
-          {shown.length ? shown.map((item, index) => (
-            <View key={item.value}>
-              {index && item.group === shown[index - 1]?.group ? (
-                <View accessible={false} style={[uiStyles.separator, { marginHorizontal: space.sm }]} />
-              ) : null}
-              {groupHeading(item, index)}
-              {renderOption(item)}
-            </View>
-          )) : empty}
-          {filtered.length > shown.length ? (
-            <Body muted style={[uiStyles.caption, { paddingHorizontal: space.md, paddingTop: space.sm }]}>
-              {copy("Daha fazlası için arayın.", "Search to narrow the list.")}
-            </Body>
-          ) : null}
-        </View>
-      ) : null}
-      {!inSheet ? <Sheet
+      {error ? <FieldError message={error} /> : <UnitHint hint={hint} />}
+      <Sheet
         visible={open && available}
         onClose={close}
         title={label}
-        size={searchEnabled ? "full" : "compact"}
+        size={searchEnabled ? "form" : "compact"}
         scroll={false}
         returnFocusRef={trigger}
-        headerAction={
-          multiple ? (
-            <Button label={copy("Tamam", "Done")} tone="quiet" onPress={close} />
-          ) : undefined
-        }
+        headerAction={multiple ? (
+          <Button label={copy("Tamam", "Done")} tone="quiet" onPress={close} reserveTouchTarget />
+        ) : undefined}
       >
         <View style={{ flexShrink: 1, flexGrow: searchEnabled ? 1 : 0, minHeight: 0 }}>
           {controls}
@@ -361,24 +352,37 @@ function SelectionField<T extends string>({
             keyboardDismissMode={searchEnabled ? "none" : scrollKeyboardDismissMode("on-drag")}
             automaticallyAdjustKeyboardInsets={false}
             contentInsetAdjustmentBehavior="never"
-            // Options share the header's centered column; a full-height sheet on a tablet
-            // must not stretch rows edge to edge under a centered title and search.
-            contentContainerStyle={{ paddingHorizontal: space.screen, paddingBottom: space.lg,
-              width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}
+            contentContainerStyle={{
+              paddingHorizontal: space.screen,
+              paddingBottom: space.lg,
+              width: "100%",
+              maxWidth: metrics.contentWidth,
+              alignSelf: "center",
+            }}
             ItemSeparatorComponent={() => (
               <View style={[uiStyles.separator, { marginHorizontal: space.sm }]} />
             )}
+            ListHeaderComponent={freeEntry && !loading ? (
+              <Button
+                tone="quiet"
+                label={copy("“{p0}” kullan", "Use “{p0}”", { p0: freeEntry })}
+                onPress={chooseFreeEntry}
+                reserveTouchTarget
+              />
+            ) : undefined}
             ListEmptyComponent={empty}
             renderItem={({ item, index }) => <>{groupHeading(item, index)}{renderOption(item)}</>}
           />
         </View>
-      </Sheet> : null}
+      </Sheet>
     </View>
   );
 }
 
 function SelectionIcon({ children }: { children?: ReactNode }) {
-  if (!children) return null;
+  if (children == null || children === false) return null;
   return <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
-    style={{ flexShrink: 0, alignItems: "center", justifyContent: "center" }}>{children}</View>;
+    style={{ flexShrink: 0, alignItems: "center", justifyContent: "center" }}>
+    {typeof children === "string" || typeof children === "number" ? <Body>{children}</Body> : children}
+  </View>;
 }

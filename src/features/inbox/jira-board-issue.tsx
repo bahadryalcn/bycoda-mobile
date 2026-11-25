@@ -4,11 +4,14 @@ import { Linking } from "react-native";
 import { useCopy } from "@/ui/copy";
 import { useAsyncAction } from "@/state/actions";
 
-import { Badge, Body, Button, Disclosure, Heading, MutationState, Notice, QueryState, Row, SelectField, Sheet, Stack, StateView } from "@/ui/primitives";
+import { Body, Button, Disclosure, Heading, MutationState, Notice, QueryState, Row, SelectField, Sheet, Stack, StateView, StatusText } from "@/ui/primitives";
+import { useMobileTheme } from "@/ui/theme";
+import { useRelativeTime } from "../management/shared/record-bits";
 import { MessageText } from "@/ui/message-text";
 import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { useLocale } from "@/i18n";
 import { ErrorText } from "../workspace/shared";
+import { humanizeState } from "./provider-labels";
 import { useInboxRead } from "./provider-queries";
 import { inboxItemInput, isInboxPrivateFailure } from "./provider-model";
 
@@ -34,6 +37,8 @@ export function JiraBoardIssueActions({
 }) {
   const inboxScope = useInboxLocalScope();
   const locale = useLocale();
+  const relative = useRelativeTime();
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy(),
     [snapshot] = useState(incoming),
     [issue] = useState(incomingIssue),
@@ -154,35 +159,50 @@ export function JiraBoardIssueActions({
       onClose={onClose}
       dismissible={!delivery.busy}
       footer={readable && !delivery.result ? (
-        <Button
-          tone="primary"
-          label={copy("İşlemi incele", "Review action")}
-          busy={delivery.busy}
-          disabled={locked || !!review || !command}
-          onPress={submit}
-        />
+        <Stack>
+          {!locked && !review && !command ? (
+            <Body muted style={uiStyles.caption}>
+              {action === "transition"
+                ? copy("Devam etmek için yeni bir durum seç.", "Choose a new status to continue.")
+                : copy("Devam etmek için işlemi tamamla.", "Complete the action to continue.")}
+            </Body>
+          ) : null}
+          <Button
+            tone="primary"
+            label={copy("İşlemi incele", "Review action")}
+            fullWidth
+            busy={delivery.busy}
+            disabled={locked || !!review || !command}
+            onPress={submit}
+          />
+        </Stack>
       ) : undefined}
     >
       <Stack>
         {readable ? <>
           <Heading>{issue.title}</Heading>
-          <Row><Body muted>{snapshot.board.name}</Body><Badge label={issue.state} /></Row>
-          <Body>{copy("Atanan", "Assignee")}: {issue.assignees?.map(person => person.login).join(", ") || copy("Atanmamış", "Unassigned")}</Body>
-          {issue.priority ? <Body>{copy("Öncelik", "Priority")}: {issue.priority}</Body> : null}
-          {issue.labels?.length ? <Body>{copy("Etiketler", "Labels")}: {issue.labels.map(label => label.name).join(", ")}</Body> : null}
-          {issue.updatedAt ? <Body>{copy("Güncellendi", "Updated")}: {new Date(issue.updatedAt).toLocaleString(locale)}</Body> : null}
-          <QueryState query={details} />
-          {details.data ? <>
-            <Body>{copy("Bildiren", "Reporter")}: {details.data.author || copy("Bilinmiyor", "Unknown")}</Body>
-            <Disclosure label={copy("Açıklama", "Description")} defaultExpanded>
-              <MessageText text={details.data.body || copy("Açıklama yok.", "No description.")} role="assistant" />
-            </Disclosure>
-          </> : null}
+          <Row><Body muted>{snapshot.board.name}</Body><StatusText label={humanizeState(issue.state)} /></Row>
+          {/* Compact facts: label and value stay together so the status picker is not pushed off screen. */}
+          <Stack>
+            <Body muted style={uiStyles.caption}>{[
+              `${copy("Atanan", "Assignee")}: ${issue.assignees?.map(person => person.login).join(", ") || copy("Atanmamış", "Unassigned")}`,
+              details.data ? `${copy("Bildiren", "Reporter")}: ${details.data.author || copy("Bilinmiyor", "Unknown")}` : "",
+            ].filter(Boolean).join(" · ")}</Body>
+            <Body muted style={uiStyles.caption}>{[
+              issue.priority ? `${copy("Öncelik", "Priority")}: ${issue.priority}` : "",
+              issue.updatedAt ? `${copy("Güncellendi", "Updated")}: ${relative(Date.parse(issue.updatedAt)) || new Date(issue.updatedAt).toLocaleDateString(locale)}` : "",
+            ].filter(Boolean).join(" · ")}</Body>
+            {issue.labels?.length ? <Body muted style={uiStyles.caption}>{`${copy("Etiketler", "Labels")}: ${issue.labels.map(label => label.name).join(", ")}`}</Body> : null}
+          </Stack>
+          <QueryState query={details} loading="inline" />
+          {details.data?.body ? <Disclosure label={copy("Açıklama", "Description")} defaultExpanded>
+            <MessageText text={details.data.body} role="assistant" />
+          </Disclosure> : null}
           {/^https?:\/\//i.test(issue.url ?? "") ? <Button tone="quiet" flush label={copy("Jira’da aç", "Open in Jira")} busy={openLink.isPending} onPress={() => {
             void openLink.run(async () => { if (current()) await Linking.openURL(issue.url); });
           }} /> : null}
           <MutationState mutation={openLink} />
-        </> : scopeCurrent ? <QueryState query={details} /> : (
+        </> : scopeCurrent ? <QueryState query={details} loading="inline" /> : (
           <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")}
             description={copy(...RECORD_ACCESS_UNAVAILABLE)} />
         )}
@@ -225,9 +245,41 @@ export function JiraBoardIssueActions({
           />
         ) : null}
         {readable ? <>
+        {action === "transition" ? (
+          <>
+            <QueryState query={transitions} empty={transitions.isSuccess && !transitions.data?.length}
+              emptyTitle={copy("Kullanılabilir geçiş yok", "No transitions available")}
+              emptyDetail={copy("Bu kayıt için Jira geçiş sunmuyor.", "Jira offers no transitions for this issue.")} loading="inline" />
+            <SelectField
+              label={copy("Durumu değiştir", "Change status")}
+              placeholder={copy("Yeni durum seç", "Choose new status")}
+              value={transitionId}
+              disabled={locked || !!review}
+              onChange={change(setTransition)}
+              options={(transitions.data ?? [])
+                .filter((item) => !item.requiresFields)
+                .map((item) => ({ value: item.id, label: item.name }))}
+            />
+            {transitions.data?.some((item) => item.requiresFields) ? (
+              <Notice
+                message={copy(
+                  "Alan gerektiren geçişleri Jira’da tamamla.",
+                  "Complete transitions requiring additional fields in Jira.",
+                )}
+              />
+            ) : null}
+          </>
+        ) : (
+          <Button tone="quiet" flush label={copy("Durumu değiştir", "Change status")} disabled={locked || !!review}
+            onPress={() => { if (!editable()) return; setAction("transition"); setTransition(""); setSprint(""); setAnchor(""); }} />
+        )}
+        {/* Moves are the rare path: folded away so the common status change stays a single select. */}
+        <Disclosure label={copy("Taşı veya sırala", "Move or rank")} defaultExpanded={action !== "transition"}>
+        <Stack>
         <SelectField
           label={copy("İşlem", "Action")}
-          value={action}
+          placeholder={copy("İşlem seç", "Choose action")}
+          value={action === "transition" ? "" : action}
           disabled={locked || !!review}
           onChange={(value) => {
             if (!editable()) return;
@@ -237,7 +289,6 @@ export function JiraBoardIssueActions({
             setAnchor("");
           }}
           options={[
-            { value: "transition", label: copy("Durumu değiştir", "Change status") },
             { value: "backlog", label: copy("Backlog’a taşı", "Move to backlog") },
             ...(snapshot.board.kind === "kanban"
               ? [{ value: "board", label: copy("Panoya taşı", "Move to board") }]
@@ -255,30 +306,6 @@ export function JiraBoardIssueActions({
               : []),
           ]}
         />
-        {action === "transition" ? (
-          <>
-            <QueryState query={transitions} empty={transitions.isSuccess && !transitions.data?.length}
-              emptyTitle={copy("Kullanılabilir geçiş yok", "No transitions available")}
-              emptyDetail={copy("Bu kayıt için Jira geçiş sunmuyor.", "Jira offers no transitions for this issue.")} loading="inline" />
-            <SelectField
-              label={copy("Jira geçişi", "Jira transition")}
-              value={transitionId}
-              disabled={locked || !!review}
-              onChange={change(setTransition)}
-              options={(transitions.data ?? [])
-                .filter((item) => !item.requiresFields)
-                .map((item) => ({ value: item.id, label: item.name }))}
-            />
-            {transitions.data?.some((item) => item.requiresFields) ? (
-              <Notice
-                message={copy(
-                  "Alan gerektiren geçişleri Jira’da tamamla.",
-                  "Complete transitions requiring additional fields in Jira.",
-                )}
-              />
-            ) : null}
-          </>
-        ) : null}
         {action === "sprint" ? (
           <SelectField
             label={copy("Hedef sprint", "Target sprint")}
@@ -318,6 +345,8 @@ export function JiraBoardIssueActions({
             />
           </>
         ) : null}
+        </Stack>
+        </Disclosure>
         </> : null}
       </Stack>
     </Sheet>

@@ -1,6 +1,6 @@
 import { REMOTE_PROVIDERS } from "../../../../src/features/connections/model/protocol";
 import { productProviderDefaults } from "../../../../src/shared/model/productProviderDefaults";
-import type { HostModelCatalog, RemoteProvider } from "./wire";
+import type { HostModelCatalog, HostSession, RemoteProvider } from "./wire";
 import { providerName } from "./provider-choices";
 import { BUNDLED_CLAUDE_MODELS, CODEX_MODEL_CATALOG } from "./bundled-models";
 
@@ -42,6 +42,42 @@ export function sessionModel(catalog: HostModelCatalog | undefined, provider: Re
   return requested.trim()
     ? models.find((model) => model.id === requested || model.nativeId === requested)
     : models[0];
+}
+
+/** A family alias retains its ID. Recent turn provenance can supply a concrete display name. */
+export function claudeFamilyModel(
+  requested: string,
+  turn: { harness: string; id: string; name: string } | undefined,
+) {
+  const alias = /^(?:claude:)?(opus|sonnet|haiku)$/i.exec(requested)?.[1]?.toLowerCase();
+  if (!alias) return undefined;
+  const family = alias[0]!.toUpperCase() + alias.slice(1);
+  const concrete = turn?.harness === "claude" && (
+    new RegExp(`^(?:claude[.:-])?${alias}[.:-][0-9]`, "i").test(turn.id) ||
+    new RegExp(`^(?:Claude )?${family} [0-9]`, "i").test(turn.name)
+  ) ? turn : undefined;
+  const cleanName = (name: string | undefined) => name?.replace(/^Claude /, "").toLowerCase();
+  return {
+    name: concrete?.name || family,
+    model: concrete ? BUNDLED_CLAUDE_MODELS.find((model) => model.id === concrete.id ||
+      model.nativeId === concrete.id || cleanName(model.name) === cleanName(concrete.name)) : undefined,
+  };
+}
+
+/** Display a saved model without changing the provider's model ID. */
+export function activeSessionModel(
+  target: Pick<HostSession["session"], "harness" | "model" | "blocks">,
+  catalog = sessionCatalog(undefined, [target.harness]),
+) {
+  const current = target.model.trim() ? sessionModel(catalog, target.harness, target.model) : undefined;
+  const family = target.harness === "claude"
+    ? claudeFamilyModel(target.model, target.blocks?.findLast((block) => !!block.turnModel)?.turnModel)
+    : undefined;
+  const catalogName = current?.name;
+  const name = (family && (!catalogName || /^(?:Claude )?(?:Opus|Sonnet|Haiku)$/i.test(catalogName))
+    ? family.name
+    : catalogName ?? target.model.replace(/^[^:]+:/, "")).replace(/^Claude (?=Opus|Sonnet|Haiku|Fable)/, "");
+  return { name, model: current?.settings !== undefined ? current : family?.model ?? current };
 }
 
 export function sessionSettings(model: ReturnType<typeof sessionModel>, values: Record<string, string>): Record<string, string> {

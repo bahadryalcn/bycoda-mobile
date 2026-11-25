@@ -8,11 +8,13 @@ import type { CrewRunView } from "@/remote/contracts/crews";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { hostKey, useHostMutation } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
-import { ActionMenu, Button, ErrorNotice, MutationState, NavigationGroup, NavigationRow, Row, Stack, Body } from "@/ui/primitives";
+import { Button, MutationState, NavigationGroup, NavigationRow, Row, Stack, Body } from "@/ui/primitives";
+import { StatusLine } from "@/ui/feedback";
+import { errorMessage } from "@/ui/error-message";
 import { RecordCard } from "@/ui/record-card";
 import { Status, statusLabel } from "../shared/status";
 import { stamp } from "../shared/format";
-import { joinMeta, RecordTrailing, useMenuGlyph } from "../shared/record-bits";
+import { joinMeta, useMenuGlyph } from "../shared/record-bits";
 import { MemberLines } from "./member-lines";
 import { CrewRuntimePanel } from "./runtime-panel";
 import { canDeleteCrewRun, canStopCrewRun, crewActivityKnown, crewHasRunningWork, crewTaskSessions } from "./runtime-model";
@@ -36,7 +38,7 @@ function CrewTaskRow({ task, model, supported, onOpenSession }: {
       disabled={!sessions.worker || !supported}
       onPress={() => { if (sessions.worker) onOpenSession(sessions.worker); }}
     />
-    <ErrorNotice error={task.error} />
+    {task.error ? <StatusLine tone="danger" label={errorMessage(task.error, copy)} /> : null}
     {sessions.review && <NavigationRow label={copy("İnceleyen", "Reviewer")} detail={task.title}
       disabled={!supported} onPress={() => onOpenSession(sessions.review!)} />}
   </Stack>;
@@ -85,16 +87,15 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
     preview={run.tasks.length ? <Progress value={done} maxValue={run.tasks.length} size="sm"
       color={run.status === "finished" ? "success" : "primary"}
       accessibilityLabel={copy("{p0}/{p1} görev tamamlandı", "{p0} of {p1} tasks done", { p0: done, p1: run.tasks.length })} /> : null}
-    menu={<RecordTrailing>
-      <ActionMenu label={copy("Ekip çalışması işlemleri", "Crew work actions")} actions={[
+    issues={[run.error]}
+    actions={{ label: copy("Ekip çalışması işlemleri", "Crew work actions"), items: [
       !!run.coordinatorSessionId && { key: "coordinator", icon: glyph(MessageSquare), label: copy("Koordinatör oturumu", "Coordinator session"),
         disabled: !supported, onPress: () => openSession(run.coordinatorSessionId!) },
       machine?.capabilities?.includes("crews.run-delete.v1") && { key: "delete", icon: glyph(Trash2, true), label: copy("Çalışmayı sil", "Delete work"), destructive: true,
         disabled: busy || !supported || !canDeleteCrewRun(run),
         onPress: () => confirm(copy("Çalışmayı sil", "Delete work"), copy("Bu çalışma listeden kaldırılsın mı? Ekip, görevler ve oturumlar korunur.", "Remove this work from the list? The crew, tasks and conversations are kept."),
           copy("Sil", "Delete"), () => { if (supported && !busy && canDeleteCrewRun(run) && useMachines.getState().activeId === machineId) remove.mutate({ projectId: run.projectId, runId: run.id, expectedUpdatedAt: run.updatedAt }); }) },
-      ]} />
-    </RecordTrailing>}
+      ] }}
     details={(expanded) => <CrewRuntimePanel run={run} active={expanded}>
       <NavigationGroup>{run.tasks.map((task) => <CrewTaskRow key={task.id} task={task}
         model={run.assignments.find((assignment) => assignment.taskId === task.id)?.candidate.model}
@@ -109,7 +110,6 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
       ? copy("Yeni görev atamaları duraklatıldı. Devam eden işler tamamlanabilir.", "New assignments are paused. Running work can still finish.")
       : copy("İş duraklatıldı. Çalışan bir işlem yok.", "Work is paused. Nothing is running.")}</Body>}
     {runActions}
-    <ErrorNotice error={run.error} />
     <MutationState mutation={pause} /><MutationState mutation={resume} /><MutationState mutation={stop} /><MutationState mutation={remove} />
   </RecordCard>;
   return <>

@@ -39,10 +39,13 @@ when no native header owns navigation. Entry flows that cancel their own state p
 its ordinary tap and explains itself on long press. A dedicated `InfoHint` icon
 shows its explanation as a tooltip on tap. Keep required state, permission and
 consequence text visible. Use inline disclosure for longer reading material.
-The trigger must forward the applicable press handler. Task RecordCard identity
+The trigger must forward the applicable press handler. RecordCard identity
 uses one named interaction target: a short press expands details, a long press
-explains status/provider/model symbols. Full provider/model values remain in the
-expanded details. Stop uses a named 48dp danger IconButton beside the session and
+opens the record's `actions` (the same list as its trailing "…" button, also
+published as the screen-reader long-press action). Persistent record failures are
+`issues`: one danger `StatusLine` each, full text in the expanded details. A list
+in selection mode passes `selection`; the row then toggles and hides its commands.
+Full provider/model values remain in the expanded details. Stop uses a named 48dp danger IconButton beside the session and
 menu actions; long press only explains it, while short press keeps confirmation.
 
 ScreenHeading's identity keeps its intrinsic minimum on web, bounded by the
@@ -315,8 +318,9 @@ relax transport access, capabilities or draft guards.
 
 `QueryState` keeps cached read failures distinct from initial loading and empty
 results. Cached unsupported Host features show the existing update guidance and
-compact last-received-data context, without offering an ineffective retry. Cached
-network failures retain their guarded refresh action. Authentication and identity
+compact last-received-data context, without offering an ineffective retry. A cached
+read that keeps failing on a reachable computer stays silent until 2 failures or 60 s,
+then shows one `StatusLine` with a guarded Refresh. Authentication and identity
 failures keep connection repair, including the nearest Sheet stack continuation;
 cache availability must not substitute a generic retry for that recovery. These
 presentation rules do not authorize access to cached private content or alter
@@ -447,7 +451,11 @@ Queue count and queued-draft access share a wrapping metadata row above the comp
 The existing queue/editor hooks retain their state, guards and transport callbacks.
 
 `chat-composer.tsx` adapts PanelUI AIInput for the workspace composer and offline
-tour. It uses a growing field in one wrapping action row, 48dp product actions and
+tour. It uses a growing field above one non-wrapping toolbar that stays visible at
+rest: `[leading] [model, flex] [status] [trailing]`. `composerToolbarLayout`
+measures the leading and trailing groups; below 96pt (scaled with text size) the
+model renders its mark-only form, and the optional status control (context ring)
+joins only when the model keeps a touch target. It keeps 48dp product actions and
 `avoidKeyboard={false}`; `SessionKeyboardFrame` remains the keyboard owner.
 Drafts, selection, suggestions, attachments, queue/steer and dispatch stay in
 their existing feature owners. Native field sizing replaces the content-size

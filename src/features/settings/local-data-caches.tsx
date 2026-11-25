@@ -2,8 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Directory, Paths } from "expo-file-system";
 import { clearMediaCache } from "@/ui/media-loader";
-import Eraser from "lucide-react-native/icons/eraser";
-import { Body, NavigationGroup, NavigationRow, SettingIcon, Stack, ValueRow } from "@/ui/primitives";
+import { Body, NavigationGroup, NavigationRow, Stack, ValueRow } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { formatBytes, savedDraftBytes, type LocalDataSizes } from "./local-data-sizes";
 
@@ -46,7 +45,6 @@ export function LocalDataCaches() {
         <NavigationRow
           label={copy("Önbellekleri temizle", "Clear caches")}
           intent="command"
-          icon={<SettingIcon glyph={Eraser} />}
           disabled={!sizes || sizes.media === 0}
           onPress={clear}
         />

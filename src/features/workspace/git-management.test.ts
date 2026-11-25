@@ -44,18 +44,19 @@ vi.mock("./git-management-form", async (importOriginal) => {
   return { ...original, GitManagementForm: (props: NonNullable<typeof state.form>) => { state.form = props; return null; } };
 });
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
-vi.mock("lucide-react-native/icons/arrow-left", () => ({ default: () => null }));
+const subpage = vi.hoisted(() => ({ back: (() => {}) as () => void }));
+vi.mock("./subpage-chrome", () => ({ useProjectSubpage: (_title: string, onBack: () => void) => { subpage.back = onBack; } }));
 vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
-  return { Stack: wrapper, Body: wrapper, Button: button, IconButton: button, Badge: wrapper, NavigationRow: button, QueryState: () => null, MutationState: () => null, ActionMenu: () => null,
+  return { Stack: wrapper, Body: wrapper, Button: button, IconButton: button, StatusText: wrapper, NavigationRow: button, QueryState: () => null, MutationState: () => null, ActionMenu: () => null,
     ErrorText: ({ error }: { error?: Error }) => createElement("span", null, error?.message), SearchField: ({ label, value, onChangeText }: { label: string; value: string; onChangeText: (value: string) => void }) => createElement("input", { "aria-label": label, value, onChange: (event: React.ChangeEvent<HTMLInputElement>) => onChangeText(event.target.value) }),
     SegmentedControl: ({ options, onChange }: { options: Array<{ value: string; label: string }>; onChange: (v: string) => void }) => createElement("nav", null, ...options.map(o => createElement("button", { key: o.value, onClick: () => onChange(o.value) }, o.label))),
     Notice: ({ message }: { message: string }) => createElement("div", null, message), StateView: ({ title }: { title: string }) => createElement("div", null, title),
     Sheet: ({ children }: PropsWithChildren) => wrapper({ children }),
-    ScreenList: ({ header, data, renderItem }: { header: React.ReactNode; data: unknown[]; renderItem: (args: { item: unknown }) => React.ReactNode }) => createElement("div", null, header, ...data.map((item) => renderItem({ item }))),
+    ScreenList: ({ header, onBack, data, renderItem }: { header: React.ReactNode; onBack?: () => void; data: unknown[]; renderItem: (args: { item: unknown }) => React.ReactNode }) => createElement("div", null, button({ label: "Back", onPress: subpage.back }), header, ...data.map((item) => renderItem({ item }))),
   };
 });
 const container = document.createElement("div");

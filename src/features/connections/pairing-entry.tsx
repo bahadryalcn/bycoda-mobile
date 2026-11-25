@@ -4,10 +4,9 @@ import Animated from "react-native-reanimated";
 import QrCode from "lucide-react-native/icons/qr-code";
 import ClipboardPaste from "lucide-react-native/icons/clipboard-paste";
 import PencilLine from "lucide-react-native/icons/pencil-line";
-import { Body, Button, FormActions, Heading, NavigationGroup, NavigationRow, Notice, Row, Stack } from "@/ui/primitives";
-import { IconTile } from "@/ui/icon-tile";
+import { Body, Button, FormActions, Heading, NavigationGroup, NavigationRow, Notice, Row, RowIcon, Stack } from "@/ui/primitives";
 import { enterItem } from "@/ui/motion";
-import { space } from "@/ui/tokens";
+import { iconSize, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { HintLabel } from "@/ui/info-hint";
 import { ManualConnectionForm } from "./manual-connection-form";
@@ -17,13 +16,6 @@ import type { PairingEntryProps } from "./connection-types";
 
 const centered = { alignItems: "stretch" as const, gap: space.sm };
 
-function tile(Glyph: typeof QrCode, color: string) {
-  return (
-    <IconTile color={color}>
-      <Glyph size={18} strokeWidth={2} color={color} />
-    </IconTile>
-  );
-}
 
 export function PairingEntry({ controller, disabled }: PairingEntryProps) {
   const { colors, uiStyles } = useMobileTheme();
@@ -44,7 +36,7 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
           fullWidth
           disabled={disabled || busy}
           onPress={() => controller.begin("scan")}
-        ><QrCode size={20} color={colors.primaryText} /></Button>
+        ><QrCode size={iconSize.action} color={colors.primaryText} /></Button>
         <Button
           label={copy("Kodu yapıştır", "Paste pairing code")}
           tone="secondary" fullWidth
@@ -56,7 +48,7 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
             label={copy("Manuel bağlan", "Connect manually")}
             detail="Tailscale"
             detailLines={0}
-            icon={tile(PencilLine, colors.muted)}
+            icon={<RowIcon glyph={PencilLine} />}
             disabled={disabled || busy}
             onPress={() => controller.begin("manual", "tailscale")}
           />
@@ -93,20 +85,20 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
       <NavigationGroup>
         <NavigationRow
           label={copy("QR kodu tara", "Scan QR code")}
-          icon={tile(QrCode, colors.accent)}
+          icon={<RowIcon glyph={QrCode} />}
           disabled={disabled || busy}
           onPress={() => controller.begin("scan")}
         />
         <NavigationRow
           label={copy("Kodu yapıştır", "Paste pairing code")}
-          icon={tile(ClipboardPaste, colors.info)}
+          icon={<RowIcon glyph={ClipboardPaste} />}
           disabled={disabled || busy}
           onPress={() => controller.begin("paste")}
         />
         {controller.connectionMode === "tailscale" ? (
           <NavigationRow
             label={copy("Manuel bağlan", "Connect manually")}
-            icon={tile(PencilLine, colors.muted)}
+            icon={<RowIcon glyph={PencilLine} />}
             disabled={disabled || busy}
             onPress={() => controller.begin("manual")}
           />

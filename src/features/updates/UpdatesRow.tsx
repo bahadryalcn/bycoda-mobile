@@ -2,10 +2,8 @@ import { useState } from "react";
 import * as Updates from "expo-updates";
 import Download from "lucide-react-native/icons/download";
 
-import { IconTile } from "../../ui/icon-tile";
 import { useCopy } from "../../ui/copy";
-import { NavigationGroup, NavigationRow, Notice } from "../../ui/primitives";
-import { useMobileTheme } from "@/ui/theme";
+import { NavigationGroup, NavigationRow, Notice, RowIcon } from "../../ui/primitives";
 import { updateFailureMessage, updateRow, updatesSupported, type UpdateAction, type UpdatePhase } from "./model/update-row";
 
 /**
@@ -14,7 +12,6 @@ import { updateFailureMessage, updateRow, updatesSupported, type UpdateAction, t
  */
 export function UpdatesRow() {
   const copy = useCopy();
-  const { colors } = useMobileTheme();
   const [phase, setPhase] = useState<UpdatePhase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [failed, setFailed] = useState<UpdateAction | null>(null);
@@ -53,11 +50,7 @@ export function UpdatesRow() {
           label={row.label}
           detail={row.detail}
           intent="command"
-          icon={
-            <IconTile color={colors.muted}>
-              <Download size={18} strokeWidth={2} color={colors.muted} />
-            </IconTile>
-          }
+          icon={<RowIcon glyph={Download} />}
           busy={row.busy}
           disabled={!row.action}
           onPress={() => void run()}

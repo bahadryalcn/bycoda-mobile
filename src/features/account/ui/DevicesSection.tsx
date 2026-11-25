@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { Badge, Button, ErrorNotice, FormActions, Field, NavigationGroup, NavigationRow, Section, SettingIcon, Sheet, Skeleton, Stack } from "@/ui/primitives";
+import { Button, ErrorNotice, FormActions, Field, NavigationGroup, NavigationRow, Section, SettingIcon, Sheet, Skeleton, Stack, StatusText } from "@/ui/primitives";
 import Globe from "lucide-react-native/icons/globe";
 import Laptop from "lucide-react-native/icons/laptop";
 import Smartphone from "lucide-react-native/icons/smartphone";
@@ -17,7 +17,7 @@ const KEY = ["account", "devices"] as const;
 /** Devices on the account: this phone is marked, any device can be renamed or signed out remotely. */
 export function DevicesSection() {
   const copy = useCopy();
-  const { runtime, device: self } = useAccount();
+  const { runtime, status, device: self } = useAccount();
   const queries = useQueryClient();
   const [renaming, setRenaming] = useState<Device | null>(null);
   const [name, setName] = useState("");
@@ -27,7 +27,8 @@ export function DevicesSection() {
   const list = useQuery({
     queryKey: KEY,
     queryFn: () => runtime!.client.listDevices(),
-    enabled: !!runtime && !!self,
+    // Listed even when this phone failed to register, so a full device limit can be resolved from here.
+    enabled: !!runtime && status === "signedIn",
   });
   const listError = useGracedReadError(list);
   const refresh = () => queries.invalidateQueries({ queryKey: KEY });
@@ -76,7 +77,7 @@ export function DevicesSection() {
               label={item.name}
               icon={<SettingIcon glyph={item.kind === "mobile" ? (item.platform === "ios" && /ipad/i.test(item.name) ? Tablet : Smartphone) : item.platform === "web" ? Globe : Laptop} />}
               detail={`${item.osVersion} · ${item.appVersion}`}
-              trailing={isSelf(item) ? <Badge label={copy("Bu cihaz", "This device")} /> : undefined}
+              trailing={isSelf(item) ? <StatusText label={copy("Bu cihaz", "This device")} /> : undefined}
               disabled={busy}
               onPress={() => {
                 if (occupied.current) return;

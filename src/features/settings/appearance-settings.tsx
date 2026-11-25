@@ -12,8 +12,9 @@ import { PalettePicker } from "./palette-picker";
 import { TypographySettings } from "./typography-settings";
 
 /**
- * The one Appearance page: theme, palette, general typography, message text size and a preview.
- * Each preference keeps its own store and recovery; this component only composes them.
+ * The one Appearance page: theme, palette and the preview right below them (so a choice shows its
+ * effect without scrolling), then general typography and message text size. Each preference keeps
+ * its own store and recovery; this component only composes them.
  */
 export function AppearanceSettings() {
   const copy = useCopy();
@@ -29,7 +30,7 @@ export function AppearanceSettings() {
   const retry = useAsyncAction();
   const [retrying, setRetrying] = useState(false);
   return (
-    <Stack style={{ gap: space.xl }}>
+    <Stack style={{ gap: space.lg }}>
       {storageError ? (
         <Notice
           tone="warning"
@@ -79,9 +80,9 @@ export function AppearanceSettings() {
           />
         </Section>
       ) : null}
+      <AppearancePreview />
       <TypographySettings />
       <ChatAppearanceSettings />
-      <AppearancePreview />
     </Stack>
   );
 }

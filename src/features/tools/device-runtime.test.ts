@@ -35,7 +35,7 @@ vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, disabled, onPress, tone }: { label: string; disabled?: boolean; onPress: () => void; tone?: string }) =>
     createElement("button", { disabled, onClick: onPress, "data-tone": tone }, label);
-  return { StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children),
+  return { StatusText: ({ label }: { label: string }) => createElement("span", null, label), ScopeLine: () => null, StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children),
     Disclosure: ({ label, children }: PropsWithChildren<{ label: string }>) => {
       const [expanded, setExpanded] = useState(false);
       return createElement("div", null, createElement("button", { onClick: () => setExpanded(!expanded) }, label), expanded ? children : null);
@@ -68,13 +68,13 @@ it("shows setup as the sole primary service action when tools are missing", asyn
   expect(visibleServiceActions()).toEqual(["Set up device tools"]);
   expect(button("Set up device tools")!.dataset.tone).toBe("primary");
 });
-it("shows Start while stopped, preserving reconfiguration within Settings", async () => {
+it("shows Start while stopped; Confirm for agent access appears only after the toggle changes", async () => {
   await render();
   expect(visibleServiceActions()).toEqual(["Start device service"]);
-  await click("Settings");
-  await click("Set up device tools");
+  expect(button("Confirm")).toBeUndefined();
+  await act(async () => (container.querySelector('input[aria-label="Let agents use devices"]') as HTMLInputElement).click());
   await click("Confirm");
-  expect(state.requests).toEqual([{ method: "devices.setup", params: { projectId: "project", agentAccess: false } }]);
+  expect(state.requests).toEqual([{ method: "devices.setup", params: { projectId: "project", agentAccess: true } }]);
 });
 it("shows Stop only for a running service with a confirmed empty preview queue", async () => {
   state.running = true;

@@ -53,3 +53,7 @@ export function deviceRevokeIntent(device: PairedDevice) {
   if (!text(device.id, 128)) throw new Error("Refresh paired devices before continuing.");
   return device.isCurrent ? { method: "devices.revokeSelf", params: {} } : { method: "devices.revokeOther", params: { id: device.id } };
 }
+/** Stopped tunnels are history, not access: only live or failed tunnels are listed on the phone. */
+export function activeAccessTunnels<T extends { state: string }>(tunnels: readonly T[]): T[] {
+  return tunnels.filter(tunnel => tunnel.state !== "stopped");
+}

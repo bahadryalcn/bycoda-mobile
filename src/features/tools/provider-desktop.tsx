@@ -7,7 +7,7 @@ import { useActiveMachine, useMachines } from "@/state/machines";
 import { reviewedMachine, isReviewedMachine } from "@/state/reviewed-machine";
 import { useHostQuery } from "@/state/queries";
 import {
-  Badge,
+  IconButton,
   Body,
   Button,
   Disclosure,
@@ -15,14 +15,17 @@ import {
   NavigationRow,
   Notice,
   QueryState,
-  Row,
   ScreenList,
   Sheet,
+  StateView,
+  StatusText,
 } from "@/ui/primitives";
 import { getQueryPresentation } from "@/ui/query-presentation";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useCopy } from "@/ui/copy";
-import { space } from "@/ui/tokens";
+import { iconSize, space } from "@/ui/tokens";
+import { useMobileTheme } from "@/ui/theme";
+import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { RecordCard } from "@/ui/record-card";
 import type { SessionScope } from "../workspace/session-types";
 import { ProviderAccountEditor } from "./provider-account-editor";
@@ -49,6 +52,7 @@ export function ProviderDesktop({
     report: DesktopManagementReport;
     account: DesktopManagementReport["accounts"][number];
   }>();
+  const { colors } = useMobileTheme();
   const machine = useActiveMachine();
   const [opening] = useState(() => ({
     ...scope,
@@ -143,20 +147,21 @@ export function ProviderDesktop({
         query={supported ? query : undefined}
         refreshState={supported ? refresh : undefined}
         keyExtractor={(entry) => entry.key}
+        scope={{ computer: machine?.name }}
+        actions={
+          <IconButton
+            label={copy("Yenile", "Refresh")}
+            busy={refresh.refreshing}
+            disabled={!supported || query.isFetching}
+            onPress={() => {
+              void refresh.onRefresh();
+            }}
+          >
+            <RefreshCw size={iconSize.action} strokeWidth={2} color={colors.accent} />
+          </IconButton>
+        }
         header={
           <View style={{ gap: space.sm }}>
-            <Row>
-              <Body style={{ flex: 1 }}>{machine?.name}</Body>
-              <Button
-                busy={refresh.refreshing}
-                tone="quiet"
-                label={copy("Yenile", "Refresh")}
-                disabled={!supported || query.isFetching}
-                onPress={() => {
-                  void refresh.onRefresh();
-                }}
-              />
-            </Row>
             {!supported ? (
               <Notice
                 message={
@@ -174,7 +179,7 @@ export function ProviderDesktop({
             ) : (
               <QueryState query={query} />
             )}
-            <Disclosure label={copy("Ayrıntılar", "Details")}>
+            <Disclosure label={copy("Teknik ayrıntılar", "Technical details")}>
               <Body mono>{opening.sessionId}</Body>
               <Body muted>
                 {copy(
@@ -211,9 +216,7 @@ export function ProviderDesktop({
                     )}
                   />
                 ) : ready && !report.mcp.length ? (
-                  <Body muted>
-                    {copy("Önbellekte MCP sunucusu yok.", "No cached MCP servers.")}
-                  </Body>
+                  <StateView size="compact" title={copy("Önbellekte MCP sunucusu yok.", "No cached MCP servers.")} />
                 ) : null}
                 {report.coverage.truncated ? (
                   <Notice
@@ -232,7 +235,7 @@ export function ProviderDesktop({
           "account" in item ? (
             <RecordCard
               title={item.account.label}
-              status={item.account.isDefault ? <Badge label={copy("Varsayılan", "Default")} tone="active" /> : undefined}
+              status={item.account.isDefault ? <StatusText label={copy("Varsayılan", "Default")} /> : undefined}
               metadata={providerName(item.account.provider)}
               details={
                 <>

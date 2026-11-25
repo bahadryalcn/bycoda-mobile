@@ -251,7 +251,7 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
         await action();
       } catch (error) {
         throw error instanceof ConnectionRemovalError
-          ? new Error(copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden açın.", "Saved computers changed. Reopen this review to continue."))
+          ? new Error(copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden aç.", "Saved computers changed. Reopen this review to continue."))
           : error instanceof ConnectionRecoveryError
           ? new Error(
               copy(

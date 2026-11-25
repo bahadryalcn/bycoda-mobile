@@ -20,7 +20,8 @@ vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Body: Group, Heading: Group, Section: Group, SectionHeader: Group, NavigationGroup: Group, Stack: Group,
     ErrorNotice: () => null, FormActions: () => null, Loading: () => null, Sheet: Group, StateView: () => null, Skeleton: () => null,
-    Badge: ({ label, tone }: { label: string; tone?: string }) => createElement("span", { "data-tone": tone }, label),
+    RowIcon: () => null,
+    StatusText: ({ label, tone }: { label: string; tone?: string }) => createElement("span", { "data-tone": tone }, label),
     NavigationRow: ({ label, detail, trailing, onPress }: { label: string; detail: string; trailing: React.ReactNode; onPress(): void }) => createElement("button", { onClick: onPress }, label, detail, trailing) };
 });
 import { AccountComputersSection } from "./account-computers-section";

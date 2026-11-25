@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { deviceRevokeIntent, localTunnelUrl, readAccessCenter, visibleAccessDevices } from "./access-center-model";
+import { activeAccessTunnels, deviceRevokeIntent, localTunnelUrl, readAccessCenter, visibleAccessDevices } from "./access-center-model";
 const report = () => ({ environmentId: "host", sampledAt: 42, devices: [{ id: "current", name: "Phone", isCurrent: true }], devicesTruncated: false,
   lan: { state: "ready" }, privateNetwork: { state: "offline" }, tunnels: { providers: [{ provider: "cloudflare", installed: true, credential: "not-required" }],
     tunnels: [{ id: "tunnel", provider: "cloudflare", target: "host", state: "ready", startedAt: 42, localUrl: "http://127.0.0.1:3000", publicUrl: "https://fixture.trycloudflare.com", canStop: true }], publicReachability: "unverified" } });
@@ -26,4 +26,9 @@ it("keeps self and other revoke methods distinct and accepts only safe host-loop
   expect(localTunnelUrl("http://localhost:3000")).toBe("http://localhost:3000");
   for (const url of ["https://example.com", "http://user:password@localhost:3000", "http://localhost:3000/?token=private", "file:///source"])
     expect(() => localTunnelUrl(url)).toThrow();
+});
+
+it("lists only live or failed tunnels, never stopped history", () => {
+  const rows = (["starting", "ready", "stopping", "stopped", "error", "interrupted"] as const).map(state => ({ id: state, state }));
+  expect(activeAccessTunnels(rows).map(row => row.id)).toEqual(["starting", "ready", "stopping", "error", "interrupted"]);
 });

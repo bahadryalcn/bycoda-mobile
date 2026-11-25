@@ -11,6 +11,8 @@ const fixture = vi.hoisted(() => ({
   directoryReady: true, projects: ["workspace-project", "other-project"],
   navigate: vi.fn(), selectProject: vi.fn(),
 }));
+vi.mock("@/ui/no-computer", () => ({ NoComputerState: () => h("p", null, "Connect a computer first"), NoComputerGate: () => h("p", null, "Connect a computer first") }));
+vi.mock("./pull-request-icon", () => ({ PullRequestIcon: () => null }));
 vi.mock("expo-router", () => ({ router: { navigate: fixture.navigate }, Stack: { Screen: () => null }, useLocalSearchParams: () => fixture.params }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
@@ -24,7 +26,7 @@ vi.mock("@/state/connection-scope", () => {
   const current = { get token() { return fixture.token; }, isCurrent: () => true };
   return { useConnectionScope: () => current };
 });
-vi.mock("@/ui/primitives", () => ({
+vi.mock("@/ui/primitives", () => ({ RowIcon: () => null,
   Screen: ({ children, context }: PropsWithChildren<{ context?: React.ReactNode }>) => h("div", null, context, children),
   SearchField: () => null,
   NavigationGroup: ({ children }: PropsWithChildren) => children,

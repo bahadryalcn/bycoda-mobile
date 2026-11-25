@@ -20,7 +20,8 @@ import { installDiagnosticCapture, readCrashMarker, type DiagnosticCapture } fro
 import { CRASH_MARKER } from "./diagnostic-files";
 import { archiveCrashMarker, formatCrashLog, readCrashHistory } from "./crash-history";
 import { expoDiagnosticFiles } from "./expo-diagnostic-files";
-import { createDiagnosticPrefs, createDiagnosticPreferenceStore } from "./diagnostic-prefs";
+import { createDiagnosticPrefs, createDiagnosticPreferenceStore, effectiveMode } from "./diagnostic-prefs";
+import { diagnosticSharingGeneration, reviewDiagnosticSharing } from "./diagnostic-sharing";
 import type { DiagnosticSendResult } from "./diagnostic-report";
 import { createPeriodicDiagnostics } from "./diagnostic-periodic";
 import { resolveWithin, runDiagnosticSend, SIGNED_IN_EMAIL_DEADLINE_MS } from "./diagnostic-send";
@@ -155,6 +156,8 @@ export async function sendDiagnostics(
   trigger: DiagnosticTrigger,
   options: { includeCrash?: boolean; note?: string; feedbackId?: string } = {},
 ): Promise<DiagnosticSendResult> {
+  if (effectiveMode(useDiagnosticPrefs.getState().consent.mode) === "off") return "declined";
+  const preparedFor = diagnosticSharingGeneration();
   const clients = (() => {
     try {
       return {
@@ -191,6 +194,14 @@ export async function sendDiagnostics(
           ? (body: DiagnosticReportCreate) => anonymousClient.sendAnonymousDiagnosticReport({ body })
           : null,
       },
+      review: (body, send) => reviewDiagnosticSharing(
+        body,
+        accountConfig.apiUrl.replace(/\/+$/, "") + (signedIn ? "/v1/diagnostics/reports" : "/v1/diagnostics/reports/anonymous"),
+        signedIn !== null,
+        preparedFor,
+        () => effectiveMode(useDiagnosticPrefs.getState().consent.mode),
+        send,
+      ),
       now: () => new Date(),
     },
     trigger,

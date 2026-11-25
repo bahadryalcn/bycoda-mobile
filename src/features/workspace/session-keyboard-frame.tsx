@@ -1,6 +1,6 @@
 import { useMobileTheme } from "@/ui/theme";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type PropsWithChildren, type ReactNode } from "react";
-import { ScrollView, TextInput, View, type HostInstance, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
+import { Platform, ScrollView, TextInput, View, type HostInstance, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { useKeyboardState, useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -93,7 +93,7 @@ export function SessionKeyboardFrame({
       // The navigation inset is replaced by the IME while it is open.
       paddingBottom: insets.bottom * (1 - Math.min(1, Math.max(0, progress.value))),
     }),
-    [insets.bottom],
+    Platform.OS === "web" ? [insets.bottom] : undefined,
   );
   const reportComposerHeight = useContext(SessionComposerHeight);
   const composerBlock = (

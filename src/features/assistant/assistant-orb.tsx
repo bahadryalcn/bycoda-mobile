@@ -12,13 +12,14 @@ export function AssistantOrb({ state, level = 0, size = 248, avatar }: { state: 
   const { colors } = useMobileTheme(), reduced = useReducedMotionPreference();
   const gradient = useId().replace(/:/g, "");
   const turn = useSharedValue(0), breath = useSharedValue(0);
-  const moving = state === "thinking" || state === "listening" || state === "speaking";
-  // State owns decorative motion; mute/error, OS reduced motion and unmount stop both loops.
+  const moving = state !== "idle" && state !== "error";
+  // Inactive calls, OS reduced motion and unmount stop both decorative loops.
   useEffect(() => {
     cancelAnimation(turn); cancelAnimation(breath);
     turn.value = 0; breath.value = 0;
     if (!reduced && moving) {
-      turn.value = withRepeat(withTiming(360, { duration: state === "thinking" ? 2400 : 18000, easing: Easing.linear }), -1, false);
+      const duration = state === "thinking" ? 2400 : state === "muted" ? 32000 : 18000;
+      turn.value = withRepeat(withTiming(360, { duration, easing: Easing.linear }), -1, false);
       breath.value = withRepeat(withTiming(1, { duration: state === "speaking" ? 550 : 1800, easing: Easing.inOut(Easing.sin) }), -1, true);
     }
     return () => { cancelAnimation(turn); cancelAnimation(breath); };

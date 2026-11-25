@@ -53,7 +53,7 @@ export function ToggleField({ label, labelLines, detail, help, value, onChange, 
           pressed && { backgroundColor: pressedFill },
         ]}
       >
-        {icon ? <View style={{ alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</View> : null}
+        {icon ? <View style={uiStyles.rowLeading}>{icon}</View> : null}
         <View style={[uiStyles.grow, { gap: space.xxs }]}>
           <Body style={uiStyles.label} numberOfLines={labelLines}>{label}</Body>
           {detail ? <Body muted style={uiStyles.caption}>{detail}</Body> : null}

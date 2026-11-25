@@ -22,7 +22,7 @@ vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}
 vi.mock("expo-router", () => ({ router: { navigate: state.navigate }, useLocalSearchParams: () => ({}) }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("@/ui/query-state", () => ({ useReadRetryNotice: () => true }));
-vi.mock("react-native", () => ({ View: "div" }));
+vi.mock("react-native", () => ({ View: "div", useWindowDimensions: () => ({ fontScale: 1 }) }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/play", () => ({ default: () => null }));
@@ -86,7 +86,7 @@ vi.mock("./automations/automation-editor", () => ({
 vi.mock("./tasks/task-editor", () => ({ TaskEditor: () => null }));
 vi.mock("./tasks/delivery-editor", () => ({ DeliveryEditor: () => null }));
 vi.mock("./tasks/task-card", () => ({ TaskCard: () => null }));
-vi.mock("./tasks/bulk-actions", () => ({ TaskBulkActions: () => null }));
+vi.mock("./tasks/bulk-actions", () => ({ useTaskBulkActions: ({ context }: { context?: unknown }) => ({ entry: context ?? null, feedback: null, bar: null, selection: { active: false, isSelected: () => false, toggle: () => {} } }) }));
 vi.mock("./crews/crew-editor", () => ({ CrewEditor: () => null }));
 vi.mock("./crews/profile-editor", () => ({ ProfileEditor: () => null }));
 vi.mock("./crews/start-editor", () => ({ StartCrewEditor: () => null }));
@@ -111,11 +111,13 @@ vi.mock("@/ui/screen-list", () => ({
   ScreenList: ({
     header,
     actions,
+    ListEmptyComponent,
     data,
     renderItem,
   }: {
     header: ReactNode;
     actions?: ReactNode;
+    ListEmptyComponent?: ReactNode;
     data: unknown[];
     renderItem: (entry: { item: unknown }) => ReactNode;
   }) =>
@@ -124,6 +126,7 @@ vi.mock("@/ui/screen-list", () => ({
       null,
       actions,
       header,
+      data.length ? null : ListEmptyComponent,
       data.map((item, index) =>
         createElement("div", { key: index }, renderItem({ item })),
       ),
@@ -141,7 +144,7 @@ vi.mock("@/ui/primitives", () => {
     disabled?: boolean;
     onPress?: () => void;
   }) => createElement("button", { disabled, onClick: onPress }, label);
-  return {
+  return { StatusText: ({ label }: { label: string }) => createElement("span", null, label),
     Body: Wrapper,
     Screen: ({context,children}:any) => createElement(Wrapper,null,context,children),
     ContextControls: ({scope,view}:any) => createElement(Wrapper,null,scope,view),

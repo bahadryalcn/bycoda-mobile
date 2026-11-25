@@ -104,7 +104,7 @@ export function crewMemberPresentation(agent: CrewAgent, roleLabel: string, copy
     ? agent.selection === "automatic" && agent.candidates.length > 1
       ? `${agent.candidates.length} ${copy("model", "models")}`
       : agent.candidates[0].model
-    : copy("Model seçilmedi", "No model selected"));
+    : undefined);
   const detail = error ?? [name && name.toLocaleLowerCase() !== roleLabel.toLocaleLowerCase() ? roleLabel : undefined, model].filter(Boolean).join(" · ");
   return { label, detail, error };
 }

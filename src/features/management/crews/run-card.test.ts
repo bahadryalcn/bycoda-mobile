@@ -56,16 +56,28 @@ vi.mock("../shared/status", () => ({
   Status: ({ value }: { value: string }) => createElement("span", null, value),
   statusLabel: (value: string) => value,
 }));
-vi.mock("@/ui/record-card", () => ({
-  RecordCard: ({
-    children,
-    footer,
-    details,
-    menu,
-    metadata,
-  }: PropsWithChildren<Record<string, any>>) =>
-    createElement("div", null, metadata, children, typeof details === "function" ? details(true) : details, footer, menu),
+vi.mock("@/ui/feedback", () => ({
+  StatusLine: ({ label }: { label: string }) => createElement("p", { role: "alert" }, label),
 }));
+vi.mock("@/ui/error-message", () => ({ errorMessage: (error: unknown) => String(error) }));
+vi.mock("@/ui/record-card", async () => {
+  const { ActionMenu } = await import("@/ui/primitives");
+  return {
+    RecordCard: ({
+      children,
+      footer,
+      details,
+      menu,
+      metadata,
+      actions,
+      issues,
+    }: PropsWithChildren<Record<string, any>>) =>
+      createElement("div", null, metadata,
+        ...((issues ?? []) as unknown[]).filter(Boolean).map((issue, index) => createElement("p", { key: `issue-${index}`, role: "alert" }, String(issue))),
+        children, typeof details === "function" ? details(true) : details, footer, menu,
+        actions ? createElement(ActionMenu as never, { actions: actions.items, label: actions.label }) : null),
+  };
+});
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const action = ({

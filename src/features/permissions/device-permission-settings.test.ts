@@ -34,19 +34,9 @@ vi.mock("react-native", () => ({
     },
   },
 }));
-vi.mock("../push/PushSettings", () => ({
-  PushSettings: () => null,
-  usePushTestFromComputer: () => ({
-    action: { error: null },
-    disabled: false,
-    busy: false,
-    run: () => undefined,
-  }),
-}));
 vi.mock("./device-permissions", () => ({
   readDevicePermission: mocks.read,
   allowDevicePermission: mocks.allow,
-  testDeviceNotification: mocks.test,
 }));
 vi.mock("@/state/actions", async () => {
   const { useCallback, useRef, useState } = await import("react");
@@ -97,8 +87,9 @@ vi.mock("@/ui/primitives", () => {
       createElement("section", null, createElement("h2", null, title), children),
     MutationState: ({ mutation }: { mutation: { error: unknown } }) =>
       mutation.error instanceof Error ? createElement("p", null, mutation.error.message) : null,
-    ValueRow: ({ label, trailing }: { label: string; trailing?: ReactNode }) => createElement("div", { "data-value-row": label }, label, trailing),
-    Badge: ({ label }: { label: string }) => createElement("span", { "data-badge": true }, label),
+    ValueRow: ({ label, value, trailing }: { label: string; value?: string; trailing?: ReactNode }) => createElement("div", { "data-value-row": label }, label, value, trailing),
+    StatusText: ({ label }: { label: string }) => createElement("span", { "data-badge": true }, label),
+    SettingIcon: () => null,
     NavigationRow: ({
       label,
       accessibilityLabel,
@@ -154,7 +145,7 @@ let container: HTMLDivElement;
 const buttons = () => [...container.querySelectorAll("button")].map((button) => button.textContent);
 const find = (text: string) =>
   [...container.querySelectorAll("button")].find((button) => button.textContent === text)!;
-// The state badge shown on a permission row; null when the state is unknown.
+// The state shown on a permission row: "Checking…" while pending, "Unreadable" after a failed read.
 const badgeOf = (label: string) =>
   container.querySelector(`[data-row="${label}"] [data-badge]`)?.textContent ?? null;
 async function render() {
@@ -204,7 +195,7 @@ it("a failing notification read leaves the camera usable, exposes Retry, and nev
   });
   await render();
   expect(badgeOf("Camera")).toBe("Not asked");
-  expect(badgeOf("Notifications")).toBeNull();
+  expect(badgeOf("Notifications")).toBe("Unreadable");
   expect(find("Camera").disabled).toBe(false);
   expect(find("Notifications").disabled).toBe(true);
   expect(mocks.allow).not.toHaveBeenCalled();
@@ -231,7 +222,7 @@ it("keeps ready permission rows usable while explicitly retrying a failed read",
   await act(async () => release(granted));
   expect(badgeOf("Notifications")).toBe("Granted");
 });
-it("shows no badge while a read is pending and refreshes again when the app returns to the foreground", async () => {
+it("names a pending read as Checking and refreshes again when the app returns to the foreground", async () => {
   let release!: (value: typeof granted) => void;
   mocks.read.mockImplementation((kind: string) =>
     kind === "camera"
@@ -241,7 +232,7 @@ it("shows no badge while a read is pending and refreshes again when the app retu
       : Promise.resolve(granted),
   );
   await render();
-  expect(badgeOf("Camera")).toBeNull();
+  expect(badgeOf("Camera")).toBe("Checking…");
   expect(badgeOf("Notifications")).toBe("Granted");
   await act(async () => release(granted));
   expect(badgeOf("Camera")).toBe("Granted");
@@ -320,4 +311,12 @@ it("shows the photos row as the system picker: no permission is read, requested 
   expect(buttons()).not.toContain("Photos and files");
   expect(mocks.read.mock.calls.map(([kind]) => kind)).not.toContain("photos");
   expect(mocks.allow).not.toHaveBeenCalled();
+});
+
+it("keeps only permission rows: notification choices and tests live on the Notifications page", async () => {
+  mocks.read.mockResolvedValue(granted);
+  await render();
+  expect(buttons()).not.toContain("Test on this phone");
+  expect(buttons()).not.toContain("Test from computer");
+  expect(container.textContent).not.toContain("From your computer");
 });

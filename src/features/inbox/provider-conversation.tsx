@@ -6,7 +6,7 @@ import type {
   ProviderInboxCommentProps,
 } from "./provider-component-types";
 import { inboxReplyTarget } from "../../../../src/features/inbox/model/remoteInbox";
-import { Badge, Body, Button, QueryState, Row, SectionHeader, ScreenList, Stack } from "@/ui/primitives";
+import { Body, Button, QueryState, Row, SectionHeader, ScreenList, Stack, StatusText } from "@/ui/primitives";
 import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
@@ -38,7 +38,7 @@ export function ProviderInboxConversation({
     <ScreenList data={rows} keyExtractor={row => row.key} query={thread} refresh={refresh}
       header={<Stack>
       {header}
-      {visible ? <SectionHeader flush title={copy("Konuşma", "Conversation")} count={rows.length} /> : null}
+      {visible ? <SectionHeader flush={!header} title={copy("Konuşma", "Conversation")} count={rows.length} /> : null}
       {visible && !hideFeedback ? <QueryState
         query={thread}
         onManageConnections={onManageConnections}
@@ -75,7 +75,7 @@ export function ProviderInboxComment({
     <Stack style={{ paddingVertical: space.md, marginStart: depth > 0 ? space.md : 0 }}>
       <Row>
         <Body style={[uiStyles.label, uiStyles.grow]}>{comment.author}</Body>
-        {comment.resolved ? <Badge label={copy("Çözüldü", "Resolved")} tone="success" /> : null}
+        {comment.resolved ? <StatusText label={copy("Çözüldü", "Resolved")} /> : null}
       </Row>
       <Body muted style={uiStyles.caption}>{stamp(comment.createdAt)}</Body>
       <MessageText text={comment.body} role="assistant" />

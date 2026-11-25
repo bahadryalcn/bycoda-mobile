@@ -1,19 +1,17 @@
 import type { SessionSettingsProps, SessionSettingsDraft } from "./session-settings-types";
-import { carryCrossDelegation } from "../../../../src/shared/model/host-contracts/delegation";
 import { View } from "react-native";
 import { useEffect, useRef, useState } from "react";
-import { sameFormValue, useFormDraft } from "@/state/form-draft";
-import { useAsyncAction } from "@/state/actions";
+import { useFormDraft } from "@/state/form-draft";
 import { useActiveMachine } from "@/state/machines";
 import { useHostMutation } from "@/state/queries";
-import { useModelCatalog } from "@/state/model-catalog";
 import {
   Button,
   FormActions,
   Field,
   MutationState,
+  NavigationGroup,
+  NavigationRow,
   Notice,
-  QueryState,
   ErrorText,
   Row,
   Section,
@@ -23,31 +21,27 @@ import { useLocalDraft } from "./use-local-draft";
 import { decodeSessionSettingsDraft, encodeSessionSettingsDraft } from "./session-settings-draft";
 import { useCopy } from "@/ui/copy";
 import { useSheetGuard } from "@/ui/sheet-guard";
-import {
-  catalogProviders,
-  modelDefaults,
-  sessionCatalog,
-  sessionModel,
-  sessionSettings,
-} from "./catalog";
-import { AgentModelFields } from "./agent-model-fields";
-import { PermissionField } from "./agent-option-icons";
-import { choiceKey, providerChoices, selectedChoice } from "./provider-choices";
 import type { HostSession } from "./wire";
 import { captureSessionAuthority } from "@/domain/session-authority";
 import { useMobileTheme } from "@/ui/theme";
 import { sessionTitleUpdate } from "./session-title-update";
+import { activeSessionModel } from "./catalog";
 
 /** Equal-width pair aligned to the field edges; wraps to full-width rows at large text. */
 const ACTION_BUTTON = { flexGrow: 1, flexBasis: 140, alignSelf: "stretch" } as const;
 
+/**
+ * Session settings: title, pin and archive. Agent, model, effort, access and compaction have one
+ * editor, the composer's "Model and access" sheet; this sheet links to it instead of editing a
+ * second copy with its own draft.
+ */
 export function SessionSettings({
   onClose,
   value,
   projectId,
   disabled,
-  onCommand,
   onUpdated,
+  onOpenModel,
 }: SessionSettingsProps) {
   const { uiStyles } = useMobileTheme();
   const copy = useCopy();
@@ -67,6 +61,7 @@ export function SessionSettings({
   }));
   const targetChanged =
     openingMachine.id !== machine?.id || openingMachine.environmentId !== machine?.environmentId;
+  // The storage key and draft shape are unchanged, so earlier phone drafts keep their title.
   const [draftKey] = useState(
     () =>
       `bycoda.mobile.session-settings.v1:${JSON.stringify([machine?.id, machine?.environmentId, projectId, value.session.id])}`,
@@ -80,92 +75,37 @@ export function SessionSettings({
   const savedBaseline = useRef(initialDraft);
   const latestValues = useRef(form.values);
   latestValues.current = form.values;
-  const { title, provider, accountId, model, mode, modelSettings } = form.values;
-  const configure = useAsyncAction<boolean>();
+  const { title } = form.values;
   const saving = useRef(false);
   const [savingPending, setSavingPending] = useState(false);
   const [reviewed, setReviewed] = useState(value);
-  const [configurationAction, setConfigurationAction] = useState<"configure" | "compact">(
-    "configure",
-  );
-  const catalog = useModelCatalog(projectId);
   const update = useHostMutation<HostSession>("sessions.update", ["sessions", projectId]);
-  const providers = [
-    ...new Set([value.session.harness, ...catalogProviders(machine?.providers, catalog.data)]),
-  ];
-  const availableCatalog = sessionCatalog(catalog.data, providers);
-  const models = availableCatalog.models[provider] ?? [];
-  const selectedModel = sessionModel(availableCatalog, provider, model);
-  const switchAllowed = machine?.capabilities?.includes("sessions.harnessSwitch");
-  const choices = providerChoices(
-    providers.filter((item) => switchAllowed || item === value.session.harness),
-    catalog.data?.accounts,
-    copy("Varsayılan hesap", "Default account"),
-  );
-  const savedChoice = choices.find((entry) => entry.key === choiceKey(provider, accountId));
-  const unavailableAccount =
-    (provider === "claude" || provider === "codex") &&
-    Array.isArray(catalog.data?.accounts?.[provider]) &&
-    !savedChoice;
-  const choice = unavailableAccount
-    ? {
-        key: choiceKey(provider, accountId),
-        provider,
-        label: copy("Hesap kullanılamıyor", "Account unavailable"),
-      }
-    : (savedChoice ?? selectedChoice(choices, provider, accountId));
-  const running = value.status === "running";
   const pending =
-    disabled ||
-    targetChanged ||
-    !hydrated ||
-    !localDraft.ready ||
-    savingPending ||
-    configure.isPending ||
-    update.isPending;
+    disabled || targetChanged || !hydrated || !localDraft.ready || savingPending || update.isPending;
   const uncertain = !!(update.error as { uncertain?: boolean } | null)?.uncertain;
-
-  const keyOf = (draft: SessionSettingsDraft) =>
-    JSON.stringify([
-      draft.provider,
-      draft.accountId ?? null,
-      draft.model,
-      draft.mode,
-      draft.modelSettings,
-    ]);
-  const agentKey = keyOf(form.values);
-  const [savedAgentKey, setSavedAgentKey] = useState(agentKey);
   const [savedTitle, setSavedTitle] = useState(value.session.title);
   const titleFlight = useRef<{ text: string; promise: Promise<boolean> } | null>(null);
 
-  // Restore the scoped phone draft before enabling edits or Host writes.
+  // Restore the scoped phone draft before enabling edits or Host writes. Only the title is
+  // edited here; agent values from older drafts stay at their baseline.
   useEffect(() => {
     if (!localDraft.ready || hydrated) return;
     const stored = localDraft.value;
     if (stored) {
       savedBaseline.current = stored.baseline;
       form.reset(stored.baseline);
-      form.patch(stored.values);
-      setSavedAgentKey(keyOf(stored.baseline));
+      form.patch({ title: stored.values.title });
       setSavedTitle(stored.baseline.title);
       setReviewed({
         ...value,
         authorityGeneration: stored.authorityGeneration,
         revision: stored.revision ?? value.revision,
-        session: {
-          ...value.session,
-          title: stored.baseline.title,
-          harness: stored.baseline.provider,
-          providerAccountId: stored.baseline.accountId,
-          model: stored.baseline.model,
-          runtimeMode: stored.baseline.mode,
-          modelSettings: stored.baseline.modelSettings,
-        },
+        session: { ...value.session, title: stored.baseline.title },
       });
     }
     setHydrated(true);
   }, [localDraft.ready, hydrated]);
-  const patchForm = (patch: Partial<SessionSettingsDraft>) => {
+  const patchForm = (patch: Pick<SessionSettingsDraft, "title">) => {
     if (pending) return;
     const values = { ...latestValues.current, ...patch };
     latestValues.current = values;
@@ -177,7 +117,7 @@ export function SessionSettings({
       revision: reviewed.revision,
     });
   };
-  const acknowledge = (patch: Partial<SessionSettingsDraft>) => {
+  const acknowledge = (patch: Pick<SessionSettingsDraft, "title">) => {
     savedBaseline.current = { ...savedBaseline.current, ...patch };
     localDraft.setValue({
       baseline: savedBaseline.current,
@@ -195,94 +135,25 @@ export function SessionSettings({
       /* Storage error remains visible and editor stays open. */
     }
   };
-  const agentDirty = agentKey !== savedAgentKey;
   const titleDirty = title.trim() !== savedTitle;
   const conflict =
     value.authorityGeneration !== reviewed.authorityGeneration ||
-    (!sameFormValue(
-      [
-        value.session.harness,
-        value.session.providerAccountId,
-        value.session.model,
-        value.session.runtimeMode,
-        value.session.modelSettings,
-        value.session.title,
-      ],
-      [
-        reviewed.session.harness,
-        reviewed.session.providerAccountId,
-        reviewed.session.model,
-        reviewed.session.runtimeMode,
-        reviewed.session.modelSettings,
-        reviewed.session.title,
-      ],
-    ) &&
-      !sameFormValue(
-        [
-          value.session.harness,
-          value.session.providerAccountId,
-          value.session.model,
-          value.session.runtimeMode,
-          value.session.modelSettings,
-          value.session.title,
-        ],
-        [
-          savedBaseline.current.provider,
-          savedBaseline.current.accountId,
-          savedBaseline.current.model,
-          savedBaseline.current.mode,
-          savedBaseline.current.modelSettings,
-          savedBaseline.current.title,
-        ],
-      ));
+    (value.session.title !== reviewed.session.title && value.session.title !== savedBaseline.current.title);
   const { requestClose: discardChanges } = useSheetGuard({
-    dirty: agentDirty || titleDirty,
+    dirty: titleDirty,
     pending,
     onClose: () => {
       void clearAndClose();
     },
   });
 
-  const saveAgent = async () => {
-    if (unavailableAccount || disabled || running || conflict) return false;
-    const submitted = agentKey;
-    setConfigurationAction("configure");
-    try {
-      const saved = await configure.run(async () => {
-        await onCommand({
-          type: "configure",
-          sessionId: reviewed.session.id,
-          ...captureSessionAuthority(reviewed),
-          ...(reviewed.revision !== undefined ? { expectedRevision: reviewed.revision } : {}),
-          harness: provider,
-          ...(provider === "claude" || provider === "codex"
-            ? { providerAccountId: accountId ?? null }
-            : {}),
-          model,
-          modelSettings: selectedModel
-            ? sessionSettings(selectedModel, modelSettings)
-            : modelSettings,
-          runtimeMode: mode,
-        });
-        return true;
-      });
-      if (saved !== true) {
-        return false;
-      }
-      setSavedAgentKey(submitted);
-      acknowledge({ provider, accountId, model, mode, modelSettings });
-      return true;
-    } catch {
-      return false;
-    }
-  };
   const saveTitle = async () => {
     if (!title.trim()) return false;
     if (!titleDirty) return true;
     const submitted = title.trim();
     if (titleFlight.current)
       return titleFlight.current.text === submitted ? titleFlight.current.promise : false;
-    if (disabled || configure.isPending || update.isPending) return false;
+    if (disabled || update.isPending) return false;
     const promise = (async () => {
       try {
         await update.mutateAsync(sessionTitleUpdate(projectId, value.session.id, submitted, reviewed));
@@ -303,24 +174,14 @@ export function SessionSettings({
     }
   };
   const save = async () => {
-    if (
-      saving.current ||
-      pending ||
-      uncertain ||
-      conflict ||
-      !title.trim() ||
-      (agentDirty && (!model || running || unavailableAccount))
-    )
-      return;
+    if (saving.current || pending || uncertain || conflict || !title.trim()) return;
     saving.current = true;
     setSavingPending(true);
-    const submittedValues = form.values;
+    const submitted = latestValues.current.title;
     try {
       await localDraft.persist();
-      // Title and configuration use separate RPCs; acknowledge each successful part.
-      if (agentDirty && !(await saveAgent())) return;
       if (!(await saveTitle())) return;
-      if (sameFormValue(latestValues.current, submittedValues)) await clearAndClose();
+      if (latestValues.current.title === submitted) await clearAndClose();
     } catch {
       /* Draft storage errors stay visible; no implicit retry. */
     } finally {
@@ -328,6 +189,7 @@ export function SessionSettings({
       setSavingPending(false);
     }
   };
+  const modelName = activeSessionModel(value.session).name;
 
   return (
     <Sheet
@@ -339,23 +201,16 @@ export function SessionSettings({
       title={copy("Oturum ayarları", "Session settings")}
       size="form"
       dismissible={!pending || (!hydrated && !!localDraft.error)}
-      dirty={agentDirty || titleDirty}
+      dirty={titleDirty}
       footer={
         <FormActions
           submitLabel={copy("Kaydet", "Save")}
           onSubmit={() => {
             void save();
           }}
-          busy={savingPending || configure.isPending || update.isPending}
-          dirty={agentDirty || titleDirty}
-          disabled={
-            pending ||
-            uncertain ||
-            conflict ||
-            !(agentDirty || titleDirty) ||
-            !title.trim() ||
-            (agentDirty && (!model || running || unavailableAccount))
-          }
+          busy={savingPending || update.isPending}
+          dirty={titleDirty}
+          disabled={pending || uncertain || conflict || !titleDirty || !title.trim()}
         />
       }
     >
@@ -445,73 +300,21 @@ export function SessionSettings({
           </Row>
         </View>
       </Section>
-      <Section title={copy("Agent ve model", "Agent and model")}>
-        {unavailableAccount ? (
-          <Notice
-            tone="warning"
-            message={copy(
-              "Kaydedilmiş hesap kullanılamıyor. Modeli değiştirmek için kullanılabilir bir hesap seçin.",
-              "The saved account is unavailable. Choose an available account to change the model.",
-            )}
+      {onOpenModel ? (
+        <NavigationGroup>
+          <NavigationRow
+            label={copy("Model ve erişim", "Model and access")}
+            detail={titleDirty
+              ? copy("Önce başlığı kaydet veya bırak.", "Save or discard the title first.")
+              : modelName}
+            disabled={disabled || pending || titleDirty}
+            onPress={() => {
+              void clearAndClose().then(onOpenModel);
+            }}
           />
-        ) : null}
-        <QueryState query={catalog} />
-        {catalog.data?.errors[provider] ? (
-          <Notice tone="danger" message={catalog.data.errors[provider]} />
-        ) : null}
-        <AgentModelFields
-          catalog={availableCatalog}
-          models={models}
-          model={model}
-          settings={modelSettings}
-          provider={{
-            choices,
-            value: choice,
-            onChange: (next) => {
-              if (next.provider === provider) {
-                patchForm({ accountId: next.accountId });
-                return;
-              }
-              const first = sessionModel(availableCatalog, next.provider, "");
-              patchForm({
-                provider: next.provider,
-                accountId: next.accountId,
-                model: first?.id ?? "",
-                modelSettings: carryCrossDelegation(modelSettings, modelDefaults(first)),
-              });
-            },
-          }}
-          disabled={pending || running}
-          unavailableAccount={unavailableAccount}
-          onChange={(next, settings) => patchForm({ model: next, modelSettings: settings })}
-        />
-        <PermissionField
-          value={mode}
-          disabled={pending || running || unavailableAccount}
-          onChange={(next) => patchForm({ mode: next })}
-        />
-        <MutationState
-          mutation={configure}
-          success={copy("Agent ayarları kaydedildi.", "Agent settings saved.")}
-        />
-      </Section>
-      {running ? (
-        <Notice
-          tone="info"
-          message={copy(
-            "Model ayarları mevcut çalışma tamamlanınca değiştirilebilir.",
-            "Model settings can change after the current run finishes.",
-          )}
-        />
+        </NavigationGroup>
       ) : null}
-      {(agentDirty || titleDirty) &&
-      (configure.isError ||
-        update.isError ||
-        unavailableAccount ||
-        !model ||
-        !title.trim() ||
-        running ||
-        conflict) ? (
+      {titleDirty && (update.isError || !title.trim() || conflict) ? (
         <Button
           label={copy("Değişiklikleri bırak", "Discard changes")}
           tone="quiet"
@@ -519,20 +322,6 @@ export function SessionSettings({
           onPress={discardChanges}
         />
       ) : null}
-      <Button
-        label={copy("Bağlamı sıkıştır", "Compact context")}
-        tone="secondary"
-        disabled={pending || running || agentDirty || titleDirty || conflict || uncertain}
-        busy={configure.isPending && configurationAction === "compact"}
-        onPress={() => {
-          setConfigurationAction("compact");
-          void configure.run(async () => {
-            const receipt = await onCommand({ type: "compact", sessionId: value.session.id });
-            onClose();
-            return !!receipt;
-          });
-        }}
-      />
     </Sheet>
   );
 }

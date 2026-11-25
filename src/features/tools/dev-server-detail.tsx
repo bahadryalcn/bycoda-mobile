@@ -3,8 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import {
   Body, Button, FormActions, ErrorText, MutationState,
-  Disclosure, Notice, QueryState, StateView, Row, Sheet, ToggleField, NavigationGroup,
+  Disclosure, Notice, QueryState, StateView, StatusLine, Row, Sheet, ToggleField, NavigationGroup,
 } from "@/ui/primitives";
+import { useMobileTheme } from "@/ui/theme";
 import { useCopy } from "@/ui/copy";
 import { MessageCode } from "@/ui/message-code";
 import { useActiveMachine, useMachines } from "@/state/machines";
@@ -24,6 +25,7 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
   onClose: () => void;
 }) {
   const copy = useCopy();
+  const { uiStyles } = useMobileTheme();
   const machineId = useMachines((state) => state.activeId);
   const machine = useActiveMachine();
   const [opening] = useState(() => ({ reviewed: reviewedMachine(machine), projectId, serverId: server.id, machineName: machine?.name, projectName: project?.name }));
@@ -104,7 +106,7 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
       {current ? (
         <>
           <Body mono>{current.command ?? current.name}</Body>
-          <Disclosure label={copy("Ayrıntılar", "Details")}>
+          <Disclosure label={copy("Teknik ayrıntılar", "Technical details")}>
             <Body mono muted>{[opening.reviewed?.id, opening.projectId].filter(Boolean).join(" / ")}</Body>
             {current.cwd ? <Body mono muted>{current.cwd}</Body> : null}
             {current.process ? <Body mono muted>{`PID ${current.process.pid}`}</Body> : null}
@@ -118,8 +120,13 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
           <NavigationGroup><ToggleField label={copy("Alt işlemleri de kapsa", "Include child processes")} value={includeChildren} disabled={busy} onChange={(value) => { setIntent(undefined); setIncludeChildren(value); }} /></NavigationGroup>
           <Body muted>{`${copy("Etkilenen portlar", "Affected ports")}: ${details.data?.affectedPorts.join(", ") || "—"}`}</Body>
           </Disclosure>
-          {!canReview ? <Notice message={copy("İşlem etkisini güvenle doğrulamak için bilgisayardaki bycoda'yı güncelle.", "Update bycoda on the computer to safely review process impact.")} /> : null}
-          {uncertain ? <Notice tone="warning" message={copy("İşlemin sonucu bilinmiyor. Tekrar göndermeden önce güncel durumu kontrol et.", "The operation outcome is unknown. Check the current state before sending another action.")} /> : null}
+          {!canReview ? <StatusLine tone="info" label={copy("İşlem etkisini güvenle doğrulamak için bilgisayardaki bycoda'yı güncelle.", "Update bycoda on the computer to safely review process impact.")} /> : null}
+          {/* One caution above the actions: unknown outcome, a process that would not stop, a busy port. */}
+          {uncertain || stop.data?.requiresForce || restart.data?.conflict ? <Notice tone="warning" message={[
+            uncertain ? copy("İşlemin sonucu bilinmiyor. Tekrar göndermeden önce güncel durumu kontrol et.", "The operation outcome is unknown. Check the current state before sending another action.") : null,
+            stop.data?.requiresForce ? stop.data.message ?? copy("İşlem hâlâ çalışıyor.", "The process is still running.") : null,
+            restart.data?.conflict ? copy("{p0} portu zaten kullanılıyor.", "Port {p0} is already in use.", { p0: restart.data.conflict.port }) : null,
+          ].filter(Boolean).join(" ")} /> : null}
           {!intent ? <Row>
             {current.state === "running" || current.state === "starting" ? <Button label={copy("Durdur", "Stop")} disabled={disabled} onPress={() => prepare("stop")} /> : null}
             {current.managed ? <Button label={copy("Yeniden başlat", "Restart")} disabled={disabled || !includeChildren} onPress={() => prepare("restart")} /> : null}
@@ -145,11 +152,9 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
             <MutationState mutation={restart} />
             <MutationState mutation={kill} />
           </> : null}
-          {stop.data?.requiresForce ? <Notice tone="warning" message={stop.data.message ?? copy("İşlem hâlâ çalışıyor.", "The process is still running.")} /> : null}
-          {restart.data?.conflict ? <Notice tone="warning" message={copy("{p0} portu zaten kullanılıyor.", "Port {p0} is already in use.", { p0: restart.data.conflict.port })} /> : null}
           {showLogs ? <>
             <QueryState query={logs} />
-            {logs.data?.available ? <>{logParts.length > 32_000 ? <Notice message={copy("Çıktının yalnızca son bölümü gösteriliyor.", "Only the most recent output is shown.")} /> : null}<MessageCode code={logTail} output allowPreview={false} complete={current.state !== "running" && current.state !== "starting"} /></> : getQueryPresentation(logs) === "ready" ? <StateView compact title={copy("Bu sunucunun günlükleri kullanılamıyor.", "Logs are not available for this server.")} /> : null}
+            {logs.data?.available ? <>{logParts.length > 32_000 ? <Body muted style={uiStyles.caption}>{copy("Çıktının yalnızca son bölümü gösteriliyor.", "Only the most recent output is shown.")}</Body> : null}<MessageCode code={logTail} output allowPreview={false} complete={current.state !== "running" && current.state !== "starting"} /></> : getQueryPresentation(logs) === "ready" ? <StateView compact title={copy("Bu sunucunun günlükleri kullanılamıyor.", "Logs are not available for this server.")} /> : null}
           </> : null}
         </>
       ) : null}

@@ -1,9 +1,9 @@
 import { useRef, useState } from "react";
-import { router } from "expo-router";
 import { View } from "react-native";
 import { useCopy } from "@/ui/copy";
 import { Empty, Notice, QueryState, Screen, ScreenList } from "@/ui/primitives";
 import { useActiveMachine } from "@/state/machines";
+import { NoComputerState } from "@/ui/no-computer";
 import { useConnectionScope } from "@/state/connection-scope";
 import { ApprovalCard, type LocalDecision } from "./approval-card";
 import { ApprovalDecisionError } from "./approvals-client";
@@ -35,25 +35,26 @@ function ApprovalsWorkspace({ machine, current, focusId }: {
     return (
       <Screen title={title} scroll={false}>
         <View style={{ flex: 1 }}>
-          <Empty
-            compact={false}
-            illustration="connect-computer"
-            title={copy("Önce bir bilgisayar bağlayın", "Connect a computer first")}
-            action={{ label: copy("Bilgisayar bağla", "Connect a computer"), onPress: () => router.push("/machines") }}
+          <NoComputerState
+            description={copy("Onay isteklerini görmek için bilgisayarını bağla.", "Connect your computer to see approval requests.")}
           />
         </View>
       </Screen>
     );
   if (!supported)
     return (
-      <Screen title={title}>
-        <Notice
-          message={copy(
-            "{p0} onayları telefona göndermiyor; bycoda'yı orada güncelle.",
-            "{p0} does not send approvals to phones yet; update bycoda there.",
-            { p0: machine.name },
-          )}
-        />
+      <Screen title={title} scroll={false}>
+        <View style={{ flex: 1 }}>
+          <Empty
+            compact={false}
+            title={copy("Henüz kullanılamıyor", "Not available yet")}
+            detail={copy(
+              "{p0} onayları telefona göndermiyor; bycoda'yı orada güncelle.",
+              "{p0} does not send approvals to phones yet; update bycoda there.",
+              { p0: machine.name },
+            )}
+          />
+        </View>
       </Screen>
     );
   const mark = (id: string, state: LocalDecision, approved: boolean) =>
@@ -94,7 +95,7 @@ function ApprovalsWorkspace({ machine, current, focusId }: {
   return (
     <ScreenList
       title={title}
-      subtitle={machine.name}
+      scope={{ computer: machine.name }}
       header={
         <>
           {/* With nothing listed the empty slot owns the page, so a failed load is centered there instead. */}

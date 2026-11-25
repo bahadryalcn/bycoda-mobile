@@ -19,6 +19,7 @@ export class AssistantCallLoop {
   private active = false;
   private muted = false;
   private speakerMuted = false;
+  private sending = false;
   private speaking = false;
   private epoch = 0;
   private pending?: Promise<void>;
@@ -49,10 +50,14 @@ export class AssistantCallLoop {
   }
   setMuted(value: boolean): void {
     if (!this.current() || this.muted === value) return;
-    this.muted = value; this.epoch++;
+    this.muted = value;
     this.wake?.(); this.wake = undefined;
-    if (value) { this.dependencies.cancelAudio(); this.dependencies.state("muted", this.selected); }
-    else {
+    if (value) {
+      if (this.sending || this.speaking) return;
+      this.epoch++;
+      this.dependencies.cancelAudio();
+      this.dependencies.state("muted", this.selected);
+    } else {
       // Muted time is not listening time: the idle window restarts with the owner's explicit unmute, as the native timer does.
       this.lastUtteranceAt = Date.now();
       if (!this.pending) this.launch();
@@ -60,7 +65,7 @@ export class AssistantCallLoop {
   }
   /** Stops the reply being spoken and returns to listening; the sent message and its reply stay in the conversation. */
   interrupt(): boolean {
-    if (!this.speaking || this.muted || !this.current()) return false;
+    if (!this.speaking || !this.current()) return false;
     this.epoch++; this.speaking = false;
     this.wake?.(); this.wake = undefined;
     this.dependencies.cancelAudio();
@@ -71,14 +76,16 @@ export class AssistantCallLoop {
     this.speakerMuted = value;
     if (value) this.interrupt();
   }
-  private valid(epoch: number) { return this.epoch === epoch && !this.muted && this.current(); }
+  private valid(epoch: number) { return this.epoch === epoch && this.current(); }
   private launch() {
     if (this.pending || !this.current() || this.muted) return;
     const epoch = this.epoch;
     this.pending = this.run(epoch).finally(() => {
       this.pending = undefined;
-      // A canceled capture/send must settle before an unmute can own a new listener.
-      if (this.current() && !this.muted) this.launch();
+      // A capture or reply must settle before unmute can start a new listener.
+      if (!this.current()) return;
+      if (this.muted) this.dependencies.state("muted", this.selected);
+      else this.launch();
     });
   }
   private pause() {
@@ -90,9 +97,8 @@ export class AssistantCallLoop {
   private async run(epoch: number) {
     const target = this.selected!;
     const current = () => this.valid(epoch);
-    let sending = false;
     try {
-      while (current()) {
+      while (!this.muted && current()) {
         this.dependencies.state("listening", target);
         const text = (await this.dependencies.capture(target, current)).trim();
         if (!current()) return;
@@ -103,22 +109,33 @@ export class AssistantCallLoop {
           continue;
         }
         this.lastUtteranceAt = Date.now();
+        this.sending = true;
         this.dependencies.state("sending", target);
-        sending = true;
         const reply = await this.dependencies.send(text, target, current);
-        sending = false;
+        this.sending = false;
         if (!current()) return;
         if (reply.trim() && !this.speakerMuted) {
-          this.dependencies.state("speaking", target);
           this.speaking = true;
+          this.dependencies.state("speaking", target);
           try { await this.dependencies.speak(reply, target, current); } finally { this.speaking = false; }
         }
       }
     } catch (error) {
-      if ((sending && this.active && this.selected === target) || current()) { this.stop(); this.dependencies.error(error); }
+      if (current()) { this.stop(); this.dependencies.error(error); }
+    } finally {
+      this.sending = false;
     }
   }
 }
+
+/** The turn-taking choices of Settings → Voice assistant → Conversation style, as on the desktop. */
+export type AssistantTurnOptions = {
+  /** Seconds of silence that end the turn; the desktop's natural pause is 1.2 s. */
+  endSilence?: number;
+  /** Silence never ends the turn; only Send now (or the utterance size cap) does. */
+  manualTurnEnd?: boolean;
+};
+export const DEFAULT_TURN_PAUSE_SECONDS = 1.2;
 
 /** Use the desktop speech detector with steady 64 ms frames, regardless of native event size. */
 export class AssistantUtteranceVad {
@@ -127,8 +144,12 @@ export class AssistantUtteranceVad {
   private samples = 0;
   private ended = false;
   private speech = false;
-  private vad = new VoiceVad(16000, () => { this.speech = true; },
-    () => { this.ended = true; }, () => { this.speech = false; }, { endSilence: 0.9 });
+  private vad: VoiceVad;
+  constructor(options: AssistantTurnOptions = {}) {
+    this.vad = new VoiceVad(16000, () => { this.speech = true; },
+      () => { this.ended = true; }, () => { this.speech = false; },
+      { endSilence: options.endSilence ?? DEFAULT_TURN_PAUSE_SECONDS, manualTurnEnd: options.manualTurnEnd === true });
+  }
   get hasSpeech() { return this.speech; }
   push(pcm: Int16Array): boolean {
     for (let offset = 0; offset < pcm.length && !this.ended;) {

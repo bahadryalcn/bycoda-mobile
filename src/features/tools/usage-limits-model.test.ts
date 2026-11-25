@@ -17,11 +17,15 @@ const limits = (over: Record<string, unknown> = {}) => structuredClone({
 
 describe("usage limits model", () => {
   it("formats reset countdowns", () => {
-    expect(resetCountdown(NOW + 4.5 * 86_400_000, NOW)).toBe("4d 12h");
+    const en = { day: "d", hour: "h", minute: "min" };
+    const tr = { day: "gün", hour: "sa", minute: "dk" };
+    expect(resetCountdown(NOW + 4.5 * 86_400_000, NOW, "en", en)).toBe("4 d 12 h");
+    expect(resetCountdown(NOW + 185 * 60_000, NOW, "tr", tr)).toBe("3 sa 5 dk");
+    expect(resetCountdown(NOW + 20_000, NOW, "en", en)).toBe("1 min");
     expect(resetCountdown(NOW + 185 * 60_000, NOW)).toBe("3h 5m");
-    expect(resetCountdown(NOW + 20_000, NOW)).toBe("1m");
-    expect(resetCountdown(NOW - 1, NOW)).toBeNull();
-    expect(resetCountdown(null, NOW)).toBeNull();
+    expect(resetCountdown(NOW + 86_400_000, NOW)).toBe("1d 0h");
+    expect(resetCountdown(NOW - 1, NOW, "en", en)).toBeNull();
+    expect(resetCountdown(null, NOW, "en", en)).toBeNull();
   });
 
   it("never rounds a sliver to empty or almost full to full", () => {

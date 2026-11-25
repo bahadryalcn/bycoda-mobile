@@ -20,6 +20,13 @@ import { ProjectOrganization } from "./project-organization";
 import { DesktopPreferences } from "./desktop-preferences";
 import { MobilePty } from "../tools/mobile-pty";
 import { ProviderDesktop } from "../tools/provider-desktop";
+import { useHostMutation } from "@/state/queries";
+import { captureSessionAuthority } from "@/domain/session-authority";
+import { showToast } from "@/ui/toast";
+import { errorMessage } from "@/ui/error-message";
+import { openModelSheet } from "./composer-model-sheet";
+import type { HostSession } from "./wire";
+import { activeSessionModel } from "./catalog";
 
 export type SessionToolbarViewProps = SessionToolbarProps & {
   onFind: () => void;
@@ -64,6 +71,24 @@ export function SessionToolbar({
     setContextual(mode);
   };
   const closeContextual = () => setContextual(null);
+  const update = useHostMutation<HostSession>("sessions.update", ["sessions", projectId]);
+  // Pin and archive confirm with a toast; archive offers Undo instead of asking first.
+  const setFlag = (patch: { pinned: boolean } | { archived: boolean }, done: string, undo?: () => void) => {
+    if (!session || !projectId || update.isPending) return;
+    void update
+      .mutateAsync({ projectId, sessionId: scope.sessionId, ...captureSessionAuthority(session), ...patch })
+      .then(() => {
+        onRefresh();
+        showToast({ message: done, ...(undo ? { action: { label: copy("Geri al", "Undo"), onPress: undo } } : {}) });
+      })
+      .catch((cause: unknown) => showToast({ tone: "danger", message: errorMessage(cause, copy) }));
+  };
+  const toggleArchive = (archived: boolean) =>
+    setFlag(
+      { archived },
+      archived ? copy("Oturum arşivlendi", "Session archived") : copy("Oturum arşivden çıkarıldı", "Session unarchived"),
+      archived ? () => toggleArchive(false) : undefined,
+    );
   const openProject = () => {
     if (!projectId) return;
     router.navigate({
@@ -92,21 +117,24 @@ export function SessionToolbar({
         sessionId={scope.sessionId}
         blocked={blocked}
         running={session?.status === "running"}
-        refreshing={query.isFetching}
         detailed={view === "details"}
-        settingsDetail={
-          session
-            ? [session.session.harness, session.session.model.replace(/^[^:]+:/, "")].join(" · ")
-            : undefined
-        }
+        pinned={session?.pinned}
+        archived={session?.archived}
+        modelDetail={session ? activeSessionModel(session.session).name : undefined}
         onClose={() => setMenu(false)}
         actions={{
           find: onFind,
           toggleDetails: () => onViewChange(view === "details" ? "messages" : "details"),
           settings: onSettings,
+          model: () => openModelSheet(scope.machineId, scope.sessionId),
+          pin: () =>
+            setFlag(
+              { pinned: !session?.pinned },
+              session?.pinned ? copy("Sabitleme kaldırıldı", "Unpinned") : copy("Oturum sabitlendi", "Session pinned"),
+            ),
+          archive: () => toggleArchive(!session?.archived),
           review: () => setReview(true),
           notes: () => setNotes(true),
-          refresh: onRefresh,
           handoff: () => openContextual("handoff"),
           secondOpinion: () => openContextual("secondOpinion"),
           importHistory: () => setHistoryImport(true),

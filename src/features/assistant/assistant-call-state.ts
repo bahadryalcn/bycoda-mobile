@@ -18,4 +18,8 @@ export const useAssistantCall = create<{
   capture?: import("./assistant-voice").AssistantVoiceState;
   /** The chain step in flight; after a failure, the step that failed. */
   stage?: import("./assistant-voice-presentation").AssistantVoiceStage;
+  /** The call went to sleep after the idle limit, as on the desktop: "Ready. Microphone is off." with Talk, not a failure. */
+  asleep?: boolean;
+  /** A dropped voice line is being reopened; the attempt number starts at 1. */
+  reconnecting?: number;
 }>(() => ({ phase: "idle", muted: false, speakerMuted: false, level: 0, replyVersion: 0 }));

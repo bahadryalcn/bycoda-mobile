@@ -51,6 +51,8 @@ vi.mock("./session-queries", () => ({ useSessionBlock: ({ enabled }: { enabled: 
 vi.mock("./transcript-attachments", () => ({ TranscriptAttachments: ({ block }: { block: Block }) => h("div", { "data-attachments": true }, block.image?.name, ...block.attachments?.map(file => file.name) ?? []) }));
 vi.mock("./transcript-structured", () => ({ TranscriptStructured: () => null }));
 vi.mock("./transcript-actions", () => ({ TranscriptActions: () => null }));
+vi.mock("./selected-text", () => ({ MessageSelection: ({ children }: PropsWithChildren) => children }));
+vi.mock("@/ui/message-selection", () => ({ SelectableProse: ({ children }: PropsWithChildren) => children }));
 vi.mock("./session-artifacts", () => ({ SessionArtifacts: () => null }));
 vi.mock("@/ui/agent-avatar", () => ({ AgentAvatar: () => null }));
 vi.mock("@/features/management/plans/plan-review", () => ({ PlanReview: () => null }));

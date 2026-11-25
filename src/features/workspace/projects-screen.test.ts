@@ -14,8 +14,9 @@ const f = vi.hoisted(() => ({
   selectProject: vi.fn(),
   open: vi.fn<(payload: { cwd: string }) => Promise<DirectoryProject>>(),
   success: vi.fn(),
-  rowDetails: undefined as (() => void) | undefined,
-  detailsFiles: undefined as (() => void) | undefined,
+  rowOptions: undefined as (() => void) | undefined,
+  optionFiles: undefined as (() => void) | undefined,
+  update: vi.fn(),
 }));
 
 vi.mock("expo-crypto", () => ({ randomUUID: () => globalThis.crypto.randomUUID() }));
@@ -41,17 +42,34 @@ vi.mock("@/ui/scroll-keyboard", () => ({ scrollKeyboardDismissMode: () => "on-dr
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
 vi.mock("@/ui/screen-content-insets", () => ({ useScreenContentInsets: () => ({ left: 0, right: 0 }) }));
 vi.mock("@/ui/primitives", () => {
-  const controls = ["Button", "IconButton", "ScreenHeading", "MutationState", "Notice", "SearchField", "Row", "Sheet", "SelectField", "SegmentedControl", "ToggleField"];
+  const controls = ["Button", "IconButton", "ScreenHeading", "MutationState", "NavigationGroup", "NavigationRow", "Notice", "SearchField", "Row", "SectionHeader", "Sheet", "SegmentedControl", "ToggleField"];
   return {
     Screen: ({ children }: { children: ReactNode }) => h("div", null, children),
     ...Object.fromEntries(controls.map((name) => [name, () => null])),
   };
 });
 vi.mock("lucide-react-native/icons/folder-plus", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/sliders-horizontal", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/arrow-down-up", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/square-pen", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/folder-tree", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/git-branch", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/git-pull-request", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/folder-input", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/copy", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/info", () => ({ default: () => null }));
+vi.mock("expo-clipboard", () => ({ setStringAsync: vi.fn(async () => true) }));
+vi.mock("@/ui/toast", () => ({ showToast: vi.fn() }));
+vi.mock("./project-organization", () => ({ ProjectOrganization: () => null }));
+vi.mock("@/ui/overflow-menu", () => ({
+  RowOptionsSheet: ({ visible, subtitle, actions }: { visible: boolean; subtitle?: string; actions: { key: string; label: string; onPress(): void }[] }) => {
+    if (!visible) return null;
+    f.optionFiles = actions.find((action) => action.key === "files")?.onPress;
+    return h("section", null, subtitle, ...actions.map((action) => h("button", { key: action.key, onClick: action.onPress }, action.label)));
+  },
+}));
 vi.mock("./project-directory-feedback", () => ({ ProjectDirectorySlot: () => null }));
 vi.mock("./project-folder-browser", () => ({ ProjectFolderBrowser: () => null }));
-vi.mock("./project-reorder-sheet", () => ({ ProjectReorderSheet: () => null, ProjectReorderAction: () => null }));
 vi.mock("./use-project-activity", () => ({ useProjectActivity: () => ({ directory: [] }) }));
 vi.mock("../group-lock/group-lock-section", () => ({ GroupLockSection: () => null }));
 vi.mock("../connections/welcome-screen", () => ({ WelcomeScreen: () => null }));
@@ -71,17 +89,12 @@ vi.mock("./use-project-directory", async () => {
 });
 vi.mock("./project-row", () => ({
   ProjectGroupHeader: () => null,
-  ProjectRow: ({ id, name, onPress, onDetails }: { id: string; name: string; onPress: (id: string) => void; onDetails: (id: string) => void }) => {
-    f.rowDetails = () => onDetails(id);
-    return h("div", null, h("button", { onClick: () => onPress(id) }, name), h("button", { onClick: f.rowDetails }, "Details"));
+  ProjectRow: ({ id, name, onPress, onOptions }: { id: string; name: string; onPress: (id: string) => void; onOptions: (id: string) => void }) => {
+    f.rowOptions = () => onOptions(id);
+    return h("div", null, h("button", { onClick: () => onPress(id) }, name), h("button", { onClick: f.rowOptions }, "Options"));
   },
 }));
-vi.mock("./project-details-sheet", () => ({
-  ProjectDetailsSheet: ({ project, onOpenView }: { project: DirectoryProject; onOpenView: (view: "files") => void }) => {
-    f.detailsFiles = () => onOpenView("files");
-    return h("section", null, project.cwd, h("button", { onClick: f.detailsFiles }, "Files"));
-  },
-}));
+vi.mock("./project-details-sheet", () => ({ ProjectDetailsSheet: () => null }));
 
 const firstComputer = { id: "phone", endpoint: "https://first.test", environmentId: "first", lanKey: "first-key", name: "First" };
 const secondComputer = { id: "phone", endpoint: "https://second.test", environmentId: "second", lanKey: "second-key", name: "Second" };
@@ -103,8 +116,8 @@ const setComputer = async (machine: typeof firstComputer) => {
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.clearAllMocks();
-  f.rowDetails = undefined;
-  f.detailsFiles = undefined;
+  f.rowOptions = undefined;
+  f.optionFiles = undefined;
   registered = true;
   await setComputer(firstComputer);
   container = document.createElement("div");
@@ -118,29 +131,41 @@ afterEach(async () => {
 it.each([
   { change: "same-ID re-pairing", machine: secondComputer },
   { change: "a computer switch", machine: { ...secondComputer, id: "second-phone" } },
-])("retires a project details sheet and retained row callbacks after $change", async ({ machine }) => {
+])("retires a project options sheet and retained row callbacks after $change", async ({ machine }) => {
   await act(async () => root.render(h(ProjectsScreen)));
-  await act(async () => click("Details"));
-  expect(container.querySelector("section")?.textContent).toContain("/First");
-  const openFirstFiles = f.detailsFiles!;
-  const openFirstDetails = f.rowDetails!;
+  await act(async () => click("Options"));
+  expect(container.querySelector("section")?.textContent).toContain("First");
+  const openFirstFiles = f.optionFiles!;
+  const openFirstOptions = f.rowOptions!;
 
   // Ordinary machine object refresh preserves the sheet.
   await act(async () => setComputer({ ...firstComputer }));
-  expect(container.querySelector("section")?.textContent).toContain("/First");
+  expect(container.querySelector("section")?.textContent).toContain("First");
   await act(async () => setComputer(machine));
   expect(container.querySelector("section")).toBeNull();
-  await act(async () => { openFirstFiles(); openFirstDetails(); });
+  await act(async () => { openFirstFiles(); openFirstOptions(); });
   expect(container.querySelector("section")).toBeNull();
   expect(f.navigate).not.toHaveBeenCalled();
 
-  await act(async () => click("Details"));
-  expect(container.querySelector("section")?.textContent).toContain("/Second");
+  await act(async () => click("Options"));
+  expect(container.querySelector("section")?.textContent).toContain("Second");
   await act(async () => click("Files"));
   expect(f.selectProject).toHaveBeenCalledWith("shared-id");
   expect(f.navigate).toHaveBeenCalledExactlyOnceWith({
     pathname: "/project/[id]",
     params: { id: "shared-id", machineId: machine.id, view: "files" },
+  });
+});
+
+it("lists project options in the desktop order and starts a session through the project route", async () => {
+  await act(async () => root.render(h(ProjectsScreen)));
+  await act(async () => click("Options"));
+  const labels = [...container.querySelectorAll("section button")].map((button) => button.textContent);
+  expect(labels).toEqual(["New session", "Files", "Changes", "Pull requests", "Copy path", "Details"]);
+  await act(async () => click("New session"));
+  expect(f.navigate).toHaveBeenCalledExactlyOnceWith({
+    pathname: "/project/[id]",
+    params: { id: "shared-id", machineId: "phone", create: "session" },
   });
 });
 

@@ -59,6 +59,7 @@ export const GLOBAL_RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * Global Sessions follows desktop Last sessions: newest turn activity first, across projects.
+ * Pinning never reorders this list (desktop parity); rows carry a pin mark and actions confirm with a toast.
  * Pass `now` to keep only the desktop window; archive and search views omit it to reach older sessions.
  */
 export function recentGlobalSessionRows(directory: readonly ShelfEntry[], now?: number): GlobalSessionRow[] {

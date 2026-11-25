@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { router } from "expo-router";
-import { Badge, Body, Button, Disclosure, MutationState, Row, Stack } from "@/ui/primitives";
+import { Badge, Body, Button, Disclosure, MutationState, Row, Stack, StatusText } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useHostMutation } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
@@ -48,10 +48,9 @@ export function ReviewNote({ task, note }: ReviewNoteProps) {
   return (
     <Stack>
       <Row>
-        <Badge
-          label={resolved ? copy("Çözüldü", "Resolved") : copy("Açık", "Open")}
-          tone={resolved ? "success" : "warning"}
-        />
+        {resolved
+          ? <StatusText label={copy("Çözüldü", "Resolved")} />
+          : <Badge label={copy("Açık", "Open")} tone="warning" />}
         <Badge
           label={
             note.kind === "suggestion" ? copy("Öneri", "Suggestion") : copy("Bulgu", "Finding")

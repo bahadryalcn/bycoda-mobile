@@ -122,3 +122,48 @@ it("routes Silence, speaker mute and Finish turn to the active call only", async
   muteAssistantCall(true); finishAssistantCallTurn(); expect(f.finish).toHaveBeenCalledOnce();
   endAssistantCall(); expect(useAssistantCall.getState().speakerMuted).toBe(false);
 });
+// Three minutes without speech used to end the call as "Call stopped" with an error card.
+it("puts an idle call to sleep instead of reporting a failure", async () => {
+  const { AssistantCallError } = await import("./assistant-call-error");
+  await startAssistantCall(target, () => true);
+  f.loops[0].state("idle"); f.loops[0].error(new AssistantCallError("no-speech"));
+  await Promise.resolve();
+  expect(useAssistantCall.getState()).toMatchObject({ phase: "idle", asleep: true, error: undefined });
+  await startAssistantCall(target, () => true);
+  expect(useAssistantCall.getState()).toMatchObject({ phase: "listening", asleep: undefined });
+  // The phone's own idle timer ends the native session with "timeout": the same sleep, not a failure.
+  f.listeners[1]({ sessionId: "session-2", type: "ended", reason: "timeout" });
+  expect(useAssistantCall.getState().asleep).toBe(true); expect(useAssistantCall.getState().error).toBeUndefined();
+});
+it("reopens a dropped voice line with the same mute choices, and End stops trying", async () => {
+  vi.useFakeTimers();
+  try {
+    const { HostWsError } = await import("@/remote/ws-connection");
+    await startAssistantCall(target, () => true);
+    muteAssistantCall(true); setAssistantCallSpeakerMuted(true);
+    useAssistantCall.setState({ stage: "transcription" });
+    f.loops[0].state("idle"); f.loops[0].error(new HostWsError("network"));
+    await Promise.resolve();
+    expect(useAssistantCall.getState()).toMatchObject({ phase: "idle", reconnecting: 1, error: undefined });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(useAssistantCall.getState()).toMatchObject({ phase: "listening", reconnecting: undefined, muted: true, speakerMuted: true, sessionId: "session-2" });
+    // A second drop schedules another attempt; End cancels it.
+    useAssistantCall.setState({ stage: "microphone" });
+    f.loops[1].state("idle"); f.loops[1].error(new HostWsError("network"));
+    await Promise.resolve();
+    expect(useAssistantCall.getState().reconnecting).toBe(1);
+    endAssistantCall();
+    expect(useAssistantCall.getState().reconnecting).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(f.loops).toHaveLength(2);
+  } finally { vi.useRealTimers(); }
+});
+it("never reopens a call whose send result is unknown", async () => {
+  const { HostWsError } = await import("@/remote/ws-connection");
+  await startAssistantCall(target, () => true);
+  useAssistantCall.setState({ stage: "reply" });
+  const error = new HostWsError("network", true);
+  f.loops[0].state("idle"); f.loops[0].error(error);
+  await Promise.resolve();
+  expect(useAssistantCall.getState()).toMatchObject({ reconnecting: undefined, error });
+});

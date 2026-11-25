@@ -70,7 +70,7 @@ export const TranscriptRow = memo(function TranscriptRow({
   return (
     <View
       style={{
-        paddingBottom: space.row,
+        paddingBottom: item.continuation ? space.sm : space.row,
         backgroundColor: highlighted ? colors.selected : undefined,
       }}
     >
@@ -80,6 +80,7 @@ export const TranscriptRow = memo(function TranscriptRow({
         /> : null}
       {item.block.modelSwitch ? <ModelSwitchRow meta={item.block.modelSwitch} /> : isSystemFailure(item.block) && item.block.text ? <SystemFailureCard text={item.block.text} repeat={item.repeat} /> : <TranscriptBlock
         modelName={item.modelName}
+        continuation={item.continuation}
         onRewind={canRewind && onRewind ? () => onRewind(item.block.id) : undefined}
         parentProvider={parentProvider}
         context={context}

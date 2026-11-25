@@ -20,23 +20,36 @@ export function composerNeedsInlineActions(available: number | null, fontScale: 
   return available < Math.max(3 * metrics.touchTarget, composerMinimumHeight(scale) + chrome);
 }
 
-/** An empty, unfocused composer is one row. Any draft, suggestion or recording keeps its controls. */
-export function composerCollapsed(input: {
-  toolbarOpen: boolean;
-  hasContent: boolean;
-  hasPrefix: boolean;
-  suggesting: boolean;
-  dictating: boolean;
-}): boolean {
-  return !input.toolbarOpen && !input.hasContent && !input.hasPrefix && !input.suggesting && !input.dictating;
+/** Below this measured chip width (scaled with text size) the model chip shows only its provider mark. */
+export const MODEL_CHIP_LABEL_MIN = 96;
+
+/**
+ * The composer toolbar is one non-wrapping row, visible at rest and while typing:
+ * `[leading] [model, flex] [status] [trailing]`. Widths are measured; the model gets every point
+ * the fixed controls leave. The optional status control (context pressure) joins the row only when
+ * the model keeps at least one touch target.
+ */
+export function composerToolbarLayout(input: {
+  /** Measured toolbar width, including its horizontal padding. */
+  toolbar: number;
+  /** Measured width of the leading controls (Add). */
+  leading: number;
+  /** Measured width of the trailing controls (mic, queue, stop, send). */
+  trailing: number;
+  /** A status control asks for one touch target between the model and the trailing controls. */
+  status?: boolean;
+  fontScale: number;
+}): { model: number; showStatus: boolean; iconOnly: boolean } {
+  const scale = positive(input.fontScale) ? Math.min(2, Math.max(1, input.fontScale)) : 1;
+  const leading = measured(input.leading), trailing = measured(input.trailing);
+  const gaps = (leading > 0 ? space.xs : 0) + (trailing > 0 ? space.xs : 0);
+  const room = Math.max(0, measured(input.toolbar) - space.sm * 2 - leading - trailing - gaps);
+  const statusWidth = metrics.touchTarget + space.xs;
+  const showStatus = !!input.status && room - statusWidth >= metrics.touchTarget;
+  const model = showStatus ? room - statusWidth : room;
+  return { model, showStatus, iconOnly: model < MODEL_CHIP_LABEL_MIN * scale };
 }
 
-/** Leave room for Stop and Send together, the other actions, and the model label. */
-export function needsModelRow(width: number, fontScale: number): boolean {
-  const scale = positive(fontScale) ? Math.max(1, fontScale) : 1;
-  const actionWidth = metrics.touchTarget * 7 + space.xs * 7;
-  return positive(width) && width < actionWidth + space.sm * 2 + 100 * scale;
-}
 /** Input growth spends only the room left by measured controls and readable conversation. */
 export function composerInputLimits(windowHeight:number,available:number|null,fontScale:number,prefix:number,footer:number,toolbar:number) {
   const scale=positive(fontScale)?Math.max(1,fontScale):1;

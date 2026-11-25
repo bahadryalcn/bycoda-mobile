@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
-import { Text, View } from "react-native";
+import { Text, useWindowDimensions, View } from "react-native";
 import { router, useCanGoBack, useIsFocused } from "expo-router";
 import { KeyboardController } from "react-native-keyboard-controller";
 import { useBackHandler } from "panelui-native/hooks/use-back-handler";
 import { useSecurity } from "@/state/security";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body } from "@/ui/typography";
-import { HeaderBackButton } from "@/ui/primitives";
+import { HeaderBackButton, PressableCard } from "@/ui/primitives";
 import { useMobileTheme } from "@/ui/theme";
 import { fontSize, lineHeight, metrics, radii, space } from "@/ui/tokens";
 import type { MobileColors } from "@/ui/tokens";
@@ -14,6 +14,7 @@ import { ProviderIcon } from "@/ui/provider-identity";
 import { ChatAction } from "@/ui/chat-controls";
 import { useCopy } from "@/ui/copy";
 import List from "lucide-react-native/icons/list";
+import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import type { RemoteProvider } from "@/domain/types";
 import { sessionDisplayTitle } from "./session-title";
 import type { SessionHeaderTone } from "./session-header-model";
@@ -41,7 +42,7 @@ export function useTabletSessionBackFallback(tablet: boolean) {
   });
 }
 
-/** Compact 48dp header: back, title over "project · status", then fixed action slots. */
+/** The header grows for long titles while preserving the fixed action targets. */
 export function SessionHeader({
   title,
   context,
@@ -51,6 +52,7 @@ export function SessionHeader({
   provider,
   showBack = true,
   onShowSessions,
+  onRefresh,
 }: {
   title: string;
   context?: string;
@@ -61,16 +63,47 @@ export function SessionHeader({
   provider?: RemoteProvider;
   showBack?: boolean;
   onShowSessions?: () => void;
+  /** Offline or failed status: the status line becomes its own recovery action. */
+  onRefresh?: () => void;
 }) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
+  const stacked = fontScale >= 1.35;
   const color = toneColor(tone, colors);
+  const heading = (
+    <View style={{ flex: stacked ? undefined : 1, minWidth: 0, justifyContent: "center" }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+        {provider ? <ProviderIcon provider={provider} size={16} /> : null}
+        <Body numberOfLines={stacked ? 3 : 2} accessibilityRole="header" style={{ flex: 1, minWidth: 0, fontSize: fontSize.title, lineHeight: lineHeight.title, fontWeight: "600", color: colors.text }}>
+          {sessionDisplayTitle(title, title)}
+        </Body>
+      </View>
+      {context || status ? <SubtitleTarget
+        label={[context, status, onRefresh ? copy("Yenile", "Refresh") : undefined].filter(Boolean).join(", ")}
+        onPress={onRefresh}
+      >
+        {context ? (
+          <Body muted numberOfLines={1} style={[uiStyles.caption, { flexShrink: 1, fontSize: fontSize.caption, lineHeight: lineHeight.caption }]}>
+            {context}
+          </Body>
+        ) : null}
+        {status ? <View accessible={false} style={{ flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 0, maxWidth: "60%" }}>
+          {context ? <Text aria-hidden style={{ color: colors.tertiary, fontSize: fontSize.caption }}>·</Text> : null}
+          <View style={{ width: 6, height: 6, borderRadius: radii.pill, backgroundColor: color }} />
+          <Body numberOfLines={1} style={{ flexShrink: 1, fontSize: fontSize.caption, lineHeight: lineHeight.caption, fontWeight: "600", color }}>
+            {status}
+          </Body>
+          {onRefresh ? <RefreshCw size={12} strokeWidth={2.4} color={color} /> : null}
+        </View> : null}
+      </SubtitleTarget> : null}
+    </View>
+  );
   return (
     <View
       style={{
         paddingTop: insets.top,
-        // Same geometry as the stack header: 16dp gutter, 48dp back box, title starts at its edge.
         paddingLeft: Math.max(insets.left, space.screen),
         paddingRight: Math.max(insets.right, space.screen),
         paddingBottom: space.xs,
@@ -80,32 +113,20 @@ export function SessionHeader({
       <View style={{ minHeight: metrics.headerHeight, flexDirection: "row", alignItems: "center" }}>
         {showBack ? <HeaderBackButton onPress={() => (router.canGoBack() ? router.back() : router.replace("/sessions"))} /> : null}
         {onShowSessions ? <ChatAction label={copy("Oturumlar", "Sessions")} onPress={onShowSessions}><List size={20} color={colors.muted} /></ChatAction> : null}
-        <View style={{ flex: 1, minWidth: 0, justifyContent: "center" }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-            {provider ? <ProviderIcon provider={provider} size={16} /> : null}
-            <Body numberOfLines={1} accessibilityRole="header" style={{ flex: 1, minWidth: 0, fontSize: fontSize.title, lineHeight: lineHeight.title, fontWeight: "600", color: colors.text }}>
-              {sessionDisplayTitle(title, title)}
-            </Body>
-          </View>
-          {context || status ? <View accessible accessibilityLabel={[context, status].filter(Boolean).join(", ")} style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
-            {context ? (
-              <Body muted numberOfLines={1} style={[uiStyles.caption, { flexShrink: 1, fontSize: fontSize.caption, lineHeight: lineHeight.caption }]}>
-                {context}
-              </Body>
-            ) : null}
-            {status ? <View accessible={false} style={{ flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 0, maxWidth: "60%" }}>
-              {context ? <Text aria-hidden style={{ color: colors.tertiary, fontSize: fontSize.caption }}>·</Text> : null}
-              <View style={{ width: 6, height: 6, borderRadius: radii.pill, backgroundColor: color }} />
-              <Body numberOfLines={1} style={{ flexShrink: 1, fontSize: fontSize.caption, lineHeight: lineHeight.caption, fontWeight: "600", color }}>
-                {status}
-              </Body>
-            </View> : null}
-          </View> : null}
-        </View>
-        <View style={{ width: SESSION_HEADER_ACTIONS_WIDTH, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: space.xs }}>
+        {stacked ? null : heading}
+        <View style={{ width: SESSION_HEADER_ACTIONS_WIDTH, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: space.xs, marginStart: stacked ? "auto" : undefined }}>
           {actions}
         </View>
       </View>
+      {stacked ? heading : null}
     </View>
   );
+}
+
+const subtitleRow = { flexDirection: "row", alignItems: "center", gap: space.xs } as const;
+
+/** The context/status line is a Refresh button only while the computer can be refreshed. */
+function SubtitleTarget({ label, onPress, children }: { label: string; onPress?: () => void; children: ReactNode }) {
+  if (!onPress) return <View accessible aria-label={label} style={subtitleRow}>{children}</View>;
+  return <PressableCard label={label} onPress={onPress} hitSlop={{ top: space.sm, bottom: space.sm }} style={subtitleRow}>{children}</PressableCard>;
 }

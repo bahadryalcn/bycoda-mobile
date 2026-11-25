@@ -16,7 +16,7 @@ import { reviewedOperationStore } from "@/state/reviewed-operation-store";
 import { useReviewedOperation } from "@/state/use-reviewed-operation";
 import type { TerminalViewportHandle } from "@/ui/terminal-viewport";
 import type { TerminalPacket } from "@/ui/terminal-document";
-import { useMobileTheme } from "@/ui/theme";
+import { darkColors } from "@/ui/tokens";
 import type { SessionScope } from "../workspace/session-types";
 import { PtyReadScheduler } from "./pty-read-scheduler";
 import {
@@ -40,7 +40,6 @@ export function useMobilePtySession({
   scope: SessionScope;
   projectId: string;
 }) {
-  const theme = useMobileTheme();
   const machine = useActiveMachine();
   const client = useHostClient();
   const deviceOffline = useDeviceOffline();
@@ -162,10 +161,12 @@ export function useMobilePtySession({
     return result;
   };
   const fresh = () => {
+    allowed.current = false;
+    generation.current++;
     setSynced(false);
     readyDocument.current = false;
     cursor.current = 0;
-    tail.current.clear();
+    tail.current = createPtyTail();
     posted.current = null;
     waiting.current = null;
     setNonce(randomUUID());
@@ -173,12 +174,13 @@ export function useMobilePtySession({
     setLost(false);
     setGap(false);
   };
-  const confirmed = async (result: unknown, requestId?: string) => {
+  const confirmed = async (result: unknown, requestId?: string, replaceRenderer = false) => {
     if (result && typeof result === "object" && "state" in result && result.state === "failed") {
       setCreateFailed(true);
       throw new Error("Mobile PTY creation failed; inspect before clearing the saved attempt");
     }
     const value = readMobilePtyLease(result, opening.sessionId);
+    if (replaceRenderer) fresh();
     setSynced(false);
     freshProtocol.current = !!requestId;
     setLease(value);
@@ -212,13 +214,16 @@ export function useMobilePtySession({
         setAttempt(null);
         return;
       }
-      fresh();
+      allowed.current = false;
+      generation.current++;
+      setPaused(true);
       await confirmed(
         await request("terminals.pty.desktop.create", {
           requestId: claim.attempt.operationId,
           ...dimensions.current,
         }),
         claim.attempt.operationId,
+        true,
       );
     });
   };
@@ -227,16 +232,23 @@ export function useMobilePtySession({
     void run(async () => {
       const retained = lease?.terminal.terminalId === terminal.terminalId && !lost && ready;
       const after = retained ? cursor.current : 0;
-      if (!retained) fresh();
-      await confirmed(
-        await request("terminals.pty.desktop.attach", {
-          terminalId: terminal.terminalId,
-          epoch: terminal.epoch,
-          requestId: randomUUID(),
-          after,
-          freshRenderer: !retained,
-        }),
-      );
+      if (!retained) {
+        allowed.current = false;
+        generation.current++;
+        setPaused(true);
+      }
+      const result = await request("terminals.pty.desktop.attach", {
+        terminalId: terminal.terminalId,
+        epoch: terminal.epoch,
+        requestId: randomUUID(),
+        after,
+        freshRenderer: !retained,
+      });
+      // Validate the new lease before retiring the previous renderer's scrollback.
+      const attached = readMobilePtyLease(result, opening.sessionId);
+      if (attached.terminal.terminalId !== terminal.terminalId || attached.terminal.epoch !== terminal.epoch)
+        throw new Error("Mobile PTY source changed; never replay input");
+      await confirmed(attached, undefined, !retained);
     }, actionKey);
   };
   const input = (dataBase64: string) => {
@@ -327,10 +339,10 @@ export function useMobilePtySession({
       active: available && !list.isError && !paused && !gap && !lost && synced,
       freshPty: freshProtocol.current,
       theme: {
-        background: theme.colors.background,
-        foreground: theme.colors.text,
-        cursor: theme.colors.text,
-        selectionBackground: theme.colors.selected,
+        background: darkColors.background,
+        foreground: darkColors.text,
+        cursor: darkColors.text,
+        selectionBackground: darkColors.selected,
       },
     });
     if (!available || list.isError) {
@@ -340,7 +352,7 @@ export function useMobilePtySession({
     if (!security.unlocked) {
       fresh();
     }
-  }, [available, list.isError, paused, gap, lost, ready, security.unlocked, theme.mode, synced]);
+  }, [available, list.isError, paused, gap, lost, ready, security.unlocked, synced]);
   useEffect(() => {
     if (!available || list.isError || !lease || !ready || paused || gap || lost || !client) return;
     let live = true;
@@ -423,7 +435,7 @@ export function useMobilePtySession({
             ? ("no-identity" as const)
             : ("unsupported" as const),
     machineName: machine?.name,
-    terminals: !lease ? (list.data?.terminals ?? []) : [],
+    terminals: list.data?.terminals ?? [],
     listError: visibleListError,
     listLoading: !deviceOffline && list.isLoading,
     listReady,
@@ -472,7 +484,7 @@ export function useMobilePtySession({
         const result = await request("terminals.pty.desktop.status", {
           requestId: attempt.operationId,
         });
-        await confirmed(result, attempt.operationId);
+        await confirmed(result, attempt.operationId, true);
       }, "secondary-1");
     },
     closeTerminal: () => {

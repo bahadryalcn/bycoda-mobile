@@ -179,6 +179,7 @@ vi.mock("./session-transcript", () => ({
         )
       : null,
 }));
+vi.mock("@/ui/error-boundary", () => ({ SectionErrorBoundary: ({ children }: { children: unknown }) => children }));
 vi.mock("./session-parent-bar", () => ({ SessionParentBar: () => null }));
 vi.mock("./session-agents", () => ({
   SessionAgents: ({ children }: { children: (chip: null) => import("react").ReactNode }) =>
@@ -485,12 +486,15 @@ it("directory verification and transcript arrival preserve the mounted draft own
   await render();
   const input = container.querySelector("input")!;
   expect(state.mounted).toBe(1);
+  expect(container.querySelector("[data-find-open]")).toBeNull();
   state.pending = false;
   await render();
   expect(container.textContent).toContain("Loading session…");
+  expect(container.querySelector("[data-find-open]")).toBeNull();
   cache.setQueryData(["machine", "machine", "session", "session"], session());
   await render();
   expect(state.title).toBe("Private title");
+  expect(container.querySelector("[data-find-open]")).not.toBeNull();
   expect(container.querySelector("input")).toBe(input);
   expect(state.mounted).toBe(1);
   expect(container.querySelectorAll('[data-query="loading"]')).toHaveLength(0);

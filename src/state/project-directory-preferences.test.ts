@@ -45,4 +45,15 @@ describe("phone project directory preferences", () => {
     expect(store.getState().machines.a?.view).toBe("list");
     expect(store.getState().error).toBe(true);
   });
+  it("migrates the retired custom drag order to the computer order and drops the stored order", async () => {
+    const saved = { a: { view: "list", sort: "custom", order: { groups: ["g"], projects: { g: ["p"] }, flat: ["p"] } } };
+    expect(normalizeProjectDirectoryPreferences(saved.a)).not.toHaveProperty("order");
+    expect(normalizeProjectDirectoryPreferences(saved.a).sort).toBe("desktop");
+    const storage = { getItem: vi.fn().mockResolvedValue(JSON.stringify(saved)), setItem: vi.fn().mockResolvedValue(undefined) };
+    const store = createProjectDirectoryPreferenceStore(storage);
+    await store.getState().update("a", { fullPaths: true });
+    const written = JSON.parse(storage.setItem.mock.calls[0]![1]).a;
+    expect(written).toMatchObject({ view: "list", sort: "desktop", fullPaths: true });
+    expect(written).not.toHaveProperty("order");
+  });
 });

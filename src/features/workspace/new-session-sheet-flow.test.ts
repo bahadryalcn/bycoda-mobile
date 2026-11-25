@@ -33,6 +33,9 @@ vi.mock("@/state/project-directory-preferences", () => ({
 }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
+vi.mock("@/state/queries", () => ({ useHostMutation: () => ({ isPending: false, reset() {}, mutateAsync: vi.fn() }) }));
+vi.mock("./agent-option-icons", () => ({ PermissionField: () => null }));
+vi.mock("./project-folder-browser", () => ({ ProjectFolderBrowser: () => null }));
 vi.mock("@/ui/primitives", () => {
   const Action = ({ label, onPress, disabled, selected, fullWidth }: {
     label: string; onPress: () => void; disabled?: boolean; selected?: boolean; fullWidth?: boolean;
@@ -133,7 +136,7 @@ it("marks the project once and starts with the edited provider, account and mode
     provider: "claude", accountId: "work", model: "chosen-model",
   } });
   await act(async () => button("Start session")!.click());
-  expect(fixture.create).toHaveBeenCalledExactlyOnceWith(expect.any(Function), { settings: { reasoningEffort: "high" } });
+  expect(fixture.create).toHaveBeenCalledExactlyOnceWith(expect.any(Function), { settings: { reasoningEffort: "high" }, runtimeMode: "supervised" });
 });
 
 beforeEach(() => {

@@ -12,7 +12,7 @@ vi.mock("expo-constants",()=>({default:{expoConfig:{version:"1.0",android:{packa
 vi.mock("expo-application", () => ({ nativeApplicationVersion: "1.0", nativeBuildVersion: "1", applicationId: "com.bycoda.mobile" }));
 vi.mock("@/ui/theme",()=>({useMobileTheme:() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })}));vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string,values?:Record<string,string|number>)=>en.replace(/\{(p\d)\}/g,(_match,key:string)=>String(values?.[key]??""))}));
 vi.mock("@/ui/info-hint",()=>({HintSection:({title,children}:PropsWithChildren<{title:string}>)=>createElement("section",null,createElement("h2",null,title),children)}));
-vi.mock("@/ui/styles",()=>({uiStyles:{}}));vi.mock("@/ui/tokens",()=>({colors:{},space:{},lineHeight:{}}));vi.mock("@/ui/motion",()=>({enterItem:()=>undefined}));vi.mock("@/ui/icon-tile",()=>({IconTile:()=>null}));
+vi.mock("@/ui/styles",()=>({uiStyles:{}}));vi.mock("@/ui/tokens",()=>({colors:{},space:{},lineHeight:{},iconSize:{}}));vi.mock("@/ui/motion",()=>({enterItem:()=>undefined}));vi.mock("@/ui/icon-tile",()=>({IconTile:()=>null}));
 vi.mock("lucide-react-native/icons/star",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/external-link",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/share-2",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/globe",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/message-square",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/flag",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/smartphone",()=>({default:()=>null}));
 vi.mock("@/ui/primitives",()=>{
  const Wrapper=({children}:PropsWithChildren)=>createElement("div",null,children);
@@ -20,6 +20,8 @@ vi.mock("@/ui/primitives",()=>{
  Button:({label,onPress}:{label:string;onPress:()=>void})=>createElement("button",{onClick:onPress},label),
  NavigationRow:({label,detail,onPress,disabled}:{label:string;detail?:string;onPress:()=>void;disabled?:boolean})=>{fixture.handlers.set(label,onPress);return createElement("button",{onClick:onPress,disabled},label,detail?createElement("span",null,detail):null);},
  Notice:({message}:{message:string})=>createElement("p",{role:"alert"},message),
+ SettingIcon:()=>null,
+ ValueRow:({label,value}:{label:string;value?:string})=>createElement("p",null,`${label}: ${value ?? ""}`),
  MutationState:({mutation}:{mutation:{error?:Error}})=>mutation.error?createElement("p",{role:"alert"},mutation.error.message):null,
  };
 });
@@ -96,7 +98,7 @@ it("shows a public-page failure once, under the action group",async()=>{
  fixture.open.mockRejectedValueOnce(new Error("failed"));await render("engagement");await act(async()=>button("App page").click());await settle();
  const message=container.querySelector('[role="alert"]')!;expect(message).not.toBeNull();
  expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
- expect(button("App page").compareDocumentPosition(message)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();expect(button("Send feedback").compareDocumentPosition(message)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+ expect(button("App page").compareDocumentPosition(message)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();expect(button("Share the app").compareDocumentPosition(message)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 it("does not let another tap steal a pending share's cancellation feedback",async()=>{
  let finish!:(value:{action:string})=>void;fixture.share.mockImplementationOnce(()=>new Promise(done=>{finish=done;}));await render("engagement");

@@ -14,7 +14,7 @@ export function AssistantMessageRow({
   message: AssistantMessage;
   voiceLabel: string;
 }) {
-  const { colors } = useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const owner = message.role === "user";
   return (
     <View
@@ -25,7 +25,7 @@ export function AssistantMessageRow({
       }
     >
       <MessageText text={message.text} role={owner ? "user" : "assistant"} compactMedia />
-      {message.via === "voice" ? <Body muted>{voiceLabel}</Body> : null}
+      {message.via === "voice" ? <Body muted style={uiStyles.caption}>{voiceLabel}</Body> : null}
     </View>
   );
 }

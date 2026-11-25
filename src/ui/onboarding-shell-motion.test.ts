@@ -7,6 +7,8 @@ import { beforeEach, expect, it, vi } from "vitest";
 type LayoutEvent = { nativeEvent: { layout: { height: number } } };
 const state = vi.hoisted(() => ({
   reduced: false,
+  fontScale: 1,
+  noticeClearance: 0,
   entering: [] as unknown[],
   scrollTo: vi.fn(),
   freeLayout: undefined as ((event: LayoutEvent) => void) | undefined,
@@ -16,10 +18,10 @@ vi.mock("react-native", () => {
     pointerEvents?: string;
     onLayout?: (event: LayoutEvent) => void;
   }>) => {
-    if (pointerEvents === "none") state.freeLayout = onLayout;
+    if (pointerEvents === "box-none" && onLayout) state.freeLayout = onLayout;
     return h("div", null, children);
   };
-  return { StyleSheet: { absoluteFill: {} }, View: box, ScrollView: box, useWindowDimensions: () => ({ width: 390, height: 844, fontScale: 1 }) };
+  return { StyleSheet: { absoluteFill: {} }, View: box, ScrollView: box, useWindowDimensions: () => ({ width: 390, height: 844, fontScale: state.fontScale }) };
 });
 vi.mock("react-native-reanimated", () => {
   const animation = { duration: () => animation, delay: () => animation, reduceMotion: () => animation, easing: () => animation };
@@ -45,6 +47,7 @@ vi.mock("./onboarding-pager", () => ({
   ),
 }));
 vi.mock("./dot-field", () => ({ DotField: () => null }));
+vi.mock("./provider", () => ({ useActionableToastClearance: () => state.noticeClearance }));
 vi.mock("./primitives", () => ({
   Heading: ({ children }: PropsWithChildren) => h("h2", null, children),
   Body: ({ children }: PropsWithChildren) => h("p", null, children),
@@ -52,7 +55,7 @@ vi.mock("./primitives", () => ({
 vi.mock("./theme", () => ({ useMobileTheme: () => ({ colors: { background: "#fff" } }) }));
 
 const page = [{ key: "a", art: "guideWalk", title: "A", body: "a" }];
-beforeEach(() => { state.entering = []; vi.resetModules(); });
+beforeEach(() => { state.entering = []; state.fontScale = 1; state.noticeClearance = 0; vi.resetModules(); });
 
 // Android "Remove animations" left entering views at opacity 0: no sign-in panel, a blank consent screen.
 it("mounts views without layout animations when the system reduces motion", async () => {
@@ -79,6 +82,15 @@ it("keeps the measured top and action controls outside entering animations", asy
   expect(state.entering.filter(Boolean)).toHaveLength(1);
   expect([...container.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["Back", "Continue"]);
   expect(container.querySelector("section button")).toBeNull();
+});
+
+it("gives a persistent notice and the sign-in action room at accessibility text sizes", async () => {
+  state.fontScale = 1.5;
+  state.noticeClearance = 160;
+  const { OnboardingShell } = await import("./onboarding-shell");
+  const html = renderToStaticMarkup(h(OnboardingShell, { pages: page } as never, h("button", null, "Continue")));
+  expect(html).toContain("Continue");
+  expect(html).not.toContain("<section");
 });
 
 it("moves the native pager with the buttons and stays inside the available pages", async () => {

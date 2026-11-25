@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useWindowDimensions, View } from "react-native";
+import ShieldAlert from "lucide-react-native/icons/shield-alert";
 import { carryCrossDelegation } from "../../../../src/shared/model/host-contracts/delegation";
 import { useFormDraft, sameFormValue } from "@/state/form-draft";
 import { captureSessionAuthority } from "@/domain/session-authority";
@@ -9,8 +11,11 @@ import { RemoteHostError } from "@/remote/host-error";
 import { Notice, QueryState } from "@/ui/primitives";
 import { ChatToolbarAction } from "@/ui/chat-controls";
 import { useCopy } from "@/ui/copy";
+import { useMobileTheme } from "@/ui/theme";
+import { space } from "@/ui/tokens";
 import {
   catalogProviders,
+  activeSessionModel,
   modelDefaults,
   sessionCatalog,
   sessionModel,
@@ -22,22 +27,39 @@ import { settingsSummary } from "./model-picker-model";
 import { settingLabels } from "./setting-labels";
 import { choiceKey, providerChoices, selectedChoice } from "./provider-choices";
 import type { SessionCommand } from "./session-types";
-import type { HostSession } from "./wire";
+import type { HostSession, RuntimeMode } from "./wire";
+import { ComposerAccessField, accessModeLabel } from "./composer-access";
+import { composerAccessAvailable, unavailableAccessModes } from "./composer-access-model";
+import { ComposerContextSection } from "./composer-context-meter";
+import type { ComposerContextReading } from "./composer-context";
+import { useModelSheetRequest } from "./composer-model-sheet";
 
 /**
- * Composer toolbar chip: provider mark, model and effort of the session. Tapping it opens the model
- * picker sheet; choices stay local until explicitly saved while the agent is idle.
+ * Composer toolbar chip: provider mark, model and effort of the session, always visible in the
+ * toolbar. A short measured slot shows only the mark; the spoken label stays complete. Full access
+ * adds a warning glyph. Tapping it opens the one "Model and access" sheet (agent, account, effort,
+ * model, access and the context reading); choices stay in its draft until Save while the agent is idle.
  */
 export function ComposerModelChip({
+  machineId,
   session,
   blocked,
+  iconOnly = false,
+  context,
   onCommand,
 }: {
+  machineId: string;
   session: HostSession;
   blocked: boolean;
+  /** The measured toolbar slot is too short for the label. */
+  iconOnly?: boolean;
+  /** The context reading and Compact now, shown inside the sheet. */
+  context?: { reading: ComposerContextReading; compactDisabled: boolean; onCompact?: () => void };
   onCommand: SessionCommand;
 }) {
   const copy = useCopy();
+  const { colors } = useMobileTheme();
+  const { fontScale } = useWindowDimensions();
   const machine = useActiveMachine();
   const catalog = useModelCatalog(session.projectId);
   const configure = useAsyncAction();
@@ -47,6 +69,7 @@ export function ComposerModelChip({
     accountId: value.session.providerAccountId,
     model: value.session.model,
     settings: value.session.modelSettings,
+    access: value.session.runtimeMode as RuntimeMode,
   });
   const form = useFormDraft(() => draftOf(session));
   const [reviewed, setReviewed] = useState(session);
@@ -55,12 +78,13 @@ export function ComposerModelChip({
     accountId: providerAccountId,
     model,
     settings: modelSettings,
+    access,
   } = form.values;
+  // The draft includes the access mode, so a mode changed elsewhere is a conflict too.
   const conflict =
     open &&
     (!sameFormValue(draftOf(session), draftOf(reviewed)) ||
-      session.authorityGeneration !== reviewed.authorityGeneration ||
-      session.session.runtimeMode !== reviewed.session.runtimeMode);
+      session.authorityGeneration !== reviewed.authorityGeneration);
   const failure = configure.error;
   // A save whose reply was lost may have landed: hold it until the owner rechecks the current model.
   const uncertain =
@@ -116,7 +140,8 @@ export function ComposerModelChip({
           : {}),
         model,
         modelSettings: selected ? sessionSettings(selected, modelSettings) : modelSettings,
-        runtimeMode: reviewed.session.runtimeMode,
+        // Harnesses without an access model keep the reviewed mode.
+        runtimeMode: reviewed.session.harness === "fx" ? reviewed.session.runtimeMode : access,
       });
       return true;
     });
@@ -125,30 +150,76 @@ export function ComposerModelChip({
       setOpen(false);
     }
   };
+  const openSheet = () => {
+    configure.reset();
+    form.reset(draftOf(session));
+    setReviewed(session);
+    setOpen(true);
+  };
+  // Session options, session settings and the context ring open this same sheet and draft.
+  const requested = useModelSheetRequest((state) => state.target);
+  useEffect(() => {
+    if (requested && useModelSheetRequest.getState().consume(machineId, session.session.id)) openSheet();
+    // The request is the only trigger; openSheet reads the current session when it fires.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requested, machineId, session.session.id]);
   const models = available.models[harness] ?? [];
-  const current = (available.models[session.session.harness] ?? []).find(
-    (entry) => entry.id === session.session.model || entry.nativeId === session.session.model,
-  );
-  const name = current?.name ?? session.session.model.replace(/^[^:]+:/, "");
-  const summary = settingsSummary(current, session.session.modelSettings, settingLabels(copy));
+  const { name, model: summaryModel } = activeSessionModel(session.session, available);
+  const summary = settingsSummary(summaryModel, session.session.modelSettings, settingLabels(copy));
   const shown = summary ? `${name} · ${summary}` : name;
+  const accessShown = composerAccessAvailable(session);
+  const fullAccess = accessShown && session.session.runtimeMode === "full-access";
+  const spoken = [
+    shown,
+    accessShown ? `${copy("Erişim", "Access")}: ${accessModeLabel(session.session.runtimeMode as RuntimeMode, copy)}` : "",
+  ].filter(Boolean).join(". ");
+  const title = accessShown ? copy("Model ve erişim", "Model and access") : copy("Model", "Model");
+  const sheetLocked = blocked || running || configure.isPending;
   return (
     <>
       <ChatToolbarAction
-        label={name}
-        multiline
-        accessibilityLabel={copy("Model ve akıl yürütme", "Model and reasoning") + ": " + shown}
+        label={fontScale >= 1.35 ? name : shown}
+        hideLabel={iconOnly}
+        reserveTouchTarget
+        accessibilityLabel={`${title}: ${spoken}`}
         disabled={blocked}
-        onPress={() => {
-          configure.reset();
-          form.reset(draftOf(session));
-          setReviewed(session);
-          setOpen(true);
-        }}
+        onPress={openSheet}
       >
-        <ComposerModelMark session={session} />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space.xxs }}>
+          <ComposerModelMark session={session} />
+          {fullAccess ? <ShieldAlert size={14} strokeWidth={2.2} color={colors.warning} /> : null}
+        </View>
       </ChatToolbarAction>
       <ModelPicker
+        title={title}
+        extra={
+          accessShown || context ? (
+            <>
+              {accessShown ? (
+                <ComposerAccessField
+                  value={access}
+                  saved={session.session.runtimeMode as RuntimeMode}
+                  unavailable={unavailableAccessModes(catalog.data, harness)}
+                  disabled={sheetLocked || unavailableAccount}
+                  onChange={(mode) => apply({ ...form.values, access: mode })}
+                />
+              ) : null}
+              {context ? (
+                <ComposerContextSection
+                  reading={context.reading}
+                  compactDisabled={context.compactDisabled || form.dirty || configure.isPending}
+                  compactReason={form.dirty
+                    ? copy("Önce seçimlerini kaydet veya bırak.", "Save or discard your choices first.")
+                    : copy("Geçerli işlemin bitmesini bekleyin", "Wait for the current operation to finish")}
+                  onCompact={context.onCompact ? () => {
+                    setOpen(false);
+                    context.onCompact?.();
+                  } : undefined}
+                />
+              ) : null}
+            </>
+          ) : undefined
+        }
         visible={open}
         onClose={() => setOpen(false)}
         dirty={form.dirty}
@@ -168,6 +239,7 @@ export function ComposerModelChip({
               accountId: next.accountId,
               model,
               settings: modelSettings,
+              access,
             });
           const first = sessionModel(available, next.provider, "");
           apply({
@@ -175,6 +247,7 @@ export function ComposerModelChip({
             accountId: next.accountId,
             model: first?.id ?? "",
             settings: carryCrossDelegation(modelSettings, modelDefaults(first)),
+            access,
           });
         }}
         models={models}
@@ -238,7 +311,7 @@ export function ComposerModelChip({
         }
         onChange={(next, settings) => {
           if (!unavailableAccount)
-            apply({ provider: harness, accountId: providerAccountId, model: next, settings });
+            apply({ provider: harness, accountId: providerAccountId, model: next, settings, access });
         }}
       />
     </>

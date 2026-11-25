@@ -18,7 +18,7 @@ import {
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
 import { useInfoHint } from "@/ui/info-hint";
-import { Body, Button, FormActions, ErrorText, Notice, Row, SelectField, Sheet } from "@/ui/primitives";
+import { Body, Button, FormActions, ErrorText, Notice, Row, ScopeLine, SelectField, Sheet } from "@/ui/primitives";
 import type { SessionScope } from "../workspace/session-types";
 import {
   readSshCatalog,
@@ -188,7 +188,7 @@ export function SshWorkspace({
       onClose={onClose}
     >
       <Row>
-        <Body>{machine?.name ?? opening.machineId}</Body>
+        <ScopeLine scope={{ computer: machine?.name ?? opening.machineId }} />
         {initialUnavailable ? null : info.button}
       </Row>
       {initialUnavailable ? null : info.panel}

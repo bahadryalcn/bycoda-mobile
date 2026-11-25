@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { randomUUID } from "expo-crypto";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { reviewedOperationStore } from "@/state/reviewed-operation-store";
@@ -38,10 +38,16 @@ import { FeatureUnavailable } from "./unavailable-state";
 export function ProjectOrganization({
   scope,
   projectId,
+  initialEditor,
   onClose,
 }: {
   scope: SessionScope;
   projectId: string;
+  /**
+   * Opens one editor directly (row options: rename, move to group, move to folder). Closing or
+   * applying that editor closes the whole organization surface.
+   */
+  initialEditor?: Editor;
   onClose: () => void;
 }) {
   const copy = useCopy();
@@ -158,6 +164,10 @@ export function ProjectOrganization({
           : (folder?.name ?? "");
     defaults.groupId = visible.groupId ?? "";
     defaults.folderId = folder?.id ?? "";
+    if (value.kind === "sessionMove" && visible.sessions.some((row) => row.id === opening.sessionId)) {
+      defaults.sessionId = opening.sessionId;
+      defaults.folderId = visible.folders.find((row) => row.sessionIds.includes(opening.sessionId))?.id ?? "";
+    }
     defaults.ids =
       value.kind === "folderSessions"
         ? (folder?.sessionIds ?? [])
@@ -174,6 +184,17 @@ export function ProjectOrganization({
     form.reset(defaults);
     setEditor(value);
   };
+  // Row options open one editor directly; it opens once, when the reviewed snapshot is ready.
+  const direct = useRef<"waiting" | "open" | "done">(initialEditor ? "waiting" : "done");
+  useEffect(() => {
+    if (direct.current === "waiting" && initialEditor && !disabled && visible) {
+      direct.current = "open";
+      open(initialEditor);
+    } else if (direct.current === "open" && !editor && !attempt && !busy) {
+      direct.current = "done";
+      onClose();
+    }
+  });
   const apply = (change: Record<string, unknown>) => {
     if (disabled || !visible) return;
     const reviewed = visible;
@@ -248,6 +269,12 @@ export function ProjectOrganization({
                 <FeatureUnavailable message={copy(
                   "Organizasyonu yönetmek için güncel bycoda masaüstü uygulamasını bu projede açık tutun.",
                   "Keep the updated bycoda desktop app open in this project to manage organization.",
+                )} />
+              ) : /belongs to another project/i.test(query.error?.message ?? "") ? (
+                // The computer answers in English when its window shows another project; say what to do instead.
+                <FeatureUnavailable message={copy(
+                  "Bu proje bilgisayardaki bycoda masaüstünde açık değil. Organizasyonu yönetmek için masaüstünde bu projeyi aç.",
+                  "This project is not open in the bycoda desktop app. Open it on your computer to manage organization.",
                 )} />
               ) : (
                 <QueryState query={query} />

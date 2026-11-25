@@ -12,10 +12,10 @@ import { GitManagementReview, type GitManagementReviewContent } from "./git-mana
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { confirmAction } from "@/ui/confirm";
-import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import Pencil from "lucide-react-native/icons/pencil";
 import Trash2 from "lucide-react-native/icons/trash-2";
-import { ActionMenu, Badge, Body, Button, ErrorText, IconButton, MutationState, NavigationRow, Notice, QueryState, ScreenList, SearchField, SegmentedControl, Sheet } from "@/ui/primitives";
+import { ActionMenu, Body, Button, ErrorText, MutationState, NavigationRow, Notice, QueryState, ScreenList, SearchField, SegmentedControl, Sheet, StatusText } from "@/ui/primitives";
+import { useProjectSubpage } from "./subpage-chrome";
 import { space } from "@/ui/tokens";
 import type { GitScope } from "./git-types";
 import { useGitBranches, useGitIndex } from "./git-queries";
@@ -28,9 +28,11 @@ type Tab = "branches" | "tags" | "remotes" | "operations" | "pr";
 type PullRequest = { number: number; title: string; url: string; state: string } | null;
 type Editor = { opening: GitManagementDraft; value: GitManagementDraft; branch: string | null; head: string | null; snapshot: GitManagementSnapshot; repository?: string; touched: boolean };
 
-export function GitManagement({ scope, initialTab = "branches", onClose, onBusyChange, registerExit }: {
+type GitManagementProps = {
   scope: GitScope; initialTab?: Tab; onClose: () => void; onBusyChange: (busy: boolean) => void; registerExit: (exit: (() => void) | null) => void;
-}) {
+};
+
+export function GitManagement({ scope, initialTab = "branches", onClose, onBusyChange, registerExit }: GitManagementProps) {
   const { colors } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale();
@@ -109,6 +111,7 @@ export function GitManagement({ scope, initialTab = "branches", onClose, onBusyC
     onClose();
   }, [editor, onClose, copy]);
   useEffect(() => { registerExit(close); return () => registerExit(null); }, [close, registerExit]);
+  useProjectSubpage(copy("Git yönetimi", "Git management"), close);
   const focused = useIsFocused();
   useBackHandler(focused, close);
   let invalid: GitManagementIssue | undefined;
@@ -163,18 +166,23 @@ export function GitManagement({ scope, initialTab = "branches", onClose, onBusyC
   const query = tab === "tags" ? tags : tab === "remotes" ? remotes : undefined;
   return <>
     <ScreenList<GitManagementRow> data={rows} keyExtractor={(row) => `${row.kind}:${row.remote ?? ""}:${row.name}`} query={query}
+      scope={{ computer: machineName || undefined, project: openingScope.root?.split(/[\\/]/).filter(Boolean).at(-1) }}
       header={<View style={{ gap: space.sm }}>
-        <IconButton label={copy("Geri", "Back")} disabled={busy} onPress={close}><ArrowLeft size={20} color={colors.muted} /></IconButton>
-        <Body mono>{openingScope.root}</Body><Body>{machineName} · {index.data?.branch ?? "HEAD"}</Body>
+        <Body mono muted selectable>{index.data?.branch ?? "HEAD"}</Body>
         {!supported && <FeatureUnavailable message={copy("Gelişmiş Git işlemleri için bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer for advanced Git actions.")} />}
         <SegmentedControl hideLabel label={copy("Git yönetimi", "Git management")} value={tab} onChange={setTab} options={[
           { value: "branches", label: copy("Dallar", "Branches") }, { value: "tags", label: copy("Etiketler", "Tags") }, { value: "remotes", label: copy("Uzak depolar", "Remotes") },
           { value: "operations", label: copy("Geçmiş işlemleri", "History actions") }, { value: "pr", label: "PR" },
         ]} />
-        <QueryState query={index} /><QueryState query={snapshot} /><MutationState mutation={mutation} /><ErrorText error={error} />
-        {uncertain && <Notice tone="warning" message={copy("İşlem sonucu belirsiz. Yeniden işlem başlatmadan bilgisayardaki depo durumunu inceleyin.", "The result is uncertain. Review the repository on the computer before starting another action.")} />}
-        {query && <QueryState query={query} />}
-        {tab === "branches" && <QueryState query={branches} />}
+        {/* Header sections share one failure owner (the list scope): the first failing read reports
+            compactly, later ones in one line. One feedback for the last action: an uncertain result
+            replaces its own error, and a preflight error shows only when the action has none. */}
+        <QueryState query={index} size="compact" /><QueryState query={snapshot} size="compact" />
+        {uncertain
+          ? <Notice tone="warning" message={copy("İşlem sonucu belirsiz. Yeniden işlem başlatmadan bilgisayardaki depo durumunu inceleyin.", "The result is uncertain. Review the repository on the computer before starting another action.")} />
+          : <><MutationState mutation={mutation} />{mutation.error ? null : <ErrorText error={error} />}</>}
+        {query && <QueryState query={query} size="compact" />}
+        {tab === "branches" && <QueryState query={branches} size="compact" />}
         {["branches", "tags", "remotes"].includes(tab) && <SearchField label={copy("Ara", "Search")} value={search} onChangeText={setSearch} />}
         {tab === "tags" && <Button tone="quiet" label={labels.createTag} disabled={unavailable} onPress={() => open("createTag")} />}
         {tab === "remotes" && <Button tone="quiet" label={labels.addRemote} disabled={unavailable} onPress={() => open("addRemote")} />}
@@ -194,7 +202,7 @@ export function GitManagement({ scope, initialTab = "branches", onClose, onBusyC
           </View>
         </>}
         {tab === "pr" && <>
-          <QueryState query={pr} /><QueryState query={remotes} /><QueryState query={destination} />
+          <QueryState query={pr} size="compact" /><QueryState query={remotes} size="compact" /><QueryState query={destination} size="compact" />
           {destination.data && <Body mono>{destination.data}</Body>}
           {pr.data && <Body>{`#${pr.data.number} · ${pr.data.title}\n${pr.data.state}\n${pr.data.url}`}</Body>}
           {pr.isSuccess && !pr.data && <Body muted>{copy("Bu dal için pull request yok.", "No pull request for this branch.")}</Body>}
@@ -203,12 +211,12 @@ export function GitManagement({ scope, initialTab = "branches", onClose, onBusyC
       </View>}
       renderItem={({ item }) => <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
         <View style={{ flex: 1, minWidth: 0 }}><NavigationRow variant="plain" label={`${item.remote ? `${item.remote}/` : ""}${item.name}`} detail={item.url ? safeRemoteUrl(item.url) : undefined}
-        trailing={item.current ? <Badge label={copy("Geçerli", "Current")} tone="success" /> : undefined}
+        trailing={item.current ? <StatusText label={copy("Geçerli", "Current")} /> : undefined}
         onPress={() => open(item.kind === "remote" ? "removeRemote" : item.kind === "tag" ? "deleteTag" : item.remote ? "deleteRemoteBranch" : "renameBranch", item)}
         /></View>
         <ActionMenu label={copy("Kayıt işlemleri", "Entry actions")} actions={
           (item.kind === "remote" ? ["removeRemote"] : item.kind === "tag" ? ["deleteTag"] : item.remote ? ["deleteRemoteBranch"] : ["renameBranch", "deleteBranch"])
-            .map((action) => ({ key: action, label: labels[action as GitManagementAction], icon: action === "renameBranch" ? <Pencil size={18} color={colors.muted} /> : <Trash2 size={18} color={colors.danger} />, destructive: action !== "renameBranch", disabled: unavailable || (item.current && action === "deleteBranch"), onPress: () => open(action as GitManagementAction, item) }))} />
+            .map((action) => ({ key: action, label: labels[action as GitManagementAction], icon: action === "renameBranch" ? <Pencil size={18} color={colors.muted} /> : <Trash2 size={18} color={colors.danger} />, destructive: action !== "renameBranch", reviewed: true, disabled: unavailable || (item.current && action === "deleteBranch"), onPress: () => open(action as GitManagementAction, item) }))} />
       </View>} />
     {editor && <Sheet visible size="form" title={labels[editor.value.action]} dirty={JSON.stringify(editor.opening) !== JSON.stringify(editor.value)} dismissible={!busy} onClose={() => { if (mounted.current && !occupied.current && editorNow.current === editor) { cancelReview(); setEditor(null); } }}
       discardTitle={copy("Git taslağını bırak?", "Leave Git draft?")}

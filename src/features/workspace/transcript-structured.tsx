@@ -1,7 +1,7 @@
 import { useMobileTheme } from "@/ui/theme";
 import { providerName } from "./provider-choices";
 import { View } from "react-native";
-import { Badge, Body, Row } from "@/ui/primitives";
+import { Badge, Body, Row, StatusText } from "@/ui/primitives";
 import { MessageCode } from "@/ui/message-code";
 import { MessageText } from "@/ui/message-text";
 import type { MessageContext } from "@/ui/media-policy";
@@ -26,6 +26,9 @@ export function TranscriptStructured({
   const copy = useCopy();
   const list = block.taskList;
   const done = list?.items.filter((item) => item.status === "completed").length ?? 0;
+  const exitCode = block.shell?.exitCode;
+  const exitLabel = typeof exitCode === "number" ? copy("Çıkış kodu: {p0}", "Exit code: {p0}", { p0: exitCode }) : undefined;
+  const shellStatus = block.shell?.running ? copy("Çalışıyor", "Running") : exitLabel;
   if (
     !list &&
     !block.questionAnswers?.length &&
@@ -202,18 +205,15 @@ export function TranscriptStructured({
       ) : null}
       {block.shell ? (
         <>
-          <Row>
-            <Badge
-              label={
-                block.shell.running
-                  ? copy("Çalışıyor", "Running")
-                  : block.shell.timedOut
-                    ? copy("Süre doldu", "Timed out")
-                    : `exit ${block.shell.exitCode ?? "—"}`
-              }
-              tone={block.shell.timedOut || block.shell.exitCode ? "danger" : "default"}
-            />
-          </Row>
+          {block.shell.timedOut ? (
+            <Row><Badge label={copy("Süre doldu", "Timed out")} tone="danger" /></Row>
+          ) : shellStatus ? (
+            <Row>
+              {block.shell.running || !exitCode
+                ? <StatusText label={shellStatus} tone={block.shell.running ? "live" : "default"} />
+                : <Badge label={shellStatus} tone="danger" />}
+            </Row>
+          ) : null}
           <MessageCode code={block.shell.command} language="shell" compact
             readerTitle={copy("Komut", "Command")} copyLabel={copy("Komutu kopyala", "Copy command")}
             allowPreview={false} context={context} />
@@ -242,7 +242,7 @@ export function TranscriptStructured({
           <Body>
             {block.handoff.from} → {block.handoff.to}
           </Body>
-          <Badge
+          <StatusText
             label={
               block.handoff.status === "ready"
                 ? copy("Hazır", "Ready")
@@ -254,7 +254,7 @@ export function TranscriptStructured({
       {block.orchestration ? (
         <View style={{ gap: space.sm }}>
           <Body style={uiStyles.label}>{block.orchestration.title}</Body>
-          <Badge label={block.orchestration.status} />
+          <StatusText label={block.orchestration.status} />
           <MessageText text={block.orchestration.summary} context={context} compactMedia />
           {block.orchestration.error ? (
             <Body style={{ color: colors.danger }}>{block.orchestration.error}</Body>

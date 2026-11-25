@@ -2,7 +2,7 @@ import { isClerkAPIResponseError, useSSO } from "@clerk/expo";
 import { useSignInWithApple } from "@clerk/expo/apple";
 import { useSignIn, useSignUp } from "@clerk/expo/legacy";
 import { useRef, useState } from "react";
-import { Body, Button, Input, Notice, Stack } from "@/ui/primitives";
+import { Body, Button, HeaderBackButton, Input, Notice, Row, Stack } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { CodeField } from "@/ui/code-field";
 import { useMobileTheme } from "@/ui/theme";
@@ -104,7 +104,19 @@ export default function ClerkSignIn({ onStepChange }: { onStepChange?: (step: St
   if (step.name === "code")
     return (
       <Stack>
-        <Body muted>{copy("{p0} adresine bir kod gönderdik.", "We sent a code to {p0}.", { p0: step.email })}</Body>
+        {/* The shared back chevron leads the step, as on every other pushed step; the shell has no header here. */}
+        <Row style={{ flexWrap: "nowrap" }}>
+          <HeaderBackButton
+            label={copy("Geri", "Back")}
+            disabled={!!busy}
+            onPress={() => {
+              setStep({ name: "choose" });
+              setCode("");
+              setError(null);
+            }}
+          />
+          <Body muted style={{ flex: 1 }}>{copy("{p0} adresine bir kod gönderdik.", "We sent a code to {p0}.", { p0: step.email })}</Body>
+        </Row>
         <CodeField
           label={copy("Doğrulama kodu", "Verification code")}
           value={code}
@@ -119,16 +131,6 @@ export default function ClerkSignIn({ onStepChange }: { onStepChange?: (step: St
           busy={busy === "verify"}
           disabled={code.length < CODE_LENGTH || !!busy}
           onPress={() => void verify(step)}
-        />
-        <Button
-          label={copy("Geri", "Back")}
-          tone="quiet"
-          disabled={!!busy}
-          onPress={() => {
-            setStep({ name: "choose" });
-            setCode("");
-            setError(null);
-          }}
         />
       </Stack>
     );

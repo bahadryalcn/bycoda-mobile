@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { useHostClient } from "@/state/queries";
 import { useLocalDraft } from "@/features/workspace/use-local-draft";
+import { RecordAccessUnavailable } from "@/features/workspace/unavailable-state";
 import { Body, Card, ErrorText, Field, FormActions, Sheet, Stack } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { space } from "@/ui/tokens";
@@ -27,7 +28,9 @@ export function SideChatSheet({ visible, sessionId, onClose }: { visible: boolea
   const client = useHostClient();
   return (
     <Sheet visible={visible} title={copy("Yan soru", "Side question")} size="full" onClose={onClose}>
-      {visible && client ? <SideChatBody key={sideChatKey(client.machine.id, sessionId)} client={client} sessionId={sessionId} /> : null}
+      {visible ? (client
+        ? <SideChatBody key={sideChatKey(client.machine.id, sessionId)} client={client} sessionId={sessionId} />
+        : <RecordAccessUnavailable />) : null}
     </Sheet>
   );
 }
@@ -76,7 +79,7 @@ function SideChatBody({ client, sessionId }: { client: HostClient; sessionId: st
     <>
       <Stack style={{ gap: space.md }}>
         <Body muted>
-          {copy("Oturumu etkilemeden, yalnızca okuma amaçlı sorulur.", "Asked read-only; the session is not affected.")}
+          {copy("Bu soru yalnızca burada görünür.", "Asked read-only; the session is not affected.")}
         </Body>
         {messages.map((message, index) => (
           <Card key={message.id}>
@@ -90,7 +93,7 @@ function SideChatBody({ client, sessionId }: { client: HostClient; sessionId: st
           </Card>
         ))}
         <Field
-          label={copy("Sorun", "Your question")}
+          label={copy("Sorunuzu yazın", "Your question")}
           value={draft}
           onChangeText={setDraft}
           multiline

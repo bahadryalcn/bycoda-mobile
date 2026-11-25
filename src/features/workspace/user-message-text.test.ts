@@ -4,6 +4,8 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children) }));
+// The in-place selection layer is native-only; here the paragraph renders as is.
+vi.mock("@/ui/message-selection", () => ({ SelectableProse: ({ children }: PropsWithChildren) => children }));
 // The mock lays out one line per "\n"-separated segment, standing in for native text layout.
 vi.mock("@/ui/primitives", () => ({
   Body: ({

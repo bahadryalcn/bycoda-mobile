@@ -32,7 +32,7 @@ export function WidgetSettings() {
   return (
     <>
       <SegmentedRow
-        label={copy("Kullanım limitleri widget'ı", "Usage limits widget")}
+        label={copy("Kullanım limitleri", "Usage limits")}
         value={usageWindows}
         disabled={!usageHydrated}
         options={usageWindowOptions(copy)}
@@ -41,7 +41,7 @@ export function WidgetSettings() {
         }}
       />
       <ToggleField
-        label={copy("Oturum başlıklarını widget'larda göster", "Show session titles on widgets")}
+        label={copy("Oturum başlıklarını göster", "Show session titles")}
         help={copy(
           "Widget'lar uygulama kilidinin dışında görünür. Kapalıyken yalnızca proje adları görünür.",
           "Widgets are visible without the app lock. When off, only project names appear.",
@@ -65,14 +65,16 @@ export function WidgetSettings() {
           void setShowTitles(value);
         }}
       />
+      {/* Depends on titles: disabled (not hidden) while titles are off, so the dependency is visible. */}
       <ToggleField
-        label={copy("Soru metnini widget'larda göster", "Show question text on widgets")}
+        label={copy("Soru metnini göster", "Show question text")}
         help={copy(
-          "Başlıklar da açıkken bekleyen sorunun metni ana ekranda görünür.",
-          "When titles are also enabled, pending question text appears on your home screen.",
+          "Bekleyen sorunun metni ana ekranda görünür. Önce oturum başlıklarını aç.",
+          "Pending question text appears on your home screen. Turn on session titles first.",
         )}
-        value={showQuestionText}
-        disabled={!hydrated || !!pending}
+        detail={!showTitles ? copy("Oturum başlıkları kapalıyken kullanılmaz", "Not used while session titles are off") : undefined}
+        value={showQuestionText && showTitles}
+        disabled={!hydrated || !!pending || !showTitles}
         onChange={(value) => {
           void setShowQuestionText(value);
         }}

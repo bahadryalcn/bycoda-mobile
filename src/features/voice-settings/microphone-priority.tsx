@@ -1,18 +1,30 @@
 import { useEffect, useState } from "react";
-import { AppState, View } from "react-native";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { Sortable } from "panelui-native/components/sortable";
+import { AppState } from "react-native";
 import { nativeVoiceCompanion } from "../../../modules/bycoda-voice-companion";
 import { useCopy } from "@/ui/copy";
-import { Body, NavigationGroup, SectionHeader, Stack, ValueRow } from "@/ui/primitives";
-import { metrics, space } from "@/ui/tokens";
-import { connectedMicKinds, micKind, readMicInputs, reorderConnectedMics } from "./mic-input";
+import { SelectField, ValueRow } from "@/ui/primitives";
+import { connectedMicKinds, micKind, readMicInputs, reorderConnectedMics, type MicInput } from "./mic-input";
 import { voicePreferences, type MicKind } from "./voice-preferences";
 
+/**
+ * A device name the owner can read. iOS reports a port's localized name on a phone, but a simulator
+ * or an accessory can report an identifier such as "MicrophoneBuiltIn"; that is never shown.
+ */
+export function readableMicName(name: string | undefined): string | undefined {
+  const value = name?.trim();
+  if (!value) return undefined;
+  return /^[A-Za-z]+$/.test(value) && /[a-z][A-Z]/.test(value) ? undefined : value;
+}
+
+/**
+ * Settings → Voice assistant → Microphone → Input device. Phones change microphones as headsets come
+ * and go, so the owner picks which connected kind is used first; the rest keep their order. With one
+ * input this is a value, not a control. There is no drag reordering.
+ */
 export function MicrophonePriority({ order, disabled }: { order: MicKind[]; disabled: boolean }) {
   const copy = useCopy();
   const [inputs, setInputs] = useState(() => readMicInputs(nativeVoiceCompanion()));
-  // Refresh the inventory while the sheet is in the foreground, without opening the microphone.
+  // Refresh the inventory while the page is in the foreground, without opening the microphone.
   useEffect(() => {
     const native = nativeVoiceCompanion();
     const refresh = () => {
@@ -33,53 +45,29 @@ export function MicrophonePriority({ order, disabled }: { order: MicKind[]; disa
     carplay: copy("CarPlay", "CarPlay"),
   };
   const visible = connectedMicKinds(order, inputs);
-  const label = (kind: MicKind) => inputs.find((input) => micKind(input) === kind)?.name || names[kind];
-  const move = (kind: MicKind, to: number) => {
-    if (disabled) return;
-    const connected = readMicInputs(nativeVoiceCompanion());
-    void voicePreferences.getState().update((current) => {
-      const available = connectedMicKinds(current.micOrder, connected);
-      if (available.length !== visible.length || available.some((item, index) => item !== visible[index])) return {};
-      return { micOrder: reorderConnectedMics(current.micOrder, available, kind, to) };
-    }).catch(() => {});
-  };
+  const device = (kind: MicKind) => readableMicName(inputs.find((input: MicInput) => micKind(input) === kind)?.name);
+  const label = copy("Giriş aygıtı", "Input device");
+  if (visible.length < 2) {
+    const kind = visible[0];
+    return <ValueRow label={label} value={kind ? device(kind) ?? names[kind] : copy("Sistem varsayılanı", "System default")} />;
+  }
   return (
-    <Stack>
-      <SectionHeader title={visible.length > 1
-        ? copy("Mikrofon önceliği", "Microphone priority") : copy("Mikrofon", "Microphone")} />
-      {visible.length > 1 ? (
-        <GestureHandlerRootView style={{ flexGrow: 0 }}>
-          <Sortable value={visible} disabled={disabled} gap={space.xs} onReorder={(_, { id, to }) => {
-            const kind = visible.find((entry) => entry === id);
-            if (kind) move(kind, to);
-          }}>
-            {visible.map((kind, index) => (
-              <Sortable.Item key={kind} id={kind}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <ValueRow label={label(kind)} value={names[kind] === label(kind) ? undefined : names[kind]} />
-                  </View>
-                  <Sortable.Handle
-                    accessibilityLabel={label(kind)}
-                    accessibilityValue={{ min: 1, max: visible.length, now: index + 1 }}
-                    accessibilityActions={[
-                      ...(index > 0 ? [{ name: "decrement" }, { name: "moveUp", label: copy("Yukarı taşı", "Move up") }] : []),
-                      ...(index < visible.length - 1 ? [{ name: "increment" }, { name: "moveDown", label: copy("Aşağı taşı", "Move down") }] : []),
-                    ]}
-                    onAccessibilityAction={({ nativeEvent: { actionName } }) => {
-                      if (actionName === "decrement" || actionName === "moveUp") move(kind, index - 1);
-                      if (actionName === "increment" || actionName === "moveDown") move(kind, index + 1);
-                    }}
-                    style={{ minWidth: metrics.touchTarget, minHeight: metrics.touchTarget }}
-                  />
-                </View>
-              </Sortable.Item>
-            ))}
-          </Sortable>
-        </GestureHandlerRootView>
-      ) : visible[0] ? (
-        <NavigationGroup><ValueRow label={label(visible[0])} /></NavigationGroup>
-      ) : <Body muted>{copy("Sistem varsayılanı", "System default")}</Body>}
-    </Stack>
+    <SelectField
+      variant="row"
+      label={label}
+      hint={copy("Bağlı olanlar arasından ilk bu kullanılır.", "Used first while it is connected.")}
+      value={visible[0]}
+      disabled={disabled}
+      options={visible.map((kind) => ({ value: kind, label: names[kind], detail: device(kind) !== names[kind] ? device(kind) : undefined }))}
+      onChange={(kind) => {
+        if (disabled) return;
+        const connected = readMicInputs(nativeVoiceCompanion());
+        void voicePreferences.getState().update((current) => {
+          const available = connectedMicKinds(current.micOrder, connected);
+          if (!available.includes(kind)) return {};
+          return { micOrder: reorderConnectedMics(current.micOrder, available, kind, 0) };
+        }).catch(() => {});
+      }}
+    />
   );
 }

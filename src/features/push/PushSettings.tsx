@@ -1,9 +1,10 @@
 import { useEffect } from "react";
+import { router } from "expo-router";
 import { useAsyncAction } from "@/state/actions";
 import { useActiveMachine } from "@/state/machines";
 import { useHostClient } from "@/state/queries";
 import { View } from "react-native";
-import { NavigationGroup, Notice, SectionHeader, ToggleField } from "@/ui/primitives";
+import { NavigationGroup, Notice, SectionHeader, StateView, ToggleField } from "@/ui/primitives";
 import { TimeoutError } from "../../../../src/shared/lib/withTimeout";
 import { useInfoHint } from "@/ui/info-hint";
 import { useCopy } from "@/ui/copy";
@@ -11,7 +12,11 @@ import { errorMessage } from "@/ui/error-message";
 import { space } from "@/ui/tokens";
 import { usePushPreferences, usePushStatus, type PushPreferenceKind } from "./push-model";
 
-/** Phone pushes from the active computer: on/off and which moments. The test action lives in `usePushTestFromComputer`. */
+/**
+ * Settings → Notifications → From your computer: on/off and which moments. Without an active
+ * computer the switches stay visible but disabled, with the one way forward. The test action lives
+ * in `usePushTestFromComputer`.
+ */
 export function PushSettings() {
   const copy = useCopy();
   const machine = useActiveMachine();
@@ -24,10 +29,10 @@ export function PushSettings() {
   }, [preferences.hydrate]);
   const events: { kind: PushPreferenceKind; label: string }[] = [
     { kind: "input", label: copy("Onay veya cevap beklediğinde", "Waiting for approval or an answer") },
+    { kind: "approvals", label: copy("Onay istekleri", "Approval requests") },
     { kind: "finished", label: copy("Ajan işini bitirdiğinde", "Agent finished") },
     { kind: "failed", label: copy("Bir tur başarısız olduğunda", "A turn failed") },
     { kind: "assistant", label: copy("Asistan güncellemeleri", "Assistant updates") },
-    { kind: "approvals", label: copy("Onaylar", "Approvals") },
   ];
   const detail = !machine
     ? copy("Bildirimler için bir bilgisayar bağla.", "Connect a computer to receive notifications.")
@@ -36,7 +41,7 @@ export function PushSettings() {
       : status.state === "off"
         ? copy("Kapalı. Bilgisayar bu telefona bildirim göndermez.", "Off. The computer does not notify this phone.")
         : status.state === "permission"
-          ? copy("Önce yukarıdan bildirim iznini ver.", "Allow notifications above first.")
+          ? copy("Önce yukarıdaki “Bu telefonda” bölümünden bildirim iznini ver.", "Allow notifications under “This phone” above first.")
           : status.state === "unsupported"
             ? copy("{p0} bu özelliği desteklemiyor; bycoda'yı güncelle.", "{p0} does not support this yet; update bycoda there.", { p0: machine.name })
             : status.state === "unconfigured"
@@ -46,11 +51,18 @@ export function PushSettings() {
                   ? copy("Bildirim hizmetinin yanıtı çok uzun sürdü.", "The notification service took too long to respond.")
                   : errorMessage(status.error, copy)
                 : copy("Kontrol ediliyor…", "Checking…");
-  const stateInfo = useInfoHint(status.state === "error" ? undefined : detail, "visible");
+  const stateInfo = useInfoHint(status.state === "error" || !machine ? undefined : detail, "visible");
   return (
     <View style={{ gap: space.sm }}>
-      <SectionHeader flush title={copy("Bilgisayardan bildirimler", "Notifications from your computer")} trailing={stateInfo.button} />
+      <SectionHeader title={copy("Bilgisayarından", "From your computer")} trailing={stateInfo.button} />
       {stateInfo.panel}
+      {!machine ? (
+        <StateView
+          compact
+          title={copy("Bilgisayar bildirimleri için bir bilgisayar bağla", "Connect a computer for computer notifications")}
+          action={{ label: copy("Bilgisayar bağla", "Connect a computer"), onPress: () => router.navigate("/machines") }}
+        />
+      ) : null}
       {status.state === "error" ? <Notice tone="warning" message={detail} onRetry={client ? retry : undefined} /> : null}
       <NavigationGroup>
         <ToggleField
@@ -60,6 +72,7 @@ export function PushSettings() {
             "Sent while you are away from the computer. Project and conversation names are never included.",
           )}
           value={preferences.enabled}
+          disabled={!machine}
           onChange={(enabled) => preferences.update({ enabled })}
         />
       </NavigationGroup>
@@ -70,6 +83,7 @@ export function PushSettings() {
               key={kind}
               label={label}
               value={preferences.events[kind]}
+              disabled={!machine}
               onChange={(value) => preferences.update({ events: { ...preferences.events, [kind]: value } })}
             />
           ))}
@@ -77,6 +91,7 @@ export function PushSettings() {
             <ToggleField
               label={copy("Sessiz saatlerde acil güncellemeler", "Urgent updates during quiet hours")}
               value={preferences.assistantUrgentDuringQuiet}
+              disabled={!machine}
               onChange={(assistantUrgentDuringQuiet) => preferences.update({ assistantUrgentDuringQuiet })}
             />
           ) : null}

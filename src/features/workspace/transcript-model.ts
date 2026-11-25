@@ -19,6 +19,7 @@ type TurnChrome = {
   modelChange?: { from: TurnModel; to: TurnModel };
   /** The turn's model, for the assistant header. */
   modelName?: string;
+  continuation?: boolean;
 };
 export type TranscriptEntry =
   | ({ id: string; kind: "message"; block: Block; author?: string; /** Identical failures folded into this card. */ repeat?: number } & TurnChrome)
@@ -140,6 +141,7 @@ export function transcriptEntries(
   let previousModel = context.model;
   let switched = context.switched;
   let turnUser: Block | undefined;
+  let lastAssistant: string | undefined;
   // Like desktop, a settled turn ends with its receipt; the running turn has none yet.
   const closeTurn = (last: boolean) => {
     const entry = entries.at(-1);
@@ -155,7 +157,11 @@ export function transcriptEntries(
   for (const [index, block] of blocks.entries()) {
     if (block.internal) continue;
     if (block.modelSwitch) switched = true;
-    if (block.role === "user") closeTurn(false);
+    if (block.role === "user") {
+      closeTurn(false);
+      lastAssistant = undefined;
+    }
+    if (block.modelSwitch) lastAssistant = undefined;
     if (block.role === "user" && !block.draft) turnWork = undefined;
     if (block.role === "user" && block.turnModel) author = block.turnModel.harness;
     let chrome: TurnChrome = {};
@@ -165,7 +171,12 @@ export function transcriptEntries(
         chrome = { modelChange: { from: previousModel, to: block.turnModel } };
       previousModel = block.turnModel ?? previousModel;
       switched = false;
-    } else if (block.role === "assistant" && turnUser?.turnModel) chrome = { modelName: turnUser.turnModel.name };
+    } else if (block.role === "assistant") {
+      const modelName = turnUser?.turnModel?.name;
+      const sender = JSON.stringify([author, modelName, block.author]);
+      chrome = { ...(modelName ? { modelName } : {}), ...(lastAssistant === sender ? { continuation: true } : {}) };
+      lastAssistant = sender;
+    }
     if (
       presentation?.view === "messages" &&
       isTransientActivity(block) &&
@@ -257,6 +268,14 @@ export function readableToolName(name: string) {
 export function activityTitle(block: Block) {
   const title = block.agentRun?.name || block.tool?.title || block.text || block.tool?.detail || "";
   return readableToolName(title.replace(/\s+/g, " ").trim());
+}
+
+/** Keep the actual operation visible when a shell command starts with a working directory. */
+export function activityListTitle(block: Block) {
+  const title = activityTitle(block);
+  if (block.role !== "tool") return title;
+  const command = /^cd\s+(?:"(?:\\.|[^"\\])*"|'[^']*'|[^\s&;"']+)\s*&&\s*(.+)$/.exec(title)?.[1];
+  return command ?? title;
 }
 
 /** Some providers keep the command in text and its result in separate fields. */

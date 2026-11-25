@@ -7,6 +7,7 @@ import { useMachines } from "@/state/machines";
 import { ProjectScreen } from "./project-screen";
 import { DraftWriteError } from "./draft-store";
 import type { DraftGuard } from "./file-editor-types";
+vi.mock("@/ui/no-computer", () => ({ NoComputerState: () => null, NoComputerGate: () => null }));
 
 const fixture = vi.hoisted(() => ({
   details: undefined as (() => void) | undefined,
@@ -60,6 +61,7 @@ vi.mock("@/ui/primitives", () => {
   };
   return {
     Button, IconButton: Button, PressableCard: Button,
+    HeaderBackButton: () => null, stackBackOptions: () => ({}),
     Screen: ({ children }: { children: ReactNode }) => h("div", null, children),
     ScreenHeading: ({ context, actions }: { context: ReactNode; actions: ReactNode }) => h("header", null, context, actions),
     Sheet: ({ visible, title, children, onClose }: { visible: boolean; title: string; children: ReactNode; onClose: () => void }) =>

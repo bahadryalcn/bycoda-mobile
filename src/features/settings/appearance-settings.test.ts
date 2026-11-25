@@ -55,9 +55,9 @@ beforeEach(() => {
   state.retryStorage.mockClear();
 });
 
-it("puts theme, palette, typography, message size and preview on one page in order", () => {
+it("puts theme, palette, preview, typography and message size on one page in order", () => {
   const html = renderToStaticMarkup(createElement(AppearanceSettings));
-  const order = ["aria-label=\"Theme\"", 'data-owner="palette"', 'data-owner="typography"', 'data-owner="chat"', 'data-owner="preview"'];
+  const order = ["aria-label=\"Theme\"", 'data-owner="palette"', 'data-owner="preview"', 'data-owner="typography"', 'data-owner="chat"'];
   const at = order.map((part) => html.indexOf(part));
   expect(at.every((index) => index >= 0)).toBe(true);
   expect([...at].sort((a, b) => a - b)).toEqual(at);

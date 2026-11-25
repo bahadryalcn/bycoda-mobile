@@ -8,6 +8,7 @@ export default function NotFound() {
     <Screen scroll={false}>
       <Stack.Screen options={{ title: copy("Sayfa bulunamadı", "Page not found"), headerTitle: "" }} />
       <StateView
+        size="region"
         title={copy("Sayfa bulunamadı", "Page not found")}
         description={copy("Aradığın sayfa taşınmış ya da hiç var olmamış olabilir.", "The page you were looking for may have moved or never existed.")}
         action={{ label: copy("Projelere git", "Go to projects"), onPress: () => router.replace("/") }}

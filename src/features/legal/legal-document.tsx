@@ -5,12 +5,13 @@ import { Linking, View, type LayoutChangeEvent } from "react-native";
 import { Body, Button, Disclosure, Heading, MutationState, Stack, NavigationGroup, NavigationRow } from "@/ui/primitives";
 import ExternalLink from "lucide-react-native/icons/external-link";
 import { useMobileTheme } from "@/ui/theme";
-import { lineHeight, space } from "@/ui/tokens";
+import { iconSize, lineHeight, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import {
   legalAppendixTitle,
   legalSections,
   legalUpdatedDate,
+  privacyUpdatedDate,
   mitLicense,
   privacyPolicyUrl,
   repositoryUrl,
@@ -52,7 +53,7 @@ export function LegalDocument({ document, sectionLayout }: {
     <Stack style={{ gap: space.xl }}>
       <Body muted>
         {copy("Son güncelleme: ", "Last updated: ")}
-        {copy(...legalUpdatedDate)}
+        {copy(...(document === "privacy" ? privacyUpdatedDate : legalUpdatedDate))}
       </Body>
       {document === "help" ? <DocumentLinks key={document} document={document} /> : null}
       {document === "help" ? <NavigationGroup>{sections}</NavigationGroup> : sections}
@@ -165,7 +166,7 @@ function DocumentLinks({ document }: { document: LegalDocumentId }) {
       <NavigationGroup>
         {[{ label: copy("E-posta uygulamasını aç", "Open email app"), url: mailUrl, detail: supportEmail }, ...links].map(({ label, url, ...rest }) => (
           <View key={url}>
-            <NavigationRow label={label} intent="command" detail={"detail" in rest ? rest.detail : undefined} detailLines={0} trailing={<ExternalLink size={16} color={colors.muted} />}
+            <NavigationRow label={label} intent="command" detail={"detail" in rest ? rest.detail : undefined} detailLines={0} trailing={<ExternalLink size={iconSize.status} color={colors.muted} />}
               disabled={action.isPending} busy={action.isPending && target === url} onPress={() => open(url)} />
             {target === url ? <MutationState mutation={action} /> : null}
             {target === mailUrl && url === mailUrl && action.isError ? (

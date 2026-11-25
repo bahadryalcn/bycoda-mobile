@@ -12,8 +12,10 @@ import { useHostMutation } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { HintSection } from "@/ui/info-hint";
 import { confirmAction } from "@/ui/confirm";
+import { IntegerTextStepper } from "@/ui/limit-presets";
 import { NumberField } from "@/ui/number-field";
 import {
+  Body,
   Button,
   Disclosure,
   ErrorText,
@@ -22,7 +24,6 @@ import {
   MutationState,
   NavigationGroup,
   NavigationRow,
-  Section,
   SelectField,
   Sheet,
   Stack,
@@ -30,7 +31,15 @@ import {
 } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { identifier } from "../shared/format";
-import { copyLibraryMember, crewMemberPresentation, crewNameError, crewValidation, crewValidationMessage, memberValidation, newMember } from "./model";
+import {
+  copyLibraryMember,
+  crewMemberPresentation,
+  crewNameError,
+  crewValidation,
+  crewValidationMessage,
+  memberValidation,
+  newMember,
+} from "./model";
 import { MemberEditor, useRoleOptions } from "./member-editor";
 import { handleLabel, linkState, rosterTraits } from "./identity-model";
 import { MemberAvatar } from "./member-avatar";
@@ -81,7 +90,7 @@ export function CrewEditor({
     if (member) setInteractedMembers((current) => new Set([...current, member.id]));
     setMember(null);
   };
-  const [profileId, setProfileId] = useState("");
+  const [adding, setAdding] = useState(false);
   const save = useHostMutation<CrewDefinition>("crews.save", ["crews", projectId]);
   const sending = useRef(false);
   const busy = save.isPending;
@@ -110,11 +119,12 @@ export function CrewEditor({
     : crewValidation(normalized);
   const traits = rosterTraits(draft.agents);
   const invalidMember = draft.agents.some((agent) => !!memberValidation(agent));
-  const visibleError = invalidNumbers && (submitted || changedNumbers)
-    ? error
-    : (submitted || changedNumbers || form.dirty) && !invalidMember
-      ? crewValidationMessage(error, copy)
-      : undefined;
+  const visibleError =
+    invalidNumbers && (submitted || changedNumbers)
+      ? error
+      : (submitted || changedNumbers || form.dirty) && !invalidMember
+        ? crewValidationMessage(error, copy)
+        : undefined;
   const submit = () => {
     setSubmitted(true);
     if (
@@ -136,6 +146,17 @@ export function CrewEditor({
       },
     );
   };
+  const blockedReason = !supported
+    ? copy("Bu bilgisayarda düzenleme kullanılamıyor.", "Editing is unavailable on this computer.")
+    : (crewNameError(draft.name, copy) ??
+      (invalidMember
+        ? copy(
+            "Her üyenin adını, rolünü ve modelini kontrol edin.",
+            "Check each member’s name, role, and model.",
+          )
+        : invalidNumbers
+          ? error
+          : crewValidationMessage(error, copy)));
   const labels: Record<NumericPolicy, string> = {
     maxParallel: copy("Eşzamanlı görevler (1–4)", "Parallel tasks (1–4)"),
     maxAssignments: copy("Görev sayısı sınırı (1–20)", "Assignment limit (1–20)"),
@@ -143,125 +164,200 @@ export function CrewEditor({
   };
   return (
     <Stack>
-      <Section title={copy("Ekip", "Crew")}>
       <Field
         label={copy("Ekip adı", "Crew name")}
+        placeholder={copy("Örn. Ürün ekibi", "e.g. Product team")}
         value={draft.name}
         error={nameTouched || submitted ? crewNameError(draft.name, copy) : undefined}
         onBlur={() => setNameTouched(true)}
         editable={!busy && supported}
         onChangeText={(name) => form.patch({ name })}
       />
-      <SelectField
-        label={copy("Kapsam", "Scope")}
-        value={draft.projectId ? "project" : "host"}
-        disabled={busy || !supported || !!opening.updatedAt}
-        options={[
-          { value: "project", label: copy("Bu proje", "This project") },
-          {
-            value: "host",
-            label: copy("Bu bilgisayardaki tüm projeler", "All projects on this computer"),
-          },
-        ]}
-        onChange={(scope) => form.patch({ projectId: scope === "project" ? projectId : undefined })}
-      />
-      </Section>
-      <HintSection title={copy("Üyeler", "Members")} help={copy(
-          "Bir koordinatör, bir inceleyen ve en az bir uzman ekleyin. Kaydetmek işi başlatmaz.",
-          "Include one coordinator, one reviewer and at least one specialist. Saving does not start work.",
-        )}>
-      <NavigationGroup>
-        {draft.agents.map((agent) => {
-          const link = linkState(agent, directory.agents);
-          const presentation = crewMemberPresentation(agent,
-            roles.find((role) => role.value === agent.role)!.label, copy,
-            submitted || interactedMembers.has(agent.id));
-          return <NavigationRow
-            key={agent.id}
-            label={presentation.label}
-            icon={<MemberAvatar member={agent} traits={traits.get(agent.id)} />}
-            detail={presentation.error ? presentation.detail : [handleLabel(agent.handle), link && (link === "linked" ? copy("Kütüphane", "Library") : copy("Özelleştirildi", "Customized")), presentation.detail].filter(Boolean).join(" · ")}
-            detailLines={2}
-            tone={presentation.error ? "danger" : undefined}
-            disabled={busy || !supported}
-            onPress={() => setMember(structuredClone(agent))}
-          />;
-        })}
-      </NavigationGroup>
-      <Button
-        tone="quiet"
-        label={copy("Üye ekle", "Add member")}
-        disabled={busy || !supported || draft.agents.length >= 20}
-        onPress={() => setMember(newMember(identifier(), "specialist", ""))}
-      />
-      </HintSection>
-      {directory.agents.length > 0 && (
-        <Disclosure label={copy("Kütüphaneden üye ekle", "Add a library member")}>
-          <SelectField
-            searchable
-            label={copy("Kayıtlı üye", "Saved member")}
-            value={profileId}
-            disabled={busy || !supported}
-            options={directory.agents.map((profile) => ({
-              value: profile.id,
-              label: profile.name,
-              detail: profile.projectId
-                ? copy("Bu proje", "This project")
-                : copy("Bilgisayar geneli", "Host-wide"),
-            }))}
-            onChange={setProfileId}
-          />
-          <Button
-            tone="quiet"
-            label={copy("Ekibe kopyala", "Copy to crew")}
-            disabled={busy || !supported || !profileId || draft.agents.length >= 20}
-            onPress={() => {
-              const profile = directory.agents.find((item) => item.id === profileId);
-              if (profile) {
-                form.patch({
-                  agents: [
-                    ...draft.agents,
-                    copyLibraryMember(profile, identifier(), groupsSupported),
-                  ],
-                });
-                setProfileId("");
-              }
-            }}
-          />
-        </Disclosure>
-      )}
-      <Disclosure label={copy("Çalışma ilkeleri", "Working policy")}>
-        {numericPolicy.map((key) => (
-          <NumberField
-            key={key}
-            label={labels[key]}
-            value={numbers[key]}
-            editable={!busy && supported}
-            decimal
-            onChangeText={(text) => setNumbers((current) => ({ ...current, [key]: text }))}
-          />
-        ))}
-        <ToggleField
-          label={copy("Alt ajanlara izin ver", "Allow subagents")}
-          value={draft.policy.allowSubagents}
+      {opening.updatedAt ? (
+        <Body muted>
+          {draft.projectId
+            ? copy("Kapsam: Bu proje", "Scope: This project")
+            : copy(
+                "Kapsam: Bu bilgisayardaki tüm projeler",
+                "Scope: All projects on this computer",
+              )}
+        </Body>
+      ) : (
+        <SelectField
+          label={copy("Kapsam", "Scope")}
+          value={draft.projectId ? "project" : "host"}
           disabled={busy || !supported}
-          onChange={(allowSubagents) => form.patch({ policy: { ...draft.policy, allowSubagents } })}
-        />
-        <ToggleField
-          label={copy(
-            "Üye onaylarını koordinatöre devret",
-            "Delegate member approvals to coordinator",
-          )}
-          value={draft.policy.delegateApprovals === true}
-          disabled={busy || !supported}
-          onChange={(delegateApprovals) =>
-            form.patch({ policy: { ...draft.policy, delegateApprovals } })
+          options={[
+            { value: "project", label: copy("Bu proje", "This project") },
+            {
+              value: "host",
+              label: copy("Bu bilgisayardaki tüm projeler", "All projects on this computer"),
+            },
+          ]}
+          onChange={(scope) =>
+            form.patch({ projectId: scope === "project" ? projectId : undefined })
           }
         />
+      )}
+      <HintSection
+        presentation="visible"
+        title={copy("Üyeler", "Members")}
+        help={copy(
+          "Bir koordinatör, bir inceleyen ve en az bir uzman ekleyin. Kaydetmek işi başlatmaz.",
+          "Include one coordinator, one reviewer and at least one specialist. Saving does not start work.",
+        )}
+      >
+        <NavigationGroup>
+          {draft.agents.map((agent) => {
+            const link = linkState(agent, directory.agents);
+            const presentation = crewMemberPresentation(
+              agent,
+              roles.find((role) => role.value === agent.role)!.label,
+              copy,
+              submitted || interactedMembers.has(agent.id),
+            );
+            return (
+              <NavigationRow
+                key={agent.id}
+                label={presentation.label}
+                icon={<MemberAvatar member={agent} traits={traits.get(agent.id)} />}
+                detail={
+                  presentation.error
+                    ? presentation.detail
+                    : [
+                        handleLabel(agent.handle),
+                        presentation.detail,
+                        link === "linked" ? copy("Kütüphane", "Library") : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
+                }
+                detailLines={2}
+                tone={presentation.error ? "danger" : undefined}
+                disabled={busy || !supported}
+                onPress={() => setMember(structuredClone(agent))}
+              />
+            );
+          })}
+        </NavigationGroup>
+        {/* One "Add member" path: a new member, or a copy of a saved library member. */}
+        <Button
+          tone="quiet"
+          label={copy("Üye ekle", "Add member")}
+          disabled={busy || !supported || draft.agents.length >= 20}
+          onPress={() =>
+            directory.agents.length > 0
+              ? setAdding(true)
+              : setMember(newMember(identifier(), "specialist", ""))
+          }
+        />
+      </HintSection>
+      <Sheet
+        visible={adding}
+        size="compact"
+        title={copy("Üye ekle", "Add member")}
+        onClose={() => setAdding(false)}
+      >
+        <NavigationGroup>
+          <NavigationRow
+            label={copy("Yeni üye", "New member")}
+            disabled={busy || !supported || draft.agents.length >= 20}
+            onPress={() => {
+              setAdding(false);
+              setMember(newMember(identifier(), "specialist", ""));
+            }}
+          />
+        </NavigationGroup>
+        <SelectField
+          searchable
+          label={copy("Kütüphaneden ekle", "Add from library")}
+          placeholder={copy("Kayıtlı üye seç", "Choose a saved member")}
+          value=""
+          disabled={busy || !supported || draft.agents.length >= 20}
+          options={directory.agents.map((profile) => ({
+            value: profile.id,
+            label: profile.name,
+            detail: profile.projectId
+              ? copy("Bu proje", "This project")
+              : copy("Bilgisayar geneli", "Host-wide"),
+          }))}
+          onChange={(profileId) => {
+            const profile = directory.agents.find((item) => item.id === profileId);
+            if (!profile || draft.agents.length >= 20) return;
+            form.patch({
+              agents: [...draft.agents, copyLibraryMember(profile, identifier(), groupsSupported)],
+            });
+            setAdding(false);
+          }}
+        />
+      </Sheet>
+      <Disclosure label={copy("Gelişmiş", "Advanced")}>
+        {numericPolicy.map((key) => {
+          const max = key === "maxParallel" ? 4 : key === "maxAssignments" ? 20 : 240;
+          const value = numbers[key];
+          const number = Number(value);
+          const onChangeText = (text: string) =>
+            setNumbers((current) => ({ ...current, [key]: text }));
+          // Older crews can have a fractional time limit; retain the supported precision.
+          return key === "maxRunMinutes" && !Number.isInteger(number) ? (
+            <NumberField
+              key={key}
+              label={labels[key]}
+              value={value}
+              decimal
+              editable={!busy && supported}
+              onChangeText={onChangeText}
+            />
+          ) : (
+            <IntegerTextStepper
+              key={key}
+              label={labels[key]}
+              value={value}
+              min={1}
+              max={max}
+              disabled={busy || !supported}
+              onChangeText={onChangeText}
+            />
+          );
+        })}
+        <NavigationGroup>
+          <ToggleField
+            label={copy("Alt ajanlara izin ver", "Allow subagents")}
+            detail={copy(
+              "Üyeler işin parçalarını başka ajanlara verebilir.",
+              "Members can delegate parts of their work to other agents.",
+            )}
+            value={draft.policy.allowSubagents}
+            disabled={busy || !supported}
+            onChange={(allowSubagents) =>
+              form.patch({ policy: { ...draft.policy, allowSubagents } })
+            }
+          />
+          <ToggleField
+            label={copy(
+              "Üye onaylarını koordinatöre devret",
+              "Delegate member approvals to coordinator",
+            )}
+            detail={copy(
+              "Üyelerin izin isteklerini koordinatör yanıtlar.",
+              "The coordinator answers members’ approval requests.",
+            )}
+            value={draft.policy.delegateApprovals === true}
+            disabled={busy || !supported}
+            onChange={(delegateApprovals) =>
+              form.patch({ policy: { ...draft.policy, delegateApprovals } })
+            }
+          />
+        </NavigationGroup>
       </Disclosure>
       <ErrorText error={visibleError} />
       <FormActions
-        feedback={<MutationState mutation={save} />}
+        feedback={
+          <>
+            <MutationState mutation={save} />
+            {!busy && blockedReason ? <Body muted>{blockedReason}</Body> : null}
+          </>
+        }
         submitLabel={copy("Ekibi kaydet", "Save crew")}
         busy={busy}
         disabled={!supported || busy || !!member || !!error}
@@ -273,24 +369,19 @@ export function CrewEditor({
           if (error) return;
           if (draft.policy.delegateApprovals && !opening.policy.delegateApprovals)
             confirmAction(
-                copy("Onayları devret", "Delegate approvals"),
-                copy(
-                  "Koordinatör, ekip üyelerinin izin isteklerine sizin yerinize yanıt verebilecek.",
-                  "The coordinator will be allowed to answer crew members' approval requests on your behalf.",
-                ),
-                copy("Onayla", "Approve"),
-                submit,
-              );
+              copy("Onayları devret", "Delegate approvals"),
+              copy(
+                "Koordinatör, ekip üyelerinin izin isteklerine sizin yerinize yanıt verebilecek.",
+                "The coordinator will be allowed to answer crew members' approval requests on your behalf.",
+              ),
+              copy("Onayla", "Approve"),
+              submit,
+            );
           else submit();
         }}
       />
       {member && (
-        <Sheet
-          visible
-          size="form"
-          title={copy("Ekip üyesi", "Crew member")}
-          onClose={closeMember}
-        >
+        <Sheet visible size="form" title={copy("Ekip üyesi", "Crew member")} onClose={closeMember}>
           <MemberEditor
             key={member.id}
             initial={member}
@@ -301,6 +392,32 @@ export function CrewEditor({
             busy={busy}
             disabled={!supported}
             onClose={closeMember}
+            endAction={
+              draft.agents.some((item) => item.id === member.id) ? (
+                <NavigationRow
+                  intent="command"
+                  tone="danger"
+                  label={copy("Üyeyi ekipten çıkar", "Remove member from crew")}
+                  disabled={busy || !supported}
+                  onPress={() =>
+                    confirmAction(
+                      copy("Üyeyi ekipten çıkar", "Remove member from crew"),
+                      copy(
+                        "Üye bu taslaktan çıkarılacak. Kütüphane kaydı korunur.",
+                        "The member will be removed from this draft. Its library profile is kept.",
+                      ),
+                      copy("Çıkar", "Remove"),
+                      () => {
+                        form.patch({
+                          agents: draft.agents.filter((item) => item.id !== member.id),
+                        });
+                        setMember(null);
+                      },
+                    )
+                  }
+                />
+              ) : undefined
+            }
             onSave={(edited) => {
               form.patch({
                 agents: draft.agents.some((item) => item.id === edited.id)
@@ -310,27 +427,6 @@ export function CrewEditor({
               closeMember();
             }}
           />
-          {draft.agents.some((item) => item.id === member.id) && (
-            <Button
-              tone="danger"
-              label={copy("Üyeyi ekipten çıkar", "Remove member from crew")}
-              disabled={busy || !supported}
-              onPress={() =>
-                confirmAction(
-                  copy("Üyeyi ekipten çıkar", "Remove member from crew"),
-                  copy(
-                    "Üye bu taslaktan çıkarılacak. Kütüphane kaydı korunur.",
-                    "The member will be removed from this draft. Its library profile is kept.",
-                  ),
-                  copy("Çıkar", "Remove"),
-                  () => {
-                    form.patch({ agents: draft.agents.filter((item) => item.id !== member.id) });
-                    setMember(null);
-                  },
-                )
-              }
-            />
-          )}
         </Sheet>
       )}
     </Stack>

@@ -1,11 +1,10 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import FileText from "lucide-react-native/icons/file-text";
 import { FileText as DuotoneFileText } from "./duotone-icon";
 import X from "lucide-react-native/icons/x";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
 import Plus from "lucide-react-native/icons/plus";
-import Check from "lucide-react-native/icons/check";
 import ListOrdered from "lucide-react-native/icons/list-ordered";
 import { Attachment } from "panelui-native/components/attachment";
 import { ChatMessage, ChatMessageContent, chatUserBubbleStyle } from "./chat";
@@ -15,20 +14,28 @@ import { PlanSteps } from "./plan-steps";
 import { MessageText } from "./message-text";
 import { messageExample } from "./message-example";
 import { ChatCircleAction, ChatToolbarAction } from "./chat-controls";
-import ChevronDown from "lucide-react-native/icons/chevron-down";
 import { Button } from "./buttons";
 import { Card, Row, Stack } from "./layout";
 import { Body, Heading, CodeText } from "./typography";
-import { NavigationGroup, NavigationRow } from "./navigation-row";
 import { Sheet } from "./dialogs";
 import { Notice, Badge } from "./feedback";
 import { haptic } from "./motion";
 import { useCopy } from "./copy";
 import { useMobileTheme } from "./theme";
 
-type Mode = "send" | "queue" | "steer";
+type Mode = "send" | "queue";
 
-export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "tour" } = {}) {
+/**
+ * Offline sample conversation. The gallery keeps the composer inline; the tour passes `layout` to put
+ * the transcript in a Sheet body and the composer in the Sheet footer, as in a real session.
+ */
+export function GalleryChat({
+  scenario = "gallery",
+  layout,
+}: {
+  scenario?: "gallery" | "tour";
+  layout?: (parts: { body: ReactNode; composer: ReactNode }) => ReactNode;
+} = {}) {
   const { colors } = useMobileTheme();
   const copy = useCopy();
   const tour = scenario === "tour";
@@ -37,8 +44,6 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
     "## Personal website plan\n\nWe can start with a home page that helps visitors get to know you and your work.\n\n1. A short introduction and contact link\n2. A gallery of selected projects\n3. A readable layout on phones and computers\n\nThis offline example changes no project files. In a real session, you can inspect results and file changes in this conversation.",
   );
   const [prompt, setPrompt] = useState("");
-  const [mode, setMode] = useState<Mode>("send");
-  const [modePicker, setModePicker] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
   const [result, setResult] = useState("");
   const [attached, setAttached] = useState(true);
@@ -46,14 +51,8 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
   const [preview, setPreview] = useState(false);
   const [queue, setQueue] = useState<{ id: number; text: string; file: boolean }[]>([]);
   const sequence = useRef(0);
-  const modeOptions: { value: Mode; label: string }[] = [
-    { value: "send", label: copy("Gönder", "Send") },
-    { value: "queue", label: copy("Sıraya al", "Queue") },
-    { value: "steer", label: copy("Yönlendir", "Steer") },
-  ];
-  const modeLabel = modeOptions.find((option) => option.value === mode)?.label ?? "";
   const sendDisabled = !prompt.trim();
-  const submitSample = (text: string) => {
+  const submitSample = (text: string, mode: Mode = "send") => {
     const value = text.trim();
     if (!value) return;
     haptic.success();
@@ -63,7 +62,44 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
     setPrompt("");
     setAttached(false);
   };
-  return (
+  const inlineComposer = (
+    <ChatComposer
+      value={prompt}
+      onValueChange={setPrompt}
+      leading={
+        tour ? null : (
+          <ChatCircleAction
+            label={copy("Dosya ekle", "Attach file")}
+            onPress={() => setAttached(true)}
+          >
+            <Plus size={19} strokeWidth={2.4} color={colors.text} />
+          </ChatCircleAction>
+        )
+      }
+      field={{
+        accessibilityLabel: copy("Mesaj", "Message"),
+        placeholder: copy("Bir mesaj yaz", "Write a message"),
+      }}
+      submit={
+        <ChatCircleAction
+          label={copy("Gönder", "Send")}
+          hint={tour ? undefined : copy("Basılı tut: Sıraya al", "Press and hold to queue")}
+          active={!sendDisabled}
+          disabled={sendDisabled}
+          onPress={() => submitSample(prompt)}
+          onLongPress={tour ? undefined : () => submitSample(prompt, "queue")}
+          longPressLabel={tour ? undefined : copy("Sıraya al", "Queue")}
+        >
+          <ArrowUp
+            size={20}
+            strokeWidth={2.4}
+            color={sendDisabled ? colors.muted : colors.primaryText}
+          />
+        </ChatCircleAction>
+      }
+    />
+  );
+  const body = (
     <Stack>
       <Card>
         {tour ? null : (
@@ -114,11 +150,11 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
           tourAnswer ? (
             <Notice
               tone="success"
-              message={tourAnswer === "yes" ? copy("Onayladın. Agent devam ediyor.", "You approved. The agent is continuing.") : copy("Reddettin. Agent durdu.", "You declined. The agent stopped.")}
+              message={tourAnswer === "yes" ? copy("Onayladın. Ajan devam ediyor.", "You approved. The agent is continuing.") : copy("Reddettin. Ajan durdu.", "You declined. The agent stopped.")}
             />
           ) : (
             <Stack>
-              <Body>{copy("Agent soruyor: Tasarım bölümünü başlatayım mı?", "The agent asks: Should I start on the design section?")}</Body>
+              <Body>{copy("Ajan soruyor: Tasarım bölümünü başlatayım mı?", "The agent asks: Should I start on the design section?")}</Body>
               <Row>
                 <Button label={copy("Onayla", "Approve")} tone="primary" onPress={() => setTourAnswer("yes")} />
                 <Button label={copy("Reddet", "Decline")} tone="quiet" onPress={() => setTourAnswer("no")} />
@@ -163,46 +199,7 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
             />
           </View>
         )}
-        <ChatComposer
-          value={prompt}
-          onValueChange={setPrompt}
-          mode={
-            tour ? undefined : (
-              <ChatToolbarAction
-                label={modeLabel}
-                onPress={() => setModePicker(true)}
-              ><ChevronDown size={12} color={colors.muted} /></ChatToolbarAction>
-            )
-          }
-          leading={
-            tour ? null : (
-              <ChatCircleAction
-                label={copy("Dosya ekle", "Attach file")}
-                onPress={() => setAttached(true)}
-              >
-                <Plus size={19} strokeWidth={2.4} color={colors.text} />
-              </ChatCircleAction>
-            )
-          }
-          field={{
-            accessibilityLabel: copy("Mesaj", "Message"),
-            placeholder: copy("Bir mesaj yaz", "Write a message"),
-          }}
-          submit={
-            <ChatCircleAction
-              label={modeLabel}
-              active={!sendDisabled}
-              disabled={sendDisabled}
-              onPress={() => submitSample(prompt)}
-            >
-              <ArrowUp
-                size={20}
-                strokeWidth={2.4}
-                color={sendDisabled ? colors.muted : colors.primaryText}
-              />
-            </ChatCircleAction>
-          }
-        />
+        {layout ? null : inlineComposer}
         {result ? (
           <Notice
             tone="success"
@@ -226,30 +223,6 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
           ]}
         />
       </ChatPlan>
-      <Sheet
-        visible={modePicker}
-        title={copy("Gönderme biçimi", "Delivery mode")}
-        size="compact"
-        onClose={() => setModePicker(false)}
-      >
-        <NavigationGroup>
-          {modeOptions.map((option) => (
-            <NavigationRow
-              key={option.value}
-              label={option.label}
-              trailing={
-                option.value === mode ? (
-                  <Check size={18} strokeWidth={2.4} color={colors.accent} />
-                ) : undefined
-              }
-              onPress={() => {
-                setMode(option.value);
-                setModePicker(false);
-              }}
-            />
-          ))}
-        </NavigationGroup>
-      </Sheet>
       <Sheet
         visible={queueOpen}
         title={copy("Mesaj sırası", "Message queue")}
@@ -298,5 +271,25 @@ export function GalleryChat({ scenario = "gallery" }: { scenario?: "gallery" | "
         )}
       </Sheet>
     </Stack>
+  );
+  return layout ? <>{layout({ body, composer: inlineComposer })}</> : body;
+}
+
+/**
+ * The tour's sample session laid out like the real conversation: the transcript scrolls in the
+ * Sheet body and the composer sits in the Sheet footer, outside the scroller, so it rides the
+ * keyboard and the focused field stays visible.
+ */
+export function TourSampleSheet({ onClose }: { onClose: () => void }) {
+  const copy = useCopy();
+  return (
+    <GalleryChat
+      scenario="tour"
+      layout={({ body, composer }) => (
+        <Sheet visible title={copy("Kişisel web sitesi", "Personal website")} onClose={onClose} footer={composer}>
+          {body}
+        </Sheet>
+      )}
+    />
   );
 }

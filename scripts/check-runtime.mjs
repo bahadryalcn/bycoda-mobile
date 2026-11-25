@@ -9,6 +9,8 @@ const desktopSource = path.resolve(mobileRoot, "../src");
 const pureContracts = new Set([
   // Dependency-free brand metadata shared by native Help and desktop About.
   "shared/lib/productIdentity",
+  // Public policy update parsing and an unauthenticated fetch, shared with desktop.
+  "shared/lib/policyUpdates",
   // Pure typed-array PCM/VAD math and base64 codecs; no DOM, audio device or desktop imports.
   "features/voice/model/voiceVad",
   "features/voice/model/dictationModels",

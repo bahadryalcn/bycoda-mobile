@@ -158,8 +158,10 @@ system scaling.
 | Spacing | `xxs` 2; `xs` 4; `sm` 6; `row` 10; `md` 12; `lg`/`screen` 16; `xl` 20; `xxl` 28; `gapIcon` 8 |
 | Type (size/line) | `micro` 11/14; `caption`/`badge` 12/16; `small` 13/17; `control` 14/19; `body` 15/21 (chat `lineHeight.message` 22); `input` 16/21; `title` 16/21; `heading` 18/24; `hero` 24/30; `display` 28/34. Use the paired `lineHeight` map |
 | Radius | `badge` 6; `control` 10; `card` 12; `preview` 14; `bubble` 18; `composer` 24; `sheet` 24; `pill` 999 |
-| Visible sizes | `controlHeight`/`buttonHeight` 40; `inputHeight`/`composerFieldMin` 48; `visualControl` 32 (icon buttons, send); `chipHeight` 28; `toolRowHeight` 28; `sectionHeaderHeight` 28; `rowHeightSession` 56; `rowHeightProject` 52; `headerHeight` 48; `tabBarHeight` 52 |
+| Visible sizes | `controlHeight`/`buttonHeight` 40; `inputHeight`/`composerFieldMin` 48; `visualControl` 32 (icon buttons, send); `chipHeight` 28; `toolRowHeight` 28; `sectionHeaderHeight` 32; `rowLeading` 32; `rowHeightSession` 56; `rowHeightProject` 52; `headerHeight` 48; `tabBarHeight` 52 |
 | Hit areas | `touchTarget`/`iconTarget` 48. Header Back, Sheet Close and composer toolbar controls reserve 48 dp in layout. Compact visible controls can expand into space their parent leaves available. |
+| Icons (`iconSize`) | `inline` 14 (in a text line); `status` 16 (status/notice glyph); `row` 20 (list row leading glyph); `action` 20 (header/toolbar icon button); `back` 24 (navigation chevron) |
+| Rhythm (`rhythm`) | `group` 28 from the previous group to the next section label; `headerLeadIn` 4; `headerGap` 4 |
 | Other | Multiline input minimum 96 |
 | Width | Content 760; entry surfaces 520 |
 | Motion | Press 120ms; reveal 220ms; sheet 280ms |
@@ -183,7 +185,8 @@ The bottom navigation is a centered, content-width icon dock above the bottom sa
 area. Its panel surface has a 1dp border, 24dp corners, 6dp padding and soft shadow.
 Each destination has a 48dp icon-only target with an accessible label; selection
 uses text-colored artwork and a 4dp accent dot, without a filled tab background.
-The new-session command stays inside the dock after a divider. Narrow widths and
+Voice assistant and new-session commands sit together inside the dock after a
+divider. Tap the waveform to open the assistant. Its dot shows call state. Narrow widths and
 large system text move destinations into the More sheet. Running counts remain
 visible and accessible there. The keyboard controller hides the dock; its measured
 footprint reserves content and toast clearance. Dock artwork is tintable PNG alpha
@@ -193,8 +196,8 @@ group; the group can move as a unit at narrow widths. Running Stop remains
 direct. Keyboard visibility combines status and scope into one text flow without
 remounting workspace, transcript, composer or action owners. Keep essential
 context readable.
-The composer gives text its own full-width row and places attachment, mode and send
-controls below it. Its fill and perimeter remain stable on focus; editable fields
+The composer gives text its own full-width row and places one non-wrapping toolbar
+below it (attachment, model chip, microphone, send/stop), visible at rest as well. Its fill and perimeter remain stable on focus; editable fields
 keep local focus cues and the caret.
 
 ## Choose components by task
@@ -207,11 +210,12 @@ keep local focus cues and the caret.
 | Text editing | `Input`, `Field`, `IdentifierField` | Visible labels, suitable keyboard, inline errors |
 | Boolean setting | `ToggleField` | Explain consequences when needed |
 | Short peer view/value | `SegmentedControl`, `ChoiceChip` | Explicit selected state |
-| One/many options | `SelectField`, `MultiSelectField` | Enable search for long or growing lists |
+| One/many options | `SelectField`, `MultiSelectField` | The label and current value share a row that opens a picker Sheet. Search appears on long lists |
+| Suggested text or remote options | `AutocompleteField` | Type in the picker search. Commit a suggestion or explicitly choose the typed text when allowed |
 | Settings navigation | `NavigationGroup`, `NavigationRow` | Group related destinations and values |
 | Collection | `ScreenList`, `SearchField` | Stable rows, query state and refresh |
 | Editor/confirmation | `Sheet`, `FormActions`, `ConfirmationCard` | Guard dismissal and show async feedback |
-| Feedback | `QueryState`, `MutationState`, `Notice`, `ErrorNotice`, `Badge` | Actual state and useful recovery |
+| Feedback | `QueryState`, `MutationState`, `StatusLine`, `Notice`, `ErrorNotice`, `showToast`, `Badge` | Actual state and useful recovery |
 
 Two or three segmented choices share the available width and allow their labels to wrap
 inside each target. Keep every peer visible; a horizontal scroller must not hide
@@ -276,6 +280,15 @@ intent for ordinary start/approve/resume operations; destructive intent remains
 the compatibility default for deletion/discard/stop operations. Presentation
 never supplies or authorizes the callback.
 
+One confirmation pattern per weight: `confirmAction` (native alert) confirms one
+decision about one known thing in a sentence or two (sign out, delete account,
+discard changes). `Sheet` + `FormActions tone="danger"` is for a review that must
+stay valid while the data behind it can change (saved computers, local drafts,
+data-sharing consent): it shows what will be affected and retires itself when
+that changes. Destructive rows that open either use `intent="command"`, never a
+navigation chevron. Settings pages are pushed routes, so these sheets never stack
+on a settings sheet.
+
 ## States, accessibility and motion
 
 Provide default, pressed, selected, disabled, busy and error states wherever
@@ -295,19 +308,40 @@ on lock; security visibility takes priority over exit animation.
 
 One language for every state; use the shared owners in `src/ui/`, never ad hoc text.
 
+Errors are quiet and small. Pick the presentation by severity, one reporter per failure:
+
+| Level | When | Presentation | Height |
+|---|---|---|---|
+| Silent | Transient read failure inside its retry budget, failed background refresh under shown data, link drop, timeout or unknown Host reply within the 6 s grace (`READ_RETRY_GRACE_MS`, one automatic retry) | Nothing; the skeleton or data stays | 0 |
+| Ambient | Link down, reconnecting, offline | Computer pill only | 0 extra |
+| Status line | Slow read after the grace, data stale after 2 failed refreshes or 60 s, a later section whose failure the first section already reports, a waiting send | `StatusLine`: icon, one line, optional text action, no fill | 24 pt |
+| Toast | Result of a quick action with no form on screen (copy, pin, refresh) with Retry or Undo; never an uncertain write | `showToast({ action })`: 4 s, 6 s with an action | about 48 pt, no push |
+| Actionable toast | App-level notice whose review or cancel actions must stay available, such as diagnostic sharing | `ActionableToast` uses the shared toast card and measured bottom clearance. The feature owns timing and dismissal. | Wraps to fit text and actions |
+| Inline notice | Failed submit in a form, sheet or review; uncertain write; a caution to read before acting | `Notice`/`ErrorNotice` beside the action, one per action area, clamped to 2 lines with Details | 61 pt collapsed |
+| Section state | A section of a screen or sheet that cannot show anything | `StateView size="compact"` | 96 pt, 128 pt with an action |
+| Region state | A whole screen, list or sheet body with nothing to show | `StateView size="region"` | error 200 pt; first-run, unpaired and empty art up to 340 pt |
+| Blocking | Lock, consent, destructive or discard confirmation, render crash (root `ErrorBoundary`, `SectionErrorBoundary` in sheet bodies) | Sheet, dialog or full screen | n/a |
+
+Auth, identity, unsupported and offline show at once; every other failed first load waits for the grace.
+Illustrations are for first run, unpaired and empty, never for errors: `StateView` draws error art
+(error, unreachable, offline, locked) as the small tone icon. Within one `Screen`, `ScreenList` or
+`Sheet` the first failing `QueryState` owns the message and a Retry that retries every failed read;
+later failing sections show one status line. `QueryState` picks `size` by default from that ownership
+and its loading shape (list/content/centered: region; inline/none: compact); pass `size` to override.
+
 | State | Presentation (owner) |
 |---|---|
-| Empty, first run, not connected, unreachable, locked, no permission | `StateView`: appears as soon as the state is known. A full region centers its title, optional illustration and recovery action. Use `compact` for subsections: one inline icon, title and any necessary detail or action. `Empty` defaults to the compact form. |
+| Empty, first run, not connected, unreachable, locked, no permission | `StateView`: `size="region"` centers its title, optional illustration (first run, unpaired, empty only) and recovery action. `size="compact"` (or `compact`) for subsections: one inline icon, title, at most two lines and a compact action. `size="line"` is one `StatusLine`. `Empty` defaults to the compact form. |
 | Initial load | `QueryState` `loading`: `"list"`/`"content"` skeleton of the content shape (rows with tile, title and meta; or heading and lines), `"centered"` spinner plus label only when the shape is unknown. Never both, and no visible "Loading…" text above a skeleton: `loadingLabel` is announced only. Placeholders appear after 250 ms (`useDelayedVisible`), so fast or cached loads never flash. A quiet reconnect without data keeps the same skeleton; the computer pill shows the link. A field-level control (project scope) never renders a `StateView`: it would stretch its toolbar row and slide the row's actions. Spinners stay for in-place actions (button, row, connecting). |
 | Refresh | Pull-to-refresh or progress line; no blocking UI. |
-| Failed load, no data | `QueryState` renders `StateView` with art from the error kind (network/timeout unreachable, offline, auth/identity locked, else error) and Retry or the repair action. |
-| Failed or paused refresh, data shown | Keep the data. The computer pill carries link outages. If a reachable computer fails the read, `QueryState` offers Refresh after the retry finishes. |
-| Waiting for a connection, no data | `QueryState` renders a centered `StateView` "Waiting for a connection" with Manage connections; reconnecting without data is a centered loading. |
-| Feedback tied to a user action (form, sheet, dialog) or a contextual explanation to read before acting | `Notice`/`ErrorNotice` with tone, never for connection, loading, availability or "not available yet" (use `StateView`), and never stacked with a `StateView` in one region: tinted surface, hairline border, 16px icon, quiet recovery action. |
+| Failed load, no data | After the grace, `QueryState` renders a `StateView` without art: a tone icon, a title from the error kind, the message (clamped) and Retry or the repair action. |
+| Failed or paused refresh, data shown | Keep the data and stay silent. The computer pill carries link outages. After 2 consecutive failed refreshes or 60 s, a warning `StatusLine` offers Refresh; a Refresh that fails again raises a toast. |
+| Waiting for a connection, no data | `QueryState` renders a `StateView` "Waiting for a connection" with Manage connections; reconnecting without data keeps the skeleton (a `StatusLine` lead only for a slow read on a connected computer). |
+| Feedback tied to a user action (form, sheet, dialog) or a contextual explanation to read before acting | `Notice`/`ErrorNotice` with tone, never for connection, loading, availability or "not available yet" (use `StateView`), and never stacked with a `StateView` in one region: tinted surface, hairline border, 16px icon, message clamped to 2 lines with a Details toggle, quiet recovery action. |
 | Field validation | `Field`/`ErrorText` use `FieldError`: 13/17 danger text with a 14px icon; the input border turns danger. |
 | One spinner per operation | Busy `Button`/`IconButton` claim the spinner through `useSoleSpinner` (`src/ui/spinner-claim.ts`): the newest busy control draws it, any other stays busy (disabled, announced) without a second glyph, so a toolbar menu and a Retry button refetching the same data never show two identical spinners. Different kinds (skeleton, progress line, one spinner) may coexist. Never hand-draw a busy glyph beside a `busy` control. |
 | Submitting | Busy `Button` keeps its label; siblings disable; `MutationState` adds no second indicator inside `FormActions`. |
-| Success | `MutationState success` raises a toast (`showToast`, `useSuccessToast`) when `ToastHost` is mounted, otherwise a success `Notice`. |
+| Success | `MutationState success` raises a toast (`showToast`, `useSuccessToast`) when `ToastHost` is mounted, otherwise a success `Notice`. A quick row action reports its result, Retry or Undo with `showToast({ action })`. |
 | Dirty | `FormActions dirty` and `Sheet dirty` show the `UnsavedBadge` pill above the actions; leaving still goes through the Sheet guard. |
 | Offline, reconnecting, unreachable, access | The computer pill status only; no app-chrome banner and never per-row errors. A region with nothing to show uses a centered `StateView`. |
 
@@ -358,8 +392,25 @@ metadata block as another large card. Buttons, icon actions, selection rows and
 list rows retain 48dp+ hit areas (rows are at least 52/56 high); pressed rows fill with
 `pressedFill()` instead of scaling. Ordinary rows are flat: no card, inset hairline separators
 (`NavigationRow` draws one inside `NavigationGroup`), 15/21 medium title and 13/17 muted meta.
-Group rows under `SectionHeader` (12/16 semibold muted label, count, hairline). Show row status
-as `StatusText` (colored 13/17 text plus a 6px dot), not a filled `Badge`. Primary option labels may grow instead of being clipped.
+Group rows under `SectionHeader` (see the rule table below). Primary option labels may grow instead of being clipped.
+
+### Visual rules (one per intent)
+
+Every screen applies these through the shared owner; feature code passes data, not metrics.
+
+| Item | Rule | Owner |
+| --- | --- | --- |
+| Section header | 12/16 semibold muted label, no rule; count as a quiet regular number after the label, hidden at 0 (never "(0)"); trailing info/action at the end, centred in a 32 row; 4 lead-in. `flush` only for the first header of a container with nothing above it | `SectionHeader`, `Section` in `src/ui/layout.tsx`; `uiStyles.sectionHeader`/`sectionCount`/`sectionTrailing` |
+| Group rhythm | 28 from the previous group to the next section label (Screen gap 16 + lead-in 4 + half the 32 header row); header to first row 4 + row padding | `rhythm` in `src/ui/tokens.ts`; `Screen`, `ScreenList` |
+| Back / header | One bare chevron (24, 2.2 stroke iOS; arrow on Android) in a 48 target. Native stack headers render it as an item without the iOS shared glass capsule, so pushed pages match the conversation header; native title stays centred | `HeaderBackButton`; `stackBackItem`/`stackBackOptions` in `src/ui/stack-back.ts`; root `app/_layout.tsx` |
+| Page context ("which computer") | `scope={{ computer, project }}` on `Screen`/`ScreenList`: one quiet 13/17 line, each value led by its 14 role glyph (laptop, folder) and spoken as "Computer: …"; heading actions (refresh 20, add) share its row. Do not hand-build "a · b" subtitles | `ScopeLine` in `src/ui/scope-line.tsx`, `ScreenHeading` |
+| List rows | 52 min (56 with a detail line), 10 vertical padding, 15/21 medium label, 13/17 muted detail, inset hairline separator in a group. Leading content sits in a 32 slot so labels align across glyphs, provider marks and avatars | `NavigationRow`, `ValueRow`, `SegmentedRow`, `ToggleField`, `SelectField` row; `uiStyles.rowLeading` |
+| Leading icons | 20 muted Lucide glyph, 1.8 stroke, no tile or fill; danger rows tint it. Provider marks 20 | `RowIcon` (`SettingIcon` is an alias) in `src/ui/navigation-row.tsx` |
+| Status | The normal/healthy state is quiet muted text (`StatusText` default tone, no dot) or nothing. Running/info/warning/danger use `StatusText` with its tone colour and 6 dot. A tinted `Badge` is only for an exception the user must act on or notice in a list (failed, unavailable, needs you, draft) | `StatusText`, `Badge` in `src/ui/feedback.tsx` |
+| Section empty state | `StateView size="compact"`: neutral is the row's body text, muted and regular, no glyph or art, aligned with the rows; a toned one leads with its 16 status glyph and a 15/21 medium title. Optional compact action below. Region art stays for a whole empty screen | `StateView` in `src/ui/state-view.tsx`, `Empty` |
+| Card vs flat | Lists are flat rows in `NavigationGroup`; `Card variant="surface"` only for an independent task region (meters, a review) | `NavigationGroup`, `Card` |
+| Readings / metrics | One row per reading: label left, muted tabular value right; a share of a capacity adds a small bar under the same row (accent, amber from 80%, red from 90%); sizes and counts get no bar; unknown readings are omitted, not "–" | `ValueRow` (`children` slot) in `src/ui/setting-rows.tsx`; PanelUI `Meter` |
+| Menus | Never a one-item menu: `ActionMenu` renders a lone action directly (icon button if it has an icon, else a quiet text button); a lone destructive action keeps the menu unless flagged `reviewed` (it opens its own confirmation). A boolean is a `ToggleField` row, not a menu item | `ActionMenu` in `src/ui/overflow-menu.tsx`, `singleMenuAction` |
 
 Collapsed task records lead with title, status and a directly named session icon.
 Stop, pending operations and actionable failures stay visible. Completion and

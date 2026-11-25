@@ -10,7 +10,7 @@ function key(kind: string | undefined) {
   return kind?.trim().toLowerCase() ?? "";
 }
 
-function toolKind(block: Block): WorkKind {
+export function toolKind(block: Block): WorkKind {
   const kind = key(block.tool?.kind);
   const preview = block.tool?.preview?.kind;
   const title = (block.text || block.tool?.title || "").trim();
@@ -223,7 +223,7 @@ export function workSteps(steps: readonly Block[], copy: Copy, live = false): Wo
           {
             id: block.id,
             label: now ? copy("Çalışıyor", "Running") : copy("Çalıştırıldı", "Ran"),
-            code: firstLine(title.replace(/^(bash|shell|powershell|pwsh)\s*[:>]?\s*/i, "")),
+            code: firstLine((block.shell?.command || block.tool?.detail || title).replace(/^(bash|shell|powershell|pwsh)\s*[:>]?\s*/i, "")),
             state,
           },
         ];

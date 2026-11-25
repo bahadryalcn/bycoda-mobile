@@ -8,7 +8,8 @@ import Check from "lucide-react-native/icons/check";
 import { Body } from "./typography";
 import { BusyIndicator } from "./busy-indicator";
 import { useHover } from "./use-hover";
-import { gapIcon, metrics, opacity, space, type SemanticTone } from "./tokens";
+import { gapIcon, iconSize, metrics, opacity, space, type SemanticTone } from "./tokens";
+import type { ComponentType } from "react";
 import type { ContainerProps } from "./component-props";
 
 const GroupedNavigation = createContext(false);
@@ -23,6 +24,18 @@ export function NavigationGroup({ children, style }: ContainerProps) {
       <View style={[{ gap: 0 }, style]}>{children}</View>
     </GroupedNavigation>
   );
+}
+
+/**
+ * The one leading glyph of a list row: a 20dp muted lucide glyph, no tile or fill, centred in the
+ * row's 32dp leading slot (`metrics.rowLeading`) so labels align with provider marks and avatars.
+ * `tone="danger"` matches a destructive row's label.
+ */
+export function RowIcon({ glyph: Glyph, tone }: {
+  glyph: ComponentType<{ size?: number; strokeWidth?: number; color?: string }>; tone?: "danger";
+}) {
+  const { colors, semanticColors } = useMobileTheme();
+  return <Glyph size={iconSize.row} strokeWidth={1.8} color={tone ? semanticColors[tone].text : colors.muted} />;
 }
 
 export function Separator({ style }: Pick<ContainerProps, "style">) {
@@ -129,11 +142,7 @@ export function NavigationRow({
         selected && tintSelected && { backgroundColor: colors.selected },
       ]}
     >
-      {icon ? (
-        <View style={{ alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          {icon}
-        </View>
-      ) : null}
+      {icon ? <View style={uiStyles.rowLeading}>{icon}</View> : null}
       <View style={[uiStyles.grow, { gap: space.xxs }]}>
         {/* The row is the pressable: a selectable label would claim long-press on Android and swallow row presses. */}
         <Body

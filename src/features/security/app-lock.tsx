@@ -4,13 +4,12 @@ import { Modal, ScrollView, StyleSheet, View, useWindowDimensions } from "react-
 import { useBackHandler } from "panelui-native/hooks/use-back-handler";
 import Animated from "react-native-reanimated";
 import { enterItem } from "../../ui/motion";
-import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import { useSecurity } from "../../state/security";
 import {
   Body,
   ErrorNotice,
   Heading,
-  IconButton,
+  HeaderBackButton,
   Loading,
   Row,
   Screen,
@@ -41,9 +40,7 @@ function LockedLegalDocument({ document, onClose }: { document: LegalLinkTarget 
             flexWrap: "nowrap",
           }}
         >
-          <IconButton label={copy("Geri dön", "Go back")} reserveTouchTarget onPress={onClose}>
-            <ArrowLeft size={20} color={colors.text} />
-          </IconButton>
+          <HeaderBackButton label={copy("Geri dön", "Go back")} onPress={onClose} />
           <Heading style={[uiStyles.title, uiStyles.grow]}>
             {document ? legalDocumentTitle(document, copy) : undefined}
           </Heading>

@@ -96,6 +96,18 @@ function build(overrides: Partial<Parameters<typeof buildUsageWidgetSnapshot>[0]
   });
 }
 
+it("keeps the last successful measurement age when the Host refresh fails", () => {
+  const input = structuredClone(report);
+  const observedAt = now - 24 * 60_000;
+  input.providers[0].accounts = [{
+    id: "a", label: account, color: "#fff", status: "error",
+    error: "Rate limited", resetCredits: null, observedAt,
+  }];
+  const snapshot = build({ report: input, windows: "session" });
+  expect(snapshot).toMatchObject({ generatedAt: observedAt, stale: true });
+  expect(snapshot?.rows.find(({ provider }) => provider === "claude")?.leftPercent).toBe(72);
+});
+
 describe("usage widget snapshot", () => {
   it("lists Codex before Claude, session before weekly, and skips model-specific cards", () => {
     const snapshot = build()!;

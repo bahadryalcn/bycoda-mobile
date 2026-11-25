@@ -69,6 +69,7 @@ export function composerCommand(
   text: string,
   attachments: RemoteAttachment[],
   noteCard?: NoteComposerCard,
+  contextReplay?: string,
 ): Record<string, unknown> {
   validateNoteDelivery(noteCard, mode, text, true);
   if (mode === "steer") {
@@ -103,6 +104,7 @@ export function composerCommand(
     ...(plan ? { intent: "plan" } : {}),
     attachments,
     ...(noteCard ? { noteCard: readNoteContext(noteCard) } : {}),
+    ...(contextReplay ? { contextReplay } : {}),
   };
 }
 

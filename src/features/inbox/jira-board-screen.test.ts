@@ -6,6 +6,7 @@ import { ProviderJiraBoards } from "./jira-board-screen";
 import { InboxLocalScopeContext, useInboxLocalScope } from "./inbox-local-scope";
 import type { InboxOrigin } from "./provider-protocol";
 vi.mock("@/i18n", () => ({ useLocale: () => "tr" }));
+vi.mock("../management/shared/record-bits", () => ({ useRelativeTime: () => () => "1 g" }));
 
 type Request = { action: string; input?: { boardId?: number; scope?: string; sprintId?: number; pageToken?: string } };
 const state = vi.hoisted(() => ({
@@ -48,10 +49,10 @@ vi.mock("@/ui/filter-sheet", () => ({
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: { children?: ReactNode }) => createElement("div", null, children);
   const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress?: () => void }) => createElement("button", { disabled, onClick: onPress }, label);
-  return { Body: Wrapper, Badge: ({ label }: { label: string }) => createElement("span", null, label),
+  return { Body: Wrapper, Badge: ({ label }: { label: string }) => createElement("span", null, label), StatusText: ({ label }: { label: string }) => createElement("span", null, label),
     Sheet: ({ children, title }: { children: ReactNode; title: string }) => createElement("div", { role: "dialog", "aria-label": title },
       createElement(InboxLocalScopeContext, { value: null }, children)),
-    Row: Wrapper, Stack: Wrapper, StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message }: { message: string }) => createElement("span", null, message), QueryState: () => null, Button,
+    Row: Wrapper, Stack: Wrapper, StateView: ({ title, description, action }: any) => createElement("p", null, title, description, action ? createElement(Button, action) : null), Notice: ({ message }: { message: string }) => createElement("span", null, message), QueryState: () => null, Button,
     ActionMenu: ({ actions }: { actions: Array<{ key: string; label: string; disabled?: boolean; onPress: () => void }> }) => createElement("div", null, actions.map((action) => {
       state.actions.set(action.key, action.onPress); return createElement(Button, { ...action, key: action.key });
     })),

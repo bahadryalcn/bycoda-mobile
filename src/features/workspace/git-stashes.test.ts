@@ -33,7 +33,8 @@ vi.mock("@/state/queries", () => ({
   useHostQuery: () => ({ isSuccess: !state.queryError, isError: !!state.queryError, isEnabled: state.enabled, fetchStatus: state.paused ? "paused" : "idle", error: state.queryError, data: state.rows, refetch: state.refetch }),
   useHostMutation: () => ({ mutateAsync: state.write, error: state.error, isPending: state.pending }),
 }));
-vi.mock("lucide-react-native/icons/arrow-left", () => ({ default: () => null }));
+const subpage = vi.hoisted(() => ({ back: (() => {}) as () => void }));
+vi.mock("./subpage-chrome", () => ({ useProjectSubpage: (_title: string, onBack: () => void) => { subpage.back = onBack; } }));
 vi.mock("lucide-react-native/icons/arrow-down-to-line", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/info", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
@@ -50,8 +51,8 @@ vi.mock("@/ui/primitives", () => {
     FormActions: ({ submitLabel, onSubmit, onCancel, cancelLabel, disabled }: { submitLabel: string; onSubmit: () => void; onCancel: () => void; cancelLabel: string; disabled: boolean }) => createElement("footer", null, button({ label: submitLabel, onPress: onSubmit, disabled }), button({ label: cancelLabel, onPress: onCancel })),
     Notice: ({ message }: { message: string }) => createElement("div", null, message), StateView: ({ title }: { title: string }) => createElement("div", null, title),
     Sheet: ({ visible, children }: PropsWithChildren<{ visible: boolean }>) => visible ? wrapper({ children }) : null,
-    ScreenList: ({ header, actions, context, data, renderItem }: { header: React.ReactNode; actions: React.ReactNode; context: React.ReactNode; data: unknown[]; renderItem: (args: { item: unknown }) => React.ReactNode }) =>
-      createElement("main", null, context, actions, header, ...data.map((item) => renderItem({ item }))),
+    ScreenList: ({ header, actions, context, onBack, data, renderItem }: { header: React.ReactNode; actions: React.ReactNode; context: React.ReactNode; onBack?: () => void; data: unknown[]; renderItem: (args: { item: unknown }) => React.ReactNode }) =>
+      createElement("main", null, button({ label: "Back", onPress: subpage.back }), context, actions, header, ...data.map((item) => renderItem({ item }))),
   };
 });
 const container = document.createElement("div");

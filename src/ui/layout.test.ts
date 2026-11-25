@@ -37,6 +37,7 @@ vi.mock("panelui-native/components/page-header", () => {
 });
 vi.mock("./design-system", () => ({ surfaceClasses: "" }));
 vi.mock("./header-back-button", () => ({ HeaderBackButton: () => null }));
+vi.mock("./scope-line", () => ({ ScopeLine: () => null }));
 vi.mock("./motion", () => ({ reveal: undefined }));
 vi.mock("./use-pull-refresh", () => ({ usePullRefresh: vi.fn() }));
 import { LargeTitle, Screen, ScreenChromeProvider, ScreenHeading, sectionTitleText, useScreenHeading } from "./layout";

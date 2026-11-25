@@ -104,10 +104,10 @@ export function SessionNotes({ scope, projectId, onClose }: { scope: SessionScop
   const detailPresentation = { ...detail, data: readable ? detail.data : undefined, refetch: async () => { if (lease.active && current() && live.current.selected === selected && detail.isEnabled !== false) await detail.refetch(); } };
   const unavailable = <RecordAccessUnavailable />;
   return <Sheet visible title={copy("Oturum notları", "Session notes")} size="full" scroll={!!selected || !available || !supported} onClose={close}
-    footer={<FormActions tone={selected && canTransfer ? "primary" : "quiet"} submitLabel={selected && canTransfer ? copy("Bağlam olarak ekle", "Add as context") : selected ? copy("Geri", "Back") : copy("Kapat", "Close")}
-      onSubmit={selected && canTransfer ? attach : close} disabled={!!selected && canTransfer && (detail.isFetching || !!detail.error)}
-      cancelLabel={selected && canTransfer ? copy("Geri", "Back") : undefined} onCancel={selected && canTransfer ? back : undefined}
-      feedback={transferError && note ? <Notice tone="warning" message={copy("Not eklenemedi. Not en fazla 64.000 karakter olmalı ve etkin oturumdaki mesaj alanı hazır olmalı.", "The note could not be added. It must fit within 64,000 characters and the active session’s composer must be ready.")} /> : undefined} />}>
+    footer={selected ? <FormActions tone={canTransfer ? "primary" : "quiet"} submitLabel={canTransfer ? copy("Bağlam olarak ekle", "Add as context") : copy("Geri", "Back")}
+      onSubmit={canTransfer ? attach : close} disabled={canTransfer && (detail.isFetching || !!detail.error)}
+      cancelLabel={canTransfer ? copy("Geri", "Back") : undefined} onCancel={canTransfer ? back : undefined}
+      feedback={transferError && note ? <Notice tone="warning" message={copy("Not eklenemedi. Not en fazla 64.000 karakter olmalı ve etkin oturumdaki mesaj alanı hazır olmalı.", "The note could not be added. It must fit within 64,000 characters and the active session’s composer must be ready.")} /> : undefined} /> : undefined}>
     {!available ? unavailable : !supported ? <FeatureUnavailable message={copy("Oturum notlarını görmek için bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer to view session notes.")} /> : selected ? <Stack>
       <Body selectable>{opening.machineName}</Body>
       <QueryState query={detailPresentation} empty={readable && detail.data === null} emptyTitle={copy("Not bulunamadı.", "Note not found.")} />

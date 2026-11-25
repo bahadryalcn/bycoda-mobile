@@ -20,7 +20,7 @@ vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }))
 vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
 }));
-vi.mock("@/ui/tokens", () => ({ space: { xxs: 2, sm: 6 } }));
+vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, metrics: { rowHeightSession: 56 }, space: { xxs: 2, sm: 6 } }));
 vi.mock("@/ui/theme", () => ({
   useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }),
 }));
@@ -54,7 +54,7 @@ vi.mock("@/ui/copy", () => ({
 }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return {
+  return { StatusText: ({ label }: { label: string }) => createElement("span", null, label),
     Badge: Wrapper,
     Row: Wrapper,
     IconButton: ({

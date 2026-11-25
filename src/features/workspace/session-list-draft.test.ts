@@ -27,6 +27,7 @@ vi.mock("lucide-react-native/icons/folder-tree", () => ({ default: () => null })
 vi.mock("lucide-react-native/icons/git-pull-request", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/circle-dot", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/bot", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/pin", () => ({ default: () => h("i", { "data-pin": "" }) }));
 vi.mock("@/ui/primitives", () => ({ Body: ({ children }: PropsWithChildren) => h("span", null, children),
   PressableCard: ({ children, label }: PropsWithChildren<{ label: string }>) => h("button", { "aria-label": label }, children), StatusText: ({ label }: { label: string }) => h("span", null, label) }));
 vi.mock("@/ui/project-icon", () => ({ ProjectIcon: () => null }));
@@ -132,4 +133,12 @@ it("names managed, worktree and linked pull request identity like desktop rows",
   await render({ session: { ...base, branch: "feat", managedBy: { assistant: true, managedAt: 1, jobId: "job", detachedAt: 2 } } });
   expect(container.querySelector("button")?.getAttribute("aria-label")).toContain("Branch: feat");
   expect(container.querySelector("button")?.getAttribute("aria-label")).not.toContain("Managed session");
+});
+
+it("marks pinned sessions with a visible pin glyph and the desktop wording", async () => {
+  await render();
+  expect(container.querySelector("[data-pin]")).toBeNull();
+  await render({ session: { ...props.session, pinned: true } });
+  expect(container.querySelector("[data-pin]")).not.toBeNull();
+  expect(container.querySelector("button")?.getAttribute("aria-label")).toContain("Pinned");
 });

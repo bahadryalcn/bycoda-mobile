@@ -7,10 +7,14 @@ import { useScreenContentInsets } from "./screen-content-insets";
 import { metrics, space } from "./tokens";
 import type { QueryLike } from "./query-presentation";
 import { usePullRefresh } from "./use-pull-refresh";
+import { ConnectionFeedbackScope } from "./connection-feedback-scope";
+import type { PageScope } from "./scope-line";
 
 export type ScreenListProps<T> = FlatListProps<T> & {
   title?: string;
   subtitle?: string;
+  /** Which computer/project the page acts on: one quiet glyph-led line beside the heading actions. */
+  scope?: PageScope;
   /** Current task scope beside heading actions, including under a native title. */
   context?: ReactNode;
   header?: ReactNode;
@@ -36,6 +40,7 @@ function renderSlot(slot: FlatListProps<unknown>["ListHeaderComponent"]): ReactN
 export function ScreenList<T>({
   title,
   subtitle,
+  scope,
   context,
   header,
   footer,
@@ -55,13 +60,15 @@ export function ScreenList<T>({
 }: ScreenListProps<T>) {
   const { colors, uiStyles } = useMobileTheme();
   const content = useScreenContentInsets();
-  const heading = useScreenHeading({ title, subtitle, context, actions, onBack });
+  const heading = useScreenHeading({ title, subtitle, scope, context, actions, onBack });
   const onRefresh = refresh ?? query?.refetch;
   const ownRefresh = usePullRefresh(refreshState ? undefined : onRefresh);
   const pullRefresh = refreshState ?? ownRefresh;
   const callerHeader = renderSlot(ListHeaderComponent);
   const callerFooter = renderSlot(ListFooterComponent);
+  // Like Screen and Sheet, a list page reports a failed read once: the first failing section owns it.
   return (
+    <ConnectionFeedbackScope>
     <FlatList
       initialNumToRender={12}
       maxToRenderPerBatch={12}
@@ -102,7 +109,7 @@ export function ScreenList<T>({
       }
       ListHeaderComponent={
         header !== undefined || heading ? (
-          <View style={{ gap: space.sm, paddingBottom: space.sm }}>
+          <View style={{ gap: space.sm, paddingBottom: space.xs }}>
             {heading}
             {header}
             {callerHeader}
@@ -122,5 +129,6 @@ export function ScreenList<T>({
         )
       }
     />
+    </ConnectionFeedbackScope>
   );
 }

@@ -16,7 +16,7 @@ const currentPeriod = () => activitySummaryQuery(new Date(), Intl.DateTimeFormat
 /** Active time from the account service: today, week, month and year in the phone's time zone. */
 export function ActivitySection() {
   const copy = useCopy();
-  const { runtime, device } = useAccount();
+  const { runtime, status } = useAccount();
   const [query, setQuery] = useState(currentPeriod);
   // The account screen can stay mounted overnight or while the phone time zone changes.
   useEffect(() => {
@@ -36,7 +36,7 @@ export function ActivitySection() {
   const summary = useQuery({
     queryKey: ["account", "activity", query.date, query.timeZone],
     queryFn: () => runtime!.client.getActivitySummary({ query }),
-    enabled: !!runtime && !!device,
+    enabled: !!runtime && status === "signedIn",
   });
   const summaryError = useGracedReadError(summary);
   const format = (minutes: number) => {

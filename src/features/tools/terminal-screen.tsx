@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View } from "react-native";
-import { router, Stack, useFocusEffect } from "expo-router";
+import { Keyboard, ScrollView, View } from "react-native";
+import { router, useFocusEffect } from "expo-router";
 import { useNavigation, usePreventRemove, type NavigationAction } from "expo-router/react-navigation";
 import { randomUUID } from "expo-crypto";
 import Plus from "lucide-react-native/icons/plus";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
-import Maximize2 from "lucide-react-native/icons/maximize-2";
+import Search from "lucide-react-native/icons/search";
+import Square from "lucide-react-native/icons/square";
+import Trash2 from "lucide-react-native/icons/trash-2";
 import { useHostClient, useHostQuery } from "@/state/queries";
 import { useAsyncAction } from "@/state/actions";
 import { useActiveMachine, useMachines } from "@/state/machines";
@@ -16,15 +18,15 @@ import { createTerminalApi } from "@/remote/services/terminal-api";
 import type { HostProject } from "@/domain/types";
 import type { HostTerminalList } from "../../../../src/features/host-tools/terminalTypes";
 import {
-  ActionMenu, Badge, Body, Button, CodePanel, CodeText, Disclosure, Field, IconButton, MutationState,
-  FormActions, NavigationRow, Notice, QueryState, Row, Screen, SelectField, Sheet,
+  ActionMenu, Body, Button, ChoiceChip, CodeText, Disclosure, Field, FieldError, IconButton, Input,
+  MutationState, FormActions, Notice, QueryState, Row, Screen, SearchField, SelectField, Sheet, StateView, StatusLine,
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
-import { useInfoHint } from "@/ui/info-hint";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useMobileTheme } from "@/ui/theme";
+import { useScreenContentInsets } from "@/ui/screen-content-insets";
 import { haptic } from "@/ui/motion";
-import { space } from "@/ui/tokens";
+import { iconSize, space } from "@/ui/tokens";
 import { projectTerminals, terminalCommandInput, terminalDisplayOutput, TERMINAL_COMMAND_LIMIT } from "./terminal-model";
 import { useLocalDraft } from "../workspace/use-local-draft";
 import { registerWorkspaceDraft } from "../workspace/draft-guard";
@@ -32,6 +34,8 @@ import { decodeTerminalDraft, emptyTerminalDraft, encodeTerminalDraft, terminalD
 import { ErrorNotice } from "@/ui/feedback";
 import { useTerminalOutput } from "./use-terminal-output";
 import { TerminalOutputView } from "./terminal-output-view";
+import { TerminalCopyButton, TerminalStatusDot } from "./terminal-header-controls";
+import { useClipboardFeedback } from "@/ui/use-clipboard-feedback";
 
 let nextTerminalScope = 1;
 export function TerminalScreen({ project }: { project: HostProject }) {
@@ -42,6 +46,7 @@ export function TerminalScreen({ project }: { project: HostProject }) {
 
 function TerminalScreenBody({ project }: { project: HostProject }) {
   const { colors, uiStyles } = useMobileTheme();
+  const insets = useScreenContentInsets();
   const copy = useCopy();
   const manageConnections = () => router.push("/machines");
   const machine = useActiveMachine();
@@ -50,7 +55,12 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
   const list = useHostQuery<HostTerminalList>(["terminals", project.id], "terminals.list", { projectId: project.id }, { interval: 5000 });
   const terminals = projectTerminals(list.data?.terminals ?? [], project.id);
   const [selectedId, setSelectedId] = useState("");
-  const selected = terminals.find((entry) => entry.id === selectedId);
+  const initialId = (terminals.find(entry => entry.state === "running") ?? terminals[0])?.id;
+  const selected = terminals.find(entry => entry.id === (selectedId || initialId));
+  // Pin the first selection before polling can reorder or replace the terminal list.
+  useEffect(() => {
+    if (initialId) setSelectedId(previous => previous || initialId);
+  }, [initialId]);
   const draftKey = terminalDraftKey([machine?.id, machine?.endpoint, machine?.environmentId, machine?.lanKey, project.id]);
   const draft = useLocalDraft(draftKey, decodeTerminalDraft, encodeTerminalDraft);
   const drafts = draft.value?.commands ?? {};
@@ -58,13 +68,16 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
   const [creating, setCreating] = useState(false);
   const [confirm, setConfirm] = useState<{ operation: "stop" | "close"; id: string; name: string }>();
   const confirmedTerminal = terminals.find(entry => entry.id === confirm?.id);
-  const [editingCommand, setEditingCommand] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const help = useInfoHint(copy("Satır tabanlı kabuk. Etkileşimli tam ekran uygulamalar desteklenmez. Durdur, kabuğu ve alt işlemlerini sonlandırır.", "Line-based shell. Interactive full-screen apps are unavailable. Stop ends the shell and its child processes."), "inline");
+  const [searchFor, setSearchFor] = useState<string>();
+  const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(true);
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
-  const output = useTerminalOutput(client, project.id, selected?.id ?? "", autoRefresh, focused);
+  const output = useTerminalOutput(client, project.id, selected?.id ?? "", true, focused);
   const terminal = output.data?.terminal ?? selected;
+  const rawOutput = output.data?.output ?? "";
+  const plainOutput = useMemo(() => terminalDisplayOutput(rawOutput), [rawOutput]);
+  const clipboard = useClipboardFeedback(plainOutput, !!plainOutput);
+  const searching = !!selected && searchFor === selected.id;
   const refresh = usePullRefresh(() => Promise.all([list.refetch(), output.refetch()]));
   const action = useAsyncAction();
   const pending = useRef(false);
@@ -77,7 +90,18 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
   const navigation = useNavigation();
   const form = useFormDraft({ name: "", profileId: "" });
   const writable = draft.ready && !!client && list.data?.writable === true && !list.isError && !output.error;
-  const command = drafts[selectedId] ?? "";
+  const canCreate = writable && !action.isPending && !uncertain;
+  const openCreate = () => {
+    Keyboard.dismiss();
+    action.reset();
+    setCreating(true);
+  };
+  const command = selected ? drafts[selected.id] ?? "" : "";
+  const commandInput = terminalCommandInput(command);
+  const commandError = command.trim() && !commandInput ? copy(
+    "En fazla 16384 UTF-8 baytı kullan ve terminal kontrol karakterlerini kaldır.",
+    "Use at most 16384 UTF-8 bytes and remove terminal control characters.",
+  ) : undefined;
   const orphanedDrafts = Object.entries(drafts).filter(([id, value]) => value.trim() && !terminals.some(entry => entry.id === id));
   const busy = action.isPending;
   const hasDrafts = Object.values(drafts).some((draft) => !!draft.trim());
@@ -124,11 +148,10 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
     });
   };
   const send = () => {
-    const input = terminalCommandInput(command);
-    if (!selected || terminal?.state !== "running" || !input) return;
+    if (!selected || terminal?.state !== "running" || !commandInput) return;
     const id = selected.id;
     run(async (target) => {
-      await target.terminalWrite(project.id, id, input);
+      await target.terminalWrite(project.id, id, commandInput);
       if (!current()) return;
       setDrafts((previous) => previous[id] === command ? { ...previous, [id]: "" } : previous);
     });
@@ -142,7 +165,7 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
       else await target.terminalClose(project.id, id);
       if (!current()) return;
       setConfirm(undefined);
-      if (operation === "close") setSelectedId("");
+      if (operation === "close") setSelectedId(terminals.find(entry => entry.id !== id)?.id ?? "");
     });
   };
   const uncertaintyFeedback = uncertain ? <Notice tone="warning" message={copy("İşlem sonucu belirsiz. Yenile ve çıktıyı kontrol et; aynı komutu yeniden gönderme.", "The result is uncertain. Refresh and inspect the output before sending the same command again.")}>
@@ -152,66 +175,87 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
     <Screen
       scroll={false}
       title={copy("Terminaller", "Terminals")}
-      subtitle={[machine?.name, project.name].filter(Boolean).join(" · ")}
+      scope={{ computer: machine?.name, project: project.name }}
       refreshState={refresh}
-      footer={!editingCommand && selected ? <Row style={{ alignItems: "flex-end" }}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-        <Field label={copy("Komut", "Command")} value={command} mono autoCapitalize="none" autoCorrect={false}
-          maxLength={TERMINAL_COMMAND_LIMIT} editable={draft.ready && !busy && writable && terminal?.state === "running" && !uncertain}
-          error={command.trim() && !terminalCommandInput(command) ? copy("En fazla 16384 UTF-8 baytı kullan ve terminal kontrol karakterlerini kaldır.", "Use at most 16384 UTF-8 bytes and remove terminal control characters.") : undefined}
-          onChangeText={value => setDrafts(previous => ({ ...previous, [selected.id]: value }))} />
-        </View>
-        <IconButton label={copy("Genişlet", "Expand")} disabled={busy} onPress={() => setEditingCommand(true)}><Maximize2 size={18} color={colors.muted} /></IconButton>
-        <IconButton label={copy("Komutu gönder", "Send command")} tone="primary" busy={busy}
-          disabled={!writable || uncertain || terminal?.state !== "running" || !terminalCommandInput(command)} onPress={send}><ArrowUp size={20} color={colors.primaryText} /></IconButton>
-      </Row> : undefined}
-      actions={
+      footer={selected ? <>
+        {commandError ? <FieldError message={commandError} /> : null}
+        <Row>
+          <Input label={copy("Komut", "Command")} placeholder={copy("Komut", "Command")}
+            style={uiStyles.grow} value={command} mono autoCapitalize="none" autoCorrect={false}
+            maxLength={TERMINAL_COMMAND_LIMIT} editable={!busy && writable && terminal?.state === "running" && !uncertain}
+            error={commandError} onChangeText={value => setDrafts(previous => ({ ...previous, [selected.id]: value }))} />
+          <IconButton label={copy("Komutu gönder", "Send command")} tone="primary" busy={busy} reserveTouchTarget
+            disabled={!writable || uncertain || terminal?.state !== "running" || !commandInput} onPress={send}>
+            <ArrowUp size={iconSize.action} color={colors.primaryText} />
+          </IconButton>
+        </Row>
+      </> : undefined}
+      actions={selected ?
         <>
-          <IconButton busy={refresh.refreshing} label={copy("Yenile", "Refresh")} disabled={list.isFetching || output.isFetching} onPress={() => { void refresh.onRefresh(); }}><RefreshCw size={22} strokeWidth={2} color={colors.accent} /></IconButton>
-          <IconButton label={copy("Terminal oluştur", "Create terminal")} disabled={!writable || busy || uncertain} onPress={() => { action.reset(); setCreating(true); }}><Plus size={22} strokeWidth={2.2} color={colors.accent} /></IconButton>
-        </>
-      }
+          <IconButton label={copy("Çıktıda ara", "Search output")} expanded={searching} reserveTouchTarget
+            onPress={() => { setQuery(""); setSearchFor(searching ? undefined : selected.id); }}>
+            <Search size={iconSize.action} color={searching ? colors.accent : colors.muted} />
+          </IconButton>
+          <TerminalCopyButton clipboard={clipboard} disabled={!plainOutput} />
+          <ActionMenu label={copy("Terminal işlemleri", "Terminal actions")} subtitle={selected.name}
+            reserveTouchTarget onTriggerPress={() => Keyboard.dismiss()} actions={[
+              { key: "refresh", label: copy("Yenile", "Refresh"), icon: <RefreshCw size={iconSize.row} color={colors.muted} />,
+                disabled: list.isFetching || output.isFetching, onPress: () => { void refresh.onRefresh(); } },
+              { key: "stop", label: copy("Terminali durdur", "Stop terminal"), destructive: true,
+                detail: copy("Kabuğu sonlandırır. Çıktı kalır.", "Ends the shell and keeps the output."),
+                icon: <Square size={iconSize.row} color={colors.danger} />,
+                disabled: !writable || busy || uncertain || terminal?.state !== "running",
+                onPress: () => { action.reset(); setConfirm({ operation: "stop", id: selected.id, name: selected.name }); } },
+              { key: "close", label: copy("Terminali kapat", "Close terminal"), destructive: true,
+                detail: copy("Terminali ve çıktısını listeden kaldırır.", "Removes the terminal and its output from the list."),
+                icon: <Trash2 size={iconSize.row} color={colors.danger} />, disabled: !writable || busy || uncertain,
+                onPress: () => { action.reset(); setConfirm({ operation: "close", id: selected.id, name: selected.name }); } },
+            ]} />
+        </> : undefined}
     >
-      <View style={{ flex: 1, minHeight: 0, paddingHorizontal: space.screen, gap: space.sm }}>
+      <View style={{ flex: 1, minHeight: 0, paddingLeft: insets.left, paddingRight: insets.right, gap: space.sm }}>
       <ErrorNotice error={draft.error} onRetry={() => { void (draft.ready ? draft.persist() : draft.load()).catch(() => {}); }} />
-      <Stack.Screen options={{ title: copy("Terminaller", "Terminals") }} />
-      <QueryState query={list} loading={selected ? "none" : "list"} empty={!terminals.length} emptyIllustration="no-sessions" emptyTitle={copy("Bu projede terminal yok.", "No terminals in this project.")} onManageConnections={manageConnections} />
-      {list.data?.writable === false ? <Notice message={copy("Bu bağlantıda terminaller salt okunur.", "Terminals are read-only on this connection.")} /> : null}
-      {terminals.length ? <Row>
-        <View style={uiStyles.grow}>
-          <SelectField hideLabel label={copy("Terminal", "Terminal")} value={selectedId} disabled={busy} placeholder={copy("Terminal seç", "Choose a terminal")} options={terminals.map((entry) => ({ value: entry.id, label: entry.name, detail: [entry.cwd, drafts[entry.id]?.trim() ? copy("Taslak", "Draft") : undefined].filter(Boolean).join(" · ") }))} onChange={(id) => { setSelectedId(id); setConfirm(undefined); setEditingCommand(false); }} />
-        </View>
-        {selected ? <ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
-          { key: "refresh", label: copy("Otomatik yenile", "Auto refresh"), selected: autoRefresh, onPress: () => setAutoRefresh(!autoRefresh) },
-          { key: "stop", label: copy("Terminali durdur", "Stop terminal"), destructive: true,
-            disabled: !writable || busy || uncertain || terminal?.state !== "running", onPress: () => setConfirm({ operation: "stop", id: selected.id, name: selected.name }) },
-          { key: "close", label: copy("Terminali kapat", "Close terminal"), destructive: true,
-            disabled: !writable || busy || uncertain, onPress: () => setConfirm({ operation: "close", id: selected.id, name: selected.name }) },
-        ]} /> : null}
-      </Row> : null}
+      {terminals.length ? (
+        <Row>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={uiStyles.grow} keyboardShouldPersistTaps="handled">
+            <Row>{terminals.map(entry => <ChoiceChip key={entry.id}
+              label={entry.name + (drafts[entry.id]?.trim() ? " · ✎" : "")}
+              selected={entry.id === selected?.id} disabled={busy}
+              onPress={() => { setSelectedId(entry.id); setConfirm(undefined); setSearchFor(undefined); }} />)}</Row>
+          </ScrollView>
+          <IconButton label={copy("Terminal oluştur", "Create terminal")} reserveTouchTarget disabled={!canCreate} onPress={openCreate}>
+            <Plus size={iconSize.action} color={colors.accent} />
+          </IconButton>
+        </Row>
+      ) : null}
+      <QueryState size={selected ? "compact" : "region"} query={list} loading={selected ? "none" : "list"}
+        empty={!terminals.length} emptyIllustration="no-sessions" emptyTitle={copy("Bu projede terminal yok.", "No terminals in this project.")}
+        emptyAction={canCreate ? { label: copy("Terminal oluştur", "Create terminal"), onPress: openCreate } : undefined}
+        onManageConnections={manageConnections} />
+      {!selected && terminals.length && list.isSuccess ? <StateView title={copy("Terminal seç", "Choose a terminal")} /> : null}
+      {list.data?.writable === false ? <StatusLine tone="info" label={copy("Bu bağlantıda terminaller salt okunur.", "Terminals are read-only on this connection.")} /> : null}
       {orphanedDrafts.length ? <Disclosure label={copy("Taslaklar", "Drafts")}>
-        {orphanedDrafts.map(([id]) => <NavigationRow key={id} label={id} disabled={busy} onPress={() => { setSelectedId(id); setEditingCommand(true); }} />)}
+        <ScrollView style={{ flexGrow: 0, maxHeight: 120 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+          {orphanedDrafts.map(([id, value]) => <View key={id}>
+            <Body muted mono>{id}</Body>
+            <CodeText selectable>{value}</CodeText>
+          </View>)}
+        </ScrollView>
       </Disclosure> : null}
       {selected ? <>
         <Row>
-          <Body mono muted style={uiStyles.grow}>{terminal?.cwd}</Body>
-          {help.button}
-          <Badge label={terminal?.state === "running" ? copy("Çalışıyor", "Running") : copy("Durduruldu", "Stopped")} tone={terminal?.state === "running" ? "active" : "default"} />
+          <TerminalStatusDot running={terminal?.state === "running"} />
+          <Body mono muted numberOfLines={1} ellipsizeMode="middle" style={[uiStyles.caption, uiStyles.grow]}>{terminal?.cwd || project.cwd}</Body>
         </Row>
-        {help.panel}
+        {searching ? <SearchField label={copy("Çıktıda ara", "Search output")} value={query} maxLength={200} onChangeText={setQuery} /> : null}
+        <ErrorNotice error={clipboard.error} />
         <QueryState query={output} loading="inline" onManageConnections={manageConnections} />
-        {output.data?.truncated ? <Notice message={copy("Çıktının yalnızca son bölümü gösteriliyor.", "Only the most recent output is shown.")} /> : null}
-        {output.data ? <TerminalOutputView key={selected.id} output={terminalDisplayOutput(output.data.output)} /> : null}
+        {output.data?.truncated ? <Body muted style={uiStyles.caption}>{copy("Çıktının yalnızca son bölümü gösteriliyor.", "Only the most recent output is shown.")}</Body> : null}
+        <TerminalOutputView key={selected.id} output={rawOutput} query={searching ? query : ""} waiting={!output.data} />
         {output.data?.hasMore ? <Button tone="quiet" label={copy("Daha fazla çıktı yükle", "Load more output")} busy={output.isFetching} onPress={() => { void output.refetch(); }} /> : null}
         {terminal?.exitCode != null ? <Body muted>{copy("Çıkış kodu: {p0}", "Exit code: {p0}", { p0: terminal.exitCode })}</Body> : null}
       </> : null}
-      {!creating && !confirm && !editingCommand ? <><MutationState mutation={action} />{uncertaintyFeedback}</> : null}
-      <Sheet visible={editingCommand && !!selectedId} size="compact" title={copy("Komut", "Command")} dismissible={!busy} onClose={() => setEditingCommand(false)}>
-        <Body muted mono>{[selected?.name ?? selectedId, terminal?.cwd].filter(Boolean).join(" · ")}</Body>
-        {selected ? <Field label={copy("Komut", "Command")} value={command} multiline mono autoCapitalize="none" autoCorrect={false} maxLength={TERMINAL_COMMAND_LIMIT} editable={!busy && writable && terminal?.state === "running" && !uncertain} error={command.trim() && !terminalCommandInput(command) ? copy("En fazla 16384 UTF-8 baytı kullan ve terminal kontrol karakterlerini kaldır.", "Use at most 16384 UTF-8 bytes and remove terminal control characters.") : undefined} onChangeText={(value) => setDrafts(previous => ({ ...previous, [selected.id]: value }))} /> : <><Badge label={copy("Salt okunur", "Read only")} /><CodePanel horizontal={false}><CodeText>{command}</CodeText></CodePanel></>}
-        {uncertaintyFeedback}
-        <FormActions submitLabel={copy("Komutu gönder", "Send command")} busy={busy} disabled={!selected || !writable || uncertain || terminal?.state !== "running" || !terminalCommandInput(command)} onSubmit={send} feedback={<MutationState mutation={action} />} />
-      </Sheet>
+      {!creating && !confirm ? <><MutationState mutation={action} />{uncertaintyFeedback}</> : null}
       <Sheet visible={creating} size="compact" title={copy("Terminal oluştur", "Create terminal")} dirty={form.dirty} dismissible={!busy} onClose={() => setCreating(false)}>
         <Body mono muted>{project.cwd}</Body>
         <Field label={copy("Ad", "Name")} value={form.values.name} editable={!busy} maxLength={80} onChangeText={(value) => form.setField("name", value)} />
@@ -228,8 +272,10 @@ function TerminalScreenBody({ project }: { project: HostProject }) {
       </Sheet>
       <Sheet visible={!!confirm} size="compact" title={confirm?.operation === "stop" ? copy("Terminali durdur", "Stop terminal") : copy("Terminali kapat", "Close terminal")} dismissible={!busy} onClose={() => setConfirm(undefined)}>
         <Body mono>{confirm?.name}</Body>
-        <Notice tone="warning" message={copy("Bu terminalin kabuğu ve çalışan alt işlemleri sonlandırılacak.", "This terminal's shell and running child processes will end.")} />
-        {command.trim() ? <Notice message={copy("Gönderilmemiş komut taslağın var.", "You have an unsent command draft.")} /> : null}
+        <Notice tone="warning" message={confirm?.operation === "close"
+          ? copy("Terminal ve çıktısı kaldırılır. Çalışan işlemler sonlandırılır.", "The terminal and its output are removed. Running processes end.")
+          : copy("Bu terminalin kabuğu ve çalışan alt işlemleri sonlandırılacak.", "This terminal's shell and running child processes will end.")} />
+        {confirm && drafts[confirm.id]?.trim() ? <Notice message={copy("Gönderilmemiş komut taslağın var.", "You have an unsent command draft.")} /> : null}
         {uncertaintyFeedback}
         <FormActions submitLabel={confirm?.operation === "stop" ? copy("Terminali durdur", "Stop terminal") : copy("Terminali kapat", "Close terminal")}
           tone="danger" busy={busy} disabled={!writable || uncertain || !confirmedTerminal || (confirm?.operation === "stop" && confirmedTerminal.state !== "running")}

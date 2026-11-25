@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { OnboardingPager, PageDots, type OnboardingPage } from "./onboarding-pager";
 import { DotField } from "./dot-field";
 import { Body, Heading } from "./primitives";
+import { useActionableToastClearance } from "./provider";
 import { useMobileTheme } from "./theme";
 import { metrics, space } from "./tokens";
 
@@ -31,6 +32,7 @@ export function OnboardingShell({ pages, hidePages = false, compactPages = false
 }) {
   const { colors } = useMobileTheme();
   const insets = useSafeAreaInsets();
+  const toastClearance = useActionableToastClearance();
   const { width, fontScale } = useWindowDimensions();
   // The action panel participates in layout and must be interactive as soon as it mounts.
   // Only the pager fades in, and it renders immediately when reduced motion is enabled.
@@ -38,8 +40,6 @@ export function OnboardingShell({ pages, hidePages = false, compactPages = false
   const offset = useSharedValue(0);
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const [index, setIndex] = useState(0);
-  const [panelHeight, setPanelHeight] = useState(0);
-  const [topHeight, setTopHeight] = useState(0);
   // Room left between the top row and the panel; it already follows the keyboard, rotation and text size.
   const [freeHeight, setFreeHeight] = useState<number | null>(null);
   const [compact, setCompact] = useState(false);
@@ -49,8 +49,10 @@ export function OnboardingShell({ pages, hidePages = false, compactPages = false
     if (!compact && freeHeight < minArtRoom) setCompact(true);
     else if (compact && freeHeight > minArtRoom + compactExitMargin) setCompact(false);
   }
-  const showPages = !hidePages && !compact;
-  const compactPage = !hidePages && compact && compactPages ? pages[index] : undefined;
+  // An actionable notice and accessibility text compete for the same height as the sign-in panel.
+  const useCompactPages = compact || (toastClearance > 0 && fontScale > 1);
+  const showPages = !hidePages && !useCompactPages;
+  const compactPage = !hidePages && useCompactPages && compactPages ? pages[index] : undefined;
   const goToPage = (page: number) => {
     if (page < 0 || page >= pages.length || (!scrollRef.current && !compactPage)) return;
     scrollRef.current?.scrollTo({ x: page * width, animated: false });
@@ -63,23 +65,20 @@ export function OnboardingShell({ pages, hidePages = false, compactPages = false
   const sideInsets = { paddingStart: Math.max(insets.left, space.screen), paddingEnd: Math.max(insets.right, space.screen) };
   return <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: colors.background }}>
     <DotField offset={offset} pulse={index} />
-    {showPages
-      ? <Animated.View entering={still ? undefined : FadeIn.duration(700).reduceMotion(ReduceMotion.System)} style={StyleSheet.absoluteFill}>
-        <OnboardingPager pages={pages} index={index} offset={offset} onIndexChange={setIndex} scrollRef={scrollRef}
-          top={topHeight + space.lg} bottomClearance={panelHeight + space.xl} />
-      </Animated.View>
-      : null}
-    <View
-      onLayout={({ nativeEvent }) => setTopHeight(nativeEvent.layout.height)}
-      pointerEvents="box-none" style={{ paddingTop: insets.top + space.lg, ...sideInsets }}>
+    <View pointerEvents="box-none" style={{ paddingTop: insets.top + space.lg, ...sideInsets }}>
       {top}
     </View>
-    <View pointerEvents="none" style={{ flex: 1 }} onLayout={({ nativeEvent }) => setFreeHeight(nativeEvent.layout.height)} />
+    <View pointerEvents="box-none" style={{ flex: 1, minHeight: 0 }} onLayout={({ nativeEvent }) => setFreeHeight(nativeEvent.layout.height)}>
+      {showPages ? (
+        <Animated.View entering={still ? undefined : FadeIn.duration(700).reduceMotion(ReduceMotion.System)} style={StyleSheet.absoluteFill}>
+          <OnboardingPager pages={pages} index={index} offset={offset} onIndexChange={setIndex} scrollRef={scrollRef} />
+        </Animated.View>
+      ) : null}
+    </View>
     <View
-      onLayout={({ nativeEvent }) => setPanelHeight(nativeEvent.layout.height)}
       // flexShrink: a tall panel gives way to the keyboard and short screens; a scrolling child inside it owns the overflow.
       style={{ width: "100%", maxWidth: metrics.entryWidth, alignSelf: "center", gap: space.lg, flexShrink: 1,
-        paddingBottom: Math.max(insets.bottom, space.md), ...sideInsets }}
+        paddingBottom: Math.max(insets.bottom + toastClearance, space.md), ...sideInsets }}
     >
       {compactPage ? (
         <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} contentContainerStyle={{ gap: space.sm }}>

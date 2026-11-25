@@ -1,4 +1,8 @@
-import { gzipSync, strToU8 } from "fflate";
+import { gunzipSync, gzipSync, strFromU8, strToU8 } from "fflate";
+
+export function readGzipBase64(value: string): string {
+  return strFromU8(gunzipSync(Uint8Array.from(atob(value), (char) => char.charCodeAt(0))));
+}
 
 /**
  * Gzip + base64 of the composed log. Synchronous on purpose: fflate's async API needs Web Workers,

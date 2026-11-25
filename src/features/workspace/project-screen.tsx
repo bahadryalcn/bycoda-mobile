@@ -7,10 +7,8 @@ import { useConnectionScope, type ConnectionScope } from "@/state/connection-sco
 import { ScrollView, Text, View } from "react-native";
 import MoreHorizontal from "lucide-react-native/icons/ellipsis";
 import Archive from "lucide-react-native/icons/archive";
-import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import Info from "lucide-react-native/icons/info";
 import FolderTree from "lucide-react-native/icons/folder-tree";
-import Search from "lucide-react-native/icons/search";
 import Plus from "lucide-react-native/icons/plus";
 import { useScreenChrome } from "@/ui/layout";
 import { useScreenContentInsets } from "@/ui/screen-content-insets";
@@ -25,12 +23,13 @@ import { useHostQuery } from "@/state/queries";
 import { useAsyncAction } from "@/state/actions";
 import {
   IconButton,
+  HeaderBackButton,
+  stackBackOptions,
   ScreenHeading,
   Button,
   SearchField,
   Sheet,
   SelectField,
-  StateView,
   MutationState,
   Notice,
   PressableCard,
@@ -51,7 +50,9 @@ import { useMobileTheme } from "@/ui/theme";
 import { ProjectIcon } from "@/ui/project-icon";
 import { ProjectSegments } from "./project-segments";
 import { ProjectMenuSheet, type ProjectMenuSection } from "./project-menu-sheet";
+import { ProjectSubpageScope, useProjectSubpageHost } from "./subpage-chrome";
 import { ProjectDetailsSheet } from "./project-details-sheet";
+import { NoComputerState } from "@/ui/no-computer";
 import { WorktreeCreate } from "./worktree-create";
 import { SubmoduleView } from "./submodule-view";
 import { PrivateContentAccessProvider, PrivateContentBoundary } from "@/ui/private-content";
@@ -88,6 +89,8 @@ function ProjectWorkspace({
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const { nativeTitle } = useScreenChrome();
+  const subpageHost = useProjectSubpageHost();
+  const { subpage } = subpageHost;
   // Horizontal gutters only: the Screen frame below pads the dock and home indicator for its own children.
   const gutter = useScreenContentInsets();
   const machine = useActiveMachine();
@@ -211,12 +214,8 @@ function ProjectWorkspace({
   };
   const menuSections = (sessionControls?: ProjectSessionControls): ProjectMenuSection[] => project ? [
     { key: "view", title: copy("Liste", "List"), items: [
-      sessionControls ? { key: "search", label: copy("Oturum ara", "Search sessions"), icon: <Search size={18} color={colors.muted} />,
-        selected: sessionControls.searchOpen || sessionControls.hasSearch, onPress: sessionControls.toggleSearch } : false,
       sessionControls ? { key: "archive", label: sessionControls.archived ? copy("Etkin oturumlar", "Active sessions") : copy("Arşiv", "Archive"),
         icon: <Archive size={18} color={colors.muted} />, selected: sessionControls.archived, onPress: sessionControls.toggleArchived } : false,
-      sessionControls ? { key: "refresh", label: copy("Yenile", "Refresh"), icon: <RefreshCw size={18} color={colors.muted} />,
-        disabled: sessionControls.refreshing, onPress: sessionControls.refresh } : false,
     ] },
     { key: "project", title: copy("Proje", "Project"), items: [
       machine ? { key: "pull-requests", label: copy("Pull request’ler", "Pull requests"), icon: <GitPullRequest size={18} color={colors.muted} />,
@@ -240,7 +239,7 @@ function ProjectWorkspace({
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
       <IconButton label={copy("Proje seçenekleri", "Project options")} expanded={menuOpen}
         onPress={() => openPanel("menu")}>
-        <MoreHorizontal size={20} color={cwd || sessionControls?.archived || sessionControls?.hasSearch ? colors.accent : colors.muted} />
+        <MoreHorizontal size={20} color={cwd || sessionControls?.archived ? colors.accent : colors.muted} />
       </IconButton>
       {sessionControls?.showCreateInHeader ? (
         <IconButton label={copy("Yeni oturum", "New session")} tone="default"
@@ -251,26 +250,30 @@ function ProjectWorkspace({
       </View>
     </PrivateContentAccessProvider>;
     return <>
-      <Stack.Screen options={{ title: visibleProject?.name || copy("Proje", "Project"),
-        headerTitle: () => <ProjectTitle name={visibleProject?.name || copy("Proje", "Project")} appearance={visibleProject?.appearance} onPress={() => openPanel("details")} />,
-        headerRight: nativeTitle && !!visibleProject ? () => headerActions : undefined }} />
+      <Stack.Screen options={{ title: subpage?.title ?? (visibleProject?.name || copy("Proje", "Project")),
+        // An open sub-page (history, a diff, a file, a folder level) lends this one header its title and back.
+        headerTitle: subpage ? undefined : () => <ProjectTitle name={visibleProject?.name || copy("Proje", "Project")} appearance={visibleProject?.appearance} onPress={() => openPanel("details")} />,
+        headerRight: nativeTitle && !!visibleProject && !subpage ? () => headerActions : undefined,
+        ...stackBackOptions(<HeaderBackButton onPress={subpage ? subpage.back : () => router.back()} />) }} />
       <WorkspaceFrame toolbar={<>
         {!nativeTitle ? <ScreenHeading context={<ProjectTitle name={project.name} appearance={project.appearance} onPress={() => openPanel("details")} />} actions={headerActions} /> : null}
         <MachineConnectionStatus />
-        <ProjectSegments
-          label={copy("Proje görünümü", "Project view")}
-          value={segment}
-          disabled={changingWorkspace}
-          options={[
-            { value: "sessions", label: copy("Oturumlar", "Sessions") },
-            { value: "files", label: copy("Dosyalar", "Files") },
-            { value: "git", label: copy("Değişiklikler", "Changes") },
-          ]}
-          onChange={(value) => {
-            if (segment !== value)
-              changeWorkspace(() => dispatch({ type: "segment", segment: value }));
-          }}
-        />
+        {!subpage ? (
+          <ProjectSegments
+            label={copy("Proje görünümü", "Project view")}
+            value={segment}
+            disabled={changingWorkspace}
+            options={[
+              { value: "sessions", label: copy("Oturumlar", "Sessions") },
+              { value: "files", label: copy("Dosyalar", "Files") },
+              { value: "git", label: copy("Değişiklikler", "Changes") },
+            ]}
+            onChange={(value) => {
+              if (segment !== value)
+                changeWorkspace(() => dispatch({ type: "segment", segment: value }));
+            }}
+          />
+        ) : null}
       </>} feedback={requestedWorktree === null && !worktreeOpen && !toolsOpen && changeAction.error ? <MutationState mutation={changeAction} /> : null}>
         {content}
       </WorkspaceFrame>
@@ -278,6 +281,7 @@ function ProjectWorkspace({
     </>;
   };
   return (
+    <ProjectSubpageScope registry={subpageHost.registry}>
     <Screen scroll={false}>
       {!visibleProject ? <Stack.Screen options={{ title: copy("Proje", "Project"), headerTitle: undefined, headerRight: undefined }} /> : null}
       {project && !visibleProject ? (
@@ -288,12 +292,7 @@ function ProjectWorkspace({
       ) : null}
       <PrivateContentBoundary visible={!project || !!visibleProject} isAllowed={() => !project || projects.isProjectVisible(id)}>
       {!machine ? (
-        <StateView
-          illustration="connect-computer"
-          title={copy("Bilgisayara bağlan", "Connect to a computer")}
-          description={copy("Projeyi açmak için bir bilgisayar bağla.", "Connect a computer to open this project.")}
-          action={{ label: copy("Bilgisayar bağla", "Connect a computer"), onPress: () => router.push("/machines") }}
-        />
+        <NoComputerState description={copy("Projeyi açmak için bilgisayarını bağla.", "Connect a computer to open this project.")} />
       ) : !project ? (
         <View style={{ flex: 1, paddingVertical: space.screen, paddingLeft: gutter.left, paddingRight: gutter.right, gap: space.md,
           width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}>
@@ -403,5 +402,6 @@ function ProjectWorkspace({
       )}
       </PrivateContentBoundary>
     </Screen>
+    </ProjectSubpageScope>
   );
 }

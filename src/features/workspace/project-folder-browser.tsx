@@ -26,7 +26,7 @@ import {
 } from "@/ui/primitives";
 import { space } from "@/ui/tokens";
 import { ProjectIcon } from "@/ui/project-icon";
-import { GroupedListRow, rowInset } from "./shared";
+import { GroupedListRow } from "./shared";
 import { queryOwnsRegion } from "./query-region";
 import type { ProjectDirectories } from "./projects-screen-types";
 import { CloneRepositorySheet } from "./clone-repository";
@@ -237,7 +237,7 @@ export function ProjectFolderBrowser({
         contentContainerStyle={{ gap: 0 }}
         ListEmptyComponent={regionOwned ? regionState : undefined}
         renderItem={({ item: entry, index }) => (
-          <GroupedListRow first={index === 0} last={index === entries.length - 1} inset={rowInset}>
+          <GroupedListRow first={index === 0} last={index === entries.length - 1}>
             <NavigationRow
               variant="plain"
               label={entry.name}

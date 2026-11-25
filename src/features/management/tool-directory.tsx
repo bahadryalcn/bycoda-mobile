@@ -1,59 +1,84 @@
-import { FolderOpen, GitBranch, MessagesSquare, CheckSquare, Target, Users, Clock, NotebookPen, Bot, Activity, Layers, Plug, KeyRound, ShieldCheck, Server, ScrollText, Smartphone, Globe, Terminal, ChartColumn } from "@/ui/duotone-icon";
+import { FolderOpen, GitBranch, MessagesSquare, CheckSquare, Target, Users, Clock, NotebookPen, Activity, Plug, KeyRound, ShieldCheck, Server, ScrollText, Smartphone, Globe, Terminal, ChartColumn } from "@/ui/duotone-icon";
+import { PullRequestIcon } from "./pull-request-icon";
+import { computerTools, toolLabels } from "../tools/tool-labels";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "@/ui/search-matching";
 import { router, type Href } from "expo-router";
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
 import { ProjectPicker } from "../workspace/project-picker";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import { useActiveMachine, useMachines } from "@/state/machines";
-import { Empty, NavigationGroup, NavigationRow, Section } from "@/ui/primitives";
+import { Empty, NavigationGroup, NavigationRow, RowIcon, Section } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
-import { useMobileTheme } from "@/ui/theme";
 import { managementSections, type ManagementSection } from "./sections";
 
 type CopyPair = readonly [tr: string, en: string];
+type HostTool = "servers" | "logs" | "devices" | "browser" | "terminals" | "diagnostics" | "usage";
 type Tool = {
   id: string;
   label: CopyPair;
-  icon: typeof FolderOpen;
+  /** A row glyph rendered through the shared `RowIcon`. */
+  icon: ComponentType<{ size?: number; strokeWidth?: number; color?: string }>;
   projectView?: "sessions" | "files" | "git";
-  hostTool?: "servers" | "logs" | "devices" | "browser" | "terminals" | "diagnostics" | "usage";
+  hostTool?: HostTool;
   managementSection?: ManagementSection;
+  /** Only a project's tools sheet lists it; the Tools tab reaches it from the project screen. */
+  projectSheetOnly?: boolean;
 };
 
-/** One directory feeds the global tools screen and each project's tools sheet. */
+/**
+ * One directory feeds the global tools screen and each project's tools sheet. Every row opens a
+ * tool; the assistant (dock) and Jira (Inbox tab) are reached from their own owners.
+ */
 const tools: readonly Tool[] = [
-  { id: "assistant", label: ["Asistan", "Assistant"], icon: Bot },
-  { id: "sessions", label: ["Oturumlar", "Sessions"], icon: MessagesSquare, projectView: "sessions" },
-  { id: "files", label: ["Dosyalar", "Files"], icon: FolderOpen, projectView: "files" },
-  { id: "git", label: ["Değişiklikler", "Changes"], icon: GitBranch, projectView: "git" },
+  { id: "sessions", label: ["Oturumlar", "Sessions"], icon: MessagesSquare, projectView: "sessions", projectSheetOnly: true },
+  { id: "files", label: ["Dosyalar", "Files"], icon: FolderOpen, projectView: "files", projectSheetOnly: true },
+  { id: "git", label: ["Değişiklikler", "Changes"], icon: GitBranch, projectView: "git", projectSheetOnly: true },
   { id: "tasks", label: managementSections.tasks, icon: CheckSquare, managementSection: "tasks" },
   { id: "goals", label: managementSections.goals, icon: Target, managementSection: "goals" },
   { id: "crews", label: managementSections.crews, icon: Users, managementSection: "crews" },
   { id: "automations", label: managementSections.automations, icon: Clock, managementSection: "automations" },
   { id: "stewards", label: managementSections.stewards, icon: ShieldCheck, managementSection: "stewards" },
-  { id: "jira", label: ["Jira", "Jira"], icon: Layers },
   { id: "notes", label: managementSections.notes, icon: NotebookPen, managementSection: "notes" },
-  { id: "terminals", label: ["Terminaller", "Terminals"], icon: Terminal, hostTool: "terminals" },
-  { id: "servers", label: ["Geliştirme sunucuları", "Dev servers"], icon: Server, hostTool: "servers" },
-  { id: "logs", label: ["Çalışma günlükleri", "Runtime logs"], icon: ScrollText, hostTool: "logs" },
-  { id: "diagnostics", label: ["Tanılama", "Diagnostics"], icon: Activity, hostTool: "diagnostics" },
-  { id: "usage", label: ["Oturum kullanımı", "Session usage"], icon: ChartColumn, hostTool: "usage" },
-  { id: "browser", label: ["Tarayıcı", "Browser"], icon: Globe, hostTool: "browser" },
-  { id: "devices", label: ["Cihazlar", "Devices"], icon: Smartphone, hostTool: "devices" },
-  { id: "providers", label: ["Sağlayıcı merkezi", "Provider center"], icon: Plug },
-  { id: "access", label: ["Bilgisayar erişimi", "Host access"], icon: KeyRound },
+  { id: "pull-requests", label: ["Pull request’ler", "Pull requests"], icon: PullRequestIcon },
+  { id: "terminals", label: toolLabels.terminals, icon: Terminal, hostTool: "terminals" },
+  { id: "servers", label: toolLabels.servers, icon: Server, hostTool: "servers" },
+  { id: "logs", label: toolLabels.logs, icon: ScrollText, hostTool: "logs" },
+  { id: "browser", label: toolLabels.browser, icon: Globe, hostTool: "browser" },
+  { id: "devices", label: toolLabels.devices, icon: Smartphone, hostTool: "devices" },
+  { id: "usage", label: toolLabels.usage, icon: ChartColumn, hostTool: "usage" },
+  { id: "diagnostics", label: toolLabels.diagnostics, icon: Activity, hostTool: "diagnostics" },
+  { id: "providers", label: toolLabels.providers, icon: Plug },
+  { id: "access", label: toolLabels.access, icon: KeyRound },
 ];
 
 const hostCapabilities = { servers: "dev.servers", devices: "device.host", browser: "browser.shared", terminals: "terminals.v1", logs: "runtime.logs", diagnostics: "resources.diagnostics", usage: "usage.sessions.read" } as const;
 
-/** Task groups also supply search vocabulary; an empty group never leaves a heading. */
+/** Computer-level tools open with any of these capabilities and without a project. */
+const computerCapabilities: Partial<Record<HostTool, readonly string[]>> = {
+  usage: ["usage.limits.read", "usage.cost.read", "usage.sessions.read"],
+  diagnostics: ["resources.diagnostics"],
+};
+
+/**
+ * Task groups also supply search vocabulary; an empty group never leaves a heading.
+ * Work is agent work; Project tools need a project; Computer tools do not.
+ */
 const groups: readonly { title: CopyPair; ids: readonly string[] }[] = [
-  { title: ["Proje", "Project"], ids: ["sessions", "files", "git", "notes"] },
-  { title: ["İşler", "Work"], ids: ["assistant", "tasks", "jira", "goals", "crews", "automations", "stewards"] },
-  { title: ["Geliştirme", "Development"], ids: ["terminals", "servers", "logs", "diagnostics", "usage", "browser", "devices"] },
-  { title: ["Bilgisayar", "Computer"], ids: ["providers", "access"] },
+  { title: ["İşler", "Work"], ids: ["tasks", "goals", "crews", "automations", "stewards"] },
+  { title: ["Proje", "Project"], ids: ["sessions", "files", "git", "notes", "pull-requests", "terminals", "servers", "logs", "browser", "devices"] },
+  { title: ["Bilgisayar", "Computer"], ids: ["usage", "diagnostics", "providers", "access"] },
 ];
+
+const isComputerTool = (tool: Tool) => !!tool.hostTool && computerTools.has(tool.hostTool);
+/** A tool the computer does not offer; capabilities not yet known count as offered. */
+function isUnsupported(tool: Tool, capabilities: readonly string[] | undefined) {
+  if (!tool.hostTool || !capabilities) return false;
+  const accepted = computerCapabilities[tool.hostTool] ?? [hostCapabilities[tool.hostTool]];
+  return !accepted.some((capability) => capabilities.includes(capability));
+}
+const needsProject = (tool: Tool) =>
+  (!!tool.hostTool && !isComputerTool(tool)) || (!!tool.projectView && tool.id !== "sessions");
 
 export function ToolDirectory({
   projectId,
@@ -69,7 +94,6 @@ export function ToolDirectory({
   onProjectView?: (view: "sessions" | "files" | "git") => void;
   onClearSearch?: () => void;
 }) {
-  const { colors } = useMobileTheme();
   const copy = useCopy();
   const locale = useLocale();
   const machine = useActiveMachine();
@@ -77,16 +101,16 @@ export function ToolDirectory({
   const [pending, setPendingTool] = useState<{ tool: Tool; connection: ConnectionScope } | null>(null);
   const pendingTool = pending?.connection === connection && connection.isCurrent() ? pending.tool : null;
   const visible = tools.filter((tool) => {
-    // The dock already owns Sessions; only a project's sheet uses it to switch back to its sessions view.
-    if (tool.id === "sessions" && !onProjectView) return false;
+    // The dock owns Sessions and the project screen owns Files and Changes; only a project's
+    // sheet lists them to switch its own view.
+    if (tool.projectSheetOnly && !onProjectView) return false;
     const group = groups.find((group) => group.ids.includes(tool.id));
     return matchesSearch([copy(...tool.label), group ? copy(...group.title) : ""].join(" "), query, locale);
   });
   const open = (tool: Tool, targetProjectId = projectId) => {
     if (!machine || !connection.isCurrent() || useMachines.getState().activeId !== machine.id) return;
-    const unsupported = tool.hostTool && machine.capabilities && !machine.capabilities.includes(hostCapabilities[tool.hostTool]);
-    const needsProject = tool.hostTool || (tool.projectView && tool.id !== "sessions");
-    if ((!unsupported && needsProject && !targetProjectId) || (tool.managementSection && targetProjectId === undefined)) {
+    const unsupported = isUnsupported(tool, machine.capabilities);
+    if ((!unsupported && needsProject(tool) && !targetProjectId) || (tool.managementSection && targetProjectId === undefined)) {
       setPendingTool({ tool, connection });
       return;
     }
@@ -104,7 +128,7 @@ export function ToolDirectory({
           pathname: "/project/[id]",
           params: { id: targetProjectId, machineId: machine.id, view: tool.projectView },
         });
-      else if (tool.hostTool && (targetProjectId || unsupported))
+      else if (tool.hostTool && (targetProjectId || unsupported || isComputerTool(tool)))
         router.navigate({ pathname: "/tools/[tool]", params: { tool: tool.hostTool, projectId: targetProjectId ?? "", machineId: machine.id } } as Href);
       else if (tool.managementSection) router.navigate({ pathname: "/manage/[section]", params: {
         section: tool.managementSection,
@@ -113,9 +137,8 @@ export function ToolDirectory({
         projectFilter: targetProjectId ? "project" : "all",
         ...(targetProjectId ? { projectId: targetProjectId } : {}),
       } });
-      else if (tool.id === "assistant") router.navigate("/assistant" as Href);
-      // The inbox owns its project scope and asks for one when Jira has none.
-      else if (tool.id === "jira") router.navigate({ pathname: "/(tabs)/inbox", params: { view: "jira" } } as Href);
+      else if (tool.id === "pull-requests")
+        router.navigate({ pathname: "/pull-requests", params: { machineId: machine.id, ...(targetProjectId ? { projectId: targetProjectId } : {}) } } as Href);
       else if (tool.id === "sessions") router.navigate("/(tabs)/chats" as Href);
       else if (tool.id === "providers") router.navigate({ pathname: "/tools/[tool]", params: { tool: "providers", machineId: machine.id } } as Href);
       else if (tool.id === "access") router.navigate({ pathname: "/tools/[tool]", params: { tool: "access", machineId: machine.id } } as Href);
@@ -141,16 +164,16 @@ export function ToolDirectory({
           <NavigationGroup>
             {group.tools.map((tool) => {
               const Icon = tool.icon;
-              const capability = tool.hostTool ? hostCapabilities[tool.hostTool] : undefined;
-              const unsupported = capability && machine?.capabilities && !machine.capabilities.includes(capability);
+              const unsupported = isUnsupported(tool, machine?.capabilities);
+              // With all projects in scope, say before the tap that a project will be asked for.
+              const asksForProject = !unsupported && needsProject(tool) && !projectId && !onProjectView;
               return (
                 <NavigationRow
                   key={tool.id}
                   label={copy(...tool.label)}
-                  detail={unsupported ? copy("Güncelleme gerekiyor", "Update needed") : undefined}
-                  icon={
-                    <Icon size={20} strokeWidth={1.8} color={colors.muted} />
-                  }
+                  detail={unsupported ? copy("Güncelleme gerekiyor", "Update needed")
+                    : asksForProject ? copy("Proje seç", "Choose a project") : undefined}
+                  icon={<RowIcon glyph={Icon} />}
                   onPress={() => open(tool)}
                 />
               );

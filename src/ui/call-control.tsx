@@ -5,13 +5,15 @@ import { LifecycleButton as PanelButton } from "./busy-indicator";
 import { useMobileTheme } from "./theme";
 import { opacity, radii, space } from "./tokens";
 import { useReducedMotionPreference } from "./use-reduced-motion";
+import { haptic } from "./motion";
 
 export const CALL_CONTROL_SIZE = 64;
 
 /**
  * A call screen control: a large round icon button with its visible label underneath, like a phone
- * call's dock. `selected` marks a toggle that is on (microphone or speaker off); `danger` is End.
- * The label is also the accessible name, so the dock never relies on icons alone.
+ * call's dock. `selected` always means "off or muted" (microphone or speaker off, drawn with a slashed
+ * icon); `danger` is End. The visible label states what a tap does ("Mute" / "Unmute"), and a light
+ * haptic confirms the tap for an owner who is not looking at the phone.
  */
 export function CallControl({ label, accessibilityLabel, selected, danger, disabled, onPress, children }: PropsWithChildren<{
   label: string;
@@ -34,7 +36,7 @@ export function CallControl({ label, accessibilityLabel, selected, danger, disab
       accessibilityState={{ disabled: !!disabled, selected: !!selected }}
       aria-disabled={!!disabled}
       disabled={disabled}
-      onPress={onPress}
+      onPress={() => { haptic.tap(); onPress(); }}
       style={{
         width: CALL_CONTROL_SIZE, height: CALL_CONTROL_SIZE, minWidth: CALL_CONTROL_SIZE, minHeight: CALL_CONTROL_SIZE,
         borderRadius: radii.pill, padding: 0, alignItems: "center", justifyContent: "center",

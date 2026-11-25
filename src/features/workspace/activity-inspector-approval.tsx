@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ApprovalCommandRefused, captureApprovalCommand } from "@/domain/approval-command";
 import { RemoteHostError } from "@/remote/host-error";
 import { hostKey } from "@/state/queries";
-import { Badge, Body, Button, ErrorText } from "@/ui/primitives";
+import { Badge, StatusText, Body, Button, ErrorText } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { space } from "@/ui/tokens";
 import type { Block } from "./wire";
@@ -86,7 +86,7 @@ function ApprovalOwner({ approval, scope, runId, disabled, onCommand, identity }
       } else update("unknown");
     }
   };
-  if (approval.decided) return <Badge
+  if (approval.decided) return <StatusText
     tone={approval.decided === "allow" ? "success" : approval.decided === "deny" ? "danger" : "warning"}
     label={approval.decided === "allow" ? copy("İzin verildi", "Allowed") : approval.decided === "cancelled" ? copy("İptal edildi", "Cancelled") : copy("Reddedildi", "Denied")} />;
   const held = disabled || !runId || !!delivery;

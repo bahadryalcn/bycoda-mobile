@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { View } from "react-native";
 import { useCopy } from "@/ui/copy";
-import { Badge, Body, Button, ErrorNotice, FormActions, Row, Section, Sheet } from "@/ui/primitives";
+import { Badge, Body, Button, ErrorNotice, FormActions, Row, Section, Sheet, StatusText } from "@/ui/primitives";
 import { space } from "@/ui/tokens";
 import type {
   AssistantJob,
@@ -75,16 +75,12 @@ export function AssistantJobsSection({
           <View key={job.id} style={{ gap: space.xs }}>
             <Body>{job.title}</Body>
             <Row>
-              <Badge
-                label={copy(...jobStatusCopy(job.status))}
-                tone={
-                  job.status === "failed"
-                    ? "danger"
-                    : job.status === "stalled" || job.status === "waiting"
-                      ? "warning"
-                      : "default"
-                }
-              />
+              {/* A failed, stalled or waiting job needs the owner and is a badge; any other state is quiet text. */}
+              {job.status === "failed" || job.status === "stalled" || job.status === "waiting" ? (
+                <Badge label={copy(...jobStatusCopy(job.status))} tone={job.status === "failed" ? "danger" : "warning"} />
+              ) : (
+                <StatusText label={copy(...jobStatusCopy(job.status))} tone={job.status === "running" ? "live" : "default"} />
+              )}
               {job.progress.total > 0 ? (
                 <Body muted>
                   {copy("{p0}/{p1} görev", "{p0}/{p1} tasks", {
@@ -117,7 +113,7 @@ export function AssistantJobsSection({
           </View>
         );
       })}
-      {visibleJobs.length < jobs.length ? <Button label={copy("Daha fazla iş göster", "Show more jobs")} onPress={() => setVisibleCount((count) => count + MAX_JOBS)} /> : null}
+      {visibleJobs.length < jobs.length ? <Button label={copy("Daha fazla iş göster", "Show more jobs")} tone="quiet" onPress={() => setVisibleCount((count) => count + MAX_JOBS)} /> : null}
       {stopping ? (
         <Sheet
           visible

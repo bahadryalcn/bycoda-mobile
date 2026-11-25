@@ -243,7 +243,10 @@ export const metrics = {
   buttonHeight: 40,
   rowHeightSession: 56,
   rowHeightProject: 52,
-  sectionHeaderHeight: 28,
+  /** Section label row; fits a 32 visual trailing control (info, count, action) without growing. */
+  sectionHeaderHeight: 32,
+  /** Leading slot of every list row: glyphs, provider marks and avatars centre in it so labels align. */
+  rowLeading: 32,
   /** Minimum width of a count pill so one- and two-digit counts share a shape. */
   countPill: 22,
   /** Guide line that joins grouped rows to their group header. */
@@ -269,6 +272,18 @@ export const metrics = {
   /** Dock capsule cap on tablets and landscape large phones. */
   wideDockWidth: 960,
 };
+/**
+ * Icon sizes by role. One size per role on every screen: `inline` sits in a text line (scope line,
+ * meta), `status` leads a status/notice line, `row` is a list row's leading glyph, `action` is a
+ * header or toolbar icon button, `back` is the navigation chevron.
+ */
+export const iconSize = { inline: 14, status: 16, row: 20, action: 20, back: 24 };
+/**
+ * Vertical rhythm between groups: 28 from the previous group to the next section label's text. A
+ * screen's parent gap (`space.lg` 16) + the header lead-in (`headerLeadIn` 4) + half of the 32 header
+ * row around its 16 label line (8) = `group`. A header sits `headerGap` above its first row.
+ */
+export const rhythm = { group: space.xxl, headerLeadIn: space.xs, headerGap: space.xs };
 /** Gap between a row icon and its text. */
 export const gapIcon = 8;
 /** Padding that grows a smaller visual control to the 48 touch target. */

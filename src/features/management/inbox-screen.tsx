@@ -1,11 +1,10 @@
 import { ScreenList } from "@/ui/screen-list";
 import type { HostAttentionInbox, MobileInboxItem } from "@/domain/types";
-import { router, useLocalSearchParams, type Href } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useInboxSeen } from "../inbox/inbox-seen-store";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActionMenu, Body, Button, Notice, QueryState, Screen, ScreenHeader, SectionHeader, SegmentedControl, Sheet, Stack, StateView } from "@/ui/primitives";
-import { CollectionToolbar } from "@/ui/search-field";
+import { Notice, QueryState, Screen, ScreenHeader, SectionHeader, SegmentedControl, StateView } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { useHostQuery } from "@/state/queries";
@@ -23,6 +22,8 @@ import { ProviderInboxScreen } from "../inbox/provider-inbox-screen";
 import { View } from "react-native";
 import { inboxRelativeTime } from "./inbox-time";
 import { isInboxPrivateFailure } from "../inbox/provider-model";
+import { PendingApprovalsRow } from "../inbox/pending-approvals-row";
+import { NoComputerState } from "@/ui/no-computer";
 
 const attentionRoutes = { task: "tasks", goal: "goals", automation: "automations", social: null, "pull-request": "tasks", session: "inbox" } as const;
 
@@ -51,17 +52,14 @@ export function InboxScreen() {
           ]}
           onChange={setMode}
         />
-        {mode === "providers" ? (
-          <Button label={copy("Pull request’ler", "Pull requests")} tone="quiet" flush onPress={() => router.push("/pull-requests" as Href)} />
-        ) : null}
       </ScreenHeader>
       {mode === "providers"
         ? <ProviderInboxScreen embedded openJira={view === "jira"} />
-        : <AttentionInboxScreen issuesLabel={issuesLabel} onOpenIssues={() => setMode("providers")} />}
+        : <AttentionInboxScreen />}
     </Screen></InboxBrowseMemoryProvider>
   );
 }
-function AttentionInboxScreen({ issuesLabel, onOpenIssues }: { issuesLabel: string; onOpenIssues: () => void }) {
+function AttentionInboxScreen() {
   const copy = useCopy();
   const machine = useActiveMachine();
   const { projectId, setProjectId, matches } = useInboxLocalScope();
@@ -92,7 +90,6 @@ function AttentionInboxScreen({ issuesLabel, onOpenIssues }: { issuesLabel: stri
   }, [focused, readable, machine, data]);
   const lease = useMemo(() => ({ active: false }), [readable, origin.machineId, origin.projectId]);
   useLayoutEffect(() => { lease.active = true; return () => { lease.active = false; }; }, [lease]);
-  const [help, setHelp] = useState<typeof lease | null>(null);
   const latest = useRef({ readable, data, enabled: query.isEnabled !== false, refetch: query.refetch });
   latest.current = { readable, data, enabled: query.isEnabled !== false, refetch: query.refetch };
   const scrollMemory = useInboxScrollMemory<MobileInboxItem>(memory, origin, initialView?.offset ?? 0,
@@ -128,27 +125,21 @@ function AttentionInboxScreen({ issuesLabel, onOpenIssues }: { issuesLabel: stri
       query={{...query, data, refetch: refresh}}
       refresh={refresh}
       data={rows}
-      header={partial ? <Notice tone="warning" retrying={query.isFetching}
+      header={<>
+        <PendingApprovalsRow />
+        {partial ? <Notice tone="warning" retrying={query.isFetching}
         message={copy("Bazı projeler zamanında yanıt vermedi; onların bekleyen işleri burada görünmüyor olabilir.",
           "Some projects did not respond in time, so their attention items may be missing.")}
-        onRetry={() => { void refresh(); }} /> : undefined}
+        onRetry={() => { void refresh(); }} /> : null}
+      </>}
       keyExtractor={(item) => item.id}
-      context={<CollectionToolbar field={<Scope allowAll projectId={projectId} onChange={setProjectId} />} actions={readable ? (
-        <ActionMenu label={copy("Diğer işlemler", "More actions")} busy={query.isFetching && data !== undefined}
-          actions={[
-            { key: "refresh", label: copy("Yenile", "Refresh"), disabled: query.isFetching,
-              onPress: () => { void refresh(); } },
-            data && !data.externalProviderInboxAvailable && { key: "help", label: copy("Yardım", "Help"),
-              onPress: () => { if (lease.active && latest.current.readable && current()) setHelp(lease); } },
-          ]} />
-      ) : null} />}
+      context={<Scope allowAll projectId={projectId} onChange={setProjectId} />}
       ListEmptyComponent={
         <>
-          {!machine ? <StateView illustration="connect-computer" title={copy("Bir bilgisayar seçin", "Choose a computer")}
-            action={{ label: copy("Bilgisayar bağla", "Connect a computer"), onPress: () => router.navigate("/machines") }} /> :!scopeCurrent || query.isEnabled === false && !query.error ? (
+          {!machine ? <NoComputerState /> :!scopeCurrent || query.isEnabled === false && !query.error ? (
             <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")}
               description={copy(...RECORD_ACCESS_UNAVAILABLE)} />
-          ) : <QueryState query={{...query, data: query.error ? undefined : data, refetch: refresh}} empty={data !== undefined && !partial}
+          ) : <QueryState size="region" query={{...query, data: query.error ? undefined : data, refetch: refresh}} empty={data !== undefined && !partial}
             emptyIllustration="inbox-empty"
             emptyTitle={copy("Bekleyen bir iş yok", "Nothing needs your attention")}
             emptyDetail={copy("Onaylar, sorular ve takılan işler burada görünür.", "Approvals, questions and stuck work show up here.")} />}
@@ -160,22 +151,12 @@ function AttentionInboxScreen({ issuesLabel, onOpenIssues }: { issuesLabel: stri
         return (
           <View>
             {first ? <SectionHeader
-              title={urgent ? copy("Şimdi sizden bekleyenler", "Needs you now") : copy("Diğer işler", "Other activity")}
+              title={urgent ? copy("Senden bekleyenler", "Needs you now") : copy("Diğer işler", "Other activity")}
               count={urgent ? groups.now.length : groups.earlier.length} /> : null}
             <AttentionRow item={item} time={relativeTime(item.updatedAt, copy)} onPress={() => open(item)} />
           </View>
         );
       }}
     />
-    {help === lease && readable ? <Sheet visible title={copy("Yardım", "Help")} size="compact" onClose={() => setHelp(null)}>
-      <Stack>
-        <Body muted>GitHub, GitLab, Jira, Linear, Azure</Body>
-        <Button label={issuesLabel} onPress={() => {
-          if (!lease.active || !latest.current.readable || !current()) return;
-          setHelp(null);
-          onOpenIssues();
-        }} />
-      </Stack>
-    </Sheet> : null}
   </>;
 }

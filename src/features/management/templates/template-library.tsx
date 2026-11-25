@@ -20,6 +20,7 @@ import {
   Stack,
 } from "@/ui/primitives";
 import { useMobileTheme } from "@/ui/theme";
+import { iconSize } from "@/ui/tokens";
 import { ScreenList } from "@/ui/screen-list";
 import { errorMessage, remoteErrorKind } from "@/ui/error-message";
 import { errorIllustration, errorTitle } from "@/ui/state-model";
@@ -203,7 +204,7 @@ export function TemplateLibrary({
                   disabled={state.rows.length >= MAX_TEMPLATES || state.saving}
                   onPress={addTemplate}
                 >
-                  <Plus size={22} strokeWidth={2.2} color={colors.accent} />
+                  <Plus size={iconSize.action} strokeWidth={2} color={colors.accent} />
                 </IconButton>
               }
             />

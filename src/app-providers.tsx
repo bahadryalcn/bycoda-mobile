@@ -15,6 +15,8 @@ import { AssistantCompanion } from "./features/assistant/assistant-companion";
 import { logDiagnostic } from "./features/diagnostics/diagnostic-log";
 import { transportKind } from "./features/diagnostics/diagnostic-events";
 import { DiagnosticsCoordinator } from "./features/diagnostics/DiagnosticsCoordinator";
+import { DiagnosticSharingNotice } from "./features/diagnostics/DiagnosticSharingNotice";
+import { PolicyUpdateNotice } from "./features/legal/policy-update-notice";
 import { ProviderConsentGate } from "./features/privacy/provider-consent";
 import { OverlayProvider } from "./ui/overlays";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -106,6 +108,8 @@ export function AppProviders({ children }: PropsWithChildren) {
                         <OutboxCoordinator />
                         <DraftPresenceReporter />
                         <AccountGate><ProviderConsentGate><AssistantCompanion>{children}</AssistantCompanion></ProviderConsentGate></AccountGate>
+                        <DiagnosticSharingNotice />
+                        <PolicyUpdateNotice />
                         <DiagnosticsCoordinator />
                       </OverlayProvider>
                     </BycodaUIProvider>

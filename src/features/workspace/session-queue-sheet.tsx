@@ -14,7 +14,7 @@ import CheckCheck from "lucide-react-native/icons/check-check";
 import RotateCw from "lucide-react-native/icons/rotate-cw";
 import { useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
-import { ActionMenu, Badge, Body, Empty, ErrorText, FormActions, NavigationRow, Notice, Row, Sheet, Stack } from "@/ui/primitives";
+import { ActionMenu, Badge, StatusText, Body, Empty, ErrorText, FormActions, NavigationRow, Notice, Row, Sheet, Stack } from "@/ui/primitives";
 import { ScreenList } from "@/ui/screen-list";
 import { CollectionToolbar } from "@/ui/search-field";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
@@ -80,7 +80,7 @@ export function SessionQueueSheet({scope,visible,state,actions}:{scope:SessionSc
       {readable&&!state.rows.length?<Empty compact title={copy("Sıra boş", "Queue is empty")} detail={copy("Tur sürerken yazdığın mesajlar burada sırayla bekler ve sırayla gönderilir.", "Messages you queue while a turn runs wait here and are sent in order.")}/>:null}
       {readable&&!primary?feedback:null}
     </Stack>} renderItem={({item:row,index})=><Row style={{alignItems:"flex-start"}}>
-      <View style={{flex:1,minWidth:0}}><NavigationRow label={row.text||copy("Ekli mesaj", "Message with attachments")} labelLines={2} detail={[index+1,sessionModelLabel(row.modelTarget)].filter(Boolean).join(" · ")} metadata={row.attachments.map(file=>file.name).join(" · ")} supporting={row.id===state.sendingId?<Badge tone="info" label={copy("Gönderiliyor…", "Sending…")}/>:row.deliveryUnknown?<Badge tone="warning" label={copy("Kontrol gerekiyor", "Needs review")}/>:undefined} onPress={()=>inspect(row)}/></View>
+      <View style={{flex:1,minWidth:0}}><NavigationRow label={row.text||copy("Ekli mesaj", "Message with attachments")} labelLines={2} detail={[index+1,sessionModelLabel(row.modelTarget)].filter(Boolean).join(" · ")} metadata={row.attachments.map(file=>file.name).join(" · ")} supporting={row.id===state.sendingId?<StatusText tone="live" label={copy("Gönderiliyor…", "Sending…")}/>:row.deliveryUnknown?<Badge tone="warning" label={copy("Kontrol gerekiyor", "Needs review")}/>:undefined} onPress={()=>inspect(row)}/></View>
       <ActionMenu label={copy("Mesaj işlemleri", "Message actions")} actions={row.deliveryUnknown?[
         {key:"delivered",icon:glyph(CheckCheck),label:copy("Zaten iletildi", "Already delivered"),disabled:state.disabled,onPress:()=>review(row,"delivered")},
         {key:"retry",icon:glyph(RotateCw),label:copy("Yeniden gönder", "Send again"),detail:state.retryBlocked,disabled:state.disabled||!!state.retryBlocked,onPress:()=>review(row,"retry")},

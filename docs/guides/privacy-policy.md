@@ -1,6 +1,6 @@
 # Privacy policy
 
-Last updated: 14 November 2026
+Last updated: 25 November 2026
 
 ## Scope and contact
 
@@ -8,7 +8,7 @@ This policy describes the bycoda desktop application, its mobile companion and i
 
 ## No developer collection or tracking
 
-bycoda does not require a bycoda account. The application does not send your projects, conversations, credentials or usage history to the maintainer. It does not include developer-operated behavioral tracking, advertising, analytics or automatic crash-report uploads. The maintainer does not monitor your activity, sell your data, or use your content to train models.
+Mobile workspace use requires a bycoda account. Ordinary account and connection requests exclude project files, conversations and Host access keys. Diagnostic sharing asks for approval by default and can be disabled or enabled automatically. The maintainer does not monitor your activity, sell your data, or use your content to train models.
 
 This does not mean the application stores no data or never uses the network. Data is processed on your devices and, when a connected feature runs, by the providers and hosts you use.
 
@@ -16,11 +16,15 @@ This does not mean the application stores no data or never uses the network. Dat
 
 To provide the workspace, bycoda reads files and folders available under the permissions you grant. It stores settings, project paths, conversations, session status, notes, usage counters, integration metadata and diagnostic information locally. Agent tools can read or modify files and run commands within their permissions. Provider CLIs may also keep their own history, logs and authentication files.
 
+In **Settings → Privacy**, diagnostic logs can be set to **Do not send**, **Ask every time** or **Send every time**. Bycoda uses error logs only to understand problems and improve the app. Before an upload, open the lower-left notice to inspect the destination, redacted log and report metadata. Opening the details pauses automatic sending. The receipt lets you review what was sent and where. **Data sharing receipts** controls whether the receipt is shown after an upload.
+
 Application history is held in the application data directory, including the local bycoda.db database; preferences may also be held in webview local storage. Connected hosts keep their own databases and logs. Credentials are handled by the applicable integration, provider CLI or local credential storage. Social integration tokens are stored in a locally encrypted vault with an operating-system-protected key. This is not a promise that every local file, log or database is encrypted.
 
 ## Mobile companion and optional permissions
 
 The mobile app pairs with a bycoda Host that you choose. It sends connection requests, commands, prompts, selected files, code and workspace context to that host and displays the requested workspace/session data. Project files, session history, tasks and provider credentials remain on the connected computer or relevant service. The mobile app can temporarily cache displayed data in memory. Host and provider logs and history are separate stores. The host or network gateway operator can receive ordinary connection information, including your IP address and request metadata.
+
+Account discovery, when enabled on the computer, stores its name, Host identifier, connection addresses and any LAN public key in bycoda Cloud. Account pairing also stores device IDs, public keys and request state. The short-lived ticket is encrypted for the requesting device and removed from the server record on delivery. The Host access key remains on the phone and its hash remains on the Host. If account access management is enabled on a computer, bycoda Cloud stores its last synchronized paired-device list, permissions and pending access changes.
 
 Saved computer names, addresses, connection identifiers, selected projects, language and connection preferences are kept in the app's local AsyncStorage. Unsent messages, file edits and note drafts may also be kept there. This storage is not guaranteed to have additional application-level encryption. Native mobile builds store device access credentials in the operating system's protected SecureStore; the browser preview keeps connection credentials only in memory. Pairing codes and device credentials are secrets: do not share them or their screenshots.
 
@@ -72,4 +76,4 @@ The maintainer cannot inspect or remotely delete your local workspace. Email the
 
 If you send an email, issue, diagnostic file or other support material, the maintainer receives what you choose to provide and uses it to address the request. Email and GitHub operate under their own policies. Such correspondence is kept only as needed to handle the request and maintain necessary security or project records. Send the minimum information needed and remove secrets before sharing logs.
 
-Changes to this policy will be dated and published in the repository and bundled in subsequent app versions. This notice describes bycoda; it does not override the policies of services you connect.
+Material changes to this policy and the terms are dated in the public repository and shown in the app with a summary and document links. The app checks the public update file on GitHub without attaching your bycoda account or device identifier. GitHub receives normal connection metadata. The notice can be dismissed and its dismissal stays on the phone. The services you connect apply their own policies.

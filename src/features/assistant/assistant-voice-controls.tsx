@@ -2,7 +2,8 @@ import Mic from "lucide-react-native/icons/mic";
 import Square from "lucide-react-native/icons/square";
 import Volume2 from "lucide-react-native/icons/volume-2";
 import { View } from "react-native";
-import { Body, Disclosure, IconButton } from "@/ui/primitives";
+import { IconButton } from "@/ui/primitives";
+import { StatusLine } from "@/ui/feedback";
 import { ChatCircleAction } from "@/ui/chat-controls";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
@@ -10,6 +11,7 @@ import { cancelAssistantVoice, finishAssistantVoice, recordAssistantVoice, speak
 import type { AssistantVoiceTarget } from "./assistant-voice";
 import { useAssistantCall } from "./assistant-call-state";
 import { isMicrophoneDenied, MicrophonePermissionNotice } from "../voice-settings/microphone-permission-notice";
+import { assistantVoiceErrorMessage } from "./assistant-voice-error";
 
 export function AssistantMicrophone({ target, enabled, current }: { target: AssistantVoiceTarget; enabled: boolean; current(): boolean }) {
   const copy = useCopy(), { colors } = useMobileTheme();
@@ -23,15 +25,22 @@ export function AssistantMicrophone({ target, enabled, current }: { target: Assi
   </ChatCircleAction>;
 }
 
+/**
+ * Voice status above the assistant composer as one line, never a box: "Listening" while recording and
+ * the failure in the owner's language with a Dismiss. A permanent microphone denial keeps its notice,
+ * because it needs the system Settings page.
+ */
 export function AssistantVoiceFeedback() {
   const copy = useCopy(), phase = useAssistantCompanion(state => state.voice), error = useAssistantCompanion(state => state.error);
-  return <>{isMicrophoneDenied(error) ? <MicrophonePermissionNotice /> : error ? <View accessibilityLiveRegion="polite"><Disclosure tone="warning" label={copy("Ses kullanılamıyor", "Voice unavailable")}
-      detail={copy("Mikrofon iznini ve bilgisayardaki ses kurulumunu kontrol et.", "Check microphone permission and voice setup on your computer.")}>
-      <Body selectable>{error instanceof Error ? error.message : String(error)}</Body>
-    </Disclosure></View> : null}
-    {phase === "recording" ? <Body muted accessibilityLiveRegion="polite"
-      accessibilityLabel={copy("Dinleniyor. Bitirince metni inceleyip gönder. Kayıt en fazla 30 saniye.", "Listening. Finish, then review and send the text. Recording is limited to 30 seconds.")}>{copy("Dinleniyor (en fazla 30 saniye)", "Listening (up to 30 seconds)")}</Body> : null}
-  </>;
+  if (isMicrophoneDenied(error)) return <MicrophonePermissionNotice />;
+  if (error) return <View accessibilityLiveRegion="polite"><StatusLine tone="danger" label={assistantVoiceErrorMessage(error, copy)}
+    action={{ label: copy("Kapat", "Dismiss"), onPress: () => useAssistantCompanion.setState({ error: undefined }) }} /></View>;
+  if (phase === "recording") return <View accessibilityLiveRegion="polite"
+    accessibilityLabel={copy("Dinleniyor. Bitirince metni inceleyip gönder. Kayıt en fazla 30 saniye.", "Listening. Finish, then review and send the text. Recording is limited to 30 seconds.")}>
+    <StatusLine tone="info" busy label={copy("Dinleniyor (en fazla 30 saniye)", "Listening (up to 30 seconds)")} />
+  </View>;
+  if (phase === "transcribing") return <StatusLine busy label={copy("Yazıya çevriliyor", "Transcribing")} />;
+  return null;
 }
 
 export function AssistantReadAloud({ target, text, enabled, current }: { target: AssistantVoiceTarget; text: string; enabled: boolean; current(): boolean }) {

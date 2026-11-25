@@ -2,6 +2,8 @@
 import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+vi.mock("../workspace/project-picker", () => ({ ProjectPicker: () => null }));
+vi.mock("@/ui/metric-value", () => ({ MetricValue: ({ children }: import("react").PropsWithChildren) => createElement("strong", null, children) }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
 const fixture = vi.hoisted(() => ({
@@ -16,20 +18,20 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 }));
 vi.mock("./usage-charts", () => ({ UsageKpis: () => null, ProviderShare: () => null }));
 vi.mock("@/ui/usage-meters", () => ({ RemainingMeter: () => null, AccountMeter: () => null, CostKpi: () => null, DailyBars: () => null }));
-vi.mock("expo-router", () => ({ Stack: { Screen: ({ options }: { options: Record<string, unknown> }) => { fixture.nativeOptions.push(options); return null; } }, useLocalSearchParams: () => ({}) }));
+vi.mock("expo-router", () => ({ Stack: { Screen: ({ options }: { options: Record<string, unknown> }) => { fixture.nativeOptions.push(options); return null; } }, useLocalSearchParams: () => ({ tab: "tokens" }), router: { setParams: vi.fn() } }));
 vi.mock("@/state/machines", () => {
   const machine = () => ({ id: "computer", endpoint: "https://synthetic.invalid", name: "Computer", environmentId: "env", capabilities: fixture.supported ? ["usage.sessions.read"] : [] });
   return { useActiveMachine: machine, useMachines: { getState: () => ({ activeId: "computer", machines: [machine()] }) } };
 });
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/tokens", () => ({ space: {}, fontSize: {}, radii: {} }));
+vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, space: {}, fontSize: {}, radii: {} }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/user-round", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/briefcase", () => ({ default: () => null }));
 vi.mock("panelui-native/components/meter", () => ({ Meter: () => null }));
 vi.mock("../management/shared/format", () => ({ stamp: () => "Sample time" }));
-vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
+vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children), StyleSheet: { hairlineWidth: 1 } }));
 vi.mock("panelui-native/components/badge", () => ({ Badge: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("@/ui/metric-row", () => ({ MetricRow: ({ label, value }: any) => createElement("p", null, `${label}: ${value}`) }));
 vi.mock("@/ui/record-card", () => ({ RecordCard: ({ title, preview, details }: any) => createElement("article", null, title, preview, details) }));
@@ -49,6 +51,7 @@ vi.mock("@/ui/primitives", async () => {
   return { Body: Wrap, Disclosure: Wrap, NavigationGroup: Wrap, Section: Wrap, Stack: Wrap, Button, IconButton, Row: Wrap,
     ActionMenu: ({ actions }: { actions: { key: string; label: string; onPress: () => void }[] }) => createElement("nav", null, actions.map(action => createElement(Button, { key: action.key, label: action.label, onPress: action.onPress }))),
     ToggleField: ({ label, value, onChange }: any) => createElement("button", { onClick: () => onChange(!value) }, label),
+    ValueRow: ({ label, value, children }: any) => createElement("p", null, `${label}: ${value}`, children),
     Screen: ({ children, actions }: any) => createElement("main", null, actions, children),
     ScreenList: ({ header, footer, actions, data, renderItem }: any) => createElement("main", null, actions, header, ...data.map((item: unknown, i: number) => createElement("div", { key: i }, renderItem({ item }))), footer),
     SegmentedControl: ({ value, onChange, disabled, label, options }: any) => options.length === 2 ? createElement("button", { disabled, "aria-label": label, onClick: () => onChange(value === "1" ? "7" : "1") }, "Change range") : null, Card: ({ children }: any) => children, SectionHeader: () => null,
@@ -88,20 +91,23 @@ it("keeps unsupported usage empty and refresh disabled without enabling host rea
   expect([...container.querySelectorAll("button")].find((button) => button.textContent === "Refresh")!.disabled).toBe(true);
 });
 it("distinguishes successful empty diagnostics from loading and cached failure, while retaining explicit polling", async () => {
-  await render(createElement(DiagnosticsScreen, { project })); expect(container.textContent).toContain("No samples yet.");
-  expect(fixture.nativeOptions.some((options) => options.title === "Diagnostics")).toBe(true);
+  await render(createElement(DiagnosticsScreen)); expect(container.textContent).toContain("No samples yet.");
+  expect(fixture.nativeOptions.some((options) => options.title === "Computer resources")).toBe(true);
   expect(fixture.interval).toBeUndefined(); await click("Auto refresh"); expect(fixture.interval).toBe(10000);
   await click("Refresh"); expect(fixture.refetch).toHaveBeenCalledOnce();
-  fixture.error = new Error("Disconnected"); await render(createElement(DiagnosticsScreen, { project }));
+  fixture.error = new Error("Disconnected"); await render(createElement(DiagnosticsScreen));
   expect(container.textContent).not.toContain("No samples yet."); expect(container.textContent).toContain("Showing cached data");
-  fixture.error = null; fixture.hasData = false; fixture.fetching = true; await render(createElement(DiagnosticsScreen, { project }));
+  fixture.error = null; fixture.hasData = false; fixture.fetching = true; await render(createElement(DiagnosticsScreen));
   expect(container.textContent).not.toContain("No samples yet."); expect(container.textContent).toContain("Loading");
 });
 it("keeps missing readings distinct from zero and reveals only fixed diagnostic fields", async () => {
   await render(createElement(UsageValues, { value: values }));
-  expect(container.textContent).toContain("Input tokens: —"); expect(container.textContent).toContain("Cache read tokens: 0"); expect(container.textContent).toContain("Cost: —");
+  expect(container.textContent).toContain("Input tokens: —"); expect(container.textContent).toContain("Cache read tokens: 0"); expect(container.textContent).not.toContain("Cost: —");
   const sample: ResourceSample = { at: Date.now(), host: { totalMemoryBytes: 1024, freeMemoryBytes: 0, logicalCpus: 8, loadAverage: null },
     process: { pid: 9, rssBytes: 1024, heapUsedBytes: 512, externalBytes: 1024 * 1024, cpuPercent: null, uptimeSeconds: 120 } };
   await render(createElement(DiagnosticsDetails, { sample }));
-  expect(container.textContent).toContain("Process CPU—"); expect(container.textContent).toContain("External memory: 1.0 MB"); expect(container.textContent).toContain("Load average (1 / 5 / 15 min): —");
+  // Unknown readings are left out instead of shown as a dash; every reading uses the same row.
+  expect(container.textContent).not.toContain("Process CPU"); expect(container.textContent).not.toContain("Load average");
+  expect(container.textContent).toContain("External memory: 1.0 MB"); expect(container.textContent).toContain("Logical CPUs: 8");
+  expect(container.textContent).toContain("Memory: 0.0 GB / 0.0 GB");
 });

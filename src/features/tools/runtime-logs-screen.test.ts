@@ -14,9 +14,11 @@ vi.mock("expo-router", () => ({ Stack: { Screen: () => null }, router: { push: v
 vi.mock("react-native", () => ({ Platform: { OS: "web" } }));
 vi.mock("../management/shared/format", () => ({ stamp: () => "Timestamp" }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/list-video", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/settings-2", () => ({ default: () => null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/tokens", () => ({ colors: {} }));
+vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, colors: {} }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "computer", name: "Computer", endpoint: fixture.endpoint }) }));
 vi.mock("@/state/queries", () => ({ useHostQuery: (_key: unknown, method: string, params: any) => {
@@ -53,9 +55,9 @@ vi.mock("@/ui/primitives", async () => {
     SearchToolbar: ({ search, actions }: any) => createElement("div", null, search, actions),
     SearchField: ({ label, value, onChangeText, ref }: any) => createElement("input", { ref, "aria-label": label, value, onChange: (e: any) => onChangeText(e.target.value) }),
     SelectField: ({ label, value, options, onChange }: any) => createElement("select", { "aria-label": label, value, onChange: (e: any) => onChange(e.target.value) }, options.map((o: any) => createElement("option", { key: o.value, value: o.value }, o.label))),
-    ToggleField: () => null,
-    ScreenList: ({ header, actions, data, renderItem, refreshState }: any) => { fixture.refresh = refreshState; return createElement("main", null, actions,
-      fixture.hideHeader ? null : createElement("header", null, header), data.map((item: any) => createElement("div", { key: item.id }, renderItem({ item })))); },
+    ToggleField: ({ label, value, onChange }: any) => createElement("button", { "aria-pressed": value, onClick: () => onChange(!value) }, label),
+    ScreenList: ({ header, actions, data, renderItem, refreshState, ListEmptyComponent }: any) => { fixture.refresh = refreshState; return createElement("main", null, actions,
+      fixture.hideHeader ? null : createElement("header", null, header), data.length ? null : ListEmptyComponent, data.map((item: any) => createElement("div", { key: item.id }, renderItem({ item })))); },
   };
 });
 import { RuntimeLogsScreen } from "./runtime-logs-screen";
@@ -68,6 +70,15 @@ beforeEach(() => {
   node = document.createElement("div"); document.body.append(node); root = createRoot(node);
 });
 afterEach(() => { act(() => root.unmount()); node.remove(); vi.useRealTimers(); });
+it("keeps auto refresh in log settings and independent of applying filters", async () => {
+  await render();
+  await click("Filters");
+  expect(node.textContent).not.toContain("Auto refresh");
+  await click("Apply");
+  await click("Settings");
+  await click("Auto refresh");
+  expect(node.querySelector('button[aria-pressed="false"]')?.textContent).toBe("Auto refresh");
+});
 it("shares toolbar/pull refresh flight and refreshes logs plus source availability", async () => {
   let finish!: () => void; fixture.logsRead.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
   await render(); let pending!: Promise<unknown>;
@@ -77,10 +88,10 @@ it("shares toolbar/pull refresh flight and refreshes logs plus source availabili
 });
 it("does not claim an empty success while a source is unavailable or failed", async () => {
   fixture.sources = [{ id: "source", projectId: "project", label: "Browser", available: false, reason: "Offline" }]; await render();
-  expect(node.textContent).not.toContain("No logs yet."); expect(node.textContent).toContain("Browser");
+  expect(node.textContent).not.toContain("No logs yet"); expect(node.textContent).toContain("Browser");
   await click("Retry sources"); expect(fixture.sourcesRead).toHaveBeenCalledOnce(); expect(fixture.logsRead).not.toHaveBeenCalled();
-  fixture.sources = []; fixture.sourceError = new Error("Source read failed"); await render(); expect(node.textContent).not.toContain("No logs yet.");
-  fixture.sourceError = null; await render(); expect(node.textContent).toContain("No logs yet.");
+  fixture.sources = []; fixture.sourceError = new Error("Source read failed"); await render(); expect(node.textContent).not.toContain("No logs yet");
+  fixture.sourceError = null; await render(); expect(node.textContent).toContain("No logs yet");
 });
 it("distinguishes filtered emptiness, resets filters, and never applies a dismissed draft", async () => {
   await render(); await click("Filters");
@@ -91,7 +102,7 @@ it("distinguishes filtered emptiness, resets filters, and never applies a dismis
   await click("Filters"); const fresh = node.querySelector('select[aria-label="Level"]')!;
   await act(() => { (fresh as HTMLSelectElement).value = "error"; fresh.dispatchEvent(new Event("change", { bubbles: true })); });
   await click("Apply"); expect(node.querySelector("[data-applied-filters]")!.textContent).toContain("Level: Error"); expect(fixture.params.levels).toEqual(["error"]); expect(node.textContent).toContain("No matching results");
-  await click("Clear filters"); expect(fixture.params.levels).toBeUndefined(); expect(node.textContent).toContain("No logs yet.");
+  await click("Clear filters"); expect(fixture.params.levels).toBeUndefined(); expect(node.textContent).toContain("No logs yet");
   expect(document.activeElement).toBe(node.querySelector('input[aria-label="Search logs"]'));
 });
 
@@ -108,7 +119,7 @@ it("names search-only recovery, restores focus and cancels a newer pending query
   expect(fixture.params.search).toBeUndefined();
   await act(() => vi.advanceTimersByTime(400));
   expect(fixture.params.search).toBeUndefined();
-  expect(node.textContent).toContain("No logs yet.");
+  expect(node.textContent).toContain("No logs yet");
 });
 it("keeps the monitor draft and log detail outside the disappearing list header", async () => {
   fixture.entries = [{ id: "log", projectId: "project", message: "Entry", timestamp: 1, level: "info" }];

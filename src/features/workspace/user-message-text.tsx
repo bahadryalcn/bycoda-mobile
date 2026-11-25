@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { use, useState } from "react";
 import { View } from "react-native";
 import type { TextLayoutEvent } from "react-native";
 import { Collapsible } from "panelui-native/components/collapsible";
@@ -7,6 +7,8 @@ import { useChatTextStyles } from "@/ui/chat-styles";
 import { useChatAppearance } from "@/state/chat-appearance";
 import { useCopy } from "@/ui/copy";
 import { space } from "@/ui/tokens";
+import { SelectableProse } from "@/ui/message-selection";
+import { PressableTextContext } from "@/ui/text-selection";
 
 export const USER_MESSAGE_LINES = 4;
 
@@ -21,18 +23,24 @@ export function UserMessageText({ text, preview }: { text: string; preview?: str
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
   const collapsedText = preview ?? text;
+  // Inside a long-press selection owner, the in-place layer (or the selection sheet) replaces the system callout.
+  const ownedSelection = use(PressableTextContext);
+  const complete = expanded || !overflows;
   const measure = (event: TextLayoutEvent) =>
     setOverflows(event.nativeEvent.lines.length > USER_MESSAGE_LINES);
   return (
     <Collapsible variant="ghost" open={expanded} onOpenChange={setExpanded} style={{ gap: space.xxs }}>
       <View>
-        <Body
-          selectable={expanded || !overflows}
-          numberOfLines={expanded ? undefined : USER_MESSAGE_LINES}
-          style={typography.user}
-        >
-          {expanded ? text : collapsedText}
-        </Body>
+        {/* Clamped text has no complete layout to lay a selection layer over; the sheet covers it. */}
+        <SelectableProse text={complete ? (expanded ? text : collapsedText) : undefined} style={typography.user}>
+          <Body
+            selectable={!ownedSelection && complete}
+            numberOfLines={expanded ? undefined : USER_MESSAGE_LINES}
+            style={typography.user}
+          >
+            {expanded ? text : collapsedText}
+          </Body>
+        </SelectableProse>
         {expanded ? null : (
           <Body
             aria-hidden

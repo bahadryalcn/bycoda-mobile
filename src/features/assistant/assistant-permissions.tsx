@@ -7,15 +7,18 @@ import type {
 import type { AssistantMobileClient } from "./assistant-client";
 import { useCopy } from "@/ui/copy";
 import {
+  Body,
   Button,
-  Disclosure,
+  FormActions,
   MultiSelectField,
   Notice,
   Section,
   SelectField,
   Stack,
+  StateView,
   ToggleField,
 } from "@/ui/primitives";
+import { useMobileTheme } from "@/ui/theme";
 import { IntegerTextStepper, MinuteLimitField } from "@/ui/limit-presets";
 
 const exclusions = [
@@ -49,6 +52,7 @@ export function AssistantPermissions({
   onChanged(): Promise<void>;
 }) {
   const copy = useCopy();
+  const { uiStyles } = useMobileTheme();
   const [opening, setOpening] = useState(profile);
   const [level, setLevel] = useState<"legacy" | "ask" | "watch" | "projects" | "everything">(
     opening.permissionLevel ?? "legacy",
@@ -198,70 +202,16 @@ export function AssistantPermissions({
     }
   };
   return (
-    <Disclosure label={copy("Asistan tercihleri", "Assistant preferences")}>
-      <Section title={copy("İzin düzeyi", "Permission level")}>
-        <SelectField
-          label={copy("Kapsam", "Scope")}
-          value={level}
-          disabled={!enabled || busy}
-          options={[
-            ...(opening.permissionLevel === undefined
-              ? [
-                  {
-                    value: "legacy" as const,
-                    label: copy("Mevcut açık sahip onayları", "Existing exact owner prompts"),
-                  },
-                ]
-              : []),
-            { value: "ask", label: copy("Her işlemde sor", "Ask for each operation") },
-            { value: "watch", label: copy("Yalnızca izle", "Watch only") },
-            { value: "projects", label: copy("Seçili projeler", "Selected projects") },
-            { value: "everything", label: copy("Her şey", "Everything") },
-          ]}
-          onChange={setLevel}
-        />
-        {level === "projects" ? (
-          <MultiSelectField
-            label={copy("Projeler", "Projects")}
-            values={projectIds}
-            disabled={!enabled || busy}
-            options={projects.map((project) => ({ value: project.id, label: project.name }))}
-            max={100}
-            onChange={setProjectIds}
-          />
-        ) : null}
-        {level === "projects" && !projectIds.length ? (
-          <Notice
-            message={copy(
-              "Proje seçilmedi: hiçbir proje için sürekli izin yok.",
-              "No projects selected: no project has standing permission.",
-            )}
-          />
-        ) : null}
-        <MultiSelectField
-          label={copy("Her zaman ayrıca onay iste", "Always ask separately")}
-          values={critical}
-          disabled={!enabled || busy}
-          options={exclusions.map((value, index) => ({ value, label: labels[index]! }))}
-          onChange={setCritical}
-          max={6}
-        />
-        <Notice
-          message={copy(
-            "Bu ayarlar izin tercihini kaydeder. Yerel bilgisayar işlemleri için masaüstünde ayrıca yetki verin; mobil uygulama bu yetkiyi veremez.",
-            "These settings save permission preferences. Authorize native computer effects separately on desktop; mobile cannot grant that authority.",
-          )}
-        />
-      </Section>
-      <Section title={copy("Bildirimler ve uyanık tutma", "Notifications and wakefulness")}>
+    <Stack>
+      <Section title={copy("İş", "Work")}>
         <ToggleField
-          label={copy("Uzaktayken bilgisayarı uyanık tut", "Keep computer awake while away")}
+          label={copy("Uzaktayken uyanık tut", "Keep awake while away")}
           value={keepAwake}
           disabled={!enabled || busy || failed}
           onChange={setKeepAwake}
         />
         <IntegerTextStepper
-          label={copy("Acil bildirim tekrarları", "Urgent notification repeats")}
+          label={copy("Acil hatırlatıcılar", "Urgent reminders")}
           help={copy("0–10; 0 tekrarı kapatır.", "0–10; 0 turns repeats off.")}
           value={repeats}
           min={0}
@@ -275,10 +225,7 @@ export function AssistantPermissions({
           }
         />
         <MinuteLimitField
-          label={copy(
-            "Acil bildirim tekrar aralığı (dakika)",
-            "Urgent notification repeat interval (minutes)",
-          )}
+          label={copy("Hatırlatma aralığı (dakika)", "Reminder interval (minutes)")}
           min={1}
           value={interval}
           disabled={!enabled || busy || failed}
@@ -336,8 +283,9 @@ export function AssistantPermissions({
           />
         ) : null}
         {targetsLoaded && !targets.length ? (
-          <Notice
-            message={copy(
+          <StateView
+            size="compact"
+            title={copy(
               "Bu bilgisayarda izinli Telegram konuşması yok.",
               "No allowed Telegram conversations on this computer.",
             )}
@@ -352,6 +300,62 @@ export function AssistantPermissions({
             )}
           />
         ) : null}
+      </Section>
+      <Section title={copy("Erişim", "Access")}>
+        <SelectField
+          label={copy("İzin düzeyi", "Permission level")}
+          value={level}
+          disabled={!enabled || busy}
+          options={[
+            ...(opening.permissionLevel === undefined
+              ? [
+                  {
+                    value: "legacy" as const,
+                    label: copy("Mevcut açık sahip onayları", "Existing exact owner prompts"),
+                  },
+                ]
+              : []),
+            { value: "ask", label: copy("Her işlemde sor", "Ask for each operation") },
+            { value: "watch", label: copy("Yalnızca izle", "Watch only") },
+            { value: "projects", label: copy("Seçili projeler", "Selected projects") },
+            { value: "everything", label: copy("Her şey", "Everything") },
+          ]}
+          onChange={setLevel}
+        />
+        {level === "projects" ? (
+          <MultiSelectField
+            label={copy("Projeler", "Projects")}
+            values={projectIds}
+            disabled={!enabled || busy}
+            options={projects.map((project) => ({ value: project.id, label: project.name }))}
+            max={100}
+            onChange={setProjectIds}
+          />
+        ) : null}
+        {level === "projects" && !projectIds.length ? (
+          <StateView
+            size="compact"
+            title={copy(
+              "Proje seçilmedi: hiçbir proje için sürekli izin yok.",
+              "No projects selected: no project has standing permission.",
+            )}
+          />
+        ) : null}
+        <MultiSelectField
+          label={copy("Her zaman ayrıca onay iste", "Always ask separately")}
+          values={critical}
+          disabled={!enabled || busy}
+          options={exclusions.map((value, index) => ({ value, label: labels[index]! }))}
+          onChange={setCritical}
+          max={6}
+        />
+        {/* A standing explanation, not an alert: a quiet footnote under the group. */}
+        <Body muted style={uiStyles.caption}>
+          {copy(
+            "Bu ayarlar izin tercihini kaydeder. Yerel bilgisayar işlemleri için masaüstünde ayrıca yetki verin; mobil uygulama bu yetkiyi veremez.",
+            "These settings save permission preferences. Authorize native computer effects separately on desktop; mobile cannot grant that authority.",
+          )}
+        </Body>
       </Section>
       <Stack>
         {justSaved && !dirty && !failed ? <Notice tone="success" message={copy("Tercihler kaydedildi.", "Preferences saved.")} /> : null}
@@ -371,8 +375,9 @@ export function AssistantPermissions({
             onPress={() => void loadCurrent()}
           />
         ) : null}
-        <Button
-          label={copy("Tercihleri kaydet", "Save preferences")}
+        <FormActions
+          submitLabel={copy("Tercihleri kaydet", "Save preferences")}
+          dirty={dirty}
           busy={busy}
           disabled={
             !enabled ||
@@ -384,9 +389,9 @@ export function AssistantPermissions({
             (changedTarget && !!telegram && !selectedTarget) ||
             profile.version !== opening.version
           }
-          onPress={() => void save()}
+          onSubmit={() => void save()}
         />
       </Stack>
-    </Disclosure>
+    </Stack>
   );
 }

@@ -1,5 +1,6 @@
 import type { UsageLimitsReport } from "../../../../host/usage/limits-report";
 import type { CostReport } from "../../../../host/usage/cost-report";
+import { numberFormat } from "../../../../src/shared/i18n/numberFormat";
 export type { UsageLimitsReport, CostReport };
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -7,7 +8,7 @@ const num = (value: unknown, min = 0, max = Number.MAX_SAFE_INTEGER): value is n
 const text = (value: unknown, max = 200): value is string => typeof value === "string" && value.length > 0 && value.length <= max;
 const reading = (value: unknown) => record(value) && num(value.usedPercent, 0, 100) && num(value.leftPercent, 0, 100) && num(value.regainPercent, 0, 100) && num(value.windowMinutes, 1) && (value.resetsAt === null || num(value.resetsAt)) && (value.timeLeftPercent === null || num(value.timeLeftPercent, 0, 100)) && (value.pace === null || value.pace === "ahead" || value.pace === "on" || value.pace === "behind");
 
-const KNOWN_PROVIDERS = new Set(["claude", "codex", "opencode"]);
+const KNOWN_PROVIDERS = new Set(["claude", "codex", "opencode", "grok"]);
 
 /** Rejects a Host reply that is not the documented quota report instead of drawing guesses. */
 export function readLimitsReport(value: unknown, environmentId: string): UsageLimitsReport {
@@ -19,12 +20,21 @@ export function readLimitsReport(value: unknown, environmentId: string): UsageLi
     if (!record(provider) || !Array.isArray(provider.cards) || provider.cards.length > 64 || !Array.isArray(provider.accounts) || provider.accounts.length > 128) return invalid();
     for (const account of provider.accounts) {
       if (!record(account) || !text(account.id) || !text(account.label) || !text(account.color, 64) || !["ok", "unavailable", "error"].includes(String(account.status)) || (account.error !== null && !text(account.error, 400)) || (account.resetCredits !== null && !num(account.resetCredits, 0, 1000))) return invalid();
+      if (account.observedAt !== undefined && account.observedAt !== null && !num(account.observedAt, 0, value.sampledAt)) return invalid();
     }
     for (const card of provider.cards) {
       if (!record(card) || !text(card.key) || !["session", "weekly", "monthly"].includes(String(card.kind)) || (card.model !== null && !text(card.model, 100)) || !reading(card.best) || !Array.isArray(card.accounts) || card.accounts.length > 128 || !card.accounts.every((entry) => record(entry) && text(entry.id) && text(entry.label) && text(entry.color, 64) && reading(entry.reading))) return invalid();
     }
   }
   return { ...value, providers } as UsageLimitsReport;
+}
+
+export function latestQuotaObservation(report: UsageLimitsReport): number | null {
+  const accounts = report.providers.flatMap((provider) => provider.accounts);
+  const observed = accounts.flatMap(({ observedAt }) => observedAt == null ? [] : [observedAt]);
+  if (observed.length) return Math.max(...observed);
+  return accounts.every(({ observedAt }) => observedAt === undefined) &&
+    report.providers.some(({ cards }) => cards.length > 0) ? report.sampledAt : null;
 }
 
 export function readCostReport(value: unknown, environmentId: string): CostReport {
@@ -51,16 +61,30 @@ export function omittedCost(report: CostReport, list: "models" | "projects"): { 
 /** True when the Host stopped at its log-file cap, so the whole report may miss older logs. */
 export const isPartialScan = (report: CostReport): boolean => report.coverage.truncated === true;
 
-/** "4d 12h", "3h 5m", "12m"; null once the reset time has passed or is unknown. */
-export function resetCountdown(resetsAt: number | null, now: number): string | null {
+const compactResetUnits = { day: "d", hour: "h", minute: "m" } as const;
+type ResetUnits = Record<keyof typeof compactResetUnits, string>;
+
+/** Countdown with the widget's compact formatting by default. */
+export function resetCountdown(
+  resetsAt: number | null,
+  now: number,
+  locale?: string,
+  units?: ResetUnits,
+): string | null {
   if (resetsAt === null) return null;
   const minutes = Math.max(0, Math.floor((resetsAt - now) / 60_000));
   if (resetsAt <= now) return null;
   const days = Math.floor(minutes / 1440);
   const hours = Math.floor((minutes % 1440) / 60);
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes % 60}m`;
-  return `${Math.max(1, minutes)}m`;
+  // Native Intl can fall back to seconds for hours and minutes. Use the app's unit labels.
+  const format = units ? numberFormat(locale).format : String;
+  const suffixes = units ?? compactResetUnits;
+  const separator = units ? " " : "";
+  const unit = (value: number, name: keyof ResetUnits) => `${format(value)}${separator}${suffixes[name]}`;
+  if (days > 0) return [unit(days, "day"), hours || !units ? unit(hours, "hour") : null].filter(Boolean).join(" ");
+  const remainingMinutes = minutes % 60;
+  if (hours > 0) return [unit(hours, "hour"), remainingMinutes || !units ? unit(remainingMinutes, "minute") : null].filter(Boolean).join(" ");
+  return unit(Math.max(1, minutes), "minute");
 }
 
 /** Whole percent for display; a sliver is never rounded away to 0 or up to 100. */

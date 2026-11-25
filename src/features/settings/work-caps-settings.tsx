@@ -25,7 +25,7 @@ export function WorkCapsSettings({ current, enabled }: { current(): boolean; ena
       return result.state;
     } });
   return <Disclosure label={copy("Token ve maliyet sınırları", "Token and cost caps")}>
-    {!supported ? <Notice message={copy("Work sınırları için bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer for Work caps.")} /> : <>
+    {!supported ? <Notice message={copy("Work sınırları için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer for Work caps.")} /> : <>
       <QueryState query={query} />
       {query.data && current() ? <WorkCapsEditor initial={query.data} current={current} providers={machine?.providers ?? []} onReload={async () => { const result = await query.refetch(); if (!result.data || result.isError) throw result.error; return result.data; }} /> : null}
     </>}

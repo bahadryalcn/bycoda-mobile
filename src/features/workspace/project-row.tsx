@@ -1,14 +1,13 @@
 import { memo } from "react";
 import { Text, View, useWindowDimensions } from "react-native";
 import CornerDownRight from "lucide-react-native/icons/corner-down-right";
-import FolderTree from "lucide-react-native/icons/folder-tree";
-import GitBranch from "lucide-react-native/icons/git-branch";
-import Info from "lucide-react-native/icons/info";
+import MoreHorizontal from "lucide-react-native/icons/ellipsis";
+import SquarePen from "lucide-react-native/icons/square-pen";
 import { DisclosureChevron } from "@/ui/disclosure-motion";
 import { ProjectIcon } from "@/ui/project-icon";
 import { Badge, PressableCard, StatusText } from "@/ui/primitives";
 import { SwipeActions, type SwipeRowAction } from "@/ui/swipe-actions";
-import { gapIcon, metrics, radii, space } from "@/ui/tokens";
+import { gapIcon, metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import type { HostProject } from "@/domain/types";
@@ -17,8 +16,10 @@ import { relativeTime } from "./shared";
 export type ProjectRowView = "files" | "git";
 
 /**
- * Compact project row: icon and name, one quiet status on the right. Paths live in the details sheet unless
- * the person turns on full folder paths; a name another project shares gets its parent folder as a hint.
+ * Compact project row: icon and name, one quiet status (opening, needs you, running or last
+ * activity). Long-press and the swipe "More" tile open the shared project options sheet; the swipe
+ * primary is "New session" for a registered project. Paths live in details unless the person turns
+ * on full folder paths; a name another project shares gets its parent folder as a hint.
  */
 export const ProjectRow = memo(function ProjectRow({
   id,
@@ -31,12 +32,13 @@ export const ProjectRow = memo(function ProjectRow({
   grouped,
   registered,
   running,
+  needsYou = 0,
   activeAt,
   opening,
   disabled,
   onPress,
-  onDetails,
-  onOpenView,
+  onOptions,
+  onNewSession,
 }: {
   id: string;
   name: string;
@@ -53,66 +55,87 @@ export const ProjectRow = memo(function ProjectRow({
   grouped: boolean;
   registered: boolean;
   running: number;
+  /** Sessions waiting for the owner; shown ahead of running. */
+  needsYou?: number;
   activeAt?: number;
   opening: boolean;
   disabled: boolean;
   /** Receive the project id so the parent can pass one stable callback to every row. */
   onPress: (id: string) => void;
-  onDetails: (id: string) => void;
-  onOpenView: (id: string, view: ProjectRowView) => void;
+  /** Opens the project options sheet (long-press, accessibility action, swipe "More"). */
+  onOptions: (id: string) => void;
+  onNewSession?: (id: string) => void;
 }) {
   const { colors, uiStyles } = useMobileTheme();
   const { fontScale } = useWindowDimensions();
+  const large = fontScale > 1;
   const copy = useCopy();
   const runningLabel = copy("{p0} çalışıyor", "{p0} running", { p0: running });
+  const needsLabel = copy("Senden bekliyor", "Needs you");
   const openingLabel = copy("Açılıyor…", "Opening…");
   const since = relativeTime(activeAt, copy);
   const kindLabel = kind === "work" ? copy("İş", "Work") : kind === "personal" ? copy("Kişisel", "Personal") : "";
   const actions: SwipeRowAction[] = [
-    {
-      key: "details",
-      label: copy("Ayrıntılar", "Details"),
-      icon: <Info size={18} strokeWidth={2} />,
-      onPress: () => onDetails(id),
-    },
-    ...(registered
-      ? [
-          { key: "files", label: copy("Dosyalar", "Files"), icon: <FolderTree size={18} strokeWidth={2} />, onPress: () => onOpenView(id, "files") },
-          { key: "git", label: copy("Değişiklikler", "Changes"), icon: <GitBranch size={18} strokeWidth={2} />, onPress: () => onOpenView(id, "git") },
-        ]
+    ...(registered && onNewSession
+      ? [{ key: "new-session", label: copy("Yeni oturum", "New session"), icon: <SquarePen size={18} strokeWidth={2} />, onPress: () => onNewSession(id) }]
       : []),
+    { key: "more", label: copy("Diğer", "More"), icon: <MoreHorizontal size={18} strokeWidth={2} />, onPress: () => onOptions(id) },
   ];
+  const status = opening ? <StatusText label={openingLabel} tone="info" />
+    : needsYou ? <StatusText label={needsLabel} tone="warning" />
+    : running ? <StatusText label={runningLabel} tone="live" />
+    : since ? <Text style={[uiStyles.caption, { flexShrink: 1 }]}>{since}</Text> : null;
   const row = (
     <PressableCard
-      label={[context ? `${name} (${context})` : name, kindLabel, path, opening ? openingLabel : running ? runningLabel : "", since].filter(Boolean).join(". ")}
+      label={[context ? `${name} (${context})` : name, kindLabel, path, opening ? openingLabel : needsYou ? needsLabel : running ? runningLabel : "", since].filter(Boolean).join(". ")}
       disabled={disabled && !opening}
       onPress={() => onPress(id)}
-      onLongPress={() => onDetails(id)}
-      optionsLabel={copy("Proje ayrıntıları", "Project details")}
+      onLongPress={() => onOptions(id)}
+      optionsLabel={copy("Proje seçenekleri", "Project options")}
       style={{
-        minHeight: Math.max(metrics.touchTarget, metrics.rowHeightProject - space.sm),
+        // The shared list-row metrics: 52 high with the row's vertical padding.
+        minHeight: metrics.rowHeightProject,
         flexDirection: "row",
-        alignItems: "center",
+        alignItems: large ? "flex-start" : "center",
         gap: gapIcon,
-        paddingVertical: space.xs,
+        paddingVertical: space.row,
         paddingStart: space.xs + depth * space.lg,
       }}
     >
-      {depth > 0 ? <CornerDownRight size={13} color={colors.tertiary} /> : null}
+      {depth > 0 ? <CornerDownRight size={13 * Math.min(fontScale, 1.6)} color={colors.tertiary} /> : null}
       <ProjectIcon appearance={appearance} size={depth > 0 ? 18 : 22} box={depth > 0 ? 22 : 28} />
-      <View style={{ flex: 1, minWidth: 0, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs }}>
-      <Text numberOfLines={1} style={[uiStyles.label, { flexGrow: 1, flexShrink: 1, flexBasis: 140 * Math.max(1, fontScale), minWidth: 0 }]}>
-        {name}{context ? <Text style={uiStyles.caption}>{`  ${context}`}</Text> : null}
-      </Text>
-      {kindLabel ? <Badge label={kindLabel} /> : null}
-      {opening ? <StatusText label={openingLabel} tone="info" />
-        : running ? <StatusText label={runningLabel} tone="live" />
-        : since ? <Text style={[uiStyles.caption, { flexShrink: 1 }]}>{since}</Text> : null}
-      {path ? <Text selectable style={[uiStyles.caption, { flexBasis: "100%" }]}>{path}</Text> : null}
-      </View>
+      {large ? (
+        // Large text: the name wraps and the status gets its own line on every row, so dates align.
+        <View style={{ flex: 1, minWidth: 0, gap: space.xxs }}>
+          <Text style={uiStyles.label}>
+            {name}{context ? <Text style={uiStyles.caption}>{`  ${context}`}</Text> : null}
+          </Text>
+          {kindLabel || status ? (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs }}>
+              {kindLabel ? <Badge label={kindLabel} /> : null}
+              {status}
+            </View>
+          ) : null}
+          {path ? <Text selectable style={uiStyles.caption}>{path}</Text> : null}
+        </View>
+      ) : (
+        <View style={{ flex: 1, minWidth: 0, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs }}>
+          <Text numberOfLines={1} style={[uiStyles.label, { flexGrow: 1, flexShrink: 1, flexBasis: 140, minWidth: 0 }]}>
+            {name}{context ? <Text style={uiStyles.caption}>{`  ${context}`}</Text> : null}
+          </Text>
+          {kindLabel ? <Badge label={kindLabel} /> : null}
+          {status}
+          {path ? <Text selectable style={[uiStyles.caption, { flexBasis: "100%" }]}>{path}</Text> : null}
+        </View>
+      )}
     </PressableCard>
   );
-  const swipeable = <SwipeActions actions={actions} disabled={disabled}>{row}</SwipeActions>;
+  const swipeable = (
+    <SwipeActions actions={actions} disabled={disabled}>
+      {row}
+      <View accessible={false} style={[uiStyles.separator, { marginStart: space.xs + depth * space.lg + gapIcon + (depth > 0 ? 22 : 28) }]} />
+    </SwipeActions>
+  );
   if (!grouped) return swipeable;
   return (
     <View style={{ marginStart: space.md, paddingStart: space.xs, borderStartWidth: metrics.groupGuide, borderStartColor: colors.separator }}>
@@ -121,7 +144,7 @@ export const ProjectRow = memo(function ProjectRow({
   );
 });
 
-/** Collapsible group header: a filled band with group icon, bold name and a count pill. */
+/** Collapsible group header: flat row with group icon, bold name, a quiet count and chevron. */
 export function ProjectGroupHeader({
   name,
   appearance,
@@ -143,13 +166,15 @@ export function ProjectGroupHeader({
 }) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
+  const { fontScale } = useWindowDimensions();
   const runningLabel = copy("{p0} çalışıyor", "{p0} running", { p0: running });
   const content = (
     <>
-      <ProjectIcon appearance={appearance} group size={18} box={24} />
-      <Text numberOfLines={1} style={[uiStyles.label, { flex: 1, minWidth: 0, fontWeight: "700" }]}>{name}</Text>
+      <ProjectIcon appearance={appearance} group size={22} box={28} />
+      <Text numberOfLines={fontScale > 1 ? undefined : 1} style={[uiStyles.label, { flex: 1, minWidth: 0, fontWeight: "700" }]}>{name}</Text>
       {running ? <StatusText label={runningLabel} tone="live" /> : null}
-      <Badge label={String(count)} />
+      {/* A count is a quiet number, never a pill. */}
+      <StatusText label={String(count)} />
       {collapsible ? <DisclosureChevron expanded={expanded} color={colors.muted} size={16} /> : null}
     </>
   );
@@ -157,13 +182,12 @@ export function ProjectGroupHeader({
     flexDirection: "row" as const,
     alignItems: "center" as const,
     gap: gapIcon,
-    minHeight: metrics.rowHeightProject - space.xs,
-    paddingHorizontal: space.row,
-    marginTop: first ? 0 : space.md,
-    // Filled band aligns to the page gutter like the search field (unfilled rows may bleed, filled ones may not).
-    marginHorizontal: 0,
-    borderRadius: radii.control,
-    backgroundColor: colors.raised,
+    // Same row height, icon box and start inset as a project row, so group and project read as
+    // one hierarchy (like the desktop rail): the group is a bold flat header, its projects nest below.
+    minHeight: metrics.rowHeightProject,
+    paddingStart: space.xs,
+    paddingEnd: space.xs,
+    marginTop: first ? 0 : space.sm,
   };
   if (!collapsible)
     return <View accessibilityRole="header" style={style}>{content}</View>;

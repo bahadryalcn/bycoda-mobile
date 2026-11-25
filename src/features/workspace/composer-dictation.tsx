@@ -3,10 +3,11 @@ import Mic from "lucide-react-native/icons/mic";
 import Square from "lucide-react-native/icons/square";
 import { ChatCircleAction } from "@/ui/chat-controls";
 import { useCopy } from "@/ui/copy";
-import { ErrorNotice, Notice } from "@/ui/primitives";
+import { StatusLine } from "@/ui/feedback";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
 import { isMicrophoneDenied, MicrophonePermissionNotice } from "../voice-settings/microphone-permission-notice";
+import { assistantVoiceErrorMessage } from "../assistant/assistant-voice-error";
 import type { useDictation } from "./use-dictation";
 
 type Dictation = ReturnType<typeof useDictation>;
@@ -29,16 +30,20 @@ export function ComposerDictationButton({ dictation }: { dictation: Dictation })
   </ChatCircleAction>;
 }
 
-/** Recording and failure feedback shown above the composer; permission loss offers system Settings. */
+/**
+ * Recording and failure feedback above the composer as one line (the shared `StatusLine`), never a
+ * stacked box. Permission loss keeps its notice, which offers the system Settings page.
+ */
 export function ComposerDictationFeedback({ dictation }: { dictation: Dictation }) {
   const copy = useCopy();
   const { phase, error } = dictation;
   if (error) return <View style={{ paddingBottom: space.xs }}>
     {isMicrophoneDenied(error) ? <MicrophonePermissionNotice />
-      : <ErrorNotice error={error} message={copy("Sesle yazma kullanılamıyor. Mikrofon iznini ve bilgisayardaki ses kurulumunu kontrol et.", "Dictation is unavailable. Check microphone permission and voice setup on your computer.")} />}
+      : <StatusLine tone="danger" label={assistantVoiceErrorMessage(error, copy)}
+        action={{ label: copy("Kapat", "Dismiss"), onPress: dictation.clearError }} />}
   </View>;
   if (phase === "recording") return <View accessibilityLiveRegion="polite" style={{ paddingBottom: space.xs }}>
-    <Notice message={copy("Dinleniyor (en fazla 30 saniye). Bitirmek için kareye dokun.", "Listening (up to 30 seconds). Tap the square to finish.")} />
+    <StatusLine tone="info" busy label={copy("Dinleniyor (en fazla 30 saniye). Bitirmek için kareye dokun.", "Listening (up to 30 seconds). Tap the square to finish.")} />
   </View>;
   return null;
 }

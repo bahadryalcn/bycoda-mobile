@@ -23,7 +23,7 @@ vi.mock("@/state/app-state", () => ({ AppState: { addEventListener: () => ({ rem
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {
-    Stack: wrapper, Section: wrapper, Card: wrapper, Row: wrapper, Heading: wrapper,
+    Stack: wrapper, Disclosure: wrapper, Card: wrapper, Row: wrapper, Heading: wrapper,
     Body: ({ children, accessibilityRole }: PropsWithChildren<{ accessibilityRole?: string }>) => createElement("div", { role: accessibilityRole }, children),
     Field: (props: { label: string; error?: string; onChangeText: (value: string) => void }) => { fixture.fields.set(props.label, props); return null; },
     SegmentedControl: ({ onChange }: { onChange: typeof fixture.mode }) => { fixture.mode = onChange; return null; },
@@ -53,7 +53,7 @@ it("associates validation with its field, keeps preview alerts, and only saves c
   } as unknown as NoteEditorProps)));
   expect(fixture.fields.get("Title")?.error).toContain("200 characters");
   expect(fixture.fields.get("Tags")?.error).toContain("48 characters");
-  expect(fixture.fields.get("Note (Markdown)")?.error).toBeUndefined();
+  expect(fixture.fields.get("Note")?.error).toBeUndefined();
   expect(fixture.actions?.disabled).toBe(true);
   act(() => fixture.actions?.onSubmit());
   expect(save).not.toHaveBeenCalled();

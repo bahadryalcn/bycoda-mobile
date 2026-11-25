@@ -2,6 +2,9 @@
 import { act, createElement, type PropsWithChildren, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
+vi.mock("@/ui/no-computer", () => ({ NoComputerState: () => createElement("p", null, "Connect a computer first"), NoComputerGate: () => createElement("p", null, "Connect a computer first") }));
+vi.mock("../workspace/project-picker", () => ({ ProjectPicker: () => null }));
+vi.mock("@/ui/metric-value", () => ({ MetricValue: ({ children }: import("react").PropsWithChildren) => createElement("strong", null, children) }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...await importOriginal<typeof import("@tanstack/react-query")>(),
@@ -29,9 +32,10 @@ const log = {
 };
 vi.mock("panelui-native/components/badge", () => ({ Badge: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("react-native", () => ({
+  StyleSheet: { hairlineWidth: 1 },
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
 }));
-vi.mock("expo-router", () => ({ Stack: { Screen: () => null }, useLocalSearchParams: () => ({}) }));
+vi.mock("expo-router", () => ({ Stack: { Screen: () => null }, useLocalSearchParams: () => ({ tab: "tokens" }), router: { setParams: vi.fn(), navigate: vi.fn() } }));
 vi.mock("lucide-react-native/icons/network", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/smartphone", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/wifi", () => ({ default: () => null }));
@@ -39,12 +43,14 @@ vi.mock("lucide-react-native/icons/activity", () => ({ default: () => null }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: () => null }));
 vi.mock("panelui-native/components/meter", () => ({ Meter: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/list-video", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/settings-2", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/user-round", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/briefcase", () => ({ default: () => null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: vi.fn(() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: { caption: {} } })) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/styles", () => ({ uiStyles: { caption: {} } }));
-vi.mock("@/ui/tokens", () => ({ colors: {}, space: {}, fontSize: {}, radii: {} }));
+vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, colors: {}, space: {}, fontSize: {}, radii: {} }));
 vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null,  FilterButton: () => null, FilterSheet: () => null }));
 vi.mock("./runtime-monitors", () => ({ RuntimeMonitors: () => null }));
 vi.mock("@/ui/message-code", () => ({ MessageCode: ({ code }: { code: string }) => createElement("pre", null, code) }));
@@ -102,6 +108,7 @@ vi.mock("@/state/queries", () => ({
                       target: "host",
                       state: "interrupted",
                       localUrl: "http://127.0.0.1:3777",
+                      publicUrl: "https://fixture.ngrok.app/",
                     },
                   ],
                 },
@@ -113,9 +120,10 @@ vi.mock("@/state/queries", () => ({
 }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children),
+  return { ValueRow: ({ label, value, trailing }: { label: string; value?: string; trailing?: import("react").ReactNode }) => createElement("div", null, label, value, trailing), RowIcon: () => null, StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children),
     Body: Wrapper,
     StatusText: ({ label }: { label: string }) => createElement("span", null, label),
+    StateView: ({ title, description }: { title: string; description?: string }) => createElement("p", null, title, description),
     Card: Wrapper,
     CodePanel: Wrapper,
     CodeText: Wrapper,
@@ -153,6 +161,7 @@ vi.mock("@/ui/primitives", () => {
     NavigationRow: ({
       label,
       detail,
+      metadata,
       trailing,
       supporting,
       accessibilityLabel,
@@ -160,6 +169,7 @@ vi.mock("@/ui/primitives", () => {
     }: {
       label: string;
       detail?: string;
+      metadata?: string;
       trailing?: ReactNode;
       supporting?: ReactNode;
       accessibilityLabel?: string;
@@ -170,6 +180,7 @@ vi.mock("@/ui/primitives", () => {
         { onClick: onPress, "aria-label": accessibilityLabel },
         label,
         detail,
+        metadata,
         supporting,
         trailing,
       ),

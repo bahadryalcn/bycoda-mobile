@@ -14,6 +14,7 @@ vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}
 vi.mock("@/state/machines", () => ({ useMachines: Object.assign(() => store(), { getState: store }), withDisconnectedComputers: async (operation: () => Promise<unknown>) => {
   state.cleanup(); if (state.machines.length) throw new Error("Disconnect computers before deleting saved drafts."); return operation();
 } }));
+vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("@/state/security", () => ({ assertAppAccess: state.access }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: state.storage }));
 vi.mock("@/features/workspace/draft-guard", () => ({ flushWorkspaceDrafts: state.flush }));
@@ -35,7 +36,7 @@ vi.mock("@/ui/record-card", () => ({ RecordCard: ({ title, metadata }: { title: 
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled, busy }: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean }) => createElement("button", { disabled: disabled || busy, onClick: onPress }, label);
-  return { Stack: Wrap, Body: Wrap, Button, Loading: ({ label }: { label: string }) => createElement("p", null, label), NavigationGroup: Wrap, NavigationRow: Button,
+  return { Stack: Wrap, Body: Wrap, Button, SettingIcon: () => null, Loading: ({ label }: { label: string }) => createElement("p", null, label), NavigationGroup: Wrap, NavigationRow: Button,
     SectionHeader: ({ title, trailing }: { title: string; trailing?: import("react").ReactNode }) => createElement("h3", null, title, trailing),
     StateView: ({ title, description, action }: { title: string; description?: string; action?: { label: string; onPress: () => void } }) => createElement("div", null, createElement("p", null, title), description ? createElement("p", null, description) : null, action ? createElement("button", { onClick: action.onPress }, action.label) : null), Notice: ({ message }: { message: string }) => createElement("p", null, message),
     Sheet: ({ children, title }: PropsWithChildren<{ title: string }>) => createElement("section", { "data-review": true }, createElement("h2", null, title), children),

@@ -1,6 +1,7 @@
 import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 import { expect, it, vi } from "vitest";
 import type { GitDiffIndex } from "./wire";
+vi.mock("@/ui/disclosure-motion", () => ({ DisclosureChevron: "DisclosureChevron" }));
 vi.mock("react-native", () => ({ View: "View" }));
 vi.mock("lucide-react-native/icons/circle-check", () => ({ default: "CheckCircle" }));
 vi.mock("lucide-react-native/icons/download", () => ({ default: "Download" }));

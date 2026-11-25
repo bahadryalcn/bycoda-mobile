@@ -7,11 +7,12 @@ const fixture = vi.hoisted(() => ({
   options: [] as { title?: string }[], enabled: undefined as boolean | undefined,
   pull: undefined as undefined | (() => unknown),
 }));
+vi.mock("@/ui/no-computer", () => ({ NoComputerState: () => createElement("p", null, "Connect a computer first"), NoComputerGate: () => createElement("p", null, "Connect a computer first") }));
 vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }), HintSection: ({ children }: PropsWithChildren) => createElement("div", null, children), InfoHint: () => null, InfoPanel: () => null, HintLabel: () => null, UnitHint: () => null, isUnitHint: () => false }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("expo-router", () => ({ Stack: { Screen: ({ options }: { options: { title?: string } }) => { fixture.options.push(options); return null; } } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/tokens", () => ({ space: {} }));
+vi.mock("@/ui/tokens", () => ({ space: {}, iconSize: {} }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { accent: "#000" } }) }));
 vi.mock("lucide-react-native/icons/network", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/smartphone", () => ({ default: () => null }));
@@ -20,6 +21,7 @@ vi.mock("lucide-react-native/icons/activity", () => ({ default: () => null }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: () => null }));
 vi.mock("panelui-native/components/meter", () => ({ Meter: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/bot", () => ({ default: () => null }));
 vi.mock("@/ui/agent-avatar", () => ({ ProviderAccountMark: () => null }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("@/state/machines", () => ({
@@ -49,6 +51,7 @@ vi.mock("@/ui/primitives", () => {
     Empty: ({ title, action }: any) => createElement("div", null, title, action ? createElement(Button, { label: action.label, onPress: action.onPress }) : null),
     Field: () => null, FormActions: () => null, MutationState: () => null, ErrorText: () => null, Sheet: Wrap,
     Screen: ({ title, children }: any) => createElement("main", null, title, children),
+    NavigationGroup: Wrap, RowIcon: () => null, ValueRow: ({ label, value, trailing }: any) => createElement("div", null, label, value, trailing),
   };
 });
 import { AccessCenter } from "./access-center";

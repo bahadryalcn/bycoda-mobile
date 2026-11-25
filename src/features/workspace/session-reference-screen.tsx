@@ -181,6 +181,8 @@ export function SessionReferenceScreen({ link }: { link: string }) {
           <Loading centered label={copy("Bağlantılar yükleniyor…", "Loading connections…")} />
         ) : !candidates.length ? (
           <Empty
+            compact={false}
+            illustration="connect-computer"
             title={copy("Bu oturum için eşleştirilmiş bilgisayar bulunamadı.", "No paired computer is available for this conversation.")}
             action={{
               label: copy("Bilgisayar bağla", "Connect a computer"),

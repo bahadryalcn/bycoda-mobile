@@ -23,14 +23,12 @@ const state = vi.hoisted(() => ({
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => state.linked, router: { replace: state.replace } }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
-vi.mock("react-native", () => ({ View: "div" }));
+vi.mock("react-native", () => ({ View: "div", ScrollView: "div", useWindowDimensions: () => ({ fontScale: 1 }) }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/filter-sheet", () => ({
   AppliedFilters: () => null,
-  FilterButton: ({ onPress }: { onPress: () => void }) => createElement("button", { onClick: onPress }, "Filters"),
-  FilterSheet: ({ visible, onApply, children }: { visible: boolean; onApply: () => void; children: ReactNode }) =>
-    visible ? createElement("section", null, children, createElement("button", { onClick: onApply }, "Apply")) : null,
+  FilterButton: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label),
 }));
 vi.mock("@/state/machines", () => ({
   useActiveMachine: () => ({ id: "machine", capabilities: state.capabilities }),
@@ -70,15 +68,15 @@ vi.mock("./tasks/task-card", () => ({
   },
 }));
 vi.mock("./tasks/bulk-actions", () => ({
-  TaskBulkActions: ({ tasks, onComplete }: { tasks: unknown[]; onComplete: () => Promise<void> }) => {
-    state.lists.push(tasks);
-    state.lists.push([onComplete]);
-    return null;
+  useTaskBulkActions: ({ tasks, onComplete, context }: { tasks: unknown[]; onComplete: () => Promise<void>; context?: ReactNode }) => {
+    // The latest render's inputs: the visible tasks and the refresh callback.
+    state.lists = [tasks, [onComplete]];
+    return { entry: context ?? null, feedback: null, bar: null, selection: { active: false, isSelected: () => false, toggle: () => {} } };
   },
 }));
 vi.mock("@/ui/screen-list", () => ({
-  ScreenList: ({ header, actions, context, data, renderItem }: { header: unknown; actions: unknown; context: ReactNode; data: unknown[]; renderItem: (entry: { item: unknown }) => unknown }) =>
-    createElement("div", null, createElement("nav", null, actions as never), context, header as never, data.map((item, index) => createElement("div", { key: index }, renderItem({ item }) as never))),
+  ScreenList: ({ header, actions, context, data, renderItem, ListEmptyComponent }: { header: unknown; actions: unknown; context: ReactNode; ListEmptyComponent?: ReactNode; data: unknown[]; renderItem: (entry: { item: unknown }) => unknown }) =>
+    createElement("div", null, createElement("nav", null, actions as never), context, header as never, data.length ? null : ListEmptyComponent, data.map((item, index) => createElement("div", { key: index }, renderItem({ item }) as never))),
 }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: { children?: unknown }) => createElement("div", null, children as never);
@@ -86,7 +84,7 @@ vi.mock("@/ui/primitives", () => {
   const Action = ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) =>
     createElement("button", { onClick: onPress, disabled }, label);
   return {
-    Body: Wrapper, Button: Action, Card: Wrapper, IconButton: Action,
+    ChoiceChip: Action, Body: Wrapper, Button: Action, Card: Wrapper, IconButton: Action,
     SearchField: ({ onChangeText }: { onChangeText: (text: string) => void }) =>
       createElement("input", { onInput: (event: { currentTarget: HTMLInputElement }) => onChangeText(event.currentTarget.value) }),
     SearchToolbar: ({ search, actions }: { search: ReactNode; actions: ReactNode }) =>
@@ -173,13 +171,10 @@ it("disables New task if the selected project can no longer be verified", async 
 });
 
 async function applyStatusFilter(status: string) {
-  await act(async () => button("Filters")!.click());
-  const input = container.querySelector("select")!;
-  await act(async () => {
-    input.value = status;
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  await act(async () => button("Apply")!.click());
+  await act(async () => button("Status")!.click());
+  const label = { blocked: "Blocked", todo: "To do", all: "All" }[status];
+  await act(async () => button(label!)!.click());
+  expect(button("Apply")).toBeUndefined();
 }
 
 it("shows a single empty-state create action for an empty selected project and restores it after closing the new task sheet", async () => {

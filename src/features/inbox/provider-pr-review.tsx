@@ -213,6 +213,7 @@ export function ProviderPrReview({
       footer={
         !value.pending && !value.completed ? <Button
           tone="primary"
+          fullWidth
           label={copy("Göndermeden incele", "Review before sending")}
           busy={busy}
           disabled={!!preflight || locked || stale || !valid || query.isFetching || !!query.error || !!rows.error}
@@ -233,7 +234,7 @@ export function ProviderPrReview({
               {selectedPath && !rows.lines.some(line => line.path === selectedPath) ? <Body muted>{copy("Bu dosya için metin diff’i yok. Dosya ikili olabilir veya diff kısmi olabilir.", "No text diff for this file. The file may be binary or the diff may be partial.")}</Body> : null}
             </> : null}
             {!originCurrent || !canRead ? (
-              <StateView illustration="unreachable" title={copy("Bağlantı bekleniyor", "Waiting for a connection")}
+              <StateView tone="warning" title={copy("Bağlantı bekleniyor", "Waiting for a connection")}
                 description={copy("İnceleme erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.",
                 "Review access is unavailable. Check the original computer and project connection.")} />
             ) : !supported ? (
@@ -378,7 +379,7 @@ export function ProviderPrReview({
                 />
               </Stack>
             ) : null}
-            {context ? <SectionHeader flush title={copy("Fark", "Diff")} /> : null}
+            {context ? <SectionHeader title={copy("Fark", "Diff")} /> : null}
             </> : null}
           </Stack>
         }

@@ -5,9 +5,10 @@ import { BarChart } from "panelui-native/components/bar-chart";
 import { PieChart } from "panelui-native/components/pie-chart";
 import { Body } from "@/ui/primitives";
 import { MetricRow } from "@/ui/metric-row";
+import { MetricValue } from "@/ui/metric-value";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
-import { fontSize, radii, space } from "@/ui/tokens";
+import { radii, space } from "@/ui/tokens";
 import { compactTokens, type ProviderUsage } from "./usage-breakdown";
 
 /** Usage headline: one PanelUI KPI per figure, wrapping to a second row on a narrow phone. */
@@ -21,7 +22,7 @@ export function UsageKpis({ items }: { items: { title: string; value: string }[]
     <View style={{ gap: space.sm }}>
       {items[0] ? <View>
         <Body muted>{items[0].title}</Body>
-        <Body style={{ fontSize: fontSize.display, fontWeight: "600" }}>{items[0].value}</Body>
+        <MetricValue>{items[0].value}</MetricValue>
       </View> : null}
       {items.slice(1).map((item) => <MetricRow key={item.title} label={item.title} value={item.value} />)}
     </View>

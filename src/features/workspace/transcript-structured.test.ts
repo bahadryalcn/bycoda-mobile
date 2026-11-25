@@ -4,7 +4,10 @@ import { expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({ documents: [] as { code: string; compact?: boolean; error?: boolean; allowPreview?: boolean }[] }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
-vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/copy", () => ({
+  useCopy: () => (_tr: string, en: string, values?: Record<string, number>) =>
+    en.replace(/\{(p\d+)\}/g, (token, key: string) => values?.[key]?.toString() ?? token),
+}));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
@@ -30,7 +33,7 @@ it("keeps realistic long shell output in the bounded reader with failure and tru
     expect.objectContaining({ code: block.shell!.command, compact: true, allowPreview: false }),
     expect.objectContaining({ code: output, compact: true, error: true, allowPreview: false }),
   ]);
-  expect(html).toContain("exit 1");
+  expect(html).toContain("Exit code: 1");
   expect(html).toContain("Output was truncated.");
 });
 

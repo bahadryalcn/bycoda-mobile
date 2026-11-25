@@ -3,7 +3,7 @@ import { useMobileTheme } from "./theme";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body, Heading } from "./typography";
-import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type HostInstance } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type HostInstance, type ScrollViewInstance } from "react-native";
 import { createContext, useContext, useId, useLayoutEffect, useSyncExternalStore, useCallback, useMemo, useRef, useState } from "react";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import X from "lucide-react-native/icons/x";
@@ -24,6 +24,8 @@ import { UnsavedBadge } from "./unsaved-badge";
 import { useAdaptiveLayout } from "./adaptive-layout";
 import { sheetCardMaxHeight, sheetPresentation } from "./sheet-layout-model";
 import { useKeyCommand } from "../../modules/bycoda-key-commands";
+import { useKeepFocusedFieldVisible } from "./use-sheet-focused-field";
+import { SectionErrorBoundary } from "./error-boundary";
 
 const SheetActionsContext = createContext<ReturnType<typeof createSheetActionsStore> | null>(null);
 
@@ -156,6 +158,7 @@ export function Sheet({
   const [frameHeight, setFrameHeight] = useState(height);
   const [headerHeight, setHeaderHeight] = useState(metrics.touchTarget);
   const heading = useRef<HostInstance>(null);
+  const body = useRef<ScrollViewInstance>(null);
   const guards = useSheetGuards();
   const [actionsStore] = useState(createSheetActionsStore);
   const canClose = dismissible && !guards.pending;
@@ -198,15 +201,21 @@ export function Sheet({
   // target stays outside that scroller at the top, even at large text sizes.
   const headerMaximum = Math.max(metrics.touchTarget, Math.min(metrics.touchTarget * 2, Math.max(0, sheetHeight - topChrome) / 3));
   const usableHeight = Math.max(0, sheetHeight - topChrome - headerHeight);
-  const bodyMinimum = Math.min(usableHeight / 2, metrics.inputHeight * Math.max(1, fontScale) + space.sm + space.lg);
+  // A compact sheet (a question, a short choice) fits its content; only forms reserve an input-sized body.
+  const bodyMinimum = size === "compact" ? 0
+    : Math.min(usableHeight / 2, metrics.inputHeight * Math.max(1, fontScale) + space.sm + space.lg);
   const actionsMaximum = Math.max(0, usableHeight - bodyMinimum);
   useNativeSheetFocus(visible, heading, returnFocusRef);
+  // The focused field stays visible above the keyboard and the action area.
+  const trackBodyScroll = useKeepFocusedFieldVisible(body, visible && scroll);
   const bodyStyle = {
     paddingTop: space.sm,
     paddingStart: Math.max(space.screen, insets.left),
     paddingEnd: Math.max(space.screen, insets.right),
-    paddingBottom: space.xl,
+    paddingBottom: size === "compact" ? space.md : space.xl,
   };
+  // One broken block inside the body never removes the whole sheet or the screen under it.
+  const content = <SectionErrorBoundary scope="sheet">{children}</SectionErrorBoundary>;
   return (
     <ScreenOverlay visible={visible} label={title} onClose={requestClose}>
       <KeyboardAvoidingView
@@ -313,6 +322,9 @@ export function Sheet({
               // The outer frame owns keyboard geometry. A second keyboard-aware
               // scroller would add the IME height again and scroll short forms away.
               <ScrollView
+                ref={body}
+                onScroll={trackBodyScroll}
+                scrollEventThrottle={16}
                 style={{ flexShrink: 1, flexGrow: fill ? 1 : 0,
                   flexBasis: fill ? 0 : undefined, minHeight: bodyMinimum }}
                 keyboardShouldPersistTaps="handled"
@@ -321,7 +333,7 @@ export function Sheet({
                 contentInsetAdjustmentBehavior="never"
                 contentContainerStyle={[uiStyles.content, bodyStyle]}
               >
-                {children}
+                {content}
               </ScrollView>
             ) : (
               <View
@@ -332,7 +344,7 @@ export function Sheet({
                   minHeight: bodyMinimum,
                 }}
               >
-                {children}
+                {content}
               </View>
             )}
             <SheetActionArea store={actionsStore} footer={footer} bottom={card ? 0 : insets.bottom} maxHeight={actionsMaximum} dirty={dirty || guards.dirty} />

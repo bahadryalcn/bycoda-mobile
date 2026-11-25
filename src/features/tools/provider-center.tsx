@@ -3,18 +3,20 @@ import { useLocale } from "@/i18n";
 import { matchesSearch } from "@/ui/search-matching";
 import { Stack, router } from "expo-router";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
+import Bot from "lucide-react-native/icons/bot";
 import { View } from "react-native";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { getQueryPresentation } from "@/ui/query-presentation";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useHostMutation, useHostQuery } from "@/state/queries";
-import { Badge, Body, Disclosure, Empty, FormActions, ErrorText, Field, IconButton, MutationState, NavigationRow, Notice, QueryState, Row, Screen, SectionHeader, StateView, ScreenList, SearchField, Sheet } from "@/ui/primitives";
+import { Badge, Body, Disclosure, Empty, FormActions, ErrorText, Field, IconButton, MutationState, NavigationGroup, NavigationRow, Notice, QueryState, RowIcon, Screen, SectionHeader, StateView, ScreenList, SearchField, Sheet, ValueRow } from "@/ui/primitives";
 import { ProviderAccountMark } from "@/ui/agent-avatar";
+import { NoComputerGate } from "@/ui/no-computer";
 import { useCopy } from "@/ui/copy";
 import { useInfoHint } from "@/ui/info-hint";
 import { useMobileTheme } from "@/ui/theme";
-import { space } from "@/ui/tokens";
+import { iconSize, space } from "@/ui/tokens";
 import type { RemoteProvider } from "@/domain/types";
 import { providerName } from "@/features/workspace/provider-choices";
 import { metadataPatch, readProviderCenter, type ProviderCenterAgent, type ProviderCenterReport } from "./provider-center-model";
@@ -24,21 +26,32 @@ type Provider = ProviderCenterReport["providers"][number];
 function availabilityLabel(launcher: Provider["launcher"], copy: ReturnType<typeof useCopy>) {
   return launcher === "resolved" ? copy("Kullanılabilir", "Available") : launcher === "unavailable" ? copy("Kullanılamıyor", "Unavailable") : copy("Bilinmiyor", "Unknown");
 }
+/** Problems first, then the computer's order; the normal state stays quiet. */
+export function orderProviders(providers: readonly Provider[]): Provider[] {
+  return providers.map((provider, index) => ({ provider, index }))
+    .sort((a, b) => Number(b.provider.launcher === "unavailable") - Number(a.provider.launcher === "unavailable") || a.index - b.index)
+    .map(({ provider }) => provider);
+}
 function ProviderLaunchers({ providers }: { providers: Provider[] }) {
   const copy = useCopy();
   const info = useInfoHint(copy("Başlatıcının bulunması, hesabın oturum açtığı anlamına gelmez. Hesap ve kimlik doğrulama yönetimi bilgisayarda kalır.", "Finding a launcher does not prove an account is signed in. Account and authentication management stay on the computer."));
-  return <View style={{ gap: space.sm }}>
-    <SectionHeader flush title={copy("Bilgisayardaki ajanlar", "Agents on this computer")} trailing={info.button} />
+  return <View>
+    <SectionHeader title={copy("Bilgisayardaki ajanlar", "Agents on this computer")} count={providers.length} trailing={info.button} />
     {info.panel}
-    {providers.map((provider) => <Row key={provider.id}>
-      <ProviderAccountMark provider={provider.id as RemoteProvider} size={24} />
-      <Body style={{ flex: 1, minWidth: 0 }}>{providerName(provider.id as RemoteProvider)}</Body>
-      <Badge label={availabilityLabel(provider.launcher, copy)} tone={provider.launcher === "resolved" ? "success" : "default"} />
-    </Row>)}
+    <NavigationGroup>
+      {orderProviders(providers).map((provider) => {
+        const label = availabilityLabel(provider.launcher, copy);
+        // Available is the normal case: quiet text. Only a missing launcher is tinted.
+        return <ValueRow key={provider.id} label={providerName(provider.id as RemoteProvider)}
+          icon={<ProviderAccountMark provider={provider.id as RemoteProvider} size={iconSize.row} />}
+          value={provider.launcher === "unavailable" ? undefined : label}
+          trailing={provider.launcher === "unavailable" ? <Badge label={label} tone="warning" /> : undefined} />;
+      })}
+    </NavigationGroup>
   </View>;
 }
 export function ProviderAgentRow({ agent, onPress }: { agent: ProviderCenterAgent; onPress: () => void }) {
-  return <NavigationRow label={agent.name} detail={agent.id} onPress={onPress} />;
+  return <NavigationRow label={agent.name} detail={agent.id} icon={<RowIcon glyph={Bot} />} separator onPress={onPress} />;
 }
 
 function AgentMetadata({ agent, revision, machineId, onClose, onUpdated }: {
@@ -79,7 +92,7 @@ function AgentMetadata({ agent, revision, machineId, onClose, onUpdated }: {
         if (!supported || !currentScope() || busy || uncertain) return;
         try { setReview(metadataPatch(opening.agent, opening.revision, name, context)); setError(undefined); } catch (cause) { setError(cause); }
       }} feedback={<><ErrorText error={error} /><MutationState mutation={patch} /></>} />}
-    <Disclosure label={copy("Ayrıntılar", "Details")}>
+    <Disclosure label={copy("Teknik ayrıntılar", "Technical details")}>
       <Body mono>{opening.machineId} / {opening.agent.id}</Body>
       <Body muted>{copy("Başlatma komutu, argümanlar ve gizli ortam değerleri bilgisayarda kalır.", "Launch commands, arguments and secret environment values stay on the computer.")}</Body>
       <Body>{copy("Argüman sayısı: {p0}", "Argument count: {p0}", { p0: agent.argumentCount })}</Body>
@@ -110,31 +123,33 @@ export function ProviderCenter() {
   const agents = (report?.acp.agents ?? []).filter((agent) => matchesSearch(`${agent.name} ${agent.id}`, search, locale));
   if (!machine || !supported) return <Screen title={copy("Sağlayıcı merkezi", "Provider center")} scroll={false}>
     <View style={{ flex: 1 }}>
-      {!machine ? <Empty compact={false} illustration="connect-computer" title={copy("Önce bir bilgisayar bağla", "Connect a computer first")}
-        action={{ label: copy("Bilgisayar bağla", "Connect a computer"), onPress: () => router.navigate("/machines") }} />
+      {!machine ? <NoComputerGate />
         : <Empty compact={false} illustration="permission" title={copy("Güncelleme gerekiyor", "Update needed")}
           detail={copy("Sağlayıcı merkezini açmak için bilgisayardaki bycoda’yı güncelleyin.", "Update bycoda on this computer to open the provider center.")} />}
     </View>
   </Screen>;
+  const ready = getQueryPresentation(query) === "ready" && !!report;
   return <>
-    <ScreenList<ProviderCenterAgent> title={copy("Sağlayıcı merkezi", "Provider center")} subtitle={machine?.name}
+    <ScreenList<ProviderCenterAgent> title={copy("Sağlayıcı merkezi", "Provider center")} scope={{ computer: machine.name }}
       query={supported ? query : undefined}
       refreshState={supported ? refresh : undefined}
+      grouped
       actions={<IconButton label={copy("Yenile", "Refresh")} busy={refresh.refreshing} disabled={!supported || query.isFetching} onPress={() => { void refresh.onRefresh(); }}>
-        <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
+        <RefreshCw size={iconSize.action} strokeWidth={2} color={colors.accent} />
       </IconButton>}
       data={agents} keyExtractor={(agent) => agent.id}
       header={<View style={{ gap: space.lg }}>
         <Stack.Screen options={{ title: copy("Sağlayıcı merkezi", "Provider center") }} />
-        <QueryState query={query} />
+        <QueryState size="region" query={query} />
         {report?.providers.length ? <ProviderLaunchers providers={report.providers} /> : null}
-        <SectionHeader title={copy("Özel ACP ajanları", "Custom ACP agents")} count={report?.acp.agents.length} trailing={intro.button} />
-        {intro.panel}
-        {report && (report.acp.agents.length || search) ? <SearchField ref={searchInput} label={copy("Ajan ara", "Search agents")} value={search} onChangeText={setSearch} /> : null}
-        {getQueryPresentation(query) === "ready" && report && report.acp.agents.length > 0 && !agents.length ? <Empty compact title={copy("Eşleşen sonuç yok", "No matching results")}
-          action={{ label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }} /> : null}
-        {getQueryPresentation(query) === "ready" && report && !report.acp.agents.length ? <StateView compact illustration="inbox-empty"
-          title={copy("Yapılandırılmış ACP ajanı yok.", "No configured ACP agents.")} /> : null}
+        {report ? <View style={{ gap: space.sm }}>
+          <SectionHeader title={copy("Özel ACP ajanları", "Custom ACP agents")} count={report.acp.agents.length} trailing={intro.button} />
+          {intro.panel}
+          {report.acp.agents.length || search ? <SearchField ref={searchInput} label={copy("Ajan ara", "Search agents")} value={search} onChangeText={setSearch} /> : null}
+          {ready && report.acp.agents.length > 0 && !agents.length ? <Empty compact title={copy("Eşleşen sonuç yok", "No matching results")}
+            action={{ label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }} /> : null}
+          {ready && !report.acp.agents.length ? <StateView size="compact" title={copy("Yapılandırılmış ACP ajanı yok.", "No configured ACP agents.")} /> : null}
+        </View> : null}
       </View>}
       renderItem={({ item }) => <ProviderAgentRow agent={item} onPress={() => { if (report && machine) setSelected({ agent: item, revision: report.acp.revision, machineId: machine.id, reviewed: reviewedMachine(machine) }); }} />} />
     {selected && !changedTarget ? <AgentMetadata key={`${selected.machineId}:${selected.agent.id}`} agent={selected.agent} revision={selected.revision} machineId={selected.machineId}

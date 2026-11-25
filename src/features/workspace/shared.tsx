@@ -5,8 +5,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Crypto from "expo-crypto";
 import { useHostClient } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
-import { Body, Button, Card, ErrorText, MutationState, Notice } from "@/ui/primitives";
-import { space, type MobileColors } from "@/ui/tokens";
+import { Body, Button, Card, ErrorText, MutationState, Notice, Separator } from "@/ui/primitives";
+import type { MobileColors } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { shortDate } from "../management/shared/format";
@@ -20,9 +20,6 @@ export { UncertainCommand } from "./commands";
 export { SelectRow, ErrorText } from "@/ui/primitives";
 
 export type CopyFn = ReturnType<typeof useCopy>;
-
-/** Leading inset of hairlines that sit after a 32pt IconTile row. */
-export const rowInset = 32 + space.row;
 
 /** Short relative stamps like desktop: whole elapsed units (floor), a short date after a week. */
 export function relativeTime(value: number | undefined, copy: CopyFn, now = Date.now()) {
@@ -79,19 +76,18 @@ export function StatusDot({ color, size = 8 }: { color: string; size?: number })
   );
 }
 
-/** Flat row with an inset hairline; no panel fill, so lists read as one surface. */
+/**
+ * A virtualized list row (or a row with a trailing control beside it) with the same hairline a
+ * `NavigationGroup` row draws, so flat lists match grouped rows everywhere.
+ */
 export function GroupedListRow({
   children,
   last,
-  inset = 0,
-}: PropsWithChildren<{ first: boolean; last: boolean; inset?: number }>) {
-  const { uiStyles } = useMobileTheme();
+}: PropsWithChildren<{ first: boolean; last: boolean }>) {
   return (
     <View>
       {children}
-      {last ? null : (
-        <View accessible={false} style={[uiStyles.separator, { marginStart: inset }]} />
-      )}
+      {last ? null : <Separator />}
     </View>
   );
 }

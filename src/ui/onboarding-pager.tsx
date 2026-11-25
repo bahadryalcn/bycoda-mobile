@@ -26,9 +26,9 @@ export type OnboardingPage = { key: string; art: CodeArtName; lightArt?: CodeArt
 const artHeight = 360;
 
 /** A page's figure resolves when its page settles; figure and title drift at different speeds. */
-function Slide({ page, position, offset, width, top, bottomClearance, active }: {
+function Slide({ page, position, offset, width, height, active }: {
   page: OnboardingPage; position: number; offset: SharedValue<number>; width: number;
-  top: number; bottomClearance: number; active: boolean;
+  height: number; active: boolean;
 }) {
   const { uiStyles, mode } = useMobileTheme();
   const figure = mode === "light" && page.lightArt ? page.lightArt : page.art;
@@ -44,8 +44,8 @@ function Slide({ page, position, offset, width, top, bottomClearance, active }: 
   }));
   return (
     <View accessibilityElementsHidden={!active} importantForAccessibility={active ? "auto" : "no-hide-descendants"}
-      style={{ width, paddingTop: top, paddingBottom: bottomClearance, paddingHorizontal: space.xl, gap: space.xl, justifyContent: "center" }}>
-      <Animated.View style={[{ flexBasis: artHeight, flexShrink: 1, alignItems: "center", justifyContent: "center" }, art]}
+      style={{ width, height, paddingHorizontal: space.xl, paddingVertical: space.lg, gap: space.xl, justifyContent: "center" }}>
+      <Animated.View style={[{ flexBasis: Math.min(artHeight, height * 0.55), flexShrink: 1, minHeight: 0, alignItems: "center", justifyContent: "center" }, art]}
         onLayout={({ nativeEvent }) => setBox({ width: nativeEvent.layout.width, height: nativeEvent.layout.height })}>
         {box.height > 0 ? <CodeArt name={figure} width={codeArtWidth(figure, box)} active={active} /> : null}
       </Animated.View>
@@ -60,29 +60,27 @@ function Slide({ page, position, offset, width, top, bottomClearance, active }: 
 }
 
 /**
- * Full-screen first-run pages: the website's code-glyph figures above one headline each. Figures
- * stay between `top` and the title; the title sits `bottomClearance` above the caller's fixed
- * actions. Never auto-advances. `offset` is shared with `PageDots`.
+ * First-run pages fill the measured viewport between the caller's header and fixed actions.
+ * Never auto-advances. `offset` is shared with `PageDots`.
  */
-export function OnboardingPager({ pages, index, offset, onIndexChange, top, bottomClearance, scrollRef }: {
+export function OnboardingPager({ pages, index, offset, onIndexChange, scrollRef }: {
   pages: OnboardingPage[];
   index: number;
   offset: SharedValue<number>;
   onIndexChange: (index: number) => void;
-  top: number;
-  bottomClearance: number;
   scrollRef: Ref<ComponentRef<typeof ScrollView>>;
 }) {
-  const [{ width, initialIndex }, setPageLayout] = useState({ width: 0, initialIndex: index });
+  const [{ width, height, initialIndex }, setPageLayout] = useState({ width: 0, height: 0, initialIndex: index });
   const onScroll = useAnimatedScrollHandler((event) => { offset.value = event.contentOffset.x; });
   return (
     <View style={StyleSheet.absoluteFill} onLayout={({ nativeEvent }) => {
-      const nextWidth = nativeEvent.layout.width;
-      if (nextWidth === width) return;
-      setPageLayout({ width: nextWidth, initialIndex: index });
-      offset.value = nextWidth * index;
+      const { width: nextWidth, height: nextHeight } = nativeEvent.layout;
+      if (nextWidth === width && nextHeight === height) return;
+      const widthChanged = nextWidth !== width;
+      setPageLayout({ width: nextWidth, height: nextHeight, initialIndex: widthChanged ? index : initialIndex });
+      if (widthChanged) offset.value = nextWidth * index;
     }}>
-      {width > 0 ? (
+      {width > 0 && height > 0 ? (
         <Animated.ScrollView
           // Re-anchor the current page after rotation or split view changes the width.
           key={width}
@@ -96,8 +94,8 @@ export function OnboardingPager({ pages, index, offset, onIndexChange, top, bott
           onMomentumScrollEnd={({ nativeEvent }) => onIndexChange(pageAtOffset(nativeEvent.contentOffset.x, width, pages.length))}
         >
           {pages.map((page, position) => (
-            <Slide key={page.key} page={page} position={position} offset={offset} width={width} top={top}
-              bottomClearance={bottomClearance} active={position === index} />
+            <Slide key={page.key} page={page} position={position} offset={offset} width={width} height={height}
+              active={position === index} />
           ))}
         </Animated.ScrollView>
       ) : null}

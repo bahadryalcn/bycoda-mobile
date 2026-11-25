@@ -2,15 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } 
 import { Stack } from "expo-router";
 import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
+import ListVideo from "lucide-react-native/icons/list-video";
+import Settings2 from "lucide-react-native/icons/settings-2";
 import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import type { HostProject } from "@/domain/types";
-import { ActionMenu, Badge, Body, CodePanel, CodeText, Empty, ErrorText, IconButton, NavigationGroup, Notice, QueryState, Row, ScreenList, SearchField, SearchToolbar, SelectField, Sheet, ToggleField } from "@/ui/primitives";
+import { ActionMenu, Badge, Body, CodePanel, CodeText, Empty, ErrorText, IconButton, NavigationGroup, Notice, QueryState, Row, ScreenList, SearchField, SearchToolbar, SelectField, Sheet, StatusText, ToggleField } from "@/ui/primitives";
 import { MessageCode } from "@/ui/message-code";
 import { useCopy } from "@/ui/copy";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useMobileTheme } from "@/ui/theme";
+import { iconSize } from "@/ui/tokens";
 import { IssueSummary } from "@/ui/issue-summary";
 import { stamp } from "../management/shared/format";
 import type {
@@ -47,10 +50,10 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
   const [source, setSource] = useState("");
   const [level, setLevel] = useState<"" | RuntimeLogLevel>("");
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [showRefreshSettings, setShowRefreshSettings] = useState(false);
   const [filterDraft, setFilterDraft] = useState<{
     source: string;
     level: "" | RuntimeLogLevel;
-    autoRefresh: boolean;
   } | null>(null);
   const [selected, setSelected] = useState<{ entry: RuntimeLogEntry; reviewed: ReviewedMachine | undefined }>();
   const [showMonitors, setShowMonitors] = useState(false);
@@ -108,7 +111,7 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
     { value: "error", label: copy("Hata", "Error") },
     { value: "warn", label: copy("Uyarı", "Warning") },
     { value: "info", label: copy("Bilgi", "Info") },
-    { value: "debug", label: "Debug" },
+    { value: "debug", label: copy("Hata ayıklama", "Debug") },
   ] as const;
   const levelLabels = new Map<string, string>(levelOptions.map((option) => [option.value, option.label]));
   const machineRef = useRef(machine);
@@ -126,7 +129,7 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
     <>
       <ScreenList<RuntimeLogEntry>
         title={copy("Çalışma günlükleri", "Runtime logs")}
-        subtitle={project.name}
+        scope={{ computer: machine?.name, project: project.name }}
         data={entries}
         keyExtractor={(entry) => entry.id}
         query={logs}
@@ -138,10 +141,13 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
               disabled={logs.isFetching || sources.isFetching || searchInput.tooLong}
               onPress={() => { void refresh.onRefresh(); }}
             >
-              <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
+              <RefreshCw size={iconSize.action} strokeWidth={2} color={colors.accent} />
             </IconButton>
             <ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
-              { key: "monitors", label: copy("Günlük izleyicileri", "Log monitors"), onPress: () => setShowMonitors(true) },
+              { key: "monitors", label: copy("Günlük izleyicileri", "Log monitors"), opens: true,
+                icon: <ListVideo size={iconSize.row} color={colors.muted} />, onPress: () => setShowMonitors(true) },
+              { key: "settings", label: copy("Ayarlar", "Settings"), opens: true,
+                icon: <Settings2 size={iconSize.row} color={colors.muted} />, onPress: () => setShowRefreshSettings(true) },
             ]} />
           </>
         }
@@ -155,23 +161,30 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
               maxLength={LOG_SEARCH_LIMIT}
               onChangeText={setSearch}
             />} actions={<FilterButton
-              count={Number(!!source) + Number(!!level) + Number(!autoRefresh)}
-              onPress={() => setFilterDraft({ source, level, autoRefresh })}
+              count={Number(!!source) + Number(!!level)}
+              onPress={() => setFilterDraft({ source, level })}
             />} />
             <AppliedFilters filters={[
               source && `${copy("Kaynak", "Source")}: ${sourceLabels.get(source) ?? source}`,
               level && `${copy("Seviye", "Level")}: ${levelLabels.get(level) ?? level}`,
-              !autoRefresh && `${copy("Otomatik yenile", "Auto refresh")}: ${copy("Kapalı", "Off")}`,
             ]} />
             {searchInput.tooLong ? <ErrorText error={copy(
               "Aramayı 512 karakter veya daha az olacak şekilde kısaltın.",
               "Shorten the search to 512 characters or fewer.",
             )} /> : null}
+            {!filterDraft ? <QueryState query={sources} loading="none" /> : null}
+            {!filterDraft ? sourceIssues : null}
+
+          </>
+        }
+        ListEmptyComponent={
+          <>
             {!searchInput.tooLong ? (
-              <QueryState
+              <QueryState size="region" emptyIllustration="inbox-empty"
                 query={logs}
                 empty={!entries.length && sources.isSuccess && !sources.error && !unavailableSources.length}
-                emptyTitle={source || level || query ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz günlük yok.", "No logs yet.")}
+                emptyTitle={source || level || query ? copy("Eşleşen sonuç yok", "No matching results") : copy("Henüz günlük yok", "No logs yet")}
+                emptyDetail={source || level || query ? undefined : copy("Uygulaman ve sunucuların yazdığı günlükler burada görünür.", "Logs written by your app and servers appear here.")}
                 emptyAction={source || level ? {
                   label: copy("Filtreleri temizle", "Clear filters"),
                   onPress: () => { setSource(""); setLevel(""); clearSearch(); },
@@ -180,9 +193,6 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
                 } : undefined}
               />
             ) : null}
-            {!filterDraft ? <QueryState query={sources} loading="none" /> : null}
-            {!filterDraft ? sourceIssues : null}
-
           </>
         }
         renderItem={({ item: entry }) => (
@@ -197,15 +207,21 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
       {showMonitors ? (
         <RuntimeMonitors projectId={project.id} projectName={project.name} onClose={() => setShowMonitors(false)} />
       ) : null}
+      {showRefreshSettings ? (
+        <Sheet visible title={copy("Ayarlar", "Settings")} size="compact" onClose={() => setShowRefreshSettings(false)}>
+          <NavigationGroup>
+            <ToggleField label={copy("Otomatik yenile", "Auto refresh")} value={autoRefresh} onChange={setAutoRefresh} />
+          </NavigationGroup>
+        </Sheet>
+      ) : null}
       {filterDraft ? (
         <FilterSheet
           visible
           onClose={() => setFilterDraft(null)}
-          onReset={() => setFilterDraft({ source: "", level: "", autoRefresh: true })}
+          onReset={() => setFilterDraft({ source: "", level: "" })}
           onApply={() => {
             setSource(filterDraft.source);
             setLevel(filterDraft.level);
-            setAutoRefresh(filterDraft.autoRefresh);
             setFilterDraft(null);
           }}
         >
@@ -231,13 +247,6 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
             options={levelOptions}
             onChange={(level) => setFilterDraft({ ...filterDraft, level })}
           />
-          <NavigationGroup>
-            <ToggleField
-              label={copy("Otomatik yenile", "Auto refresh")}
-              value={filterDraft.autoRefresh}
-              onChange={(autoRefresh) => setFilterDraft({ ...filterDraft, autoRefresh })}
-            />
-          </NavigationGroup>
         </FilterSheet>
       ) : null}
       <Sheet
@@ -252,10 +261,12 @@ export function RuntimeLogsScreen({ project }: { project: HostProject }) {
               <Body muted style={uiStyles.caption}>
                 {stamp(selectedEntry.timestamp)}
               </Body>
-              <Badge
-                label={levelLabels.get(selectedEntry.level) ?? selectedEntry.level}
-                tone={logLevelTone(selectedEntry.level)}
-              />
+              {logLevelTone(selectedEntry.level) === "default"
+                ? <StatusText label={levelLabels.get(selectedEntry.level) ?? selectedEntry.level} />
+                : <Badge
+                  label={levelLabels.get(selectedEntry.level) ?? selectedEntry.level}
+                  tone={logLevelTone(selectedEntry.level)}
+                />}
             </Row>
             <CodePanel horizontal={false}>
               <CodeText>{selectedEntry.message}</CodeText>

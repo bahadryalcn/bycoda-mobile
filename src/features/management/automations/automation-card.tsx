@@ -6,7 +6,10 @@ import Pencil from "lucide-react-native/icons/pencil";
 import History from "lucide-react-native/icons/history";
 import MessageSquare from "lucide-react-native/icons/message-square";
 import Trash2 from "lucide-react-native/icons/trash-2";
-import { ActionMenu, Body, Button, ErrorNotice, MutationState, Row } from "@/ui/primitives";
+import Play from "lucide-react-native/icons/play";
+import Pause from "lucide-react-native/icons/pause";
+import { Body, Button, IconButton, MutationState } from "@/ui/primitives";
+import { useMobileTheme } from "@/ui/theme";
 import { HoursOverview } from "@/ui/week-hours";
 import { WEEK_ORDER, weekRunBlocks } from "@/ui/week-hours-model";
 import { joinMeta, RecordTrailing, useMenuGlyph, useRelativeTime } from "../shared/record-bits";
@@ -32,6 +35,7 @@ export function AutomationCard({
   remove,
 }: AutomationCardProps) {
   const copy = useCopy();
+  const { colors } = useMobileTheme();
   const machine = useActiveMachine();
   const connection = useConnectionScope();
   const pendingReview = useRef<symbol | null>(null);
@@ -75,8 +79,14 @@ export function AutomationCard({
     save.mutate({
       automation: { ...item, enabled: !item.enabled, expectedConfiguration: item },
     });
-  // Pause/enable is a frequent action and sits beside Run now; edit, history, last session and delete are secondary.
+  // Run now stays a direct quiet command; pause/enable, edit, history, last session and delete are options.
   const menu = [
+    {
+      key: "toggle", icon: glyph(item.enabled ? Pause : Play),
+      label: item.enabled ? copy("Duraklat", "Pause") : copy("Etkinleştir", "Enable"),
+      disabled: busy || editorOpen || toggling,
+      onPress: toggle,
+    },
     {
       key: "edit", icon: glyph(Pencil),
       label: copy("Düzenle", "Edit"),
@@ -124,25 +134,25 @@ export function AutomationCard({
         !!relative(item.lastRunAt) && copy("Son çalışma {p0}", "Last run {p0}", { p0: relative(item.lastRunAt) }),
       ])}
       preview={item.prompt ? <Body muted numberOfLines={2}>{item.prompt}</Body> : null}
-      footer={<Row>
-        <Button tone="primary" label={copy("Şimdi çalıştır", "Run now")} busy={running} style={{ flexGrow: 1 }}
-          disabled={busy || editorOpen} onPress={() => review("run")} />
-        <Button tone="secondary" label={item.enabled ? copy("Duraklat", "Pause") : copy("Etkinleştir", "Enable")} style={{ flexGrow: 1 }}
-          busy={toggling} disabled={busy || editorOpen || toggling} onPress={toggle} />
-      </Row>}
       menu={<RecordTrailing>
-        <ActionMenu label={copy("Otomasyon işlemleri", "Automation actions")}
-          busy={(save.isPending && (save.variables?.automation as { id?: string } | undefined)?.id === item.id) || (remove.isPending && remove.variables?.automationId === item.id)} actions={menu} />
+        <IconButton label={copy("Şimdi çalıştır", "Run now")} busy={running}
+          disabled={busy || editorOpen} onPress={() => review("run")}>
+          <Play size={18} color={colors.accent} />
+        </IconButton>
       </RecordTrailing>}
+      actions={{ label: copy("Otomasyon işlemleri", "Automation actions"),
+        busy: toggling || (remove.isPending && remove.variables?.automationId === item.id), items: menu }}
+      issues={[historyId === item.id ? undefined : item.lastRunError]}
       details={
         <>
           <Body>{item.prompt}</Body>
           <Body muted>{agentPresentation(item.harness, item.model)}</Body>
           {!item.trigger ? <HoursOverview rows={WEEK_ORDER.map((day) => ({ key: String(day), label: dayNames[day], blocks: blocks[day] }))} /> : null}
+          <Button tone="primary" label={copy("Şimdi çalıştır", "Run now")} busy={running} fullWidth
+            disabled={busy || editorOpen} onPress={() => review("run")} />
         </>
       }
     >
-      <ErrorNotice error={historyId === item.id ? undefined : item.lastRunError} />
       {!editorOpen && savedAutomationId(save.variables) === item.id ? <MutationState mutation={save} success={copy("Otomasyon kaydedildi.", "Automation saved.")} /> : null}
       {run.variables?.automationId === item.id ? <MutationState mutation={run} success={copy("Çalıştırma istendi.", "Run requested.")} /> : null}
       {remove.variables?.automationId === item.id ? <MutationState mutation={remove} /> : null}

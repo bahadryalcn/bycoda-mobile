@@ -8,6 +8,7 @@ export function UsageUnavailable({ tab }: { tab: Exclude<UsageTab, "tokens"> }) 
   const copy = useCopy();
   return (
     <StateView
+      size="compact"
       illustration="permission"
       title={
         tab === "cost"

@@ -115,7 +115,6 @@ function SessionFilesScope({ scope, session, connection }: { scope: SessionScope
         size="full"
         scroll={false}
         onClose={close}
-        footer={<FormActions tone="quiet" submitLabel={copy("Kapat", "Close")} onSubmit={close} />}
       >
         {open && !readable ? <ScrollView contentContainerStyle={{ padding: space.screen, gap: space.sm, flexGrow: 1, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center" }}>
           <RecordAccessUnavailable />
@@ -133,9 +132,12 @@ function SessionFilesScope({ scope, session, connection }: { scope: SessionScope
                   <SlidersHorizontal size={19} color={activeFilters ? colors.accent : colors.muted} />
                 </IconButton>
               </Row>
-              <Row><Body muted style={uiStyles.caption}>{copy("{p0} / {p1} dosya", "{p0} / {p1} files", { p0: filtered.length, p1: files.length })}</Body>
-                {activeFilters ? <Badge label={copy("Filtre etkin", "Filter active")} tone="active" /> : null}
-              </Row>
+              {files.length || activeFilters ? (
+                <Row>
+                  {files.length ? <Body muted style={uiStyles.caption}>{copy("{p0} / {p1} dosya", "{p0} / {p1} files", { p0: filtered.length, p1: files.length })}</Body> : null}
+                  {activeFilters ? <Badge label={copy("Filtre etkin", "Filter active")} tone="active" /> : null}
+                </Row>
+              ) : null}
             </View>
           <ScreenChromeProvider nativeTitle bottomSafeArea={false}><ScopedFileList scope={scope} session={session}
             {...position.listProps}
@@ -189,7 +191,7 @@ function SessionFilesScope({ scope, session, connection }: { scope: SessionScope
           options={[
             { value: "all", label: copy("Tümü", "All") },
             { value: "user", label: copy("Siz", "You") },
-            { value: "agent", label: copy("Agent", "Agent") },
+            { value: "agent", label: copy("Ajan", "Agent") },
           ]}
         />
         <SelectField
@@ -216,7 +218,7 @@ function ScopedFileList({ scope, session, ...props }: Omit<ScreenListProps<Sessi
   const client = useHostClient(), copy = useCopy();
   const context = client ? { client, machineId: scope.machineId, projectId: session.projectId, sessionId: scope.sessionId, cwd: session.session.worktreeCwd || session.session.cwd } : undefined;
   return <ScreenList<SessionFile> {...props} renderItem={({ item }) => <View style={{ gap: space.xs }}>
-    <Body muted style={uiStyles.caption}>{item.source === "user" ? copy("Siz", "You") : copy("Agent", "Agent")}</Body>
+    <Body muted style={uiStyles.caption}>{item.source === "user" ? copy("Siz", "You") : copy("Ajan", "Agent")}</Body>
     {context ? <AttachmentFile id={item.id} name={item.name} size={item.size} mimeType={item.mimeType} image={item.kind === "image"} context={context} /> : null}
   </View>} />;
 }

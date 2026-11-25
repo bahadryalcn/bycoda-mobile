@@ -6,18 +6,10 @@ import { NavigationSettings } from "./navigation-settings";
 import { defaultAppPreferences, type AppPreferences } from "./app-preferences";
 
 const fixture = vi.hoisted(() => ({ preferences: undefined as unknown as AppPreferences }));
-vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children), StyleSheet: { hairlineWidth: 1 } }));
-vi.mock("react-native-reanimated", () => ({
-  default: { ScrollView: ({ children }: PropsWithChildren) => h("div", null, children) },
-  useAnimatedRef: () => null,
-}));
-vi.mock("react-native-gesture-handler", () => ({ GestureHandlerRootView: ({ children }: PropsWithChildren) => h("div", null, children) }));
 vi.mock("lucide-react-native/icons/rows-3", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/folder-clock", () => ({ default: () => null }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (tr: string) => tr }));
 vi.mock("@/ui/preference-storage-notice", () => ({ PreferenceStorageNotice: () => null }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
-vi.mock("@/ui/tokens", () => ({ gapIcon: 4, metrics: {}, space: {} }));
 vi.mock("@/ui/primitives", () => {
   const wrap = ({ children }: PropsWithChildren) => h("div", null, children);
   const command = ({ label, onPress }: { label: string; onPress: () => void }) => h("button", { onClick: onPress }, label);
@@ -28,24 +20,9 @@ vi.mock("@/ui/primitives", () => {
       h("button", { onClick: () => onChange(false) }, label),
   };
 });
-vi.mock("panelui-native/components/sortable", () => {
-  const wrap = ({ children }: PropsWithChildren) => h("div", null, children);
-  const handle = ({ accessibilityLabel, accessibilityValue, accessibilityActions, onAccessibilityAction }: {
-    accessibilityLabel: string;
-    accessibilityValue?: { min: number; max: number; now: number };
-    accessibilityActions?: { label?: string }[];
-    onAccessibilityAction?: (event: { nativeEvent: { actionName: string } }) => void;
-  }) => h("span", {
-    "data-handle": accessibilityLabel,
-    "data-value": JSON.stringify(accessibilityValue),
-    "data-actions": accessibilityActions?.flatMap(action => action.label ?? []).join(", "),
-    onClick: () => onAccessibilityAction?.({ nativeEvent: { actionName: "increment" } }),
-  });
-  return { Sortable: Object.assign(wrap, { Item: wrap, Handle: handle }) };
-});
 vi.mock("./app-preferences", () => {
   const defaults = {
-    tabs: { order: ["index", "chats", "inbox", "manage"], hidden: [] },
+    tabs: { hidden: [] },
     groupByRepository: false, newSessionUsesLastProject: false,
   };
   return {
@@ -72,18 +49,10 @@ async function openTabs() {
   return container;
 }
 
-it("explains visibility and reordering without assuming where tabs appear", async () => {
+it("explains visibility in the app language without offering reordering", async () => {
   const container = await openTabs();
-  expect(container.textContent).toContain("Görünecek sekmeleri seç. Sıralamak için tutamaçları sürükle.");
-});
-
-it("gives screen readers numeric tab positions and labels in the app language", async () => {
-  const container = await openTabs();
-  const handle = container.querySelector('[data-handle="Projeler, Sekmeyi sürükle"]');
-  expect(JSON.parse(handle?.getAttribute("data-value") ?? "null")).toEqual({ min: 1, max: 4, now: 1 });
-  expect(handle?.getAttribute("data-actions")).toBe("Aşağı taşı");
-  const last = container.querySelector('[data-handle="Araçlar, Sekmeyi sürükle"]');
-  expect(last?.getAttribute("data-actions")).toBe("Yukarı taşı");
+  expect(container.textContent).toContain("Alt çubukta görünecek sekmeleri seç. Ayarlar her zaman görünür.");
+  expect(container.textContent).not.toContain("sürükle");
 });
 
 it("keeps both visibility changes made before a fresh render", async () => {
@@ -96,9 +65,12 @@ it("keeps both visibility changes made before a fresh render", async () => {
   expect(fixture.preferences.tabs.hidden).toEqual(["index", "chats"]);
 });
 
-it("moves an incremented tab later from its latest saved position", async () => {
+it("keeps the last visible tab shown", async () => {
   const container = await openTabs();
-  const handle = container.querySelector<HTMLElement>('[data-handle="Projeler, Sekmeyi sürükle"]');
-  await act(async () => { handle!.click(); handle!.click(); });
-  expect(fixture.preferences.tabs.order).toEqual(["chats", "inbox", "index", "manage"]);
+  await act(async () => {
+    for (const label of ["Projeler", "Oturumlar", "Gelen kutusu", "Araçlar"]) {
+      [...container.querySelectorAll("button")].find(button => button.textContent === label)!.click();
+    }
+  });
+  expect(fixture.preferences.tabs.hidden).toEqual(["index", "chats", "inbox"]);
 });

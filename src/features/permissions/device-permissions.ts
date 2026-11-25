@@ -2,6 +2,8 @@ import { Linking } from "react-native";
 import { create } from "zustand";
 import { requestDevicePermission, type DevicePermission } from "./permission-flow";
 import { isViewingSession } from "../push/push-viewing";
+import { withTimeout } from "../../../../src/shared/lib/withTimeout";
+import { PERMISSION_READ_TIMEOUT_MS } from "./permission-deadline";
 
 export type DevicePermissionKind = "camera" | "microphone" | "notifications";
 let handlerReady = false;
@@ -31,7 +33,11 @@ export async function notifications() {
   return api;
 }
 
-export async function readDevicePermission(kind: DevicePermissionKind): Promise<DevicePermission> {
+export function readDevicePermission(kind: DevicePermissionKind): Promise<DevicePermission> {
+  return withTimeout(readDevicePermissionNow(kind), PERMISSION_READ_TIMEOUT_MS, `${kind} permission check`);
+}
+
+async function readDevicePermissionNow(kind: DevicePermissionKind): Promise<DevicePermission> {
   if (process.env.EXPO_OS === "web") return { granted: false, canAskAgain: false, status: "unavailable" };
   if (kind === "microphone") {
     const audio = await import("expo-audio");

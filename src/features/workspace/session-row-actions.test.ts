@@ -23,12 +23,17 @@ const f = vi.hoisted(() => ({
   copyCurrent: undefined as (() => boolean) | undefined,
   privateAccess: undefined as { allowed: boolean; check(): boolean } | undefined,
   actions: new Map<string, () => void>(),
+  toasts: [] as unknown[],
 }));
 vi.mock("lucide-react-native/icons/clock", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/mail", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/mail-open", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/square", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/folder-input", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/ellipsis", () => ({ default: () => null }));
+vi.mock("@/ui/toast", () => ({ showToast: (value: unknown) => f.toasts.push(value) }));
+vi.mock("./project-organization", () => ({ ProjectOrganization: () => null }));
 vi.mock("./session-row-copy-menu", async () => {
   const { SessionActionList } = await import("./session-action-list");
   return { SessionRowCopyMenu: ({ actions, current }: { actions: Action[]; current(): boolean }) => {
@@ -147,6 +152,8 @@ vi.mock("@/ui/primitives", () => {
     },
     Badge: ({ label, tone }: { label: string; tone?: string }) =>
       createElement("span", { "data-tone": tone }, label),
+    StatusText: ({ label, tone }: { label: string; tone?: string }) =>
+      createElement("span", { "data-tone": tone ?? "default" }, label),
     Sheet: ({
       children,
       title,
@@ -305,13 +312,13 @@ it("opens full cached details without a Host read and keeps them visible during 
   expect(f.read).not.toHaveBeenCalled();
 });
 it("reviews deletion, cancel does nothing, and confirmation sends once", async () => {
-  await act(() => f.actions.get("delete")!());
+  await press("delete");
   expect(f.remove).not.toHaveBeenCalled();
   const cancelled = f.confirm!;
   await act(() => f.cancel!());
   await act(() => cancelled());
   expect(f.remove).not.toHaveBeenCalled();
-  await act(() => f.actions.get("delete")!());
+  await press("delete");
   const confirm = f.confirm!;
   await act(async () => {
     confirm();
@@ -329,7 +336,7 @@ it("reviews deletion, cancel does nothing, and confirmation sends once", async (
 it.each(["authority", "epoch", "privacy", "machine"])(
   "retires deletion on %s changes",
   async (change) => {
-    await act(() => f.actions.get("delete")!());
+    await press("delete");
     const confirm = f.confirm!;
     if (change === "authority") session = { ...session, authorityGeneration: 3 };
     if (change === "epoch") f.epoch = false;
@@ -371,7 +378,7 @@ it("retains unknown archive outcome and refuses a second dispatch", async () => 
   expect(f.update).toHaveBeenCalledOnce();
 });
 it("does not revive a delete confirmation after access disappears and returns", async () => {
-  await act(() => f.actions.get("delete")!());
+  await press("delete");
   const confirm = f.confirm!;
   f.allowed = false;
   await render();
@@ -401,19 +408,19 @@ it("keeps uncertain feedback visible after the summary revision advances during 
 it("does not mutate read-only capability sets or wrong project rows", async () => {
   f.capabilities = ["transport.ws.read.v2"];
   await render();
-  await act(() => f.actions.get("pin")!());
+  await press("pin");
   await act(() => f.actions.get("settle")!());
   expect(f.update).not.toHaveBeenCalled();
   expect(f.remove).not.toHaveBeenCalled();
   f.capabilities = ["sessions"];
   await render({ projectId: "wrong" });
-  await act(() => f.actions.get("pin")!());
+  await press("pin");
   expect(f.update).not.toHaveBeenCalled();
   expect(f.read).not.toHaveBeenCalled();
 });
 
 it("pins through sessions.update with the displayed authority and refreshes the directory", async () => {
-  await act(() => f.actions.get("pin")!());
+  await press("pin");
   expect(f.update).toHaveBeenCalledExactlyOnceWith({
     projectId: "project",
     sessionId: "session",
@@ -468,4 +475,30 @@ it("writes unread and snooze with the displayed revision and authority", async (
   expect(f.update).toHaveBeenCalledTimes(1);
   await press("hour");
   expect(f.update).toHaveBeenLastCalledWith(expect.objectContaining({ projectId: "project", sessionId: "session", expectedRevision: 3, authorityGeneration: 2, snoozedUntil: expect.any(Number) }));
+});
+
+it("confirms a pin with a toast whose Undo writes the inverse pin", async () => {
+  f.toasts.length = 0;
+  await press("pin");
+  const toast = f.toasts.at(-1) as { message: string; action?: { label: string; onPress(): void } };
+  expect(toast.message).toBe("Session pinned");
+  expect(toast.action?.label).toBe("Undo");
+  f.update.mockClear();
+  await act(async () => toast.action!.onPress());
+  expect(f.update).toHaveBeenCalledExactlyOnceWith({
+    projectId: "project",
+    sessionId: "session",
+    pinned: false,
+    authorityGeneration: 2,
+  });
+});
+
+it("swipes to one state-dependent action plus the shared options sheet", async () => {
+  f.actions.clear();
+  await render();
+  expect([...f.actions.keys()]).toEqual(["settle", "more"]);
+  session = { ...session, status: "running", runId: "run" };
+  f.actions.clear();
+  await render();
+  expect([...f.actions.keys()]).toEqual(["pin", "more"]);
 });

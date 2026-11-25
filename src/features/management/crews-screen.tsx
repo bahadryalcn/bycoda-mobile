@@ -1,3 +1,4 @@
+import { ManagementToolbar } from "./shared/collection-toolbar";
 import { useRef, useState, type ComponentRef } from "react";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "./shared/search";
@@ -22,7 +23,7 @@ import {
   SegmentedControl,
   Sheet,
 } from "@/ui/primitives";
-import { ScreenList } from "@/ui/screen-list";
+import { ManagementList } from "./shared/management-list";
 import { Scope } from "./shared/scope";
 import { useLocalProjectScope } from "./shared/local-project-scope";
 import { identifier } from "./shared/format";
@@ -39,6 +40,7 @@ import { useReadRetryNotice } from "@/ui/query-state";
 import { isTransientConnectionError } from "@/state/query-retry";
 import { crewDirectoryPollInterval } from "./crews/runtime-model";
 import { useMobileTheme } from "@/ui/theme";
+import { iconSize } from "@/ui/tokens";
 
 type Tab = "definitions" | "runs" | "agents";
 type Row =
@@ -61,14 +63,28 @@ export function CrewsScreen() {
   const machine = useActiveMachine();
   const { projectId, setProjectId, current: localScope, revision } = useLocalProjectScope();
   const supported = machine?.capabilities?.includes("crews.v1") === true;
-  const executionSupported =
-    machine?.capabilities?.includes("crews.tasks.v1") === true;
-  const deleteSupported =
-    machine?.capabilities?.includes("crews.delete.v1") === true;
+  const executionSupported = machine?.capabilities?.includes("crews.tasks.v1") === true;
+  const deleteSupported = machine?.capabilities?.includes("crews.delete.v1") === true;
   const [tab, setTab] = useState<Tab>("definitions");
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
   const searchInput = useRef<ComponentRef<typeof SearchField>>(null);
-  const clearSearch = () => { setSearch(""); searchInput.current?.focus(); };
+  const filterOptions =
+    tab === "runs"
+      ? [
+          { value: "all", label: copy("Tümü", "All") },
+          { value: "open", label: copy("Açık", "Open") },
+          { value: "finished", label: copy("Bitmiş", "Finished") },
+        ]
+      : [
+          { value: "all", label: copy("Tümü", "All") },
+          { value: "project", label: copy("Bu proje", "This project") },
+          { value: "host", label: copy("Bilgisayar geneli", "Host-wide") },
+        ];
+  const clearSearch = () => {
+    setSearch("");
+    searchInput.current?.focus();
+  };
   const [editor, setEditor] = useState<Editor | null>(null);
   const query = useHostQuery<CrewDirectory>(
     ["crews", projectId],
@@ -95,15 +111,15 @@ export function CrewsScreen() {
   const catalogTransient = !!catalog.error && isTransientConnectionError(catalog.error);
   const catalogGraceElapsed = useReadRetryNotice(catalogTransient, machine?.id ?? null);
   const catalogRead = {
-    state: crewCatalogState(catalog.data, catalogTransient && !catalogGraceElapsed ? null : catalog.error),
+    state: crewCatalogState(
+      catalog.data,
+      catalogTransient && !catalogGraceElapsed ? null : catalog.error,
+    ),
     retry: () => {
       void catalog.refetch();
     },
   };
-  const removeAgent = useHostMutation("crews.agent.delete", [
-    "crews",
-    projectId,
-  ]);
+  const removeAgent = useHostMutation("crews.agent.delete", ["crews", projectId]);
   const busy = remove.isPending || removeAgent.isPending;
   const directory = query.data;
   const rows: Row[] = !directory
@@ -113,14 +129,19 @@ export function CrewsScreen() {
       : tab === "runs"
         ? directory.runs.map((value) => ({ kind: "run", value }))
         : directory.agents.map((value) => ({ kind: "profile", value }));
-  const visible = rows.filter((row) =>
-    matchesSearch(
-      row.kind === "run"
-        ? `${row.value.title ?? ""} ${row.value.definition.name}`
-        : row.value.name,
-      search,
-      locale,
-    ),
+  const visible = rows.filter(
+    (row) =>
+      (filter === "all" ||
+        (row.kind === "run"
+          ? (row.value.status === "finished" ? "finished" : "open") === filter
+          : (row.value.projectId ? "project" : "host") === filter)) &&
+      matchesSearch(
+        row.kind === "run"
+          ? `${row.value.title ?? ""} ${row.value.definition.name}`
+          : row.value.name,
+        search,
+        locale,
+      ),
   );
   const open = (entry: Omit<Editor, "projectId" | "directory">) => {
     if (!projectId || !directory || editor || busy) return;
@@ -132,7 +153,10 @@ export function CrewsScreen() {
       : copy("Yeni ekip", "New crew");
   const canCreate = !!projectId && !!directory && !busy && !editor;
   const presentation = getQueryPresentation(query);
-  const showCreateInHeader = supported && tab !== "runs" && rows.length > 0 &&
+  const showCreateInHeader =
+    supported &&
+    tab !== "runs" &&
+    rows.length > 0 &&
     (presentation === "ready" || presentation === "stale-error");
   const create = () => {
     if (!projectId || !directory) return;
@@ -151,23 +175,76 @@ export function CrewsScreen() {
         value: newDefinition(identifier(), projectId),
       });
   };
+  const listState = (
+    <QueryState
+      size="region"
+      query={query}
+      empty={!!directory && !visible.length}
+      emptyTitle={
+        (search.trim() || filter !== "all") && rows.length
+          ? copy("Eşleşen sonuç yok", "No matching results")
+          : tab === "definitions"
+            ? copy("Henüz ekip yok", "No crews yet")
+            : tab === "runs"
+              ? copy("Henüz ekip çalışması yok", "No crew work yet")
+              : copy("Kütüphanede üye yok", "No library members yet")
+      }
+      emptyDetail={
+        (search.trim() || filter !== "all") && rows.length
+          ? undefined
+          : tab === "definitions"
+            ? copy(
+                "Ekip; koordinatör, uzman ve inceleyenlerden oluşur ve işi birlikte yürütür.",
+                "A crew pairs a coordinator, specialists and a reviewer to carry out work together.",
+              )
+            : tab === "runs"
+              ? copy(
+                  "Bir ekipten iş başlattığınızda çalışma burada görünür.",
+                  "Work appears here once you start it from a crew.",
+                )
+              : copy(
+                  "Kayıtlı üyeleri birden çok ekipte yeniden kullanın.",
+                  "Save members once and reuse them across crews.",
+                )
+      }
+      emptyAction={
+        (search.trim() || filter !== "all") && rows.length
+          ? search.trim()
+            ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
+            : {
+                label: copy("Filtreleri temizle", "Clear filters"),
+                onPress: () => setFilter("all"),
+              }
+          : !rows.length && tab !== "runs" && canCreate
+            ? { label: createLabel, onPress: create }
+            : undefined
+      }
+    />
+  );
   return (
-    <ScreenList<Row>
+    <ManagementList<Row>
       title={copy("Ekipler", "Crews")}
       query={supported && projectId ? query : undefined}
-      data={visible}
-      keyExtractor={(row) =>
-        `${machine?.id}:${projectId}:${row.kind}:${row.value.id}`
+      ListEmptyComponent={
+        supported && !!projectId ? (
+          listState
+        ) : supported ? (
+          <StateView
+            size="region"
+            title={copy("Bir proje seç", "Choose a project")}
+            description={copy(
+              "Ekipler proje başına tutulur. Yukarıdan bir proje seç.",
+              "Crews are kept per project. Choose a project above.",
+            )}
+          />
+        ) : undefined
       }
-      context={<Scope projectId={projectId} onChange={setProjectId} />}
+      data={visible}
+      keyExtractor={(row) => `${machine?.id}:${projectId}:${row.kind}:${row.value.id}`}
       actions={
         showCreateInHeader ? (
-          <IconButton
-            label={createLabel}
-            disabled={!canCreate}
-            onPress={create}
-          >
-            <Plus size={22} color={colors.accent} />
+          <IconButton label={createLabel} disabled={!canCreate} onPress={create}>
+            <Plus size={iconSize.action} strokeWidth={2} color={colors.accent} />
           </IconButton>
         ) : undefined
       }
@@ -183,21 +260,16 @@ export function CrewsScreen() {
               )}
             />
           ) : !projectId ? (
-            <StateView
-              illustration="no-projects"
-              title={copy("Proje seçin", "Choose a project")}
-              description={copy(
-                "Ekipleri görüntülemek için bir proje seçin.",
-                "Select a project to view crews.",
-              )}
-            />
+            <Scope projectId={projectId} onChange={setProjectId} />
           ) : (
             <>
-              <SegmentedControl hideLabel
+              <SegmentedControl
+                hideLabel
                 label={copy("Ekip görünümü", "Crew view")}
                 value={tab}
                 onChange={(next) => {
                   setTab(next);
+                  setFilter("all");
                   // Only the Work list polls; entering it shows current data instead of waiting for a tick.
                   if (next === "runs") void query.refetch();
                 }}
@@ -211,48 +283,43 @@ export function CrewsScreen() {
                 ]}
               />
               {tab === "runs" ? <ActiveCrews /> : null}
-              <SearchField
-                ref={searchInput}
-                label={tab === "definitions" ? copy("Ekip adında ara", "Search crew names") : tab === "runs" ? copy("Çalışma başlığında ara", "Search work titles") : copy("Üye adında ara", "Search member names")}
-                value={search}
-                onChangeText={setSearch}
+              <ManagementToolbar
+                project={<Scope projectId={projectId} onChange={setProjectId} />}
+                search={
+                  <SearchField
+                    placeholder={copy("Ara", "Search")}
+                    ref={searchInput}
+                    label={
+                      tab === "definitions"
+                        ? copy("Ekip adında ara", "Search crew names")
+                        : tab === "runs"
+                          ? copy("Çalışma başlığında ara", "Search work titles")
+                          : copy("Üye adında ara", "Search member names")
+                    }
+                    value={search}
+                    onChangeText={setSearch}
+                  />
+                }
+                status={{
+                  label: tab === "runs" ? copy("Durum", "Status") : copy("Kapsam", "Scope"),
+                  value: filter,
+                  unfilteredValue: "all",
+                  options: filterOptions,
+                  onChange: setFilter,
+                }}
               />
               {!visible.some(
                 (row) =>
-                  row.kind === "definition" &&
-                  row.value.id === remove.variables?.definitionId,
+                  row.kind === "definition" && row.value.id === remove.variables?.definitionId,
               ) ? (
                 <MutationState mutation={remove} />
               ) : null}
               {!visible.some(
-                (row) =>
-                  row.kind === "profile" &&
-                  row.value.id === removeAgent.variables?.agentId,
+                (row) => row.kind === "profile" && row.value.id === removeAgent.variables?.agentId,
               ) ? (
                 <MutationState mutation={removeAgent} />
               ) : null}
-              <QueryState
-                query={query}
-                empty={!!directory && !visible.length}
-                emptyTitle={
-                  search.trim() && rows.length
-                    ? copy("Eşleşen sonuç yok", "No matching results")
-                    : tab === "definitions" ? copy("Henüz ekip yok", "No crews yet")
-                      : tab === "runs" ? copy("Henüz ekip çalışması yok", "No crew work yet")
-                        : copy("Kütüphanede üye yok", "No library members yet")
-                }
-                emptyDetail={search.trim() && rows.length ? undefined
-                  : tab === "definitions" ? copy("Ekip; koordinatör, uzman ve inceleyenlerden oluşur ve işi birlikte yürütür.", "A crew pairs a coordinator, specialists and a reviewer to carry out work together.")
-                    : tab === "runs" ? copy("Bir ekipten iş başlattığınızda çalışma burada görünür.", "Work appears here once you start it from a crew.")
-                      : copy("Kayıtlı üyeleri birden çok ekipte yeniden kullanın.", "Save members once and reuse them across crews.")}
-                emptyAction={
-                  search.trim() && rows.length
-                    ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
-                    : !rows.length && tab !== "runs" && canCreate
-                      ? { label: createLabel, onPress: create }
-                      : undefined
-                }
-              />
+              {visible?.length ? listState : null}
             </>
           )}
           {editor && (
@@ -312,7 +379,11 @@ export function CrewsScreen() {
             deleteSupported={deleteSupported}
             machineId={machine?.id}
             projectId={projectId}
-            isScopeCurrent={() => localScope.current.machineId === machine?.id && localScope.current.projectId === projectId && localScope.current.revision === revision}
+            isScopeCurrent={() =>
+              localScope.current.machineId === machine?.id &&
+              localScope.current.projectId === projectId &&
+              localScope.current.revision === revision
+            }
             remove={remove}
             library={directory?.agents}
             onStart={(value) => open({ kind: "start", value })}
@@ -326,7 +397,11 @@ export function CrewsScreen() {
             editorOpen={!!editor}
             machineId={machine?.id}
             projectId={projectId}
-            isScopeCurrent={() => localScope.current.machineId === machine?.id && localScope.current.projectId === projectId && localScope.current.revision === revision}
+            isScopeCurrent={() =>
+              localScope.current.machineId === machine?.id &&
+              localScope.current.projectId === projectId &&
+              localScope.current.revision === revision
+            }
             remove={removeAgent}
             onEdit={(value) => open({ kind: "profile", value })}
           />

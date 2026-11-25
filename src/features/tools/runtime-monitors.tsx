@@ -4,7 +4,7 @@ import { useHostMutation, useHostQuery, useHostReadActive } from "@/state/querie
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
 import {
-  Badge,
+  StatusText,
   Body,
   Button,
   IconButton,
@@ -21,7 +21,7 @@ import {
 } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
-import { space } from "@/ui/tokens";
+import { iconSize, metrics, space } from "@/ui/tokens";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import {
   monitorUrl,
@@ -177,20 +177,16 @@ export function RuntimeMonitors({
         <QueryState
           query={query}
           empty={query.data?.length === 0}
-          emptyTitle={copy("Etkin izleyici yok.", "No active monitors.")}
-          emptyDetail={copy(
-            "Bir port veya HTTP(S) adresi girerek bilgisayardaki sunucunun günlüklerini izle.",
-            "Enter a port or HTTP(S) URL to follow the computer's server logs.",
-          )}
+          emptyTitle={copy("Henüz izleyici yok", "No monitors yet")}
         />
       )}
       <Row>
         <Body muted style={{ flex: 1, minWidth: 0 }}>
-          {query.data
+          {query.data?.length
             ? copy("Etkin izleyiciler: {p0} / 8", "Active monitors: {p0} / 8", {
                 p0: query.data.length,
               })
-            : copy("Etkin izleyiciler", "Active monitors")}
+            : copy("Bir sunucunun günlüklerini port veya adresle izle.", "Follow a server's logs by port or address.")}
         </Body>
         <IconButton
           label={copy("Yenile", "Refresh")}
@@ -200,7 +196,7 @@ export function RuntimeMonitors({
             void refresh();
           }}
         >
-          <RefreshCw size={22} strokeWidth={2} color={colors.accent} />
+          <RefreshCw size={iconSize.action} strokeWidth={2} color={colors.accent} />
         </IconButton>
       </Row>
       {query.data && query.data.length >= MAX_MONITORS ? (
@@ -224,21 +220,19 @@ export function RuntimeMonitors({
         {(validScope ? (query.data ?? []) : []).map((monitor, index, rows) => (
           // Rows are not pressable: the explicit Stop button is the only path to the stop confirmation.
           <View key={monitor.id}>
-            <Row style={{ alignItems: "center", gap: space.sm, paddingHorizontal: space.sm, paddingVertical: space.sm }}>
+            <Row style={{ alignItems: "center", gap: space.sm, minHeight: metrics.rowHeightSession, paddingHorizontal: space.sm, paddingVertical: space.row }}>
               <View style={[uiStyles.grow, { gap: space.xxs }]}>
                 <Body selectable style={uiStyles.label}>
                   {monitor.url}
                 </Body>
-                <Row>
-                  <Badge
-                    label={
-                      monitor.sourceId
-                        ? copy("Çalışıyor", "Running")
-                        : copy("Başlatılıyor", "Starting")
-                    }
-                    tone={monitor.sourceId ? "active" : "default"}
-                  />
-                </Row>
+                <StatusText
+                  label={
+                    monitor.sourceId
+                      ? copy("Çalışıyor", "Running")
+                      : copy("Başlatılıyor", "Starting")
+                  }
+                  tone={monitor.sourceId ? "live" : "info"}
+                />
               </View>
               <Button
                 label={copy("Durdur", "Stop")}
@@ -260,6 +254,7 @@ export function RuntimeMonitors({
       <Field
         label={copy("Port veya HTTP(S) adresi", "Port or HTTP(S) URL")}
         value={url}
+        placeholder="3000  ·  http://localhost:3000"
         error={error}
         editable={!busy && validScope}
         autoCapitalize="none"

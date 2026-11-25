@@ -131,13 +131,13 @@ function emptyState(
 }
 
 /** Rows follow the chosen windows; a window without a model-less reading is simply absent. */
-export function usageWidgetRows(
+function usageWidgetReadings(
   report: UsageLimitsReport,
   windows: UsageWindowChoice,
   now: number,
   labels: UsageWidgetLabels,
-): UsageWidgetRow[] {
-  const rows: UsageWidgetRow[] = [];
+): { row: UsageWidgetRow; observedAt: number; failed: boolean }[] {
+  const rows: { row: UsageWidgetRow; observedAt: number; failed: boolean }[] = [];
   for (const { id, name } of PROVIDERS) {
     const provider = report.providers.find((entry) => entry.provider === id);
     if (!provider) continue;
@@ -146,7 +146,8 @@ export function usageWidgetRows(
       const card = provider.cards.find((entry) => entry.kind === kind && entry.model === null);
       if (!card) continue;
       const countdown = resetCountdown(card.best.resetsAt, now);
-      rows.push({
+      const account = provider.accounts.find((entry) => entry.id === card.accounts[0]?.id);
+      rows.push({ row: {
         id: `${id}-${kind}`,
         provider: id,
         providerName: name,
@@ -157,7 +158,7 @@ export function usageWidgetRows(
           ? labels.resetIn.replace("{p0}", countdown)
           : labels.resetUnknown,
         tone: usageTone(wholePercent(card.best.leftPercent)),
-      });
+      }, observedAt: account?.observedAt ?? report.sampledAt, failed: account?.status === "error" });
     }
   }
   return rows;
@@ -171,10 +172,14 @@ export function buildUsageWidgetSnapshot(input: UsageWidgetInput): UsageWidgetSn
   if (!input.unlocked) return emptyState(input, "locked", input.now);
   if (!input.machine) return emptyState(input, "setup", input.now);
   if (!input.report) return null;
-  const rows = usageWidgetRows(input.report, input.windows, input.now, input.labels);
-  const generatedAt = input.report.sampledAt;
+  const readings = usageWidgetReadings(input.report, input.windows, input.now, input.labels);
+  const rows = readings.map(({ row }) => row);
+  const generatedAt = readings.length > 0
+    ? Math.min(...readings.map(({ observedAt }) => observedAt))
+    : input.report.sampledAt;
   return {
     ...emptyState(input, rows.length > 0 ? "ready" : "empty", generatedAt),
+    stale: readings.some(({ failed }) => failed) || input.now >= generatedAt + SNAPSHOT_TTL_MS,
     rows,
   };
 }

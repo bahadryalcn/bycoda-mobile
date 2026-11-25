@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import type { HostProject } from "@/domain/types";
 import { carryCrossDelegation } from "../../../../src/shared/model/host-contracts/delegation";
 import { useActiveMachine, useMachines } from "@/state/machines";
+import { useHostMutation } from "@/state/queries";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import { useSingleFlight } from "@/state/actions";
 import { useModelCatalog } from "@/state/model-catalog";
@@ -37,7 +38,9 @@ import { latestProjectActivity } from "./project-summaries";
 import { useAppPreferences } from "../navigation-prefs/app-preferences";
 import { lastUsedProject, orderProjectsByRecency, projectRecency, RECENT_PROJECT_LIMIT } from "./recent-projects";
 import { CommandError, relativeTime } from "./shared";
-import type { CreationDraft } from "./creation-selection";
+import type { CreationDraft, RuntimeMode } from "./creation-selection";
+import { PermissionField } from "./agent-option-icons";
+import { ProjectFolderBrowser } from "./project-folder-browser";
 import { ModelPickerField } from "./model-picker-field";
 import { selectedChoice } from "./provider-choices";
 import { rememberedDraft, lastCreationChoices, useLastCreationChoice } from "./last-creation-choice";
@@ -45,22 +48,29 @@ import { useCreateSession } from "./use-create-session";
 import { useLatestCallback } from "./use-latest-callback";
 import { useProjectActivity } from "./use-project-activity";
 
-/** Prepare a session in a visible project, then start it explicitly. */
-export function NewSessionSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  return visible ? <NewSessionOpening onClose={onClose} /> : null;
+/** Where a project screen opens the editor: that project (and its worktree folder) is fixed. */
+export type NewSessionProject = { id: string; cwd?: string };
+
+/**
+ * The one new-session editor. Prepare a session in a visible project, then start it explicitly.
+ * The dock and Sessions tab let the person pick a project; a project screen passes `project` so
+ * the same model and permission controls open with that project preselected.
+ */
+export function NewSessionSheet({ visible, project, onClose }: { visible: boolean; project?: NewSessionProject; onClose: () => void }) {
+  return visible ? <NewSessionOpening project={project} onClose={onClose} /> : null;
 }
 
 type Picked = { id: string; attempt: number };
 
-function NewSessionOpening({ onClose }: { onClose: () => void }) {
+function NewSessionOpening({ project, onClose }: { project?: NewSessionProject; onClose: () => void }) {
   const connection = useConnectionScope();
   const [firstConnection] = useState(connection.token);
-  return <NewSessionConnection key={connection.token} connection={connection} onClose={onClose}
+  return <NewSessionConnection key={connection.token} connection={connection} onClose={onClose} fixed={project}
     allowAutomaticSelection={connection.token === firstConnection} />;
 }
 
-function NewSessionConnection({ connection, allowAutomaticSelection, onClose }: {
-  connection: ConnectionScope; allowAutomaticSelection: boolean; onClose: () => void;
+function NewSessionConnection({ connection, allowAutomaticSelection, fixed, onClose }: {
+  connection: ConnectionScope; allowAutomaticSelection: boolean; fixed?: NewSessionProject; onClose: () => void;
 }) {
   const copy = useCopy();
   const locale = useLocale();
@@ -103,7 +113,10 @@ function NewSessionConnection({ connection, allowAutomaticSelection, onClose }: 
   // A prompt link or share may name the project; it is only preselected, never started.
   const launch = useLaunchRequest((state) => state.request);
   const linked = allowAutomaticSelection && readable && machine ? matchLaunchProject(ordered, launch?.project) : undefined;
-  const project = picked ? ordered.find((item) => item.id === picked.id) : linked ?? last;
+  const fixedProject = fixed && readable
+    ? (activity.projects.data ?? []).find((item) => item.id === fixed.id && activity.projects.isProjectVisible(item.id, item.cwd))
+    : undefined;
+  const project = fixed ? fixedProject : picked ? ordered.find((item) => item.id === picked.id) : linked ?? last;
   const selected = project ? { project, attempt: picked?.attempt ?? 0 } : undefined;
 
   const created = (project: HostProject, sessionId: string, reviewedLaunch: LaunchRequest | null) => {
@@ -139,9 +152,28 @@ function NewSessionConnection({ connection, allowAutomaticSelection, onClose }: 
   const close = () => {
     if (!locked) leave();
   };
+  // "Add project" opens the folder browser here and returns with the new project selected.
+  const [adding, setAdding] = useState(false);
+  const openProject = useHostMutation<HostProject>("projects.open", ["projects"]);
   const addProject = () => {
-    if (leave()) router.push("/");
+    if (!isCurrent() || locked) return;
+    openProject.reset();
+    setAdding(true);
   };
+  const openFolder = (cwd: string) => {
+    if (!isCurrent() || openProject.isPending) return;
+    void openProject.mutateAsync({ cwd }).then((opened) => {
+      if (!isCurrent()) return;
+      setAdding(false);
+      setSearch("");
+      setPicked((current) => ({ id: opened.id, attempt: (current?.attempt ?? 0) + 1 }));
+    }, () => {
+      // The mutation owns failure feedback inside the folder browser.
+    });
+  };
+  const browser = adding ? (
+    <ProjectFolderBrowser onClose={() => setAdding(false)} mutation={openProject} onOpen={openFolder} />
+  ) : null;
   const feedback = {
     query: { ...activity.projects, refetch: activity.refetch },
     readiness: activity.readiness,
@@ -163,7 +195,40 @@ function NewSessionConnection({ connection, allowAutomaticSelection, onClose }: 
       : { label: copy("Proje ekle", "Add project"), onPress: addProject },
   };
 
+  if (fixed) {
+    return (
+      <Sheet
+        visible
+        title={copy("Yeni oturum", "New session")}
+        size="compact"
+        dismissible={!locked}
+        onClose={close}
+      >
+        {fixedProject ? (
+          <QuickStart
+            project={fixedProject}
+            cwd={fixed.cwd}
+            showProjectName
+            onLocked={setLocked}
+            isCurrent={isCurrent}
+            onCreated={(sessionId) => created(fixedProject, sessionId, launch)}
+          />
+        ) : (
+          <ProjectDirectorySlot
+            query={feedback.query}
+            readiness={feedback.readiness}
+            privacyUnavailable={feedback.privacyUnavailable}
+            loadingLabel={feedback.loadingLabel}
+            empty={readable}
+            emptyTitle={copy("Bu proje bu bilgisayarda bulunamadı.", "This project was not found on this computer.")}
+          />
+        )}
+      </Sheet>
+    );
+  }
+
   return (
+    <>
     <Sheet
       visible
       title={copy("Yeni oturum", "New session")}
@@ -281,18 +346,23 @@ function NewSessionConnection({ connection, allowAutomaticSelection, onClose }: 
         />
       </ScreenChromeProvider>
     </Sheet>
+    {browser}
+    </>
   );
 }
 
 /** Owns the chosen project's launch settings and command recovery. */
 function QuickStart({
   project,
+  cwd,
   showProjectName,
   onCreated,
   onLocked,
   isCurrent,
 }: {
   project: HostProject;
+  /** Worktree folder chosen on the project screen; the main project folder when omitted. */
+  cwd?: string;
   showProjectName: boolean;
   onCreated: (sessionId: string) => void;
   onLocked: (locked: boolean) => void;
@@ -306,9 +376,10 @@ function QuickStart({
   const remembered = rememberedDraft(useLastCreationChoice(machine?.id), useModelCatalog(project.id).data);
   const draft = picked ?? remembered ?? { model: "" };
   const [settings, setSettings] = useState<Record<string, string>>({});
+  const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>("supervised");
   const { catalog, command, locked, canStart, create, selection, choices } = useCreateSession(
     project.id,
-    { draft },
+    { draft, cwd },
   );
   const submit = useSingleFlight<boolean>();
   const receiptTarget = useRef<typeof onCreated | null>(null);
@@ -335,7 +406,7 @@ function QuickStart({
       onCreated(id);
     };
     receiptTarget.current = complete;
-    void submit.run(() => active() ? create(complete, { settings }) : Promise.resolve(false)).catch(() => false);
+    void submit.run(() => active() ? create(complete, { settings, runtimeMode }) : Promise.resolve(false)).catch(() => false);
   });
   // A paused (offline) first load is not "loading": it needs a reason and Retry.
   const ready = !catalog.isPending || catalog.fetchStatus !== "fetching";
@@ -349,6 +420,9 @@ function QuickStart({
   return (
     <View style={{ gap: space.sm }}>
       {showProjectName ? <Body>{project.name}</Body> : null}
+      {cwd && cwd !== project.cwd ? (
+        <Body mono muted selectable style={uiStyles.caption}>{`${copy("Çalışma klasörü:", "Working folder:")} ${cwd}`}</Body>
+      ) : null}
       {ready && (selectedProvider || choices.length > 0) ? (
         <ModelPickerField
           hideLabel
@@ -383,9 +457,7 @@ function QuickStart({
                 : copy("Kullanılabilir ajan veya model yok.", "No agent or model available.")}
         </Body>
       )}
-      <Body muted style={uiStyles.caption}>
-        {`${copy("İzinler", "Permissions")}: ${copy("Onay iste", "Ask for approval")}`}
-      </Body>
+      <PermissionField value={runtimeMode} disabled={locked} onChange={setRuntimeMode} />
       <CommandError
         error={command.error}
         onDismiss={() => {

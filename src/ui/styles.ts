@@ -1,5 +1,5 @@
 import { StyleSheet } from "react-native";
-import { colors, fontSize, lineHeight, metrics, monoFont, radii, space } from "./tokens";
+import { colors, fontSize, gapIcon, lineHeight, metrics, monoFont, radii, rhythm, space } from "./tokens";
 import { createThemedStyles } from "./themed-styles";
 
 /** Shared visual rules. Feature styles should only describe their own layout. */
@@ -93,15 +93,35 @@ export const uiStyles = createThemedStyles(() => ({
     fontWeight: "600",
     paddingHorizontal: 0,
   },
-  /** Bare header: owns a modest lead-in because sheets/lists have tight parent gaps. `Section` adds none (its parent gap separates groups). */
+  /**
+   * Section header: one look everywhere. Label, optional quiet count, trailing control at the end; no
+   * rule (rows carry the separators). It owns `rhythm.headerLeadIn` above it so every label sits 28
+   * below the previous group inside a Screen (see `rhythm`); `flush` drops the lead-in only for the
+   * first header of a container that has nothing above it.
+   */
   sectionHeader: {
     minHeight: metrics.sectionHeaderHeight,
-    paddingTop: space.md,
-    paddingBottom: space.xs,
+    paddingTop: rhythm.headerLeadIn,
+    paddingBottom: rhythm.headerGap,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.row,
+    gap: space.sm,
   },
+  /** Count after a section label: same size, tabular, one step quieter. */
+  sectionCount: {
+    color: colors.muted,
+    fontSize: fontSize.caption,
+    lineHeight: lineHeight.caption,
+    fontWeight: "400",
+    fontVariant: ["tabular-nums"],
+  },
+  /** Trailing slot of a section header: right-aligned, centred on the label line. */
+  sectionTrailing: { marginStart: "auto", flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 0 },
+  /** Which computer/project a pushed page acts on: one quiet caption line with role glyphs. */
+  scopeLine: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space.md, rowGap: space.xxs, minWidth: 0 },
+  scopeItem: { flexDirection: "row", alignItems: "center", gap: space.xs, minWidth: 0, flexShrink: 1 },
+  /** Leading slot of a list row: fixed width so labels align whatever the glyph/mark size. */
+  rowLeading: { width: metrics.rowLeading, minHeight: metrics.rowLeading, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   /** 6px status dot; color is set per tone. */
   statusDot: { width: 6, height: 6, borderRadius: radii.pill },
   statusText: { fontSize: fontSize.small, lineHeight: lineHeight.small, fontWeight: "600", fontVariant: ["tabular-nums"] },
@@ -215,19 +235,34 @@ export const uiStyles = createThemedStyles(() => ({
   noticeMessage: { flexDirection: "row", alignItems: "flex-start", gap: space.row,
     flexGrow: 1, flexShrink: 1, minWidth: 0 },
   noticeText: { color: colors.text, fontSize: fontSize.control, lineHeight: 20, fontWeight: "500" },
-  /** Centered state: fills the region and centers its single column. */
-  stateRegion: { flex: 1, minHeight: 240, alignItems: "center", justifyContent: "center",
-    paddingHorizontal: space.xl, paddingVertical: space.xxl },
+  /** Invisible unclamped copy of a notice message, measured to decide whether "Details" is needed. */
+  noticeMeasure: { position: "absolute", top: 0, left: 0, right: 0, opacity: 0, pointerEvents: "none" },
+  /** One-line status: no fill or border, 24 pt at default text; the action reaches 48 dp through hitSlop. */
+  statusLine: { flexDirection: "row", alignItems: "center", gap: space.xs + 2, minHeight: 24 },
+  statusLineText: { flexShrink: 1, fontSize: fontSize.small, lineHeight: lineHeight.small, fontWeight: "500" },
+  statusLineAction: { fontSize: fontSize.small, lineHeight: lineHeight.small, fontWeight: "600" },
+  /** Centered state: fills the region and centers its single column. No minimum height: an error
+   * region with a title, one line and Retry stays within 200 pt. */
+  stateRegion: { flex: 1, alignItems: "center", justifyContent: "center",
+    paddingHorizontal: space.xl, paddingVertical: space.lg },
   stateColumn: { width: "100%", maxWidth: 320, alignItems: "center", gap: space.sm },
   stateTitle: { color: colors.text, fontSize: fontSize.heading, lineHeight: lineHeight.heading, fontWeight: "600",
     letterSpacing: -0.2, textAlign: "center" },
   stateDescription: { color: colors.muted, fontSize: fontSize.control, lineHeight: 20, textAlign: "center" },
   /** Centered like the column above it: "stretch" with a max width pinned the capped box to the start edge. */
   stateActions: { alignSelf: "center", alignItems: "center", gap: space.xs, marginTop: space.md },
+  /** First-run, unpaired and empty art keep their breathing room. */
+  stateRegionArt: { paddingVertical: space.xxl },
   stateAction: { alignSelf: "center", minWidth: 200, maxWidth: "100%" },
   stateSecondaryAction: { alignSelf: "center", maxWidth: "100%" },
-  stateInline: { flexDirection: "row", alignItems: "flex-start", gap: space.row, paddingVertical: space.lg },
-  stateIconTile: { width: 56, height: 56, borderRadius: radii.pill, alignItems: "center", justifyContent: "center",
+  /** Section state: at most 96 pt, 128 pt with an action (two description lines, compact button). */
+  stateInline: { flexDirection: "row", alignItems: "flex-start", gap: gapIcon, paddingVertical: space.row },
+  /** Section empty state: the row's body text, muted and regular. */
+  stateInlineQuiet: { textAlign: "left", color: colors.muted, fontSize: fontSize.body, lineHeight: lineHeight.body, fontWeight: "400" },
+  /** Section problem state: a row label next to its status glyph. */
+  stateInlineTitle: { textAlign: "left", color: colors.text, fontSize: fontSize.body, lineHeight: lineHeight.body, fontWeight: "500" },
+  stateInlineDescription: { textAlign: "left", fontSize: fontSize.small, lineHeight: lineHeight.small },
+  stateIconTile: { width: 48, height: 48, borderRadius: radii.pill, alignItems: "center", justifyContent: "center",
     borderWidth: StyleSheet.hairlineWidth },
   /** Field validation: 13/17 danger text beside a 14px icon. */
   fieldError: { flexDirection: "row", alignItems: "flex-start", gap: space.xs + 2 },

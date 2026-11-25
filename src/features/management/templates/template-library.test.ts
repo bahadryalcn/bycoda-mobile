@@ -10,7 +10,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 vi.mock("@/i18n", () => ({ useLocale: () => "tr" }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "new-template" }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/tokens", () => ({ space: {} }));
+vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, space: {} }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { accent: "#000" }, uiStyles: { content: {} } }) }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: fixture.confirm }));

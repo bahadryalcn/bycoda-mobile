@@ -9,6 +9,7 @@ vi.mock("react-native", () => ({
 vi.mock("@/ui/primitives", () => ({
   Body: ({ children }: PropsWithChildren) => createElement("p", null, children),
 }));
+vi.mock("@/ui/metric-value", () => ({ MetricValue: ({ children }: PropsWithChildren) => createElement("p", null, children) }));
 vi.mock("@/ui/metric-row", () => ({
   MetricRow: ({ label, value }: { label: string; value: string }) =>
     createElement("p", null, `${label}: ${value}`),

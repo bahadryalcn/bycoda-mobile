@@ -36,6 +36,33 @@ export const contentStressShell: Block = {
 
 export const contentStressCode = `type RecoveryStep = { path: string; required: boolean };\nconst steps: RecoveryStep[] = [\n${Array.from({ length: 30 }, (_, index) => `  { path: "src/features/workspace/İstanbul-東京-${index + 1}.tsx", required: true },`).join("\n")}\n];\n`;
 
+export const contentStressPlan: Block = {
+  id: "stress-plan", role: "plan", text: "",
+  taskList: {
+    items: [
+      { text: "Mevcut taslağı doğrula", status: "completed" },
+      { text: "Küçük ekranda çalışma adımlarını incele", status: "in_progress" },
+      { text: "Klavye açıldığında son adımın erişilebilir kaldığını kontrol et", status: "pending" },
+    ],
+  },
+};
+
+export const contentStressDiff: Block = {
+  id: "stress-diff", role: "tool", text: "",
+  tool: {
+    title: "recovery.ts", status: "completed",
+    preview: {
+      kind: "write", path: "recovery.ts",
+      lines: [
+        { kind: "context", number: 1, text: "export const steps = [" },
+        { kind: "del", number: 2, text: '  "clear draft",' },
+        { kind: "add", number: 2, text: '  "restore draft",' },
+        { kind: "context", number: 3, text: "];" },
+      ],
+    },
+  },
+};
+
 export const contentStressApprovals: Block[] = [
   { id: "approval-pending", role: "approval", text: "Run pnpm test src/features/workspace on the owning computer?", approval: { requestId: 9003, occurrenceId: "019c0000-0000-7000-8000-000000009003" } },
   { id: "approval-denied", role: "approval", text: "Publish application package", approval: { requestId: 9004, occurrenceId: "019c0000-0000-7000-8000-000000009004", decided: "deny" } },

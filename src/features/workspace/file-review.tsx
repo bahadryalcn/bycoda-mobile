@@ -7,10 +7,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useActiveMachine } from "@/state/machines";
 import { useHostClient, useHostQuery, useHostReadActive } from "@/state/queries";
 import {
-  Badge,
+  StatusText,
   Body,
   Button,
-  HeaderBackButton,
   CodeText,
   Disclosure,
   ErrorText,
@@ -23,6 +22,7 @@ import {
 } from "@/ui/primitives";
 import { DocumentPreview, ProjectMedia } from "@/ui/document-preview";
 import { useCopy } from "@/ui/copy";
+import { useProjectSubpage } from "./subpage-chrome";
 import { useLocale } from "@/i18n";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
@@ -99,17 +99,12 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
   const binary = source === "computer" && media || text?.includes("\0") === true;
   const focused = useIsFocused();
   useBackHandler(focused, onBack);
+  useProjectSubpage(path.split("/").filter(Boolean).at(-1) ?? path, onBack);
   return (
     <Screen scroll={false}>
       <View style={{ paddingHorizontal: space.screen, paddingVertical: space.sm, gap: space.xs }}>
-        <Row style={{ flexWrap: "nowrap" }}>
-          <HeaderBackButton label={copy("Dosyalara dön", "Back to files")} onPress={onBack} />
-          <Body mono numberOfLines={1} ellipsizeMode="middle" style={[uiStyles.grow, { fontWeight: "600" }]}>
-            {path}
-          </Body>
-        </Row>
         <Row>
-          <Badge
+          <StatusText
             label={
               source === "draft"
                 ? copy("Korunan taslak · salt okunur", "Preserved draft · read only")

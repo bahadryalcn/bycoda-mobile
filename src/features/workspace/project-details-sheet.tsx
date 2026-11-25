@@ -1,8 +1,6 @@
 import { View } from "react-native";
 import Copy from "lucide-react-native/icons/copy";
-import FolderTree from "lucide-react-native/icons/folder-tree";
-import GitBranch from "lucide-react-native/icons/git-branch";
-import { Body, Button, NavigationGroup, NavigationRow, Sheet, StatusRow } from "@/ui/primitives";
+import { Body, Button, NavigationGroup, NavigationRow, RowIcon, Sheet, StatusRow } from "@/ui/primitives";
 import { ProjectIcon } from "@/ui/project-icon";
 import { useClipboardFeedback } from "@/ui/use-clipboard-feedback";
 import { useCopy } from "@/ui/copy";
@@ -10,7 +8,10 @@ import { space } from "@/ui/tokens";
 import { useMobileTheme } from "@/ui/theme";
 import type { HostProject } from "@/domain/types";
 
-/** Where a project lives and the quick ways in. The path is shown here only, never in lists or headers. */
+/**
+ * Where a project lives. The path is shown here only, never in lists or headers; Files, Changes and
+ * the other ways in live in the project options sheet, not here.
+ */
 export function ProjectDetailsSheet({
   visible,
   project,
@@ -19,7 +20,6 @@ export function ProjectDetailsSheet({
   registered = true,
   onClose,
   onOpen,
-  onOpenView,
 }: {
   visible: boolean;
   project: Pick<HostProject, "name" | "cwd" | "appearance">;
@@ -28,9 +28,8 @@ export function ProjectDetailsSheet({
   registered?: boolean;
   onClose: () => void;
   onOpen?: () => void;
-  onOpenView?: (view: "files" | "git") => void;
 }) {
-  const { colors, uiStyles } = useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   const clipboard = useClipboardFeedback(project.cwd, visible);
   return (
@@ -72,26 +71,12 @@ export function ProjectDetailsSheet({
         />
       ) : null}
       <NavigationGroup>
-        {registered && onOpenView ? (
-          <>
-            <NavigationRow
-              label={copy("Dosyalar", "Files")}
-              icon={<FolderTree size={18} color={colors.muted} />}
-              onPress={() => onOpenView("files")}
-            />
-            <NavigationRow
-              label={copy("Değişiklikler", "Changes")}
-              icon={<GitBranch size={18} color={colors.muted} />}
-              onPress={() => onOpenView("git")}
-            />
-          </>
-        ) : null}
         <NavigationRow
           intent="command"
           label={
             clipboard.copied ? copy("Kopyalandı", "Copied") : copy("Yolu kopyala", "Copy path")
           }
-          icon={<Copy size={18} color={colors.muted} />}
+          icon={<RowIcon glyph={Copy} />}
           busy={clipboard.busy}
           onPress={clipboard.copy}
         />

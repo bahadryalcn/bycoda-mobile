@@ -57,3 +57,10 @@ it("holds a microphone order changed while the stored record is unreadable and s
   expect(store.getState().preferences.micOrder[0]).toBe("carplay");
   expect(JSON.parse(storage.data.get(key)!).micOrder[0]).toBe("carplay");
 });
+
+// The phone cut the owner off after 0.9 s and offered no choice; the desktop default is a natural 1.2 s pause.
+it("defaults to the desktop's natural pause and keeps only the desktop's pause choices", () => {
+  expect(normalizeVoicePreferences({})).toMatchObject({ turnPause: 1.2, manualTurnEnd: false });
+  expect(normalizeVoicePreferences({ turnPause: 2.5, manualTurnEnd: true })).toMatchObject({ turnPause: 2.5, manualTurnEnd: true });
+  expect(normalizeVoicePreferences({ turnPause: 0.9, manualTurnEnd: "yes" })).toMatchObject({ turnPause: 1.2, manualTurnEnd: false });
+});

@@ -1,339 +1,210 @@
-import { useMobileTheme } from "@/ui/theme";
-import { useState, type PropsWithChildren } from "react";
+import { useEffect } from "react";
 import { router, type Href } from "expo-router";
+import Constants from "expo-constants";
+import * as Application from "expo-application";
+import { Avatar } from "panelui-native/components/avatar";
 import Laptop from "lucide-react-native/icons/laptop";
-import ShieldCheck from "lucide-react-native/icons/shield-check";
-import Smartphone from "lucide-react-native/icons/smartphone";
+import Bot from "lucide-react-native/icons/bot";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
-import LockKeyhole from "lucide-react-native/icons/lock-keyhole";
-import LifeBuoy from "lucide-react-native/icons/life-buoy";
-import Info from "lucide-react-native/icons/info";
 import Palette from "lucide-react-native/icons/palette";
 import MessageSquare from "lucide-react-native/icons/message-square";
-import Globe from "lucide-react-native/icons/globe";
-import Gauge from "lucide-react-native/icons/gauge";
-import Flag from "lucide-react-native/icons/flag";
-import Scale from "lucide-react-native/icons/scale";
+import Bell from "lucide-react-native/icons/bell";
+import LockKeyhole from "lucide-react-native/icons/lock-keyhole";
+import Smartphone from "lucide-react-native/icons/smartphone";
+import Database from "lucide-react-native/icons/database";
+import LifeBuoy from "lucide-react-native/icons/life-buoy";
+import MessageCircleHeart from "lucide-react-native/icons/message-circle-heart";
+import Info from "lucide-react-native/icons/info";
 import UserRound from "lucide-react-native/icons/user-round";
-import LayoutGrid from "lucide-react-native/icons/layout-grid";
-import { IconTile } from "../../ui/icon-tile";
 import { LANGUAGES } from "../../localization";
 import { useActiveMachine, useMachines } from "../../state/machines";
-import { reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { useAppearance } from "../../state/appearance";
-import { busySendStore, useBusySend } from "../../state/busy-send";
-import { dataSaverStore, useDataSaver } from "../../state/data-saver";
-import {
-  Body,
-  NavigationGroup,
-  NavigationRow,
-  Notice,
-  Screen,
-  SelectField,
-  Sheet,
-  StateView,
-  Stack,
-} from "../../ui/primitives";
+import { useBusySend } from "../../state/busy-send";
+import { useSecurity } from "../../state/security";
+import { NavigationGroup, NavigationRow, Screen, Section, SettingIcon, StateView } from "../../ui/primitives";
 import { useCopy } from "../../ui/copy";
-import { SecuritySettings } from "../security/security-settings";
-import { EngagementSettings } from "../engagement/engagement-settings";
-import { UpdatesRow } from "../updates/UpdatesRow";
-import { KeyboardSettings } from "../keyboard/keyboard-preferences";
-import { NavigationSettings } from "../navigation-prefs/navigation-settings";
+import { PALETTES } from "@/ui/tokens";
+import { graphemes } from "../../../../src/shared/lib/text/truncate";
 import { VoiceSettings } from "../voice-settings/voice-settings";
-import { HostSettingsEditor } from "./host-settings-editor";
-import { LocalDataControls } from "./local-data-controls";
-import { DiagnosticsSettings } from "../diagnostics/DiagnosticsSettings";
-import { AppearanceSettings } from "./appearance-settings";
+import { useAccount } from "../account/ui/account-context";
+import { useAccountMe } from "../account/ui/use-account-me";
+import { useDiagnosticPrefs } from "../diagnostics/diagnostics-runtime";
+import { appIdentity } from "../engagement/engagement-model";
+import { usePermissionReads } from "../permissions/use-permission-reads";
 import { appearanceSummary, themeModeOptions } from "./appearance-settings-model";
-import { PALETTES, space } from "@/ui/tokens";
-import { WidgetSettings } from "../widgets";
-import { DevicePermissionSettings } from "../permissions/device-permission-settings";
-import { leaveSheetThen } from "./sheet-navigation";
+import { settingsRoutes } from "./settings-routes";
+import { identitySummary, notificationSummary, onOffSummary, permissionSummary } from "./settings-summaries";
 
-function SettingsGroup({ title, children }: PropsWithChildren<{ title: string }>) {
-  const { uiStyles } = useMobileTheme();
+const go = (route: string) => () => router.navigate(route as Href);
+
+/** The identity row leads the index: who is signed in, or the way to sign in. */
+function IdentityRow() {
+  const copy = useCopy();
+  const account = useAccount();
+  const me = useAccountMe();
+  const user = me.data?.user;
+  const { name, detail } = identitySummary(user);
+  const signedIn = account.status === "signedIn";
+  const label = signedIn ? name || copy("Hesap", "Account") : copy("Hesap", "Account");
+  const value = signedIn
+    ? detail ?? (name ? undefined : copy("bycoda hesabı", "bycoda account"))
+    : account.status === "loading" ? undefined : copy("Giriş yap", "Sign in");
   return (
-    <Stack style={{ gap: space.xs, marginBottom: space.xs }}>
-      <Body accessibilityRole="header" muted style={uiStyles.sectionLabel}>{title}</Body>
-      {children}
-    </Stack>
+    <NavigationRow
+      label={label}
+      detail={value}
+      accessibilityLabel={[copy("Hesap", "Account"), label, value].filter(Boolean).join(". ")}
+      icon={signedIn && name ? (
+        <Avatar size="sm" source={user?.avatarUrl ? { uri: user.avatarUrl } : undefined}
+          fallback={(graphemes(name)[0] ?? "?").toUpperCase()} />
+      ) : <SettingIcon glyph={UserRound} />}
+      separator={false}
+      onPress={go(settingsRoutes.account)}
+    />
   );
 }
 
+/**
+ * Settings index: an identity row and four groups of navigation rows. Every row shows its current
+ * value; switches and selects live on the pushed sub-pages, never here.
+ */
 export function SettingsScreen() {
-  const { colors } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
   const language = useMachines((s) => s.language);
-  const setLanguage = useMachines((s) => s.setLanguage);
   const storageError = useMachines((s) => s.storageError);
-  const storageHydrated = useMachines((s) => s.hydrated);
   const themeMode = useAppearance((s) => s.themeMode);
   const palette = useAppearance((s) => s.palette);
   const textScale = useAppearance((s) => s.typography.scale);
-  const appearanceError = useAppearance((s) => s.storageError);
   const busySend = useBusySend((s) => s.mode);
-  const busySendHydrated = useBusySend((s) => s.hydrated);
-  const busySendError = useBusySend((s) => s.storageError);
-  const dataSaver = useDataSaver((s) => s.dataSaver);
-  const dataSaverHydrated = useDataSaver((s) => s.hydrated);
-  const dataSaverError = useDataSaver((s) => s.storageError);
-  const [panel, setPanel] = useState<
-    "security" | "host" | "privacy" | "about" | "visual" | "permissions" | "widgets" | null
-  >(null);
-  const [hostTarget, setHostTarget] = useState<{
-    id: string;
-    name: string;
-    target: ReviewedMachine | undefined;
-  }>();
-  const titles = {
-    permissions: copy("Telefon izinleri", "Phone permissions"),
-    security: copy("Güvenli erişim", "Secure access"),
-    host: copy("Bilgisayar ayarları", "Computer settings"),
-    privacy: copy("Gizlilik ve veriler", "Privacy & data"),
-    about: copy("bycoda hakkında", "About bycoda"),
-    visual: copy("Görünüm", "Appearance"),
-    widgets: copy("Widget'lar", "Widgets"),
-  };
-  const leaveSheet = (go: () => void) => leaveSheetThen(() => setPanel(null), go);
-  const tile = (Glyph: typeof Laptop) => (
-    <IconTile color={colors.muted}>
-      <Glyph size={18} strokeWidth={2} color={colors.muted} />
-    </IconTile>
-  );
+  const lockEnabled = useSecurity((s) => s.enabled);
+  const diagnosticMode = useDiagnosticPrefs((s) => s.consent.mode);
+  const hydrateDiagnostics = useDiagnosticPrefs((s) => s.hydrate);
+  // Reason: the Data and privacy value reads the stored log-sharing choice, not the default.
+  useEffect(() => { void hydrateDiagnostics(); }, [hydrateDiagnostics]);
+  const reads = usePermissionReads();
+  const platform = process.env.EXPO_OS ?? "unknown";
+  const version = appIdentity(Constants, platform, Application).version;
+  const languageLabel = language === "system"
+    ? copy("Sistem", "System")
+    : LANGUAGES.find((item) => item.value === language)?.label ?? language;
+  const diagnosticsLabel = diagnosticMode === "off"
+    ? copy("Günlükler gönderilmez", "Logs not sent")
+    : diagnosticMode === "auto"
+      ? copy("Günlükler otomatik gönderilir", "Logs sent automatically")
+      : copy("Günlükler için sorulur", "Asks before sending logs");
+  const native = process.env.EXPO_OS !== "web";
   return (
     <Screen title={copy("Ayarlar", "Settings")}>
-      <SettingsGroup title={copy("Bağlantılar", "Connections")}>
+      <NavigationGroup>
+        <IdentityRow />
+      </NavigationGroup>
+      <Section title={copy("Bilgisayar", "Computer")}>
         <NavigationGroup>
           <NavigationRow
-            label={copy("bycoda hesabı", "bycoda account")}
-            icon={tile(UserRound)}
-            onPress={() => router.navigate("/account" as Href)}
+            label={copy("Bilgisayarlar", "Computers")}
+            detail={machine?.name ?? copy("Bağlı değil", "Not connected")}
+            icon={<SettingIcon glyph={Laptop} />}
+            onPress={go(settingsRoutes.computers)}
           />
           <NavigationRow
-            label={copy("Bağlantıları yönet", "Manage connections")}
+            label={copy("Ajanlar ve görevler", "Agents and tasks")}
             detail={machine?.name ?? copy("Bilgisayar bağla", "Connect a computer")}
-            icon={tile(Laptop)}
-            separator={!!machine}
-            onPress={() => router.navigate("/machines")}
+            icon={<SettingIcon glyph={Bot} />}
+            separator={false}
+            onPress={go(settingsRoutes.agents)}
           />
-          {machine ? (
-            <NavigationRow
-              label={titles.host}
-              detail={`${copy("Görev sınırları", "Task limits")} · ${copy("Ajan varsayılanları", "Agent defaults")}`}
-              separator={false}
-              icon={tile(SlidersHorizontal)}
-              onPress={() => {
-                setHostTarget({
-                  id: machine.id,
-                  name: machine.name,
-                  target: reviewedMachine(machine),
-                });
-                setPanel("host");
-              }}
-            />
-          ) : null}
         </NavigationGroup>
         {storageError ? (
           <StateView
             compact
             tone="warning"
-            illustration="error"
-            title={copy(
-              "Kaydedilmiş bağlantılar kullanılamıyor",
-              "Saved connections are unavailable",
-            )}
+            title={copy("Kaydedilmiş bağlantılar kullanılamıyor", "Saved connections are unavailable")}
             description={storageError}
-            action={{
-              label: copy("Depolamayı kurtar", "Recover saved connections"),
-              onPress: () => router.navigate("/machines"),
-            }}
+            action={{ label: copy("Depolamayı kurtar", "Recover saved connections"), onPress: go(settingsRoutes.computers) }}
           />
         ) : null}
-      </SettingsGroup>
-      <SettingsGroup title={copy("Tercihler", "Preferences")}>
+      </Section>
+      <Section title={copy("Uygulama", "App")}>
         <NavigationGroup>
           <NavigationRow
-            label={titles.visual}
-            icon={tile(Palette)}
-            detailLines={0}
+            label={copy("Genel", "General")}
+            detail={languageLabel}
+            icon={<SettingIcon glyph={SlidersHorizontal} />}
+            onPress={go(settingsRoutes.general)}
+          />
+          <NavigationRow
+            label={copy("Görünüm", "Appearance")}
             detail={appearanceSummary({
               theme: themeModeOptions(copy).find((option) => option.value === themeMode)?.label ?? "",
-              palette: PALETTES.filter((item) => item.id === palette)
-                .map((item) => copy(item.nameTr, item.name))
-                .join(""),
+              palette: PALETTES.filter((item) => item.id === palette).map((item) => copy(item.nameTr, item.name)).join(""),
               scale: textScale,
             })}
-            onPress={() => setPanel("visual")}
+            icon={<SettingIcon glyph={Palette} />}
+            onPress={go(settingsRoutes.appearance)}
           />
-          <SelectField
-            variant="row"
-            icon={tile(Globe)}
-            label={copy("Dil", "Language")}
-            value={language}
-            disabled={!storageHydrated || !!storageError}
-            options={[{ value: "system" as const, label: copy("Sistem", "System") }, ...LANGUAGES]}
-            onChange={setLanguage}
-          />
-          <SelectField
-            variant="row"
-            icon={tile(Gauge)}
-            label={copy("Veri tasarrufu", "Data saver")}
-            value={dataSaver}
-            disabled={!dataSaverHydrated}
-            options={[
-              {
-                value: "auto" as const,
-                label: copy("Otomatik", "Auto"),
-                detail: copy("Mobil veride tasarruf et.", "Save data on cellular."),
-              },
-              {
-                value: "on" as const,
-                label: copy("Her zaman", "Always"),
-                detail: copy(
-                  "Görseller dokununca yüklenir. Tarayıcı yayını daha az veri kullanır.",
-                  "Load images on tap and use less data for browser streaming.",
-                ),
-              },
-              { value: "off" as const, label: copy("Kapalı", "Off") },
-            ]}
-            onChange={(value) => { void dataSaverStore.getState().setDataSaver(value); }}
-          />
-          <KeyboardSettings />
-          <NavigationRow label={titles.widgets} icon={tile(LayoutGrid)} separator={false} onPress={() => setPanel("widgets")} />
-        </NavigationGroup>
-        {dataSaverError ? <Notice tone="warning" message={copy("Veri tasarrufu tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The data saver preference could not be read or saved. Select it again to retry.")} /> : null}
-        {appearanceError ? (
-          <Notice
-            tone="warning"
-            message={copy(
-              "Görünüm tercihi okunamadı veya kaydedilemedi. Yeniden dene veya bir seçim yap.",
-              "The appearance preference could not be read or saved. Retry or make a choice.",
-            )}
-          />
-        ) : null}
-        {panel === "visual" ? (
-          <Sheet visible title={titles.visual} size="full" onClose={() => setPanel(null)}>
-            <AppearanceSettings />
-          </Sheet>
-        ) : null}
-      </SettingsGroup>
-      <SettingsGroup title={copy("Sohbet", "Chat")}>
-        <NavigationGroup>
-          <SelectField
-            variant="row"
-            icon={tile(MessageSquare)}
-            label={copy("Ajan çalışırken gönder", "Send while agent is running")}
-            value={busySend}
-            disabled={!busySendHydrated}
-            options={[
-              {
-                value: "steer" as const,
-                label: copy("Yönlendir", "Steer"),
-                detail: copy("Mesajı çalışan ajana hemen ilet.", "Send to the running agent now."),
-              },
-              {
-                value: "queue" as const,
-                label: copy("Sıraya al", "Queue"),
-                detail: copy("Ajan bitirdiğinde gönder.", "Send after the agent finishes."),
-              },
-            ]}
-            onChange={(value) => { void busySendStore.getState().setMode(value); }}
+          <NavigationRow
+            label={copy("Sohbet", "Chat")}
+            detail={busySend === "queue"
+              ? copy("Çalışırken: Sıraya al", "While running: Queue")
+              : copy("Çalışırken: Yönlendir", "While running: Steer")}
+            icon={<SettingIcon glyph={MessageSquare} />}
+            onPress={go(settingsRoutes.chat)}
           />
           <VoiceSettings />
-        </NavigationGroup>
-        {busySendError ? <Notice tone="warning" message={copy("Gönderim tercihi okunamadı veya kaydedilemedi. Yeniden seçerek dene.", "The send preference could not be read or saved. Select it again to retry.")} /> : null}
-      </SettingsGroup>
-      <SettingsGroup title={copy("Gezinme", "Navigation")}>
-        <NavigationSettings />
-      </SettingsGroup>
-      <SettingsGroup title={copy("Erişim ve gizlilik", "Access & privacy")}>
-        <NavigationGroup>
           <NavigationRow
-            label={titles.security}
-            icon={tile(ShieldCheck)}
-            onPress={() => setPanel("security")}
-          />
-          <NavigationRow
-            label={titles.permissions}
-            icon={tile(Smartphone)}
-            onPress={() => setPanel("permissions")}
-          />
-          <NavigationRow
-            label={titles.privacy}
-            icon={tile(LockKeyhole)}
+            label={copy("Bildirimler", "Notifications")}
+            detail={native ? notificationSummary(reads.notifications, copy) : undefined}
+            icon={<SettingIcon glyph={Bell} />}
             separator={false}
-            onPress={() => setPanel("privacy")}
+            onPress={go(settingsRoutes.notifications)}
           />
         </NavigationGroup>
-      </SettingsGroup>
-      <SettingsGroup title={copy("Destek", "Support")}>
+      </Section>
+      <Section title={copy("Gizlilik ve güvenlik", "Privacy and security")}>
         <NavigationGroup>
           <NavigationRow
-            label={copy("Yardım ve destek", "Help & support")}
-            icon={tile(LifeBuoy)}
-            onPress={() => router.navigate("/legal/help")}
+            label={copy("Uygulama kilidi", "App lock")}
+            detail={native ? onOffSummary(lockEnabled, copy) : undefined}
+            icon={<SettingIcon glyph={LockKeyhole} />}
+            onPress={go(settingsRoutes.security)}
           />
           <NavigationRow
-            label={copy("İçerik bildir", "Report content")}
-            icon={tile(Flag)}
-            onPress={() => router.navigate("/report")}
+            label={copy("Telefon izinleri", "Phone permissions")}
+            detail={native ? permissionSummary(reads, copy) : undefined}
+            icon={<SettingIcon glyph={Smartphone} />}
+            onPress={go(settingsRoutes.permissions)}
           />
-          <NavigationRow label={titles.about} icon={tile(Info)} onPress={() => setPanel("about")} />
-          <NavigationRow label={copy("Açık kaynak lisansları", "Open-source licenses")} icon={tile(Scale)} separator={false} onPress={() => router.navigate("/licenses")} />
+          <NavigationRow
+            label={copy("Veriler ve gizlilik", "Data and privacy")}
+            detail={diagnosticsLabel}
+            icon={<SettingIcon glyph={Database} />}
+            separator={false}
+            onPress={go(settingsRoutes.privacy)}
+          />
         </NavigationGroup>
-      </SettingsGroup>
-      {panel && panel !== "visual" ? (
-        <Sheet
-          visible
-          size={
-            panel === "privacy" ||
-            panel === "about" ||
-            panel === "host" ||
-            (process.env.EXPO_OS === "web" && (panel === "security" || panel === "permissions"))
-              ? "compact"
-              : "form"
-          }
-          title={titles[panel]}
-          onClose={() => setPanel(null)}
-        >
-          {panel === "permissions" ? (
-            <DevicePermissionSettings />
-          ) : panel === "widgets" ? (
-            <NavigationGroup><WidgetSettings /></NavigationGroup>
-          ) : panel === "security" ? (
-            <SecuritySettings />
-          ) : panel === "host" && hostTarget ? (
-            <HostSettingsEditor
-              key={hostTarget.id}
-              machineId={hostTarget.id}
-              machineName={hostTarget.name}
-              target={hostTarget.target}
-            />
-          ) : panel === "privacy" ? (
-            <>
-              <NavigationGroup>
-                <NavigationRow
-                  label={copy("Gizlilik politikası", "Privacy policy")}
-                  onPress={() => leaveSheet(() => router.navigate("/legal/privacy"))}
-                />
-                <NavigationRow
-                  label={copy("Kullanım koşulları ve lisans", "Terms of use & license")}
-                  onPress={() => leaveSheet(() => router.navigate("/legal/terms"))}
-                />
-              </NavigationGroup>
-              <DiagnosticsSettings />
-              <LocalDataControls />
-            </>
-          ) : (
-            <>
-              <EngagementSettings leaveSheet={leaveSheet} />
-              <UpdatesRow />
-            </>
-          )}
-        </Sheet>
-      ) : null}
+      </Section>
+      <Section title={copy("Destek", "Support")}>
+        <NavigationGroup>
+          <NavigationRow
+            label={copy("Yardım ve destek", "Help and support")}
+            icon={<SettingIcon glyph={LifeBuoy} />}
+            onPress={go(settingsRoutes.help)}
+          />
+          <NavigationRow
+            label={copy("Geri bildirim gönder", "Send feedback")}
+            icon={<SettingIcon glyph={MessageCircleHeart} />}
+            onPress={go(settingsRoutes.feedback)}
+          />
+          <NavigationRow
+            label={copy("Hakkında", "About")}
+            detail={version ?? undefined}
+            icon={<SettingIcon glyph={Info} />}
+            separator={false}
+            onPress={go(settingsRoutes.about)}
+          />
+        </NavigationGroup>
+      </Section>
     </Screen>
   );
 }

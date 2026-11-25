@@ -4,6 +4,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { Block } from "./wire";
 
 vi.mock("@/ui/theme", () => ({ useMobileTheme: vi.fn() }));
+vi.mock("lucide-react-native/icons/terminal", () => ({ default: () => null }));
+vi.mock("@/ui/primitives", () => ({
+  NavigationRow: ({ detail }: { detail: string }) => createElement("button", { "data-navigation-row": true }, detail),
+  RowIcon: () => null,
+}));
 vi.mock("@/ui/copy", () => ({
   useCopy: () => (_tr: string, en: string, values?: Record<string, string | number>) =>
     en.replace(/\{(p\d+)\}/g, (_: string, key: string) => String(values?.[key])),

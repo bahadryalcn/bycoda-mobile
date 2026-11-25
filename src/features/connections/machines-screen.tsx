@@ -1,14 +1,13 @@
 import { ConnectionFeedback } from "./connection-feedback";
 import { useMobileTheme } from "@/ui/theme";
 import { useEffect, useLayoutEffect, useRef, useState, type ComponentRef } from "react";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { router, Stack, useCanGoBack, useLocalSearchParams } from "expo-router";
 import { useIsFocused } from "expo-router/react-navigation";
 import { View } from "react-native";
 import { useBackHandler } from "panelui-native/hooks/use-back-handler";
 import Laptop from "lucide-react-native/icons/laptop";
 import Plus from "lucide-react-native/icons/plus";
 import MoreHorizontal from "lucide-react-native/icons/ellipsis";
-import { IconTile } from "@/ui/icon-tile";
 import { useLocale } from "@/i18n";
 import { useScreenChrome } from "@/ui/layout";
 import { ScreenList } from "@/ui/screen-list";
@@ -18,9 +17,9 @@ import { useMachineStatus } from "@/ui/machine-bar";
 import { useMachines } from "@/state/machines";
 import { reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { assertAppAccess } from "@/state/security";
-import { Body, Button, Disclosure, FormActions, HeaderBackButton, IconButton, Loading, NavigationGroup, NavigationRow, Notice, QueryState, Screen, SearchField, Sheet, StateView } from "@/ui/primitives";
+import { Body, Button, Disclosure, FormActions, HeaderBackButton, IconButton, Loading, NavigationGroup, NavigationRow, Notice, QueryState, RowIcon, Screen, SearchField, Sheet, StateView } from "@/ui/primitives";
 import { confirmAction } from "@/ui/confirm";
-import { metrics, space } from "@/ui/tokens";
+import { iconSize, metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { errorMessage } from "@/ui/error-message";
 import { LegalLinks } from "@/ui/brand";
@@ -32,6 +31,7 @@ import { PairingScanner } from "./pairing-scanner";
 import { matchesSavedComputer, removeSavedComputer, reloadSavedConnections, selectSavedComputer } from "./recovery";
 import { selectedComputerFirst } from "./saved-computer-order";
 import { useComputerConnection } from "./use-computer-connection";
+import { stackBackOptions } from "@/ui/stack-back";
 
 export function MachinesScreen() {
   const { colors } = useMobileTheme();
@@ -41,6 +41,7 @@ export function MachinesScreen() {
   const [search, setSearch] = useState("");
   const searchInput = useRef<ComponentRef<typeof SearchField>>(null);
   const focused = useIsFocused();
+  const canGoBack = useCanGoBack();
   const machines = useMachines((store) => store.machines);
   const hydrated = useMachines((store) => store.hydrated);
   const storageError = useMachines((store) => store.storageError);
@@ -90,7 +91,7 @@ export function MachinesScreen() {
   const addComputer = !showPairing ? (
     <IconButton label={copy("Bilgisayar ekle", "Add computer")} disabled={unavailable || busy}
       onPress={() => controller.begin("choices")}>
-      <Plus size={20} color={colors.accent} />
+      <Plus size={iconSize.action} color={colors.accent} />
     </IconButton>
   ) : undefined;
   const visible = selectedComputerFirst(
@@ -141,12 +142,17 @@ export function MachinesScreen() {
     <Button tone="quiet" label={copy("Yardım sayfasını aç", "Open help page")} onPress={() => router.navigate("/legal/help")} />
     <LegalLinks onOpen={(document) => router.navigate({ pathname: "/legal/[document]", params: { document } })} />
   </Disclosure>;
+  const nativeBack = entryActive
+    ? <HeaderBackButton disabled={busy} onPress={cancelEntry} />
+    : canGoBack
+      ? <HeaderBackButton onPress={() => router.back()} />
+      : undefined;
   return <Screen scroll={showPairing} title={showPairing ? copy("Bilgisayarlar", "Computers") : undefined}
     actions={!nativeTitle && showPairing && entryActive ? <HeaderBackButton disabled={busy} onPress={cancelEntry} /> : undefined}>
     <Stack.Screen options={{
       title: copy("Bilgisayarlar", "Computers"),
       gestureEnabled: !entryActive && !busy && !controller.form.dirty,
-      headerLeft: entryActive ? () => <HeaderBackButton disabled={busy} onPress={cancelEntry} /> : undefined,
+      ...stackBackOptions(nativeBack),
       headerRight: nativeTitle && addComputer ? () => addComputer : undefined,
     }} />
     {!showPairing ? <ScreenList
@@ -173,9 +179,9 @@ export function MachinesScreen() {
             accessibilityLabel={active
               ? [machine.name, address, activeStatus.status, activeStatus.reason].filter(Boolean).join(". ")
               : undefined}
-            icon={<IconTile color={colors.muted}><Laptop size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
+            icon={<RowIcon glyph={Laptop} />}
             supporting={active ? <ActiveComputerStatus connection={activeStatus} /> : undefined}
-            trailing={active ? undefined : <IconButton label={copy("{p0} için seçenekler", "Options for {p0}", { p0: address ? `${machine.name} (${address})` : machine.name })} disabled={unavailable || busy} onPress={() => setManaging(machine.id)}><MoreHorizontal size={20} color={colors.muted} /></IconButton>}
+            trailing={active ? undefined : <IconButton label={copy("{p0} için seçenekler", "Options for {p0}", { p0: address ? `${machine.name} (${address})` : machine.name })} disabled={unavailable || busy} onPress={() => setManaging(machine.id)}><MoreHorizontal size={iconSize.action} color={colors.muted} /></IconButton>}
             disabled={unavailable || busy} onPress={() => active ? setManaging(machine.id) : switchToComputer(machine.id)}
           />;
       }}
@@ -188,7 +194,7 @@ export function MachinesScreen() {
     </View>}
     {selected || removal ? <Sheet visible size="compact" title={removal ? copy("Bilgisayarı kaldır", "Remove computer") : selected!.name} onClose={closeManagement} dismissible={!busy}>
       {removal ? <>
-        {staleRemoval ? <Notice tone="warning" message={copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden açın.", "Saved computers changed. Reopen this review to continue.")} /> : null}
+        {staleRemoval ? <Notice tone="warning" message={copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden aç.", "Saved computers changed. Reopen this review to continue.")} /> : null}
         <Body>{removal.name}</Body>
         <Body muted>{removal.endpoint}</Body>
         <Body>{copy("Bu bağlantı telefondan kaldırılacak. Kaydedilmiş taslaklar korunur.", "This connection will be removed from this phone. Saved drafts remain.")}</Body>
@@ -221,7 +227,7 @@ export function MachinesScreen() {
         <Body muted>{selected.endpoint}</Body>
         <NavigationGroup>
           <NavigationRow label={copy("Bağlantıyı düzenle", "Edit connection")} disabled={unavailable || busy} onPress={() => { setManaging(null); controller.edit(selected); }} />
-          <NavigationRow label={copy("Kaldır", "Remove")} tone="danger" disabled={unavailable || busy} onPress={() => { retiredRemoval.current = false; operation.reset(); setRemoval({ ...reviewedMachine(selected)!, name: selected.name }); }} />
+          <NavigationRow label={copy("Kaldır", "Remove")} tone="danger" intent="command" disabled={unavailable || busy} onPress={() => { retiredRemoval.current = false; operation.reset(); setRemoval({ ...reviewedMachine(selected)!, name: selected.name }); }} />
         </NavigationGroup>
       </Disclosure>
       <ConnectionFeedback operation={operation} />

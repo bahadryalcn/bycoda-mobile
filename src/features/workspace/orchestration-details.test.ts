@@ -15,7 +15,7 @@ vi.mock("@/ui/search-field",()=>({CollectionToolbar:({field,actions}:any)=>creat
 vi.mock("@/ui/primitives",()=>{
  const content=({children}:any)=>createElement("div",null,children);
  const button=({label,onPress}:any)=>{state.commands.set(label,onPress);return createElement("button",{onClick:onPress},label);};
- return{Body:content,Stack:content,Row:content,Badge:({label}:any)=>createElement("span",null,label),Notice:({message}:any)=>createElement("p",null,message), StateView: ({ title }:any) => createElement("p",null,title),Sheet:({title,children}:any)=>createElement("article",{"aria-label":title},children),NavigationRow:button,
+ return{Body:content,Stack:content,Row:content,Badge:({label}:any)=>createElement("span",null,label), StatusText: ({label}:any)=>createElement("span",null,label),Notice:({message}:any)=>createElement("p",null,message), StateView: ({ title }:any) => createElement("p",null,title),Sheet:({title,children}:any)=>createElement("article",{"aria-label":title},children),NavigationRow:button,
  FormActions:({submitLabel,onSubmit}:any)=>button({label:submitLabel,onPress:onSubmit}),ActionMenu:({actions}:any)=>createElement("nav",null,...actions.map((action:any)=>createElement("section",{key:action.key},button(action))))};
 });
 vi.mock("@/ui/screen-list",()=>({ScreenList:({data,renderItem,header,footer,ListEmptyComponent}:any)=>createElement("main",null,header,...data.map((item:any,index:number)=>createElement("section",{key:index},renderItem({item}))),data.length?null:ListEmptyComponent,footer)}));

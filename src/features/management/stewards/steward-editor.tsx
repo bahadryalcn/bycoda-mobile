@@ -5,13 +5,13 @@ import type { useHostMutation } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import { IntegerTextStepper } from "@/ui/limit-presets";
 import {
+  Body,
   Disclosure,
   ErrorText,
   Field,
   FormActions,
   MutationState,
   NavigationGroup,
-  Section,
   Stack,
   ToggleField,
 } from "@/ui/primitives";
@@ -63,20 +63,60 @@ export function StewardEditor({
   const update = (patch: Partial<HostStewardInput>) => {
     if (!save.isPending) form.patch(patch);
   };
+  const blockedReason = !normalized.model.trim()
+    ? copy("Bir model seçin.", "Choose a model.")
+    : !scheduleValid
+      ? copy("Zamanlamayı kontrol edin.", "Check the schedule.")
+      : !valid
+        ? copy(
+            "Odak ve gelişmiş sınırları kontrol edin.",
+            "Check the focus and limits in Advanced.",
+          )
+        : undefined;
   return (
     <Stack>
-      <Section title={copy("Odak", "Focus")}>
-        <Field
-          label={copy("Neye odaklanmalı?", "What should it focus on?")}
-          value={draft.focus}
-          multiline
-          maxLength={4000}
-          editable={!save.isPending}
-          onChangeText={(focus) => update({ focus })}
-        />
-      </Section>
-      <Section title={copy("Ajan", "Agent")}>
+      <Field
+        label={copy("Neye odaklanmalı?", "What should it focus on?")}
+        value={draft.focus}
+        multiline
+        maxLength={4000}
+        editable={!save.isPending}
+        onChangeText={(focus) => update({ focus })}
+      />
+      <AgentFields
+        value={normalized}
+        projectId={draft.projectId}
+        disabled={save.isPending}
+        onChange={({ maxRunMinutes: _minutes, ...agent }) => update(agent)}
+      />
+      <ScheduleFields
+        value={draft}
+        minute={minute}
+        onMinuteChange={setMinute}
+        onChange={update}
+        disabled={save.isPending}
+      />
+      <Disclosure
+        label={copy("Gelişmiş", "Advanced")}
+        feedback={
+          !integerInRange(proposals, 1, 10) || !integerInRange(open, 1, 30) ? (
+            <>
+              {!integerInRange(proposals, 1, 10) ? (
+                <ErrorText
+                  error={`${copy("Çalışma başına öneri", "Proposals per run")}: ${copy("1 ile 10 arasında bir sayı girin.", "Enter a number from 1 to 10.")}`}
+                />
+              ) : null}
+              {!integerInRange(open, 1, 30) ? (
+                <ErrorText
+                  error={`${copy("Açık görev sınırı", "Open task limit")}: ${copy("1 ile 30 arasında bir sayı girin.", "Enter a number from 1 to 30.")}`}
+                />
+              ) : null}
+            </>
+          ) : null
+        }
+      >
         <AgentFields
+          part="settings"
           value={normalized}
           projectId={draft.projectId}
           disabled={save.isPending}
@@ -84,21 +124,6 @@ export function StewardEditor({
           onValidityChange={setAgentValid}
           onChange={({ maxRunMinutes: _minutes, ...agent }) => update(agent)}
         />
-      </Section>
-      <Section title={copy("Zamanlama", "Schedule")}>
-        <ScheduleFields
-          value={draft}
-          minute={minute}
-          onMinuteChange={setMinute}
-          onChange={update}
-          disabled={save.isPending}
-        />
-      </Section>
-      <Disclosure label={copy("Gelişmiş seçenekler", "Advanced options")}
-        feedback={!integerInRange(proposals, 1, 10) || !integerInRange(open, 1, 30) ? <>
-          {!integerInRange(proposals, 1, 10) ? <ErrorText error={`${copy("Çalışma başına öneri", "Proposals per run")}: ${copy("1 ile 10 arasında bir sayı girin.", "Enter a number from 1 to 10.")}`} /> : null}
-          {!integerInRange(open, 1, 30) ? <ErrorText error={`${copy("Açık görev sınırı", "Open task limit")}: ${copy("1 ile 30 arasında bir sayı girin.", "Enter a number from 1 to 30.")}`} /> : null}
-        </> : null}>
         <IntegerTextStepper
           label={copy("Çalışma başına öneri", "Proposals per run")}
           value={proposals}
@@ -118,26 +143,31 @@ export function StewardEditor({
         <NavigationGroup>
           <ToggleField
             label={copy("Önerilen görevleri otomatik başlat", "Automatically start proposed tasks")}
+            detail={copy(
+              "Önerilen görevler onay beklemeden başlar.",
+              "Start proposed tasks without waiting for approval.",
+            )}
             value={draft.autoStart}
             disabled={save.isPending}
             onChange={(autoStart) => update({ autoStart })}
           />
-        </NavigationGroup>
-      </Disclosure>
-      <Section title={copy("Durum", "Status")}>
-        <NavigationGroup>
           <ToggleField
             label={copy("Etkin", "Enabled")}
+            detail={copy(
+              "Planlanan proje incelemelerini çalıştırır.",
+              "Run scheduled project reviews.",
+            )}
             value={draft.enabled}
             disabled={save.isPending}
             onChange={(enabled) => update({ enabled })}
           />
         </NavigationGroup>
-      </Section>
+      </Disclosure>
       <FormActions
         feedback={
           <>
             <MutationState mutation={save} />
+            {!save.isPending && blockedReason ? <Body muted>{blockedReason}</Body> : null}
           </>
         }
         submitLabel={copy("Kaydet", "Save")}

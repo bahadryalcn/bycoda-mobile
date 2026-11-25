@@ -6,13 +6,12 @@ import ArrowDownToLine from "lucide-react-native/icons/arrow-down-to-line";
 import ArrowUpFromLine from "lucide-react-native/icons/arrow-up-from-line";
 import WandSparkles from "lucide-react-native/icons/wand-sparkles";
 import Square from "lucide-react-native/icons/square";
-import ChevronDown from "lucide-react-native/icons/chevron-down";
-import ChevronRight from "lucide-react-native/icons/chevron-right";
 import GitCommitHorizontal from "lucide-react-native/icons/git-commit-horizontal";
-import { Body, Button, Disclosure, ErrorNotice, IconButton, Input, Notice, PressableCard, Row } from "@/ui/primitives";
+import { Body, Button, Disclosure, ErrorNotice, IconButton, Input, Notice, PressableCard, Row, SectionHeader } from "@/ui/primitives";
+import { DisclosureChevron } from "@/ui/disclosure-motion";
 import { HintLabel } from "@/ui/info-hint";
 import { decorativeSvgProps } from "@/ui/accessibility";
-import { metrics, space, fontSize, lineHeight } from "@/ui/tokens";
+import { hitSlopFor, metrics, space, fontSize, lineHeight } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useLocale } from "@/i18n";
 import { GitFileRow } from "./git-file-row";
@@ -34,26 +33,22 @@ export function GitChangeGroupHeader({ group, count, expanded, onToggle, onBulkA
   onBulkAction?: () => void;
   busy: boolean;
 }) {
-  const { colors, uiStyles } = useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
-  const countText = new Intl.NumberFormat(useLocale()).format(count);
   const staged = group === "staged";
   const title = staged ? copy("Stage’deki değişiklikler", "Staged changes") : copy("Değişiklikler", "Changes");
-  const Chevron = expanded ? ChevronDown : ChevronRight;
+  // The same collapsible section header as the session shelves: shared label, quiet count, chevron.
   return (
-    <Row style={{ alignItems: "center", gap: space.xs, marginTop: space.sm }}>
+    <Row style={{ alignItems: "center", gap: space.xs, flexWrap: "nowrap" }}>
       <PressableCard
-        label={`${title} (${countText})`}
+        label={`${title}. ${count}`}
         expanded={expanded}
         onPress={onToggle}
-        style={{
-          flex: 1, minWidth: 0, minHeight: metrics.touchTarget, marginHorizontal: 0,
-          flexDirection: "row", alignItems: "center", gap: space.sm,
-        }}
+        hitSlop={hitSlopFor(metrics.sectionHeaderHeight)}
+        style={{ flex: 1, minWidth: 0, minHeight: 0, paddingVertical: 0, marginHorizontal: 0 }}
       >
-        <Chevron color={colors.muted} size={16} />
-        <Body selectable={false} style={[uiStyles.grow, { fontWeight: "600" }]}>{title}</Body>
-        <Body muted selectable={false}>{countText}</Body>
+        <SectionHeader title={title} count={count}
+          trailing={<DisclosureChevron expanded={expanded} color={colors.muted} />} />
       </PressableCard>
       {onBulkAction ? (
         <Button

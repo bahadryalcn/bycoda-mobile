@@ -7,7 +7,7 @@ import { SheetGuardContext } from "./sheet-guard-context";
 import { ConnectionFeedbackScope } from "./connection-feedback-scope";
 vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("./feedback", () => ({ Empty: "Empty", ErrorNotice: "ErrorNotice", Loading: "Loading", Notice: "Notice", Skeleton: "Skeleton" }));
+vi.mock("./feedback", () => ({ Empty: "Empty", ErrorNotice: "ErrorNotice", Loading: "Loading", Notice: "Notice", Skeleton: "Skeleton", StatusLine: "StatusLine" }));
 vi.mock("./typography", () => ({ Body: "Body" }));
 vi.mock("./state-view", () => ({ StateView: "StateView" }));
 vi.mock("./toast", () => ({ showToast: vi.fn(), useToastAvailable: () => false }));
@@ -72,51 +72,6 @@ it("keeps the reconnect budget when a failed initial read briefly returns to pen
   }
 });
 
-it("offers Retry for a timed-out read when the selected computer's socket is ready", () => {
-  quiet.on = true;
-  recordActiveHostMachine("pc");
-  recordHostRuntimeState("pc", "ready");
-  const refetch = vi.fn();
-  const query = { error: new RemoteHostError("pc", "timeout", "Timed out"), refetch };
-  const state = renderQuery({ query, loading: "inline" });
-  expect(state?.props.title).toBe("The computer took too long to respond");
-  expect(state?.props.description).toBeUndefined();
-  expect(state?.props.illustration).toBeUndefined();
-  expect(state?.props.action?.label).toBe("Retry");
-  state?.props.action?.onPress();
-  expect(refetch).toHaveBeenCalledOnce();
-});
-
-it("keeps two timed-out reads on a reachable Host independently retryable", async () => {
-  quiet.on = true;
-  recordActiveHostMachine("pc");
-  recordHostRuntimeState("pc", "ready");
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const root = createRoot(document.createElement("div"));
-  const refetches = [vi.fn(), vi.fn()];
-  const feedback: Rendered[] = [];
-  function Probe({ index }: { index: number }) {
-    feedback[index] = unwrap(QueryState({
-      query: { error: new RemoteHostError("pc", "timeout", "Timed out"), refetch: refetches[index] },
-      loading: "inline",
-      shareConnectionFeedback: true,
-    }));
-    return null;
-  }
-  try {
-    await act(async () => root.render(createElement(ConnectionFeedbackScope, { sharedReads: true },
-      createElement(Probe, { index: 0 }), createElement(Probe, { index: 1 }),
-    )));
-    for (const state of feedback) expect(state?.props.action?.label).toBe("Retry");
-    feedback[1]?.props.action?.onPress();
-    expect(refetches[0]).not.toHaveBeenCalled();
-    expect(refetches[1]).toHaveBeenCalledOnce();
-  } finally {
-    await act(async () => root.unmount());
-    vi.unstubAllGlobals();
-  }
-});
-
 it("uses custom progress only while the query can load", () => {
   const query = { status: "pending", fetchStatus: "fetching", failureCount: 1 } as const;
   const renderLoading = vi.fn((label: string) => createElement("div", { "aria-label": label }));
@@ -124,7 +79,7 @@ it("uses custom progress only while the query can load", () => {
 
   expect(renderQuery(props)?.props["aria-label"]).toBe("Loading…");
   onlineManager.setOnline(false);
-  expect(renderQuery(props)?.props.illustration).toBe("offline");
+  expect(renderQuery(props)?.props.title).toBe("You're offline");
   expect(renderLoading).toHaveBeenCalledOnce();
 });
 
@@ -219,25 +174,11 @@ it.each(["fetching", "paused"] as const)("keeps a brief live socket backoff quie
   }
 });
 
-it("keeps cached data and offers Refresh after a deadline on a reachable Host", () => {
-  quiet.on = true;
-  recordActiveHostMachine("pc");
-  recordHostRuntimeState("pc", "ready");
-  const refetch = vi.fn();
-  const query = { data: [1], error: new RemoteHostError("pc", "timeout", "Timed out"), refetch };
-  const notice = renderQuery({ query, loading: "inline" });
-  expect(notice?.type).toBe("Notice");
-  expect(notice?.props.action?.label).toBe("Refresh");
-  notice?.props.action?.onPress();
-  expect(refetch).toHaveBeenCalledOnce();
-  expect(renderQuery({ query: { ...query, fetchStatus: "fetching" }, loading: "inline" })).toBeNull();
-});
-
 it("shows offline immediately during an initial fetch and retains an explicit repair error", () => {
   recordActiveHostMachine("machine");
   recordHostRuntimeState("machine", "backoff");
   onlineManager.setOnline(false);
-  expect(renderQuery({ query: { status: "pending", fetchStatus: "fetching" } })?.props.illustration).toBe("offline");
+  expect(renderQuery({ query: { status: "pending", fetchStatus: "fetching" } })?.props.title).toBe("You're offline");
   const repair = renderQuery({ query: { error: new RemoteHostError("machine", "auth", "Pairing") } });
   expect(repair?.props.action.label).toBe("Manage connections");
 });
@@ -249,7 +190,7 @@ it("keeps connection recovery compact inside a settings section", () => {
     loading: "inline",
     compact: true,
   });
-  expect(waiting?.props.compact).toBe(true);
+  expect(waiting?.props.size).toBe("compact");
   expect(waiting?.props.title).toBe("Waiting for a connection");
   expect(waiting?.props.action.label).toBe("Manage connections");
 });
@@ -257,7 +198,8 @@ it("keeps connection recovery compact inside a settings section", () => {
 it("shows one centered offline state instead of reconnecting while the device has no network", () => {
   onlineManager.setOnline(false);
   const failed = renderQuery({ query: { error: new RemoteHostError("computer", "network", "down"), refetch: vi.fn() } });
-  expect(failed?.props.illustration).toBe("offline");
+  expect(failed?.props.illustration).toBeUndefined();
+  expect(failed?.props.size).toBe("region");
   expect(failed?.props.title).toBe("You're offline");
   const cached = renderQuery({ query: { data: [1], error: new RemoteHostError("computer", "network", "down"), refetch: vi.fn() } });
   expect(cached).toBeNull();
@@ -269,7 +211,7 @@ it("uses caller-owned connection recovery for authentication and identity while 
     const query = { error: new RemoteHostError("machine", kind, "Repair pairing"), status: "error" as const };
     const embedded = renderQuery({ query, onManageConnections: recover });
     expect(embedded!.props.action.onPress).toBe(recover); embedded!.props.action.onPress();
-    expect(embedded!.props.action.label).toBe("Manage connections"); expect(embedded!.props.illustration).toBe("locked");
+    expect(embedded!.props.action.label).toBe("Manage connections"); expect(embedded!.props.tone).toBe("warning");
     renderQuery({ query })!.props.action.onPress();
   }
   expect(recover).toHaveBeenCalledTimes(2); expect(router.navigate).toHaveBeenCalledWith("/machines");
@@ -302,7 +244,7 @@ it("keeps a network retry within its reader instead of starting Sheet dismissal"
   const requestCloseThen = vi.fn(), refetch = vi.fn();
   const view = renderQuery({ query: { error: new RemoteHostError("machine", "network", "Offline"), refetch } },
     { register: vi.fn(), requestClose: vi.fn(), requestCloseThen });
-  expect(view!.props.action.label).toBe("Retry"); expect(view!.props.illustration).toBe("unreachable");
+  expect(view!.props.action.label).toBe("Retry"); expect(view!.props.title).toBe("Can't reach your computer");
   view!.props.action.onPress(); expect(refetch).toHaveBeenCalledOnce(); expect(requestCloseThen).not.toHaveBeenCalled();
 });
 it("keeps network retry independent from a caller's connection-navigation action", () => {
@@ -341,7 +283,8 @@ it("centers a waiting state with a connections action when paused without data",
   const view = renderQuery({ query: { fetchStatus: "paused", status: "pending" }, onManageConnections: manage })!;
   expect(view.type).toBe("StateView");
   expect(view.props.title).toBe("Waiting for a connection");
-  expect(view.props.illustration).toBe("unreachable");
+  expect(view.props.illustration).toBeUndefined();
+  expect(view.props.size).toBe("region");
   expect(view.props.action.label).toBe("Manage connections");
   view.props.action.onPress(); expect(manage).toHaveBeenCalledOnce();
 });
@@ -360,45 +303,194 @@ it("shows a calm reconnecting state instead of Retry while a dropped link recove
   expect(auth.type).toBe("StateView");
 });
 
-it("marks shown data as not current when a refresh fails for a reason other than the link", () => {
+
+/** Mounts QueryState sections (optionally in one Screen scope) under fake timers. */
+async function mountSections(sections: Array<ComponentProps<typeof QueryState>>, scoped = false) {
+  vi.useFakeTimers();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const root = createRoot(document.createElement("div"));
+  const view = { rendered: [] as Rendered[] };
+  function Probe({ index, props }: { index: number; props: ComponentProps<typeof QueryState> }) {
+    view.rendered[index] = unwrap(QueryState(props));
+    return null;
+  }
+  const render = (next: Array<ComponentProps<typeof QueryState>>) => act(async () => {
+    const probes = next.map((props, index) => createElement(Probe, { key: index, index, props }));
+    root.render(scoped ? createElement(ConnectionFeedbackScope, null, ...probes) : createElement("div", null, ...probes));
+  });
+  await render(sections);
+  return {
+    view,
+    render,
+    advance: (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); }),
+    async unmount() {
+      await act(async () => root.unmount());
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    },
+  };
+}
+
+it("keeps a timed-out read on a reachable computer quiet for the grace with one automatic retry", async () => {
+  quiet.on = true;
+  recordActiveHostMachine("pc");
+  recordHostRuntimeState("pc", "ready");
   const refetch = vi.fn();
-  // A rejected reply while connected: without a sign the list kept showing an old "Running".
-  const rejected = renderQuery({ query: { data: [1], error: new RemoteHostError("computer", "protocol", "Invalid reply"), refetch } });
-  expect(rejected?.type).toBe("Notice");
-  expect(rejected?.props.message).toBe("Showing the last loaded version; it could not be refreshed.");
-  rejected?.props.action.onPress();
-  expect(refetch).toHaveBeenCalledOnce();
-  // Link problems stay with the computer pill.
-  expect(renderQuery({ query: { data: [1], error: new RemoteHostError("computer", "network", "down"), refetch } })).toBeNull();
+  const query = { error: new RemoteHostError("pc", "timeout", "Timed out"), refetch };
+  const mounted = await mountSections([{ query, loading: "inline" }]);
+  try {
+    expect(mounted.view.rendered[0]?.type).toBe("Loading");
+    await mounted.advance(1_000);
+    expect(refetch).toHaveBeenCalledOnce();
+    await mounted.advance(4_999);
+    expect(mounted.view.rendered[0]?.type).toBe("Loading");
+    await mounted.advance(1);
+    const state = mounted.view.rendered[0];
+    expect(state?.props.title).toBe("The computer took too long to respond");
+    expect(state?.props.tone).toBe("warning");
+    expect(state?.props.description).toBeUndefined();
+    expect(state?.props.illustration).toBeUndefined();
+    // Inline loading marks a section: the failure is compact there, not a full region.
+    expect(state?.props.size).toBe("compact");
+    expect(state?.props.action?.label).toBe("Retry");
+    state?.props.action?.onPress();
+    expect(refetch).toHaveBeenCalledTimes(2);
+  } finally {
+    await mounted.unmount();
+  }
 });
 
-it("offers to refresh cached data when a connected Host reports that the read failed", () => {
+it("keeps two timed-out reads on a reachable Host independently retryable", async () => {
+  quiet.on = true;
+  recordActiveHostMachine("pc");
+  recordHostRuntimeState("pc", "ready");
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.useFakeTimers();
+  const root = createRoot(document.createElement("div"));
+  const refetches = [vi.fn(), vi.fn()];
+  const feedback: Rendered[] = [];
+  function Probe({ index }: { index: number }) {
+    feedback[index] = unwrap(QueryState({
+      query: { error: new RemoteHostError("pc", "timeout", "Timed out"), refetch: refetches[index] },
+      loading: "inline",
+      shareConnectionFeedback: true,
+    }));
+    return null;
+  }
+  try {
+    await act(async () => root.render(createElement(ConnectionFeedbackScope, { sharedReads: true },
+      createElement(Probe, { index: 0 }), createElement(Probe, { index: 1 }),
+    )));
+    await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+    for (const state of feedback) expect(state?.props.action?.label).toBe("Retry");
+    refetches.forEach((refetch) => refetch.mockClear());
+    feedback[1]?.props.action?.onPress();
+    expect(refetches[0]).not.toHaveBeenCalled();
+    expect(refetches[1]).toHaveBeenCalledOnce();
+  } finally {
+    await act(async () => root.unmount());
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("offers Retry after an initial Host read fails while the link is up, after the quiet grace", async () => {
   quiet.on = true;
   const refetch = vi.fn();
   const error = Object.assign(
     new RemoteHostError("computer", "host", "Host read could not be completed."),
     { transient: true },
   );
-  const props = { query: { data: [1], error, refetch } };
-  const feedback = renderQuery(props);
-  expect(feedback?.props.message).toBe("Showing the last loaded version; it could not be refreshed.");
-  feedback?.props.action.onPress();
-  expect(refetch).toHaveBeenCalledOnce();
-
-  onlineManager.setOnline(false);
-  expect(renderQuery(props)).toBeNull();
+  const mounted = await mountSections([{ query: { error, refetch }, loading: "inline" }]);
+  try {
+    expect(mounted.view.rendered[0]?.type).toBe("Loading");
+    await mounted.advance(6_000);
+    const feedback = mounted.view.rendered[0];
+    expect(feedback?.type).toBe("StateView");
+    expect(feedback?.props.action.label).toBe("Retry");
+    expect(refetch).toHaveBeenCalledOnce();
+    feedback?.props.action.onPress();
+    expect(refetch).toHaveBeenCalledTimes(2);
+  } finally {
+    await mounted.unmount();
+  }
 });
 
-it("offers Retry after an initial Host read fails while the link is up", () => {
+it("says the automatic retry is slow when it outlasts the grace", async () => {
+  recordActiveHostMachine("pc");
+  recordHostRuntimeState("pc", "ready");
+  const refetch = vi.fn(() => new Promise(() => undefined));
+  const query = { error: new RemoteHostError("pc", "protocol", "Invalid reply"), refetch };
+  const mounted = await mountSections([{ query }]);
+  try {
+    await mounted.advance(6_000);
+    expect(mounted.view.rendered[0]?.type).toBe("Skeleton");
+    expect(mounted.view.rendered[0]?.props.label).toBe("The computer is slow to answer; trying again…");
+  } finally {
+    await mounted.unmount();
+  }
+});
+
+it("reports a failed load once per screen: the first section owns it, later sections show one line", async () => {
+  const retries = [vi.fn(), vi.fn()];
+  const failed = (index: number) => ({ query: { error: new Error(`Broken ${index}`), refetch: retries[index] } });
+  const mounted = await mountSections([failed(0), failed(1)], true);
+  try {
+    const [owner, later] = mounted.view.rendered;
+    expect(owner?.props.size).toBe("region");
+    expect(owner?.props.action.label).toBe("Retry");
+    expect(later?.props.size).toBe("line");
+    expect(later?.props.action).toBeUndefined();
+    // The owner's Retry retries every failed read of the screen.
+    await act(async () => { owner?.props.action.onPress(); });
+    expect(retries[0]).toHaveBeenCalledOnce();
+    expect(retries[1]).toHaveBeenCalledOnce();
+  } finally {
+    await mounted.unmount();
+  }
+});
+
+it("keeps cached data silent after one failed refresh and shows one status line once it repeats", async () => {
   quiet.on = true;
+  recordActiveHostMachine("pc");
+  recordHostRuntimeState("pc", "ready");
   const refetch = vi.fn();
-  const error = Object.assign(
-    new RemoteHostError("computer", "host", "Host read could not be completed."),
-    { transient: true },
-  );
-  const feedback = renderQuery({ query: { error, refetch }, loading: "inline" });
-  expect(feedback?.type).toBe("StateView");
-  expect(feedback?.props.action.label).toBe("Retry");
-  feedback?.props.action.onPress();
-  expect(refetch).toHaveBeenCalledOnce();
+  const failed = () => ({ query: { data: [1], error: new RemoteHostError("pc", "timeout", "Timed out"), refetch }, loading: "inline" as const });
+  const mounted = await mountSections([failed()]);
+  try {
+    expect(mounted.view.rendered[0]).toBeNull();
+    await mounted.render([failed()]);
+    const line = mounted.view.rendered[0];
+    expect(line?.type).toBe("StatusLine");
+    expect(line?.props.tone).toBe("warning");
+    expect(line?.props.label).toBe("Showing the last loaded version; it could not be refreshed.");
+    expect(line?.props.action?.label).toBe("Refresh");
+    await act(async () => { line?.props.action?.onPress(); });
+    expect(refetch).toHaveBeenCalledOnce();
+    await mounted.render([{ ...failed(), query: { ...failed().query, fetchStatus: "fetching" } }]);
+    expect(mounted.view.rendered[0]).toBeNull();
+  } finally {
+    await mounted.unmount();
+  }
+});
+
+it("marks shown data as not current after a minute of failed refreshes, never for a link problem", async () => {
+  const refetch = vi.fn();
+  const error = new RemoteHostError("computer", "protocol", "Invalid reply");
+  const mounted = await mountSections([{ query: { data: [1], error, refetch } }]);
+  try {
+    expect(mounted.view.rendered[0]).toBeNull();
+    await mounted.advance(60_000);
+    expect(mounted.view.rendered[0]?.type).toBe("StatusLine");
+    // Link problems stay with the computer pill.
+    await mounted.render([{ query: { data: [1], error: new RemoteHostError("computer", "network", "down"), refetch } }]);
+    await mounted.advance(60_000);
+    expect(mounted.view.rendered[0]).toBeNull();
+    onlineManager.setOnline(false);
+    await mounted.render([{ query: { data: [1], error, refetch } }]);
+    await mounted.advance(60_000);
+    expect(mounted.view.rendered[0]).toBeNull();
+  } finally {
+    await mounted.unmount();
+  }
 });

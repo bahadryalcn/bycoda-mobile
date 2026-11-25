@@ -28,7 +28,7 @@ must be checked against installed source before implementation.
 | --- | --- | --- |
 | Clear peer navigation | `tabs` | Existing `SegmentedControl`, navigator and floating-tab owners; preserve route semantics, avoid duplicate tabs |
 | Secondary actions | `menu`, `context-menu` | `src/ui/overflow-menu.tsx`; retain accessible trigger and visible frequent actions |
-| One/many values and search | `select`, `search-bar`, `tag-input` | `src/ui/select-field.tsx`; `src/ui/search-field.tsx` is built on `search-bar`. Preserve single/multiple/free-entry contracts |
+| One/many values and search | `select`, `combobox`, `search-bar` | `SelectField`, `MultiSelectField` and `AutocompleteField` in `src/ui/select-field.tsx` use the shared Sheet and `SearchField` (PanelUI `search-bar`) |
 | Fields and numeric values | `input`, `input-group`, `otp-input`, `number-input` | `src/ui/fields.tsx`; `src/ui/number-field.tsx` on `input-group` commits every keystroke (`number-input` commits on blur); `src/ui/code-field.tsx` on `otp-input` for verification codes only. Retain labels, refs, keyboard, validation and pending state |
 | Advanced details/history | `accordion`, `timeline` | Existing `Disclosure` or focused shared composite; do not collapse required errors/state |
 | Long editors and confirmation | `bottom-sheet`, `dialog` | `src/ui/dialogs.tsx`; preserve private overlay, dirty guard, Back, focus and keyboard owners |
@@ -49,6 +49,18 @@ must be checked against installed source before implementation.
 | Hold-to-confirm | `progress-button` | `ProgressButton` in `src/ui/buttons.tsx` for one deliberate, hard-to-undo action; not for routine submits |
 
 ## Integration boundaries
+
+Selection rows open one picker layer, including when the trigger is already in
+an editor Sheet. The editor keeps its draft and dismissal guard. The picker's
+virtualized list owns scrolling, with search and multi-select actions outside
+the list. PanelUI Select and Combobox have their own presentation and focus
+owners. Use the shared Sheet to preserve app lock, Back and focus routing.
+
+For local autocomplete, supply `options` and let the picker filter the labels,
+groups and descriptions. For remote autocomplete, use `onQueryChange` (initially
+called with an empty string on open), set `loading` while fetching, and publish
+options for the current query only. Set `allowFreeText` to let the user commit a
+new value with an explicit action.
 
 Project workspaces use `src/ui/workspace-frame.tsx` for measured header/body
 allocation. Growing context or feedback scrolls in the header's region while the

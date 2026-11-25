@@ -3,7 +3,7 @@ import type { Block } from "@/domain/types";
 import { useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import type { SessionScope } from "./session-types";
-import { ActionMenu, Badge, Body, FormActions, NavigationRow, Notice, Row, Stack, StateView } from "@/ui/primitives";
+import { ActionMenu, StatusText, Body, FormActions, NavigationRow, Notice, Row, Stack, StateView } from "@/ui/primitives";
 import { ScreenList } from "@/ui/screen-list";
 import { CollectionToolbar } from "@/ui/search-field";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
@@ -46,7 +46,7 @@ export function OrchestrationDetails({block,scope,context,onClose}:{block:Block;
   return <><ScreenList data={readable&&proposal?proposal.tasks:[]} keyExtractor={task=>task.id}
     ListEmptyComponent={readable?<StateView compact title={copy("Bu görünümde görev yok", "No tasks in this view")}/>:undefined} header={<Stack>
     {readable&&proposal?<>
-      <CollectionToolbar field={<Row><Body selectable style={{flexShrink:1}}>{opening.machineName}</Body>{statusLabel?<Badge label={statusLabel}/>:null}</Row>} actions={<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[{key:"details",label:copy("Ayrıntılar", "Details"),onPress:()=>open({kind:"details"})},{key:"help",label:copy("Yardım", "Help"),onPress:()=>open({kind:"help"})}]}/>}/>
+      <CollectionToolbar field={<Row><Body selectable style={{flexShrink:1}}>{opening.machineName}</Body>{statusLabel?<StatusText label={statusLabel}/>:null}</Row>} actions={<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[{key:"details",label:copy("Ayrıntılar", "Details"),onPress:()=>open({kind:"details"})},{key:"help",label:copy("Yardım", "Help"),onPress:()=>open({kind:"help"})}]}/>}/>
       {proposal.leadId!==scope.sessionId?<Notice tone="warning" message={copy("Bu öneri başka bir ana oturuma ait.", "This proposal belongs to another parent session.")}/>:null}
       {proposal.error?<Notice tone="danger" message={proposal.error}/>:null}
       <NavigationRow label={copy("İstek", "Request")} onPress={()=>open({kind:"request"})}/>

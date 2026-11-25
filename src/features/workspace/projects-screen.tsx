@@ -4,9 +4,18 @@ import { ProjectDirectorySlot } from "./project-directory-feedback";
 import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import { useLatestCallback } from "./use-latest-callback";
 import { FlatList, View, type ListRenderItem } from "react-native";
-import { router, Stack } from "expo-router";
+import { router, Stack, type Href } from "expo-router";
 import FolderPlus from "lucide-react-native/icons/folder-plus";
-import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
+import ArrowDownUp from "lucide-react-native/icons/arrow-down-up";
+import SquarePen from "lucide-react-native/icons/square-pen";
+import FolderTree from "lucide-react-native/icons/folder-tree";
+import GitBranch from "lucide-react-native/icons/git-branch";
+import GitPullRequest from "lucide-react-native/icons/git-pull-request";
+import Pencil from "lucide-react-native/icons/pencil";
+import FolderInput from "lucide-react-native/icons/folder-input";
+import Copy from "lucide-react-native/icons/copy";
+import Info from "lucide-react-native/icons/info";
+import * as Clipboard from "expo-clipboard";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
@@ -16,15 +25,19 @@ import {
   IconButton,
   ScreenHeading,
   MutationState,
+  NavigationGroup,
+  NavigationRow,
   Notice,
   Screen,
   SearchField,
   Row,
+  SectionHeader,
   Sheet,
-  SelectField,
   SegmentedControl,
   ToggleField,
 } from "@/ui/primitives";
+import { RowOptionsSheet, type MenuAction } from "@/ui/overflow-menu";
+import { showToast } from "@/ui/toast";
 import { useScreenContentInsets } from "@/ui/screen-content-insets";
 import { metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
@@ -35,11 +48,16 @@ import type { MobileMachine } from "@/remote/types";
 import {
   directorySections,
   directoryRows,
+  latestProjectSessions,
+  projectAttentionCounts,
   projectNameContexts,
+  projectSortOf,
   PINNED_SECTION_KEY,
+  PROJECT_SORTS,
   sortDirectoryProjects,
   type DirectoryProject,
   type DirectoryRow,
+  type ProjectSort,
 } from "./project-directory";
 import { useProjectDirectory } from "./use-project-directory";
 import { GroupLockSection } from "../group-lock/group-lock-section";
@@ -50,14 +68,8 @@ import { runningProjectCounts } from "./activity-model";
 import { appPreferences, useAppPreferences } from "../navigation-prefs/app-preferences";
 import { groupProjectsByRepository } from "./repository-grouping";
 import { ProjectGroupHeader, ProjectRow, type ProjectRowView } from "./project-row";
-import { ProjectReorderAction, ProjectReorderSheet } from "./project-reorder-sheet";
-import {
-  applyCustomOrder,
-  moveInOrder,
-  orderFromSections,
-  type ProjectOrderMove,
-} from "./project-order";
 import { ProjectDetailsSheet } from "./project-details-sheet";
+import { ProjectOrganization } from "./project-organization";
 import { latestProjectActivity } from "./project-summaries";
 import {
   projectDirectoryPreferences,
@@ -98,6 +110,8 @@ function ProjectsConnectionScreen({ machine, connection }: {
   } = useProjectDirectoryPreferences(machine?.id);
   const [openingId, setOpeningId] = useState<string>();
   const [detailsId, setDetailsId] = useState<string>();
+  const [optionsId, setOptionsId] = useState<string>();
+  const [organizing, setOrganizing] = useState<{ projectId: string; sessionId: string; kind: "projectName" | "projectGroup" }>();
   const {
     query,
     projects: directoryProjects,
@@ -120,6 +134,14 @@ function ProjectsConnectionScreen({ machine, connection }: {
   const activity = useProjectActivity();
   const running = useMemo(() => runningProjectCounts(activity.directory), [activity.directory]);
   const activeAt = useMemo(() => latestProjectActivity(activity.directory), [activity.directory]);
+  const needsYou = useMemo(() => projectAttentionCounts(activity.directory), [activity.directory]);
+  const contextSessions = useMemo(() => latestProjectSessions(activity.directory), [activity.directory]);
+  const sort = projectSortOf(preferences.sort);
+  const sortLabels: Record<ProjectSort, string> = {
+    desktop: copy("Bilgisayardaki sıra", "Computer order"),
+    recent: copy("Son etkinlik", "Recent activity"),
+    name: copy("Ad (A–Z)", "Name (A–Z)"),
+  };
   const contexts = useMemo(() => projectNameContexts(projects), [projects]);
   // Personal/Work tags reach the Host through desktop model routing; read-only here.
   const routing = useHostQuery<ModelRoutingState>(["modelRouting"], "modelRouting.get", {}, {
@@ -133,23 +155,21 @@ function ProjectsConnectionScreen({ machine, connection }: {
   const showGroups =
     (preferences.view === "grouped" || byRepository) &&
     (groups.length > 0 || projects.some((project) => project.pinned));
-  const custom = preferences.sort === "custom";
+  // One sort applies to every view: inside each group, in the pinned section and in the flat list.
   const buildSections = useCallback(
     (query: string, collapsed: Readonly<Record<string, boolean>>) => {
-      const ordered = sortDirectoryProjects(projects, preferences);
+      const ordered = sortDirectoryProjects(projects, preferences, activeAt);
       const sections = directorySections(ordered, groups, query, collapsed, running);
-      if (showGroups)
-        return custom ? applyCustomOrder(sections, preferences.order, true) : sections;
+      if (showGroups) return sections;
       const matchingIds = new Set(
         sections.flatMap((section) => section.data.map((project) => project.id)),
       );
       const data = ordered.filter((project) => matchingIds.has(project.id));
-      const flat = [
+      return [
         { key: "", count: data.length, total: data.length, running: 0, expanded: true, data },
       ];
-      return custom ? applyCustomOrder(flat, preferences.order, false) : flat;
     },
-    [projects, groups, preferences, showGroups, running, custom],
+    [projects, groups, preferences, showGroups, running, activeAt],
   );
   const sections = useMemo(
     () =>
@@ -161,24 +181,6 @@ function ProjectsConnectionScreen({ machine, connection }: {
       ),
     [buildSections, deferredSearch, showGroups, preferences.collapsed, groups],
   );
-  const [reordering, setReordering] = useState(false);
-  const reorderSections = useMemo(
-    () =>
-      reordering
-        ? buildSections("", Object.fromEntries(groups.map((group) => [group.id, false])))
-        : [],
-    [reordering, buildSections, groups],
-  );
-  const moveOrder = useLatestCallback((move: ProjectOrderMove) => {
-    if (!connection.isCurrent()) return;
-    const next = moveInOrder(orderFromSections(reorderSections, showGroups), move);
-    void projectDirectoryPreferences
-      .getState()
-      .update(machine.id, (current) => ({
-        sort: "custom",
-        order: { ...current.order, ...next },
-      }));
-  });
   const rows = useMemo(() => directoryRows(sections, showGroups), [sections, showGroups]);
   const updatePreferences = useCallback(
     (patch: Partial<ProjectDirectoryPreferences>) => {
@@ -222,14 +224,65 @@ function ProjectsConnectionScreen({ machine, connection }: {
     }
     openFolder(project.cwd, { id: project.id, view });
   });
-  const openView = useLatestCallback((id: string, view: ProjectRowView) => {
-    const project = projects.find((item) => item.id === id);
-    if (project) choose(project, view);
+  const showOptions = useLatestCallback((id: string) => {
+    if (connection.isCurrent() && directoryReady) setOptionsId(id);
   });
-  const showDetails = useLatestCallback((id: string) => {
-    if (connection.isCurrent()) setDetailsId(id);
+  const startSession = useLatestCallback((id: string) => {
+    const project = projects.find((item) => item.id === id);
+    if (!project?.registered || !connection.isCurrent() || !isProjectVisible(project.id)) return;
+    selectProject(project.id);
+    router.navigate({
+      pathname: "/project/[id]",
+      params: { id: project.id, machineId: machine.id, create: "session" },
+    });
   });
   const details = detailsId ? projects.find((item) => item.id === detailsId) : undefined;
+  const optionsProject = optionsId ? projects.find((item) => item.id === optionsId) : undefined;
+  const organizationSupported = machine.capabilities?.includes("projects.organization.desktop.v1") === true;
+  const projectOptions = (project: DirectoryProject): MenuAction[] => {
+    const contextSession = contextSessions[project.id];
+    const organize = (kind: "projectName" | "projectGroup") => () => {
+      if (contextSession && connection.isCurrent()) setOrganizing({ projectId: project.id, sessionId: contextSession, kind });
+    };
+    const organizeDetail = contextSession
+      ? undefined
+      : copy("Önce bu projede bir oturum başlat.", "Start a session in this project first.");
+    return [
+      ...(project.registered ? [
+        { key: "new-session", group: "open", label: copy("Yeni oturum", "New session"), icon: <SquarePen />, onPress: () => startSession(project.id) },
+        { key: "files", group: "open", label: copy("Dosyalar", "Files"), icon: <FolderTree />, opens: true, onPress: () => choose(project, "files") },
+        { key: "git", group: "open", label: copy("Değişiklikler", "Changes"), icon: <GitBranch />, opens: true, onPress: () => choose(project, "git") },
+        {
+          key: "pull-requests", group: "open", label: copy("Pull request’ler", "Pull requests"), icon: <GitPullRequest />, opens: true,
+          onPress: () => {
+            if (!connection.isCurrent() || !isProjectVisible(project.id)) return;
+            router.push(`/pull-requests?projectId=${encodeURIComponent(project.id)}&machineId=${encodeURIComponent(machine.id)}` as Href);
+          },
+        },
+      ] satisfies MenuAction[] : [
+        { key: "open", group: "open", label: copy("Projeyi aç", "Open project"), icon: <FolderTree />, onPress: () => choose(project) },
+      ]),
+      ...(project.registered && organizationSupported ? [
+        { key: "rename", group: "organize", label: copy("Yeniden adlandır", "Rename"), icon: <Pencil />, opens: true,
+          detail: organizeDetail, disabled: !contextSession, onPress: organize("projectName") },
+        { key: "group", group: "organize", label: copy("Gruba taşı", "Move to group"), icon: <FolderInput />, opens: true,
+          detail: organizeDetail, disabled: !contextSession, onPress: organize("projectGroup") },
+      ] : []),
+      {
+        key: "copy-path", group: "info", label: copy("Yolu kopyala", "Copy path"), icon: <Copy />,
+        onPress: () => {
+          void Clipboard.setStringAsync(project.cwd).then(
+            (accepted) => showToast(accepted === false
+              ? { tone: "danger", message: copy("Kopyalanamadı. Yeniden dene.", "Could not copy. Try again.") }
+              : { tone: "success", message: copy("Yol kopyalandı", "Path copied") }),
+            () => showToast({ tone: "danger", message: copy("Kopyalanamadı. Yeniden dene.", "Could not copy. Try again.") }),
+          );
+        },
+      },
+      { key: "details", group: "info", label: copy("Ayrıntılar", "Details"), icon: <Info />, opens: true,
+        onPress: () => { if (connection.isCurrent()) setDetailsId(project.id); } },
+    ];
+  };
   const chooseById = useLatestCallback((id: string) => {
     const project = projects.find((item) => item.id === id);
     if (project) choose(project);
@@ -284,11 +337,11 @@ function ProjectsConnectionScreen({ machine, connection }: {
             />
           </View>
           <IconButton
-            label={copy("Liste seçenekleri", "List options")}
+            label={`${copy("Sıralama ve görünüm", "Sort and view")}: ${sortLabels[sort]}`}
             expanded={optionsOpen}
             onPress={() => setOptionsOpen(true)}
           >
-            <SlidersHorizontal size={18} color={colors.muted} />
+            <ArrowDownUp size={18} color={sort === "desktop" ? colors.muted : colors.accent} />
           </IconButton>
         </View>
         {preferencesError ? (
@@ -319,6 +372,7 @@ function ProjectsConnectionScreen({ machine, connection }: {
       preferencesError,
       matching,
       directory,
+      sort,
     ],
   );
   const keyExtractor = useCallback((row: DirectoryRow) => row.key, []);
@@ -330,7 +384,7 @@ function ProjectsConnectionScreen({ machine, connection }: {
           <ProjectGroupHeader
             name={
               section.pinned
-                ? copy("Sabitlenmiş", "Pinned")
+                ? copy("Sabitlenenler", "Pinned")
                 : (section.group?.name ?? copy("Diğerleri", "Others"))
             }
             appearance={section.group?.appearance}
@@ -360,12 +414,13 @@ function ProjectsConnectionScreen({ machine, connection }: {
           grouped={showGroups}
           registered={project.registered}
           running={running[project.id] ?? 0}
+          needsYou={needsYou[project.id] ?? 0}
           activeAt={activeAt[project.id]}
           opening={openingId === project.id}
           disabled={open.isPending || !directoryReady}
           onPress={chooseById}
-          onDetails={showDetails}
-          onOpenView={openView}
+          onOptions={showOptions}
+          onNewSession={startSession}
         />
       );
     },
@@ -373,6 +428,7 @@ function ProjectsConnectionScreen({ machine, connection }: {
       search,
       preferences,
       running,
+      needsYou,
       activeAt,
       contexts,
       projectKinds,
@@ -383,8 +439,8 @@ function ProjectsConnectionScreen({ machine, connection }: {
       copy,
       updatePreferences,
       chooseById,
-      showDetails,
-      openView,
+      showOptions,
+      startSession,
     ],
   );
   return (
@@ -424,12 +480,27 @@ function ProjectsConnectionScreen({ machine, connection }: {
       </SwipeActionsGroup>
       <Sheet
         visible={optionsOpen}
-        title={copy("Liste seçenekleri", "List options")}
+        title={copy("Sıralama ve görünüm", "Sort and view")}
         size="compact"
         onClose={() => setOptionsOpen(false)}
       >
+        <NavigationGroup>
+          <SectionHeader title={copy("Sıralama", "Sort by")} />
+          {PROJECT_SORTS.map((value) => (
+            <NavigationRow
+              key={value}
+              intent="select"
+              label={sortLabels[value]}
+              selected={sort === value}
+              disabled={!hydrated}
+              onPress={() => updatePreferences({ sort: value })}
+            />
+          ))}
+        </NavigationGroup>
+        <SectionHeader title={copy("Görünüm", "View")} />
         <SegmentedControl
           label={copy("Görünüm", "View")}
+          hideLabel
           value={preferences.view}
           disabled={!hydrated}
           options={[
@@ -444,19 +515,6 @@ function ProjectsConnectionScreen({ machine, connection }: {
           disabled={!appPrefsHydrated}
           onChange={(groupByRepository) => void appPreferences.getState().update({ groupByRepository })}
         />
-        <SelectField
-          label={copy("Sıralama", "Sort order")}
-          value={preferences.sort}
-          disabled={!hydrated}
-          options={[
-            { value: "desktop", label: copy("Bilgisayardaki sıra", "Computer order") },
-            { value: "name", label: copy("Ada göre", "Name") },
-            { value: "recent", label: copy("Son açılan", "Recently opened") },
-            { value: "custom", label: copy("Özel", "Custom") },
-          ]}
-          onChange={(sort) => updatePreferences({ sort })}
-        />
-        <ProjectReorderAction disabled={!hydrated || !!search.trim() || !projects.length} onOpen={() => setReordering(true)} />
         <ToggleField
           label={copy("Tam klasör yolları", "Full folder paths")}
           value={preferences.fullPaths}
@@ -495,15 +553,22 @@ function ProjectsConnectionScreen({ machine, connection }: {
           </Row>
         ) : null}
       </Sheet>
-      <ProjectReorderSheet
-        visible={reordering}
-        sections={reorderSections}
-        grouped={showGroups}
-        othersLabel={copy("Diğerleri", "Others")}
-        pinnedLabel={copy("Sabitlenmiş", "Pinned")}
-        onMove={moveOrder}
-        onClose={() => setReordering(false)}
+      <RowOptionsSheet
+        visible={!!optionsProject}
+        title={copy("Proje seçenekleri", "Project options")}
+        subtitle={optionsProject?.name}
+        actions={optionsProject ? projectOptions(optionsProject) : []}
+        onClose={() => setOptionsId(undefined)}
       />
+      {organizing ? (
+        <ProjectOrganization
+          key={`${organizing.projectId}:${organizing.kind}`}
+          scope={{ machineId: machine.id, sessionId: organizing.sessionId }}
+          projectId={organizing.projectId}
+          initialEditor={{ kind: organizing.kind }}
+          onClose={() => setOrganizing(undefined)}
+        />
+      ) : null}
       {details ? (
         <ProjectDetailsSheet
           visible
@@ -515,10 +580,6 @@ function ProjectsConnectionScreen({ machine, connection }: {
           onOpen={() => {
             setDetailsId(undefined);
             choose(details);
-          }}
-          onOpenView={(view) => {
-            setDetailsId(undefined);
-            choose(details, view);
           }}
         />
       ) : null}

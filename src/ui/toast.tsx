@@ -1,14 +1,8 @@
 import { useSyncExternalStore, useEffect } from "react";
 import { toast, ToastViewport } from "panelui-native/components/toast";
-import CircleCheck from "lucide-react-native/icons/circle-check";
-import CircleAlert from "lucide-react-native/icons/circle-alert";
-import TriangleAlert from "lucide-react-native/icons/triangle-alert";
-import Info from "lucide-react-native/icons/info";
-import { colors, semanticColors, type SemanticTone } from "./tokens";
+import { ToastCard, type ToastAction, type ToastTone } from "./toast-card";
 
-export type ToastTone = SemanticTone | "neutral";
-const toastVariants = { neutral: "default", info: "info", success: "success", warning: "warning", danger: "destructive" } as const;
-const toastIcons = { neutral: Info, info: Info, success: CircleCheck, warning: TriangleAlert, danger: CircleAlert };
+export type { ToastAction, ToastTone } from "./toast-card";
 
 let hosts = 0;
 const listeners = new Set<() => void>();
@@ -30,16 +24,27 @@ export function useToastAvailable() {
   return useSyncExternalStore(subscribe, mounted, () => false);
 }
 
-/** Transient confirmation or notice: bottom, tone icon, 2.5s by default. */
-export function showToast({ tone = "success", message, duration = 2500 }: { tone?: ToastTone; message: string; duration?: number }) {
-  const Icon = toastIcons[tone];
-  const color = tone === "neutral" ? colors.muted : semanticColors[tone].text;
+export type ShowToastOptions = { tone?: ToastTone; message: string; duration?: number; action?: ToastAction };
+
+/** Default visible time; an action (Undo, Retry) needs longer to reach. */
+export const TOAST_DURATION_MS = 4000;
+export const TOAST_ACTION_DURATION_MS = 6000;
+
+/**
+ * Transient result of a quick action: bottom, tone icon, 4 s (6 s with an action). An action such
+ * as Undo or Retry closes the toast before it runs. Never for an uncertain write: that stays inline.
+ */
+export function showToast({ tone = "success", message, duration, action }: ShowToastOptions) {
   return toast.show({
-    variant: toastVariants[tone],
     label: message,
-    duration,
-    closable: false,
-    icon: <Icon size={16} strokeWidth={2} color={color} />,
+    duration: duration ?? (action ? TOAST_ACTION_DURATION_MS : TOAST_DURATION_MS),
+    component: ({ hide }) => (
+      <ToastCard
+        tone={tone}
+        message={message}
+        action={action && { label: action.label, onPress: () => { hide(); action.onPress(); } }}
+      />
+    ),
   });
 }
 

@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import { GitCommitBar, GitCommitPanel } from "./git-changes";
 
+vi.mock("@/ui/disclosure-motion", () => ({ DisclosureChevron: () => null }));
 vi.mock("react-native", () => ({ View: ({ children }: { children: ReactNode }) => h("div", null, children) }));
 vi.mock("lucide-react-native/icons/circle-check", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/download", () => ({ default: () => null }));

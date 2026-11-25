@@ -61,7 +61,7 @@ vi.mock("@/ui/primitives", () => {
     onPress: () => void;
     disabled: boolean;
   }) => createElement("button", { onClick: onPress, disabled }, label);
-  return {
+  return { ScopeLine: () => null,
     Body: Wrap,
     Stack: Wrap,
     Disclosure: Wrap,

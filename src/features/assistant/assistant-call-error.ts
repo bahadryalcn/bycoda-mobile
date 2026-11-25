@@ -72,6 +72,23 @@ function reasonMessage(reason: AssistantCallFailure, copy: Copy): string {
   }
 }
 
+/** The idle limit is a normal end of listening: the call sleeps instead of reporting a failure. */
+export function assistantCallSleeps(error: unknown): boolean {
+  return error instanceof AssistantCallError && (error.reason === "no-speech" || error.reason === "idle-timeout");
+}
+
+/**
+ * The voice line to the computer dropped while nothing was in flight that could have changed the
+ * computer (listening, transcription or speech). Such a call can be reopened automatically; a dropped
+ * send cannot, because its result is unknown.
+ */
+export function assistantCallLinkDropped(error: unknown, stage?: AssistantVoiceStage): boolean {
+  if (stage === "reply") return false;
+  if (error instanceof HostWsError) return error.uncertain || error.category === "network" || error.category === "unavailable";
+  if (error instanceof RemoteHostError) return error.uncertain || error.kind === "network";
+  return false;
+}
+
 /**
  * The text under a voice-call failure heading. The app's own failures are translated by reason; every
  * other error (Host-vetted, already redacted details included) goes through the shared presenter unchanged.

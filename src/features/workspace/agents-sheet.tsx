@@ -1,18 +1,16 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { router } from "expo-router";
 import { FlatList, View } from "react-native";
-import ChevronRight from "lucide-react-native/icons/chevron-right";
 import { AgentAvatar } from "@/ui/agent-avatar";
 import { Body } from "@/ui/typography";
-import { Badge } from "@/ui/feedback";
-import { Empty, PressableCard, QueryState, SectionHeader, Sheet, StateView } from "@/ui/primitives";
+import { Badge, StatusText } from "@/ui/feedback";
+import { Empty, NavigationRow, QueryState, SectionHeader, Sheet, StateView } from "@/ui/primitives";
 import { getQueryPresentation, type QueryLike } from "@/ui/query-presentation";
 import { useConnectionScope } from "@/state/connection-scope";
 import { usePrivateContentAccess } from "@/ui/private-access";
 import { ChatToolbarAction } from "@/ui/chat-controls";
 import { useCopy } from "@/ui/copy";
-import { useMobileTheme } from "@/ui/theme";
-import { fontSize, lineHeight, metrics, radii, space } from "@/ui/tokens";
+import { iconSize, metrics, space } from "@/ui/tokens";
 import type { Block } from "@/domain/types";
 import { agentStateLabel } from "./agent-state";
 import { groupAgents, type AgentEntry, type AgentListItem } from "./agents-model";
@@ -33,10 +31,6 @@ type Props = Pick<TranscriptBlockProps, "scope" | "runId" | "disabled" | "onComm
   live?: boolean;
   onClose: () => void;
 };
-
-const badgeTone = (state: AgentEntry["state"]) =>
-  state === "running" ? "info" : state === "failed" ? "danger" : state === "stopped" || state === "interrupted" ? "warning"
-    : state === "completed" ? "success" : "default";
 
 type ListItem =
   | AgentListItem
@@ -101,16 +95,18 @@ export function AgentsSheet({ blocks, childRuns: children = [], childrenQuery, l
           </> : undefined}
           keyExtractor={(item) => item.id}
           style={{ flex: 1 }}
-          contentContainerStyle={{ gap: space.sm, width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center", paddingHorizontal: space.screen, paddingBottom: space.lg, flexGrow: 1 }}
-          renderItem={({ item }) => {
-            if (item.kind === "heading") return <SectionHeader title={item.label} />;
-            if (item.kind === "child") return <ChildRow child={item.child} provider={props.parentProvider} onOpen={() => {
+          contentContainerStyle={{ width: "100%", maxWidth: metrics.contentWidth, alignSelf: "center", paddingHorizontal: space.screen, paddingBottom: space.lg, flexGrow: 1 }}
+          renderItem={({ item, index }) => {
+            // Flat rows with the group hairline; a later section keeps the shared group rhythm.
+            if (item.kind === "heading") return <View style={{ paddingTop: index ? space.lg : 0 }}><SectionHeader title={item.label} /></View>;
+            const separator = index < items.length - 1 && items[index + 1]?.kind !== "heading";
+            if (item.kind === "child") return <ChildRow child={item.child} provider={props.parentProvider} separator={separator} onOpen={() => {
               const { sessionId, projectId } = item.child;
               if (!current() || !latest.current.childRows.some((child) => child.sessionId === sessionId && child.projectId === projectId)) return;
               close();
               router.push({ pathname: "/session/[id]", params: { id: sessionId, machineId: opening.machineId, projectId } });
             }} />;
-            return <AgentRow entry={item.entry} now={now} provider={props.parentProvider} onPress={() => { if (current()) setSelectedId(item.id); }} />;
+            return <AgentRow entry={item.entry} now={now} provider={props.parentProvider} separator={separator} onPress={() => { if (current()) setSelectedId(item.id); }} />;
           }}
           ListEmptyComponent={queryFeedback ?? <Empty compact={false} illustration="no-sessions" title={copy("Alt ajan yok", "No subagents")} detail={copy("Bu oturumda alt ajan çalışmadı. Ajan başlatıldığında burada görünür.", "No subagents have run in this session. They appear here when one starts.")} />} />
       )}
@@ -118,44 +114,41 @@ export function AgentsSheet({ blocks, childRuns: children = [], childrenQuery, l
   );
 }
 
-function ChildRow({ child, provider, onOpen }: { child: ChildSessionEntry; provider: Props["parentProvider"]; onOpen: () => void }) {
-  const { colors } = useMobileTheme();
+/**
+ * Agent status in a list: the finished (normal) state is quiet text, running/stopped carry their
+ * tone, and only a failure is a badge the owner should notice.
+ */
+function AgentStatus({ state, label }: { state: AgentEntry["state"]; label: string }) {
+  if (state === "failed") return <Badge label={label} tone="danger" />;
+  return <StatusText label={label} tone={state === "running" ? "live" : state === "stopped" || state === "interrupted" ? "warning" : "default"} />;
+}
+
+function ChildRow({ child, provider, separator, onOpen }: { child: ChildSessionEntry; provider: Props["parentProvider"]; separator: boolean; onOpen: () => void }) {
   const copy = useCopy();
   const label = agentStateLabel(child.state, copy);
   return (
-    <PressableCard label={[child.title, label, child.meta].filter(Boolean).join(". ")}
-      onPress={onOpen}
-      style={{ minHeight: metrics.touchTarget, gap: space.xs, paddingVertical: space.md, paddingHorizontal: space.md, marginHorizontal: 0, borderRadius: radii.card, backgroundColor: colors.raised, borderWidth: 1, borderColor: colors.separator }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.row }}>
-        <AgentAvatar author={provider} size={20} />
-        <Body numberOfLines={1} ellipsizeMode="tail" style={{ flex: 1, minWidth: 0, fontWeight: "600" }}>{child.title}</Body>
-        <Badge label={label} tone={badgeTone(child.state)} />
-        <ChevronRight size={16} color={colors.tertiary} />
-      </View>
-      {child.meta ? <Body muted numberOfLines={2} style={{ fontSize: fontSize.caption, lineHeight: lineHeight.caption }}>{child.meta}</Body> : undefined}
-    </PressableCard>
+    <NavigationRow label={child.title} labelLines={1} separator={separator}
+      accessibilityLabel={[child.title, label, child.meta].filter(Boolean).join(". ")}
+      icon={<AgentAvatar author={provider} size={iconSize.row} />}
+      detail={child.meta || undefined} detailLines={2}
+      trailing={<AgentStatus state={child.state} label={label} />}
+      onPress={onOpen} />
   );
 }
 
-function AgentRow({ entry, now, provider, onPress }: { entry: AgentEntry; now: number; provider: Props["parentProvider"]; onPress: () => void }) {
-  const { colors } = useMobileTheme();
+function AgentRow({ entry, now, provider, separator, onPress }: { entry: AgentEntry; now: number; provider: Props["parentProvider"]; separator: boolean; onPress: () => void }) {
   const copy = useCopy();
   const label = agentStateLabel(entry.state, copy);
   const end = entry.endedAt ?? (entry.state === "running" ? now : undefined);
   const elapsed = entry.startedAt !== undefined && end !== undefined ? formatElapsed(end - entry.startedAt) : undefined;
   const secondary = [elapsed, entry.meta].filter(Boolean).join(" · ");
-  const small = { fontSize: fontSize.caption, lineHeight: lineHeight.caption };
   return (
-    <PressableCard label={[entry.name, label, elapsed, entry.meta, entry.summary].filter(Boolean).join(". ")} onPress={onPress}
-      style={{ minHeight: metrics.touchTarget, gap: space.xs, paddingVertical: space.md, paddingHorizontal: space.md, marginHorizontal: 0, borderRadius: radii.card, backgroundColor: colors.raised, borderWidth: 1, borderColor: colors.separator }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.row }}>
-        <AgentAvatar author={provider} size={20} />
-        <Body numberOfLines={1} ellipsizeMode="tail" style={{ flex: 1, minWidth: 0, fontWeight: "600" }}>{entry.name}</Body>
-        <Badge label={label} tone={badgeTone(entry.state)} />
-        <ChevronRight size={16} color={colors.tertiary} />
-      </View>
-      {secondary ? <Body muted numberOfLines={2} style={{ ...small, fontVariant: ["tabular-nums"] }}>{secondary}</Body> : undefined}
-      {entry.summary ? <Body muted numberOfLines={3} style={small}>{entry.summary}</Body> : undefined}
-    </PressableCard>
+    <NavigationRow label={entry.name} labelLines={1} separator={separator}
+      accessibilityLabel={[entry.name, label, elapsed, entry.meta, entry.summary].filter(Boolean).join(". ")}
+      icon={<AgentAvatar author={provider} size={iconSize.row} />}
+      detail={secondary || undefined} detailLines={2}
+      metadata={entry.summary} metadataLines={3}
+      trailing={<AgentStatus state={entry.state} label={label} />}
+      onPress={onPress} />
   );
 }

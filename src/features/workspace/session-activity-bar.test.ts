@@ -20,7 +20,7 @@ vi.mock("@/ui/copy", () => ({
     values?.p0 === undefined ? en : en.replace("{p0}", String(values.p0)),
 }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { raised: "r", separator: "s", warning: "w", success: "ok", tertiary: "t", info: "i" } }) }));
-vi.mock("@/ui/tokens", () => ({ fontSize: {}, hitSlopFor: () => 8, lineHeight: {}, radii: {}, space: {} }));
+vi.mock("@/ui/tokens", () => ({ fontSize: {}, hitSlopFor: () => 8, lineHeight: {}, metrics: { touchTarget: 44 }, radii: {}, space: {} }));
 vi.mock("./use-elapsed-now", () => ({ useElapsedNow: () => clock.now }));
 import { SessionActivityBar } from "./session-activity-bar";
 

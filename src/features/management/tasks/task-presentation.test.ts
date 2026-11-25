@@ -10,6 +10,7 @@ const fixture = vi.hoisted(() => ({
   fields: new Map<string, { value: string; onChangeText(value: string): void }>(),
   save: vi.fn(),
 }));
+vi.mock("../shared/task-brief", () => ({ TaskBrief: () => null, taskInstructionsSummary: (value: string) => value }));
 vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
 }));
@@ -45,24 +46,31 @@ vi.mock("../shared/agent-fields", () => ({ AgentFields: () => null }));
 vi.mock("@/ui/hint", () => ({ Hint: ({ children }: PropsWithChildren) => children }));
 vi.mock("./review-notes", () => ({ ReviewNotes: () => null }));
 vi.mock("./task-feedback", () => ({ TaskDeclineFeedback: () => null }));
-vi.mock("@/ui/record-card", () => ({
-  RecordCard: ({
-    children,
-    details,
-    footer,
-    status,
-    menu,
-  }: PropsWithChildren<{ details: ReactNode; footer: ReactNode; status: ReactNode; menu: ReactNode }>) =>
-    createElement("div", null, status, details, children, createElement("nav", null, menu), createElement("footer", null, footer)),
-}));
+vi.mock("@/ui/record-card", async () => {
+  const { ActionMenu } = await import("@/ui/primitives");
+  return {
+    RecordCard: ({
+      children,
+      details,
+      footer,
+      status,
+      menu,
+      actions,
+    }: PropsWithChildren<{ details: ReactNode; footer: ReactNode; status: ReactNode; menu: ReactNode; actions?: { items: unknown[] } }>) =>
+      createElement("div", null, status, details, children,
+        createElement("nav", null, menu, actions ? createElement(ActionMenu as never, { actions: actions.items }) : null),
+        createElement("footer", null, footer)),
+  };
+});
 vi.mock("@/ui/limit-presets", async () =>
   (await import("@/ui/limit-presets.fixture")).limitFieldDoubles((await import("@/ui/primitives")).NumberField as never));
 vi.mock("@/ui/primitives", () => {
   const Box = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Action = ({ label, disabled, onPress, tone }: { label: string; disabled?: boolean; onPress: () => void; tone?: string }) =>
     createElement("button", { disabled, onClick: onPress, "data-tone": tone }, label);
-  return {
+  return { StatusText: ({ label }: { label: string }) => createElement("output", { "data-quiet": "" }, label),
     Body: Box,
+    SectionHeader: () => null,
     Stack: Box,
     Row: Box,
     Disclosure: Box,
@@ -149,10 +157,10 @@ it("guards an invalid minute draft and blocks saving its previous numeric value"
   );
   expect(fixture.dirty).toBe(false);
   await act(async () =>
-    fixture.fields.get("Run limit")!.onChangeText("invalid"),
+    fixture.fields.get("Run limit (minutes)")!.onChangeText("invalid"),
   );
   expect(fixture.dirty).toBe(true);
-  expect(fixture.fields.get("Run limit")!.value).toBe("invalid");
+  expect(fixture.fields.get("Run limit (minutes)")!.value).toBe("invalid");
   expect(container.querySelector("button")!.disabled).toBe(true);
   expect(fixture.save).not.toHaveBeenCalled();
 });

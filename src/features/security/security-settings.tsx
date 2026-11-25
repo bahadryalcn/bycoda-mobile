@@ -8,31 +8,21 @@ import { autoLockTimeoutOptions } from "../../state/security-preferences";
 import type { AutoLockTimeoutMs } from "../../state/security-types";
 import { useCopy } from "../../ui/copy";
 import {
-  Body,
   ErrorNotice,
   NavigationGroup,
   NavigationRow,
   SelectField,
-  Stack,
+  SettingIcon,
+  StateView,
   ToggleField,
 } from "../../ui/primitives";
 import { HintSection } from "../../ui/info-hint";
-import { IconTile } from "../../ui/icon-tile";
 import { enterItem } from "../../ui/motion";
 import { space } from "../../ui/tokens";
 import { useSecurityError } from "./app-lock";
-import { useMobileTheme } from "../../ui/theme";
 
-function tile(Glyph: typeof Lock, color: string) {
-  return (
-    <IconTile color={color}>
-      <Glyph size={18} strokeWidth={2} color={color} />
-    </IconTile>
-  );
-}
-
+/** Settings → App lock: the switch, auto-lock delay and Lock now. */
 export function SecuritySettings() {
-  const { colors } = useMobileTheme();
   const copy = useCopy();
   const security = useSecurity();
   const describeError = useSecurityError();
@@ -46,15 +36,16 @@ export function SecuritySettings() {
   const prompt = copy("bycoda güvenlik ayarını değiştir", "Change bycoda security settings");
   const idle = security.busy || security.status !== "unlocked";
   if (process.env.EXPO_OS === "web")
+    // Same page-level info state as Phone permissions on web.
     return (
-      <Stack>
-        <Body muted>
-          {copy(
-            "Uygulama kilidi, iOS ve Android uygulamalarında telefonunun ekran kilidini kullanır.",
-            "App lock uses your phone’s screen lock in the iOS and Android apps.",
-          )}
-        </Body>
-      </Stack>
+      <StateView
+        compact={false}
+        tone="info"
+        title={copy(
+          "Uygulama kilidi, iOS ve Android uygulamalarında telefonunun ekran kilidini kullanır.",
+          "App lock uses your phone’s screen lock in the iOS and Android apps.",
+        )}
+      />
     );
   return (
     <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
@@ -62,7 +53,7 @@ export function SecuritySettings() {
       <NavigationGroup>
         <ToggleField
           label={copy("Uygulama kilidi", "App lock")}
-          icon={tile(Lock, colors.accent)}
+          icon={<SettingIcon glyph={Lock} />}
           help={copy(
             "Bilgisayarlarını telefonunun ekran kilidi veya biyometrisiyle koru.",
             "Protect your computers with your phone’s screen lock or biometrics.",
@@ -79,14 +70,14 @@ export function SecuritySettings() {
           title={copy("Kilitleme", "Locking")}
           presentation="inline"
           help={copy(
-            "Uygulama arka plana geçtiğinde seçtiğin süre sonunda tekrar giriş gerekir. Bu süre içinde dönersen kaldığın yerden devam edersin. İçerik arka planda hemen gizlenir. Uygulamayı yeniden açtığında veya Şimdi kilitle’yi kullandığında her zaman giriş gerekir.",
-            "Authentication is required after the chosen time in the background. Return sooner to continue where you left off. Content is hidden immediately in the background. A fresh app launch or Lock now always requires authentication.",
+            "Uygulama arka planda seçtiğin süre kalınca kilitlenir. İçerik arka planda hemen gizlenir.",
+            "The app locks after the chosen time in the background. Content is hidden immediately in the background.",
           )}
         >
           <NavigationGroup>
             <SelectField
               variant="row"
-              icon={tile(Timer, colors.warning)}
+              icon={<SettingIcon glyph={Timer} />}
               label={copy("Otomatik kilitle", "Auto-lock")}
               value={String(security.autoLockTimeoutMs)}
               disabled={idle}
@@ -106,7 +97,7 @@ export function SecuritySettings() {
           <NavigationRow
             label={copy("Telefon güvenliğini yeniden kontrol et", "Check phone security again")}
             intent="command"
-            icon={tile(RefreshCw, colors.info)}
+            icon={<SettingIcon glyph={RefreshCw} />}
             disabled={security.busy}
             onPress={() => {
               void security.initialize();
@@ -118,7 +109,7 @@ export function SecuritySettings() {
         <NavigationRow
           label={copy("Şimdi kilitle", "Lock now")}
           intent="command"
-          icon={tile(LockKeyhole, colors.accent)}
+          icon={<SettingIcon glyph={LockKeyhole} />}
           disabled={!security.enabled || security.busy || security.status !== "unlocked"}
           onPress={security.lock}
         />

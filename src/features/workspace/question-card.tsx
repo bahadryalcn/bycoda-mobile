@@ -6,6 +6,7 @@ import { RemoteHostError } from "@/remote/host-error";
 import { space } from "@/ui/tokens";
 import {
   Badge,
+  StatusText,
   Body,
   Button,
   Card,
@@ -136,19 +137,28 @@ function QuestionCardOwner({
 
   return (
     <Card
+      variant="surface"
       style={{
-        backgroundColor: colors.panel,
-        // Prominent without a heavy box: a one-pixel edge that turns warm while it needs an answer.
+        // The shared surface owns padding, radius and fill; a one-pixel edge turns warm while it
+        // needs an answer.
         borderWidth: 1,
         borderColor: questionNeedsAttention(current) ? colors.warning : colors.border,
       }}
     >
       <View style={uiStyles.stack}>
-        <Badge
-          label={questionStatusLabel(current, copy)}
-          tone={questionNeedsAttention(current) ? "warning" : "default"}
-        />
-        {current.error ? <Body accessibilityRole="alert">{current.error}</Body> : null}
+        {questionNeedsAttention(current)
+          ? <Badge label={questionStatusLabel(current, copy)} tone="warning" />
+          : <StatusText label={questionStatusLabel(current, copy)} />}
+        {current.error ? (
+          <View accessibilityRole="alert" style={{ gap: space.xxs }}>
+            {current.delivery !== "unknown" && current.delivery !== "failed" ? (
+              <Body>{copy("Yanıt teslim edilemedi.", "The answer could not be delivered.")}</Body>
+            ) : null}
+            <Disclosure label={copy("Teknik ayrıntılar", "Technical details")}>
+              <Body mono selectable>{current.error}</Body>
+            </Disclosure>
+          </View>
+        ) : null}
         <ErrorText error={local && !superseded ? local.error : undefined} />
         {current.delivery === "unknown" ? (
           <Body muted>
@@ -177,7 +187,12 @@ function QuestionCardOwner({
             });
           }}
         >
-          {question.questions.length > 1 ? <Questionnaire.Progress variant="count" /> : null}
+          {question.questions.length > 1 ? (
+            <Questionnaire.Progress variant="count">
+              {({ current: position, total }) =>
+                copy("Soru {p0} / {p1}", "Question {p0} of {p1}", { p0: position, p1: total })}
+            </Questionnaire.Progress>
+          ) : null}
           {question.questions.map((item) => (
             <Questionnaire.Item
               key={item.id}
@@ -204,7 +219,7 @@ function QuestionCardOwner({
               {item.allowCustom ? (
                 !item.options.length || answers[item.id]?.some((id) => isCustomChoice(item, id)) ? (
                   customField(item)
-                ) : (
+                ) : item.options.some((option) => isCustomChoice(item, option.id)) ? null : (
                   <Disclosure
                     label={copy("Kendi yanıtın", "Your own answer")}
                     defaultExpanded={!!custom[item.id]}

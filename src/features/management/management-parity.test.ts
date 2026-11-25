@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
   reviewReturnFocus: undefined as RefObject<HTMLButtonElement | null> | undefined,
   actions: [] as Array<{ key: string; disabled?: boolean; onPress: () => void } | false | null>,
 }));
+vi.mock("./shared/task-brief", () => ({ TaskBrief: () => null, taskInstructionsSummary: (value: string) => value }));
 vi.mock("lucide-react-native/icons/square", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/settings-2", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/cpu", () => ({ default: () => null }));
@@ -41,10 +42,14 @@ vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
 vi.mock("react-native", () => ({ View: "div" }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
-vi.mock("@/ui/record-card", () => ({
-  RecordCard: ({ menu, metadata }: { menu: React.ReactNode; metadata?: string }) =>
-    createElement("article", null, createElement("output", null, metadata), menu),
-}));
+vi.mock("@/ui/record-card", async () => {
+  const { ActionMenu } = await import("@/ui/primitives");
+  return {
+    RecordCard: ({ menu, metadata, actions }: { menu: React.ReactNode; metadata?: string; actions?: { items: unknown[] } }) =>
+      createElement("article", null, createElement("output", null, metadata), menu,
+        actions ? createElement(ActionMenu as never, { actions: actions.items }) : null),
+  };
+});
 vi.mock("@/ui/plan-steps", () => ({ PlanSteps: () => null }));
 vi.mock("./tasks/task-status-icon", () => ({ TaskStatusIcon: () => null }));
 vi.mock("@/ui/hint", () => ({ Hint: ({children}: PropsWithChildren) => children }));
@@ -76,7 +81,7 @@ vi.mock("@/ui/limit-presets", async () =>
   (await import("@/ui/limit-presets.fixture")).limitFieldDoubles((await import("@/ui/number-field")).NumberField as never));
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Section: wrapper, NavigationGroup: wrapper, NumberField: () => null,
+  return { StatusText: ({ label }: { label: string }) => createElement("span", null, label), Section: wrapper, NavigationGroup: wrapper, NumberField: () => null,
     Sheet: ({ children, title, returnFocusRef }: PropsWithChildren<{
       title: string; returnFocusRef?: RefObject<HTMLButtonElement | null>;
     }>) => {
@@ -331,11 +336,12 @@ it("shows the review note counts only in the disclosure heading", async () => {
   expect(container.textContent).toContain("Resolved finding");
 });
 
-it("keeps Run now and Pause or Enable side by side in both management card footers", () => {
+it("keeps Run now a quiet row command and moves Pause or Enable into the record options", () => {
   for (const path of ["./automations/automation-card.tsx", "./stewards/steward-card.tsx"]) {
     const card = readFileSync(new URL(path, import.meta.url), "utf8");
-    expect(card).toMatch(/footer=\{<Row>\s*<Button tone="primary" label=\{copy\("Şimdi çalıştır", "Run now"\)/);
-    expect(card).toContain('<Button tone="secondary" label={item.enabled ? copy("Duraklat", "Pause") : copy("Etkinleştir", "Enable")}');
-    expect(card).not.toContain('key: "toggle"');
+    expect(card).not.toContain("footer=");
+    expect(card).toMatch(/<IconButton label=\{copy\("Şimdi çalıştır", "Run now"\)\}/);
+    expect(card).toContain('key: "toggle"');
+    expect(card).toContain('item.enabled ? copy("Duraklat", "Pause") : copy("Etkinleştir", "Enable")');
   }
 });

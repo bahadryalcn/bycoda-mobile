@@ -25,6 +25,7 @@ import {
   MutationState,
   NavigationRow,
   PressableCard,
+  RowIcon,
   QueryState,
   Row,
   ScreenList,
@@ -37,14 +38,14 @@ import { space } from "@/ui/tokens";
 import { SearchToolbar } from "@/ui/search-field";
 import { useCopy } from "@/ui/copy";
 import { haptic } from "@/ui/motion";
-import { IconTile } from "@/ui/icon-tile";
 import type { FileEntry } from "./wire";
 import { InScreenBack } from "@/ui/in-screen-back";
 import { FileReview } from "./file-review";
 import { FileActions } from "./file-actions";
 import { filesReducer } from "./workspace-state";
+import { useProjectSubpage } from "./subpage-chrome";
 import { defaultFileListOptions, fileParentPath, visibleFileEntries } from "./file-list-model";
-import { GroupedListRow, rowInset } from "./shared";
+import { GroupedListRow } from "./shared";
 
 type FileRow =
   | { key: string; entry: FileEntry }
@@ -125,10 +126,13 @@ export function ProjectFiles({
       }))
     : entries.map((entry) => ({ key: entry.path, entry }));
   const focused = useIsFocused();
-  useBackHandler(focused && state.view.kind === "browse" && (!!path || !!search), () => {
+  const browseBack = () => {
     if (search) dispatch({ type: "search", value: "" });
     else navigate(fileParentPath(path));
-  });
+  };
+  useBackHandler(focused && state.view.kind === "browse" && (!!path || !!search), browseBack);
+  // A folder level or a search lends its name to the project header, whose one back goes up a level.
+  useProjectSubpage(state.view.kind !== "browse" ? null : search ? copy("Arama", "Search") : path ? path.split("/").filter(Boolean).at(-1) ?? null : null, browseBack);
   // The browser stays mounted under an open file so Back returns to the same scroll position.
   const review = selected ? (
       <FileReview
@@ -369,7 +373,7 @@ export function ProjectFiles({
             const match = item.match;
             const name = match.relative.replaceAll("\\", "/").split("/").at(-1) || match.relative;
             return (
-              <GroupedListRow first={first} last={last} inset={rowInset}>
+              <GroupedListRow first={first} last={last}>
                 <NavigationRow
                   variant="plain"
                   label={name + ":" + match.line}
@@ -379,9 +383,7 @@ export function ProjectFiles({
                   metadataLines={0}
                   accessibilityLabel={`${match.relative}:${match.line}. ${match.preview}`}
                   icon={
-                    <IconTile>
-                      <FileText size={18} strokeWidth={2} color={colors.muted} />
-                    </IconTile>
+                    <RowIcon glyph={FileText} />
                   }
                   onPress={() => openFile(match.relative, match.line)}
                 />
@@ -390,7 +392,7 @@ export function ProjectFiles({
           }
           const entry = item.entry;
           return (
-            <GroupedListRow first={first} last={last} inset={rowInset}>
+            <GroupedListRow first={first} last={last}>
               <Row style={{ flexWrap: "nowrap", paddingEnd: space.xs }}>
                 <View style={uiStyles.grow}>
                   <NavigationRow
@@ -399,13 +401,9 @@ export function ProjectFiles({
                     intent={root ? "select" : "navigate"}
                     icon={
                       entry.isDir ? (
-                        <IconTile>
-                          <Folder size={18} strokeWidth={2} color={colors.muted} />
-                        </IconTile>
+                        <RowIcon glyph={Folder} />
                       ) : (
-                        <IconTile>
-                          <File size={18} strokeWidth={2} color={colors.muted} />
-                        </IconTile>
+                        <RowIcon glyph={File} />
                       )
                     }
                     detail={

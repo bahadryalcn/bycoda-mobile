@@ -5,6 +5,7 @@ import { expect, it, vi } from "vitest";
 const f=vi.hoisted(()=>({keyboard:0,frame:undefined as undefined|((e:any)=>void),composerLayout:undefined as undefined|((e:any)=>void),composerViewport:undefined as undefined|((e:any)=>void),space:null as number|null, scrollTo:vi.fn(), focusedInput:null as null | {measureLayout:ReturnType<typeof vi.fn>}}));
 vi.mock("@/ui/theme",()=>({useMobileTheme:() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })}));
 vi.mock("react-native",()=>({
+ Platform:{OS:"ios"},
  View:({children,onLayout}:any)=>{if(onLayout)f.frame=onLayout;return createElement("div",null,children);},
  ScrollView:({children,onLayout,keyboardShouldPersistTaps,ref}:any)=>{
    f.composerViewport=onLayout;

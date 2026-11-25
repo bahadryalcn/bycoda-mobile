@@ -51,7 +51,25 @@ it("does not resume capture while a muted send is still settling", async () => {
   const s = setup(), send = deferred<string>(), next = deferred<string>(); s.deps.send.mockImplementation(() => send.promise); s.deps.capture.mockImplementationOnce(() => s.audio.promise).mockImplementation(() => next.promise);
   s.loop.start(target); s.audio.resolve("Once"); await vi.waitFor(() => expect(s.deps.send).toHaveBeenCalledOnce());
   s.loop.setMuted(true); s.loop.setMuted(false); expect(s.deps.capture).toHaveBeenCalledTimes(1);
-  send.resolve("Late admitted reply"); await vi.waitFor(() => expect(s.deps.capture).toHaveBeenCalledTimes(2)); expect(s.deps.speak).not.toHaveBeenCalled(); s.loop.stop(); next.resolve("");
+  send.resolve("Late admitted reply"); await vi.waitFor(() => expect(s.deps.capture).toHaveBeenCalledTimes(2));
+  expect(s.deps.speak).toHaveBeenCalledOnce(); s.loop.stop(); next.resolve("");
+});
+it("keeps the pending reply and playback active while the microphone is muted", async () => {
+  const s = setup(), send = deferred<string>(), playback = deferred<void>();
+  s.deps.send.mockImplementation(() => send.promise);
+  s.deps.speak.mockImplementation(() => playback.promise);
+  s.loop.start(target); s.audio.resolve("Once");
+  await vi.waitFor(() => expect(s.deps.state).toHaveBeenLastCalledWith("sending", target));
+  s.loop.setMuted(true);
+  expect(s.deps.state).toHaveBeenLastCalledWith("sending", target);
+  send.resolve("Admitted reply");
+  await vi.waitFor(() => expect(s.deps.state).toHaveBeenLastCalledWith("speaking", target));
+  s.loop.setMuted(false); s.loop.setMuted(true);
+  expect(s.deps.cancelAudio).not.toHaveBeenCalled();
+  playback.resolve();
+  await vi.waitFor(() => expect(s.deps.state).toHaveBeenLastCalledWith("muted", target));
+  expect(s.deps.capture).toHaveBeenCalledOnce();
+  s.loop.stop();
 });
 it("VAD requires sustained speech followed by silence and never calls silence speech", () => {
   const vad = new AssistantUtteranceVad(); const frame = (value: number, ms: number) => new Int16Array(ms * 16).fill(value);
@@ -59,7 +77,20 @@ it("VAD requires sustained speech followed by silence and never calls silence sp
   expect(vad.push(frame(0, 8000))).toBe(true); expect(vad.hasSpeech).toBe(false);
   const speech = new AssistantUtteranceVad(); expect(speech.push(voiced(100))).toBe(false); expect(speech.hasSpeech).toBe(false);
   expect(speech.push(voiced(200))).toBe(false); expect(speech.hasSpeech).toBe(true);
-  expect(speech.push(frame(50, 500))).toBe(false); expect(speech.push(frame(50, 500))).toBe(true);
+  expect(speech.push(frame(50, 500))).toBe(false); expect(speech.push(frame(50, 500))).toBe(false);
+  // The desktop's natural pause: 1.2 s of silence ends the turn, not the former 0.9 s.
+  expect(speech.push(frame(50, 300))).toBe(true);
+});
+it("honors the chosen pause and the owner's own turn end", () => {
+  const frame = (value: number, ms: number) => new Int16Array(ms * 16).fill(value);
+  const voiced = (ms: number) => Int16Array.from({ length: ms * 16 }, (_, i) => 2400 * Math.sin(i * Math.PI / 40));
+  const longer = new AssistantUtteranceVad({ endSilence: 2.5 });
+  longer.push(voiced(300)); expect(longer.hasSpeech).toBe(true);
+  expect(longer.push(frame(50, 2000))).toBe(false); expect(longer.push(frame(50, 600))).toBe(true);
+  // "I decide when my turn ends": long silence keeps listening; only Send now commits.
+  const manual = new AssistantUtteranceVad({ manualTurnEnd: true });
+  manual.push(voiced(300)); expect(manual.hasSpeech).toBe(true);
+  expect(manual.push(frame(50, 6000))).toBe(false);
 });
 it("rejects microphone crackle and DC offset despite their high amplitude", () => {
   const vad = new AssistantUtteranceVad();

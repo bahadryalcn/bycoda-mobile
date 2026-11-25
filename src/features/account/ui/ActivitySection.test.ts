@@ -6,7 +6,7 @@ const fixture = vi.hoisted(() => ({ refetch: vi.fn(), data: undefined as undefin
 vi.mock("./use-graced-read-error", () => ({ useGracedReadError: (query: { error: unknown }) => query.error ?? null }));
 vi.mock("react-native", () => ({ AppState: { currentState: "active", addEventListener: () => ({ remove() {} }) } }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: fixture.data, isError: fixture.error, error: fixture.error ? new Error("failed") : null, refetch: fixture.refetch }) }));
-vi.mock("./account-context", () => ({ useAccount: () => ({ runtime: { client: {} }, device: { id: "phone" } }) }));
+vi.mock("./account-context", () => ({ useAccount: () => ({ status: "signedIn", runtime: { client: {} }, device: { id: "phone" } }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, values?: Record<string, string | number>) => en.replace(/\{(p\d+)\}/g, (_, key) => String(values?.[key] ?? key)) }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);

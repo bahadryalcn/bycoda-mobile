@@ -240,11 +240,10 @@ it("uses an opaque navigation surface without a separate command", async () => {
   expect(container.querySelector("[data-blur]")).toBeNull();
   expect(container.querySelectorAll("[role=tab]")).toHaveLength(5);
 });
-it("starts a session on tap and opens quick actions on hold without selecting a tab", async () => {
-  const onPress = vi.fn(),
-    onLongPress = vi.fn();
+it("starts a session on tap without running a command on hold or selecting a tab", async () => {
+  const onPress = vi.fn();
   await render({
-    quickAction: { label: "New session", optionsLabel: "Quick actions", onPress, onLongPress },
+    quickAction: { label: "New session", onPress },
   });
   const command = container.querySelector('[aria-label="New session"]') as HTMLElement;
   expect(command.getAttribute("role")).toBe("button");
@@ -252,7 +251,7 @@ it("starts a session on tap and opens quick actions on hold without selecting a 
   await act(async () => command.click());
   expect(onPress).toHaveBeenCalledTimes(1);
   await act(async () => command.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })));
-  expect(onLongPress).toHaveBeenCalledTimes(1);
+  expect(onPress).toHaveBeenCalledTimes(1);
   expect(state.navigate).not.toHaveBeenCalled();
 });
 it("keeps large-text destinations reachable while the quick action owns a slot", async () => {
@@ -260,9 +259,7 @@ it("keeps large-text destinations reachable while the quick action owns a slot",
   await render({
     quickAction: {
       label: "New session",
-      optionsLabel: "Quick actions",
       onPress: vi.fn(),
-      onLongPress: vi.fn(),
     },
   });
   expect(container.querySelector('[aria-label="New session"]')).not.toBeNull();
@@ -275,6 +272,7 @@ it("keeps large-text destinations reachable while the quick action owns a slot",
 });
 it("closes the overflow sheet when a window resize makes every destination visible", async () => {
   state.fontScale = 2;
+  state.width = 200;
   await render();
   const more = container.querySelector('[aria-label^="More"]') as HTMLElement;
   await act(async () => more.click());
@@ -283,7 +281,7 @@ it("closes the overflow sheet when a window resize makes every destination visib
   await render();
   expect(container.querySelector('[aria-label^="More"]')).toBeNull();
   expect(container.querySelector('[role="dialog"]')).toBeNull();
-  state.width = 320;
+  state.width = 200;
   await render();
   expect(container.querySelector('[data-destination="settings"]')).toBeNull();
 });
@@ -383,8 +381,15 @@ it("keeps long translated labels readable without font shrinking or scaling caps
     expect(tabStyle(tab).minHeight).toBeGreaterThanOrEqual(48);
   }
 });
-it("keeps one row at large text and reaches overflow destinations through More", async () => {
+it("keeps all five icon destinations at large text on a phone", async () => {
   state.fontScale = 2;
+  await render();
+  expect(container.querySelectorAll("[role=tab]")).toHaveLength(5);
+  expect(container.querySelector('[aria-label^="More"]')).toBeNull();
+});
+it("keeps one row on a genuinely narrow window and reaches overflow destinations through More", async () => {
+  state.fontScale = 2;
+  state.width = 200;
   await render();
   const tabs = [...container.querySelectorAll("[role=tab]")];
   expect(tabs).toHaveLength(3);
@@ -414,8 +419,9 @@ it("uses explicit accessibility descriptions for running counts", async () => {
   await render({ descriptors });
   expect(container.querySelector('[aria-label="Sessions, 99+ running sessions"]')).not.toBeNull();
 });
-it("retains running counts when large text moves Sessions into overflow", async () => {
+it("retains running counts when a narrow window moves Sessions into overflow", async () => {
   state.fontScale = 3;
+  state.width = 160;
   const descriptors = {
     ...props.descriptors,
     sessions: {
@@ -443,9 +449,7 @@ it("places create inside the content-width dock beside five tabs when they fit",
   await render({
     quickAction: {
       label: "New session",
-      optionsLabel: "Quick actions",
       onPress: vi.fn(),
-      onLongPress: vi.fn(),
     },
   });
   const command = container.querySelector('[aria-label="New session"]')!;
@@ -465,15 +469,14 @@ it("places create inside the content-width dock beside five tabs when they fit",
 });
 
 it("keeps narrow large-type navigation and create independently reachable", async () => {
-  state.width = 280;
+  // A genuinely narrow window: icon slots do not shrink with text, so only width forces overflow.
+  state.width = 180;
   state.fontScale = 3;
   await render({
     state: { ...props.state, index: 4 },
     quickAction: {
       label: "Yeni oturum oluştur",
-      optionsLabel: "Diğer hızlı işlemler",
       onPress: vi.fn(),
-      onLongPress: vi.fn(),
     },
   });
   const command = container.querySelector('[aria-label="Yeni oturum oluştur"]')!;

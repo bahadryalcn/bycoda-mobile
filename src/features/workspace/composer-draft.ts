@@ -7,6 +7,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 export type SelectedMention = { label: string; path: string };
 type PendingQueueIntent = { id: string; contentDigest: string } & SessionAuthority;
+type PendingCrewIntent = { id: string; textDigest: string; environmentId: string; targets: string[] };
 export type ComposerDraft = {
   version: 2;
   text: string;
@@ -15,6 +16,7 @@ export type ComposerDraft = {
   noteCard?: NoteComposerCard;
   queueIntent?: PendingQueueIntent;
   clientMessageId?: string;
+  crewIntent?: PendingCrewIntent;
 };
 export const emptyComposerDraft = (): ComposerDraft => ({
   version: 2,
@@ -64,6 +66,15 @@ export function decodeComposerDraft(raw: string): ComposerDraft {
       throw new Error("The saved queued request could not be read.");
     captureSessionAuthority(intent);
   }
+  if (value.crewIntent !== undefined) {
+    const intent = value.crewIntent;
+    if (!intent || typeof intent.id !== "string" || !/^[a-f0-9-]{36}$/i.test(intent.id) ||
+      typeof intent.textDigest !== "string" || !/^[a-f0-9]{64}$/.test(intent.textDigest) ||
+      typeof intent.environmentId !== "string" || !intent.environmentId ||
+      !Array.isArray(intent.targets) || intent.targets.length > 5 ||
+      intent.targets.some((target) => typeof target !== "string" || !target))
+      throw new Error("The saved delegation request could not be read.");
+  }
   for (const file of value.attachments)
     if (file.browserAnnotation)
       file.browserAnnotation = parseBrowserAnnotation(file.browserAnnotation);
@@ -104,6 +115,16 @@ export function sameComposerContent(
 }
 
 export type QueuedComposerDraft = { draft: ComposerDraft; id: string } & SessionAuthority;
+export function crewIntentForDraft(
+  draft: ComposerDraft, environmentId: string, targets: string[], newId: () => string,
+): PendingCrewIntent {
+  const textDigest = bytesToHex(sha256(utf8ToBytes(draft.text)));
+  const intent = draft.crewIntent;
+  return intent?.textDigest === textDigest && intent.environmentId === environmentId
+    ? intent
+    : { id: newId(), textDigest, environmentId, targets };
+}
+
 function queueContentDigest(draft: ComposerDraft): string {
   return bytesToHex(
     sha256(

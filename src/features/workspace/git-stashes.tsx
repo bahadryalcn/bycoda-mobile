@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import ArrowDownToLine from "lucide-react-native/icons/arrow-down-to-line";
 import Info from "lucide-react-native/icons/info";
 import Plus from "lucide-react-native/icons/plus";
@@ -19,12 +18,15 @@ import { confirmAction } from "@/ui/confirm";
 import { readStashes, stashRequest, uncertainStashWrite, type GitStash, type StashMode, type StashOperation } from "./git-stash-model";
 import { GitStashIdentity, GitStashReview, type StashReviewOperation } from "./git-stash-review";
 import type { GitScope } from "./git-types";
+import { useProjectSubpage } from "./subpage-chrome";
 import { FeatureUnavailable, RecordAccessUnavailable } from "./unavailable-state";
 
-export function GitStashes({ scope, onClose, onBusyChange, registerExit }: {
+type GitStashesProps = {
   scope: GitScope; onClose: () => void; onBusyChange: (busy: boolean) => void;
   registerExit: (exit: (() => void) | null) => void;
-}) {
+};
+
+export function GitStashes({ scope, onClose, onBusyChange, registerExit }: GitStashesProps) {
   const { colors } = useMobileTheme(), copy = useCopy(), machine = useActiveMachine(), connection = useConnectionScope();
   const [opening] = useState(() => ({ machineId: machine?.id, machineName: machine?.name ?? "", scope: { ...scope }, connection }));
   const access = usePrivateContentAccess(), accessNow = useRef(access); accessNow.current = access;
@@ -90,6 +92,7 @@ export function GitStashes({ scope, onClose, onBusyChange, registerExit }: {
     } else onClose();
   }, [draft, onClose, copy, readable, readLease]);
   useEffect(() => { registerExit(close); return () => registerExit(null); }, [close, registerExit]);
+  useProjectSubpage(copy("Stash’ler", "Stashes"), close);
   const focused = useIsFocused();
   useBackHandler(focused, close);
   const openReview = (operation: StashReviewOperation) => {
@@ -112,11 +115,11 @@ export function GitStashes({ scope, onClose, onBusyChange, registerExit }: {
   };
   const context = <><Body selectable>{opening.machineName}</Body><Body mono selectable>{opening.scope.root}</Body></>;
   return <>
-    <ScreenList title={copy("Stash’ler", "Stashes")} subtitle={readable ? [opening.machineName, opening.scope.root?.split(/[\\/]/).filter(Boolean).at(-1)].filter(Boolean).join(" · ") : undefined}
+    <ScreenList
+      scope={readable ? { computer: opening.machineName || undefined, project: opening.scope.root?.split(/[\\/]/).filter(Boolean).at(-1) } : undefined}
       actions={<Row>
         <IconButton label={copy("Stash oluştur", "Create stash")} disabled={unavailable} onPress={() => { if (current() && !latest.current.unavailable && !occupied.current) setCreating(true); }}><Plus size={20} color={colors.accent} /></IconButton>
         <ActionMenu label={copy("Stash işlemleri", "Stash actions")} actions={[
-          { key: "back", icon: <ArrowLeft size={18} color={colors.muted} />, label: copy("Geri", "Back"), disabled: mutation.isPending, onPress: close },
           { key: "refresh", icon: <RefreshCw size={18} color={colors.muted} />, label: copy("Yenile", "Refresh"), disabled: !inScope || query.isEnabled === false || query.isFetching, onPress: () => { void refresh(); } },
           readable && { key: "details", icon: <Info size={18} color={colors.muted} />, label: copy("Ayrıntılar", "Details"), onPress: () => { if (current()) setDetails(true); } },
           { key: "clear", icon: <Trash2 size={18} color={colors.danger} />, label: copy("Tüm stash’leri sil", "Delete all stashes"), destructive: true,
