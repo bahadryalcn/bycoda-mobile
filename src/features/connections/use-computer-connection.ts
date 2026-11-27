@@ -13,6 +13,7 @@ import { flushWorkspaceDrafts } from "../workspace/draft-guard";
 import { LONG_AWAY_MS } from "@/state/app-resume";
 import { duringSystemPrompt } from "@/state/system-prompt";
 import { pairingPhoneName } from "./phone-name";
+import { phoneInstallId } from "./install-id";
 import { connectComputer } from "./computer-connection";
 import { pairingCodeExpired } from "./connection-lifecycle";
 import {
@@ -230,6 +231,8 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
             signal: controller.signal,
             assertAccess,
             proofKey: proofKeyOf(proofSeed),
+            previousProofSeed: await credentials.pairedProofSeed(entry.code.environmentId),
+            installId: phoneInstallId(entry.code.environmentId),
           });
           check();
           await finish(

@@ -47,6 +47,8 @@ export function signRequestProof(input: {
   method: string;
   path: string;
   environmentId: string;
+  /** The credential is not saved on this phone yet; see `DeviceProofClaims.unsaved`. */
+  unsaved?: boolean;
 }): string {
   return signDeviceProof({ ...input, jti: base64urlEncode(proofRandomBytes(16)) });
 }

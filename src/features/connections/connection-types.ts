@@ -65,6 +65,10 @@ export type PairingRedeemOptions = {
   assertAccess: () => void;
   /** Public JWK of the phone key the new credential is bound to. */
   proofKey: DeviceProofJwk;
+  /** Seed of the key behind this phone's earlier credential for the same computer, if any. */
+  previousProofSeed?: Uint8Array | null;
+  /** `phoneInstallId` for this computer: lets it recognise this phone after an app reinstall. */
+  installId?: string | null;
   timeoutMs?: number;
   now?: () => number;
 };

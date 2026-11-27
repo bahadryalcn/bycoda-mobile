@@ -1,5 +1,6 @@
 import { parseDesktopPairingCode, PairingFailure } from "./pairing-code";
 import { utf8Bytes } from "@/remote/transport-validation";
+import { signDeviceReplacement } from "../../../../src/integrations/device-proof";
 import { nativeHostFetch } from "@/remote/native-fetch";
 import { encryptedLanFetch } from "@/remote/lan-fetch";
 import type { MobilePairingCode } from "./pairing-code";
@@ -87,6 +88,17 @@ export async function redeemMobilePairingCode(
         claimId,
         deviceName: deviceName.trim(),
         proofKey: options.proofKey,
+        // Proves this is the phone behind the earlier credential, so the computer replaces it.
+        ...(options.previousProofSeed
+          ? {
+              replaces: signDeviceReplacement(options.previousProofSeed, {
+                claimId,
+                proofKey: options.proofKey,
+                environmentId: code.environmentId,
+              }),
+            }
+          : {}),
+        ...(options.installId ? { installId: options.installId } : {}),
       }),
       signal: controller.signal,
       redirect: "error",

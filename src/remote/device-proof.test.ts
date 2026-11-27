@@ -13,8 +13,11 @@ import {
   signRequestProof,
 } from "./device-proof";
 import { HostTransport } from "./host-transport";
+import { discoverMachine } from "./pairing";
 import { RemoteHostError } from "./host-error";
 import type { MobileMachine } from "./types";
+
+vi.mock("../state/security", () => ({ assertAppAccess() {} }));
 
 const token = "t".repeat(43);
 const machine: MobileMachine = {
@@ -90,6 +93,17 @@ describe("HostTransport proof signing", () => {
         expectedJkt: jkt,
       }),
     ).toMatchObject({ ok: true });
+    expect(verifyDeviceProof({ proof: headers.DPoP, token, method: "POST", path: "/rpc", environmentId: "env-1", expectedJkt: jkt })).not.toHaveProperty("unsaved");
+  });
+
+  it("marks the discovery that precedes saving a pairing, so it cannot retire the earlier credential", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(ok());
+    // Only the request matters here; this reply is no Host descriptor, so discovery rejects it.
+    await discoverMachine(machine.endpoint, token, { fetchImpl: fetcher, environmentId: "env-1", proofSeed: seed }).catch(() => undefined);
+    const headers = fetcher.mock.calls[0][1]?.headers as Record<string, string>;
+    expect(
+      verifyDeviceProof({ proof: headers.DPoP, token, method: "POST", path: "/rpc", environmentId: "env-1", expectedJkt: jkt }),
+    ).toMatchObject({ ok: true, unsaved: true });
   });
 
   it("sends no DPoP header while the credential has no key", async () => {

@@ -28,5 +28,8 @@ export async function discoverMachine(
     options.fetchImpl,
     assertAppAccess,
     options.proofSeed ? async () => options.proofSeed! : undefined,
+    // Discovery runs before the credential is saved: it must not retire the phone's earlier
+    // credential, which is all the phone has left if the save then fails.
+    true,
   ).describe(options);
 }

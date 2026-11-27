@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as Crypto from "expo-crypto";
 import { MobilePairingCodeError } from "../../../../src/integrations/mobile-pairing";
 import { discoverMachine, RemoteHostError } from "@/remote/transport";
-import { useMachines } from "@/state/machines";
+import { credentials, useMachines } from "@/state/machines";
 import { assertAppAccess } from "@/state/security";
 import { useCopy } from "@/ui/copy";
 import type { Computer } from "../account/contracts";
@@ -25,6 +25,7 @@ import {
 import { newProofSeed, proofKeyOf } from "@/remote/device-proof";
 import { redeemMobilePairingCode } from "./pairing-redeem";
 import { pairingPhoneName } from "./phone-name";
+import { phoneInstallId } from "./install-id";
 import { leaveTo } from "@/ui/navigation";
 
 
@@ -111,6 +112,8 @@ export function useAccountPairing() {
           signal,
           assertAccess: assertAppAccess,
           proofKey: proofKeyOf(proofSeed),
+          previousProofSeed: await credentials.pairedProofSeed(code.environmentId),
+          installId: phoneInstallId(code.environmentId),
         });
         if (signal.aborted) throw new AccountPairingError("cancelled");
         await connectComputer(

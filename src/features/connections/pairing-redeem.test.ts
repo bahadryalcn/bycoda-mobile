@@ -3,6 +3,10 @@ import { redeemMobilePairingCode } from "./pairing-redeem";
 import type { MobilePairingCode } from "./pairing-code";
 import type { PairingRedeemResult } from "./connection-types";
 import { proofKeyOf } from "@/remote/device-proof";
+import {
+  deviceProofThumbprint,
+  verifyDeviceReplacement,
+} from "../../../../src/integrations/device-proof";
 
 const proofKey = proofKeyOf(new Uint8Array(32).fill(7));
 
@@ -53,6 +57,27 @@ describe("short-lived mobile QR redemption", () => {
       deviceName: "Bycoda phone",
       proofKey,
     });
+  });
+
+  it("proves the earlier key when this phone pairs with the same computer again", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(reply());
+    const previousSeed = new Uint8Array(32).fill(3);
+    await redeemMobilePairingCode(code, claim, "Bycoda phone", {
+      fetchImpl: fetcher,
+      assertAccess: access,
+      proofKey,
+      previousProofSeed: previousSeed,
+      installId: "i".repeat(43),
+    });
+    const body = JSON.parse(String(fetcher.mock.calls[0][1]?.body));
+    expect(body.installId).toBe("i".repeat(43));
+    expect(
+      verifyDeviceReplacement(body.replaces, {
+        claimId: claim,
+        proofKey,
+        environmentId: code.environmentId,
+      }),
+    ).toBe(deviceProofThumbprint(proofKeyOf(previousSeed)));
   });
 
   it("allows an owner retry to reuse the same claim after a lost response", async () => {

@@ -12,6 +12,7 @@ vi.mock("expo-secure-store", () => secrets);
 vi.mock("./security", () => access);
 import { credentials, isMachinePending, useMachines, withDisconnectedComputers } from "./machines";
 import { LANGUAGES } from "../../../src/shared/i18n/languages";
+import { decodeProofSeed } from "../remote/device-proof";
 const machine = {
   id: "computer-a",
   name: "Work",
@@ -605,7 +606,11 @@ describe("device proof seed lifecycle", () => {
   });
   it("stores the pairing seed next to the credential and reads it back under the identity guard", async () => {
     await useMachines.getState().saveMachine(proof, token, seedA);
-    expect([...store.keys()].sort()).toEqual(["bycoda.remote.computer-a", "bycoda.remote.proof.computer-a"]);
+    expect([...store.keys()].sort()).toEqual([
+      "bycoda.remote.computer-a",
+      "bycoda.remote.proof.computer-a",
+      "bycoda.remote.proof.env.env-a",
+    ]);
     expect(store.get("bycoda.remote.proof.computer-a")).toHaveLength(43);
     expect(await credentials.getProofSeed(machine.id, proof)).toEqual(seedA);
     expect(await credentials.getProofSeed(machine.id, { ...proof, endpoint: "https://other.example" })).toBeNull();
@@ -624,7 +629,42 @@ describe("device proof seed lifecycle", () => {
     await credentials.saveProofSeed(machine.id, seedA);
     expect(await credentials.getProofSeed(machine.id)).toEqual(seedA);
     await useMachines.getState().removeMachine(machine.id);
-    expect(store.size).toBe(0);
+    // Only the key survives, under the computer's identity; the credential is gone.
+    expect([...store.keys()]).toEqual(["bycoda.remote.proof.env.env-a"]);
+  });
+  it("signs a new pairing with the saved key, or the retained one after removal or reinstall", async () => {
+    const seedB = new Uint8Array(32).fill(2);
+    expect(await credentials.pairedProofSeed(machine.environmentId)).toBeNull();
+    await useMachines.getState().saveMachine(proof, token, seedA);
+    await useMachines.getState().saveMachine(proof, replacement, seedB);
+    expect(await credentials.pairedProofSeed(machine.environmentId)).toEqual(seedB);
+    await useMachines.getState().removeMachine(machine.id);
+    expect(await credentials.pairedProofSeed(machine.environmentId)).toEqual(seedB);
+    // A reinstall on iOS: the saved list is gone and the keychain kept the retained key.
+    useMachines.setState({ machines: [], activeId: null });
+    expect(await credentials.pairedProofSeed(machine.environmentId)).toEqual(seedB);
+    // Another computer, an identity that cannot be a keychain name, and a locked app sign nothing.
+    expect(await credentials.pairedProofSeed("env-b")).toBeNull();
+    expect(await credentials.pairedProofSeed("env a/../x")).toBeNull();
+    access.assertAppAccess.mockImplementation(() => {
+      throw new Error("locked");
+    });
+    expect(await credentials.pairedProofSeed(machine.environmentId)).toBeNull();
+  });
+  it("keeps the retained key of the saved credential when a replacement cannot be saved", async () => {
+    await useMachines.getState().saveMachine(proof, token, seedA);
+    storage.setItem.mockRejectedValueOnce(new Error("Disk full"));
+    await expect(
+      useMachines.getState().saveMachine(proof, replacement, new Uint8Array(32).fill(2)),
+    ).rejects.toThrow("could not be saved");
+    expect(decodeProofSeed(store.get("bycoda.remote.proof.env.env-a"))).toEqual(seedA);
+    // A failed retention never fails the save it follows.
+    secrets.setItemAsync.mockImplementation(async (key: string, value: string) => {
+      if (key.includes(".env.")) throw new Error("keychain");
+      store.set(key, value);
+    });
+    await useMachines.getState().saveMachine(proof, replacement, new Uint8Array(32).fill(2));
+    expect(store.get("bycoda.remote.computer-a")).toBe(replacement);
   });
   it("restores the previous seed when the metadata save fails", async () => {
     await useMachines.getState().saveMachine(proof, token, seedA);

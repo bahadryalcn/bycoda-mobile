@@ -74,6 +74,29 @@ async function deleteProofSeed(id: string) {
   if (process.env.EXPO_OS === "web") webProofSeeds.delete(id);
   else await SecureStore.deleteItemAsync(proofSeedKey(id));
 }
+/**
+ * The newest proof seed per computer, keyed by the computer's own identity instead of the saved
+ * entry, and kept when the computer is removed. Pairing with that computer again signs with it,
+ * so the computer replaces this phone's earlier credential instead of listing the phone twice.
+ * The seed opens nothing without the credential, which removal deletes. The iOS keychain keeps it
+ * across an app reinstall; Android deletes app storage on uninstall, so there it only covers a
+ * computer removed in the app and `phoneInstallId` covers the reinstall. The dot keeps these keys apart from saved entries' `proofSeedKey`.
+ */
+const retainedSeedKey = (environmentId: string) =>
+  /^[A-Za-z0-9_-]{1,120}$/.test(environmentId) ? `bycoda.remote.proof.env.${environmentId}` : null;
+/** Best effort: without it the next pairing adds a device row instead of replacing one. */
+async function retainProofSeed(environmentId: string, value: string) {
+  const name = retainedSeedKey(environmentId);
+  if (!name || process.env.EXPO_OS === "web") return;
+  await SecureStore.setItemAsync(name, value, {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  }).catch(() => undefined);
+}
+async function readRetainedSeed(environmentId: string): Promise<Uint8Array | null> {
+  const name = retainedSeedKey(environmentId);
+  if (!name || process.env.EXPO_OS === "web") return null;
+  return decodeProofSeed(await SecureStore.getItemAsync(name));
+}
 /** Puts the previous seed (or its absence) back after a failed save. */
 async function restoreProofSeed(id: string, previous: string | null) {
   if (previous) await writeProofSeed(id, previous);
@@ -111,6 +134,25 @@ export const credentials = {
     assertAppAccess();
     return changingCredentials.has(id) ? null : decodeProofSeed(value);
   },
+  /**
+   * The seed of the key this phone's saved credential for a computer is bound to. Pairing with
+   * that computer again signs with it, so the computer retires the earlier credential. A computer
+   * that is no longer saved (removed, or the app was reinstalled) falls back to the seed retained
+   * for it; null (nothing to retire) when there is none or it cannot be read.
+   */
+  async pairedProofSeed(environmentId: string): Promise<Uint8Array | null> {
+    const saved = useMachines
+      .getState()
+      .machines.find((machine) => machine.environmentId === environmentId);
+    try {
+      const seed = saved ? await credentials.getProofSeed(saved.id, saved) : null;
+      if (seed) return seed;
+      assertAppAccess();
+      return await readRetainedSeed(environmentId);
+    } catch {
+      return null;
+    }
+  },
   /** Persists the seed of an already saved computer after `devices.bindProofKey` was attempted. */
   async saveProofSeed(id: string, seed: Uint8Array) {
     try {
@@ -118,6 +160,8 @@ export const credentials = {
     } catch {
       throw new Error("The computer credential could not be saved securely.");
     }
+    const saved = useMachines.getState().machines.find((machine) => machine.id === id);
+    if (saved) await retainProofSeed(saved.environmentId, encodeProofSeed(seed));
   },
   async get(
     id: string,
@@ -446,6 +490,7 @@ export const useMachines = create<MachineState>((set, get) => ({
         }
         throw new Error("Computer could not be saved. Check available device storage.");
       }
+      if (proofSeed) await retainProofSeed(machine.environmentId, encodeProofSeed(proofSeed));
       if (oldToken !== token) set((state) => {
         const credentialRevisions = new Map(state.credentialRevisions);
         credentialRevisions.set(machine.id, (credentialRevisions.get(machine.id) ?? 0) + 1);
@@ -470,6 +515,8 @@ export const useMachines = create<MachineState>((set, get) => ({
         oldToken = await readSecret(id);
         oldSeed = await readProofSeed(id);
         seedRead = true;
+        // Kept under the computer's identity so pairing with it again replaces this credential.
+        if (oldSeed) await retainProofSeed(origin.environmentId, oldSeed);
         await deleteSecret(id);
         if (oldSeed) await deleteProofSeed(id);
       } catch {

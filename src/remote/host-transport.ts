@@ -112,6 +112,11 @@ export class HostTransport {
     private readonly assertAccess?: () => void,
     /** The seed of the key this credential is bound to; absent before the Host has bound one. */
     private readonly readProofSeed?: () => Promise<Uint8Array | null>,
+    /**
+     * The credential is not saved on this phone yet (the check before saving a pairing). Proofs
+     * say so, and the computer keeps this phone's earlier credential until a saved one is used.
+     */
+    private readonly credentialUnsaved = false,
   ) {
     this.endpoint = normalizeHostEndpoint(machine.endpoint, machine.lanKey);
     this.machine = Object.freeze({ ...machine, endpoint: this.endpoint });
@@ -156,6 +161,7 @@ export class HostTransport {
       method: "POST",
       path: "/rpc",
       environmentId: this.machine.environmentId,
+      unsaved: this.credentialUnsaved,
     });
   }
 
