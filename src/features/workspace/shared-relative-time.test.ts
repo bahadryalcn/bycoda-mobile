@@ -43,7 +43,7 @@ it("keeps failed idle sessions distinct from Ready while current running/input s
     color: "live",
   });
   expect(sessionStatus({ ...failed, needsInput: true }, copy, colors)).toEqual({
-    label: "Needs input",
+    label: "Needs you",
     color: "warning",
   });
 });

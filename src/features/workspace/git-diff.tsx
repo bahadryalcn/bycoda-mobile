@@ -25,7 +25,8 @@ export function GitDiffPanel({
 }: GitDiffPanelProps) {
   const { uiStyles } = useMobileTheme();
   const copy = useCopy();
-  useProjectSubpage(copy("Dosya farkı", "File diff"), onBack);
+  // The header names the file, like the file viewer; the full path stays on the line below.
+  useProjectSubpage(selection.path.replaceAll("\\", "/").split("/").pop() || copy("Dosya farkı", "File diff"), onBack);
   const diff = useGitDiff(scope, selection);
   const [selecting, setSelecting] = useState(false);
   const textDiff = diff.data && !diff.data.binary && !diff.data.tooLarge ? diff.data : undefined;

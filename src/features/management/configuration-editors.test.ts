@@ -26,7 +26,7 @@ vi.mock("@/ui/limit-presets", async () =>
 vi.mock("@/ui/primitives", () => {
   const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Stack: wrapper, Section: wrapper, NumberField: () => null, Body: wrapper, Disclosure: wrapper, NavigationGroup: wrapper, SectionHeader: () => null,
-    ErrorNotice: () => null, SelectField: () => null, ErrorText: () => null, MutationState: () => null, ToggleField: () => null,
+    ErrorNotice: () => null, SelectField: () => null, SegmentedControl: () => null, NavigationRow: () => null, ErrorText: () => null, MutationState: () => null, ToggleField: () => null,
     Field: ({ label, onChangeText }: { label: string; onChangeText: (value: string) => void }) => { calls.fields.set(label, onChangeText); return null; },
     FormActions: ({ onSubmit }: { onSubmit: () => void }) => { calls.submit = onSubmit; return null; } };
 });

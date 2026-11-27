@@ -1,11 +1,11 @@
 import { View } from "react-native";
-import { router } from "expo-router";
 import { useActiveMachine } from "@/state/machines";
 import { Empty, Screen } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { ProviderInboxBrowse } from "./provider-browse";
 import { useInboxLocalScope } from "./inbox-local-scope";
 import { inboxOriginKey } from "./provider-model";
+import { pushOnce } from "@/ui/navigation";
 
 export function ProviderInboxScreen({ embedded = false, openJira = false }: { embedded?: boolean; openJira?: boolean }) {
   const machine = useActiveMachine();
@@ -21,7 +21,7 @@ export function ProviderInboxScreen({ embedded = false, openJira = false }: { em
             illustration="connect-computer"
             title={copy("Bir bilgisayar seçin", "Choose a computer")}
             detail={copy("Servis gelen kutusunu görmek için bir bilgisayar bağla.", "Connect a computer to see its provider inbox.")}
-            action={{ label: copy("Bilgisayar bağla", "Connect a computer"), onPress: () => router.push("/machines") }}
+            action={{ label: copy("Bilgisayar bağla", "Connect a computer"), onPress: () => pushOnce("/machines") }}
           />
         </View>
       </Screen>

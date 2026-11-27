@@ -16,7 +16,7 @@ import { reviewedOperationStore } from "@/state/reviewed-operation-store";
 import { useReviewedOperation } from "@/state/use-reviewed-operation";
 import type { TerminalViewportHandle } from "@/ui/terminal-viewport";
 import type { TerminalPacket } from "@/ui/terminal-document";
-import { darkColors } from "@/ui/tokens";
+import { useTerminalTheme } from "./use-terminal-console";
 import type { SessionScope } from "../workspace/session-types";
 import { PtyReadScheduler } from "./pty-read-scheduler";
 import {
@@ -26,7 +26,7 @@ import {
   readMobilePtyOutput,
   type MobilePtyLease,
   type MobilePtyTerminal,
-  PTY_KEYS,
+  PTY_INTERRUPT,
 } from "./mobile-pty-model";
 
 /**
@@ -46,6 +46,7 @@ export function useMobilePtySession({
   const unlocked = useSecurity((state) => state.status === "unlocked");
   const foreground = useSecurity((state) => state.appState === "active" && state.windowFocused);
   const security = { unlocked, active: foreground };
+  const theme = useTerminalTheme();
   const [opening] = useState(() => ({ ...scope, projectId, review: reviewedMachine(machine) }));
   const latest = useRef({ scope, projectId });
   latest.current = { scope, projectId };
@@ -60,13 +61,15 @@ export function useMobilePtySession({
     !!machine?.capabilities?.includes("terminals.pty.desktop.v1");
   const available = supported && security.unlocked && security.active && !deviceOffline && !!client;
   const params = { projectId: opening.projectId, sessionId: opening.sessionId };
+  const [lease, setLease] = useState<MobilePtyLease | null>(null);
   const list = useHostQuery(
     ["mobile-pty", opening.projectId, opening.sessionId],
     "terminals.pty.desktop.list",
     params,
     {
       enabled: available,
-      interval: 5000,
+      // The list is off screen while attached; attach, close and detach refetch it directly.
+      interval: lease ? 30_000 : 5000,
       queryFn: async (client, signal) =>
         readMobilePtyList(
           await client.request("terminals.pty.desktop.list", params, { signal }),
@@ -75,7 +78,6 @@ export function useMobilePtySession({
     },
   );
   const listReady = available && list.data !== undefined && !list.isError;
-  const [lease, setLease] = useState<MobilePtyLease | null>(null);
   const [closePending, setClosePending] = useState(false);
   const closeAttempt = useRef<{ terminalId: string; epoch: string; requestId: string } | null>(null);
   const [paused, setPaused] = useState(true);
@@ -86,12 +88,15 @@ export function useMobilePtySession({
   const [ready, setReady] = useState(false);
   const readyDocument = useRef(false);
   const [gap, setGap] = useState(false);
+  /** The shell ended on its own; a state, not a failure. */
+  const [exited, setExited] = useState<{ exitCode: number | null } | null>(null);
   const viewport = useRef<TerminalViewportHandle>(null);
   const cursor = useRef(0);
   const tail = useRef(createPtyTail());
   const posted = useRef<{ next: number; dataBase64: string } | null>(null);
   const waiting = useRef<number | null>(null);
   const wakeReader = useRef<(() => void) | undefined>(undefined);
+  const wakeReaderAfterAck = useRef<(() => void) | undefined>(undefined);
   const sequence = useRef(0);
   const generation = useRef(0);
   const inputQueue = useRef(Promise.resolve());
@@ -173,6 +178,7 @@ export function useMobilePtySession({
     setReady(false);
     setLost(false);
     setGap(false);
+    setExited(null);
   };
   const confirmed = async (result: unknown, requestId?: string, replaceRenderer = false) => {
     if (result && typeof result === "object" && "state" in result && result.state === "failed") {
@@ -314,11 +320,12 @@ export function useMobilePtySession({
       if (posted.current?.next === packet.next) tail.current.push(posted.current.dataBase64);
       posted.current = null;
       waiting.current = null;
-      wakeReader.current?.();
+      // Spaced so steady small output is batched; input still wakes the reader at once.
+      wakeReaderAfterAck.current?.();
       return;
     }
+    // The accepted write receipt wakes the reader, so input needs no second wake here.
     if (packet.type === "input") input(packet.dataBase64!);
-    if (packet.type === "input") wakeReader.current?.();
     if (packet.type === "resize") {
       dimensions.current = { cols: packet.cols!, rows: packet.rows! };
       if (allowed.current && lease && !op.occupied.current)
@@ -338,12 +345,7 @@ export function useMobilePtySession({
       type: "configure",
       active: available && !list.isError && !paused && !gap && !lost && synced,
       freshPty: freshProtocol.current,
-      theme: {
-        background: darkColors.background,
-        foreground: darkColors.text,
-        cursor: darkColors.text,
-        selectionBackground: darkColors.selected,
-      },
+      theme,
     });
     if (!available || list.isError) {
       generation.current++;
@@ -352,7 +354,7 @@ export function useMobilePtySession({
     if (!security.unlocked) {
       fresh();
     }
-  }, [available, list.isError, paused, gap, lost, ready, security.unlocked, synced]);
+  }, [available, list.isError, paused, gap, lost, ready, security.unlocked, synced, theme]);
   useEffect(() => {
     if (!available || list.isError || !lease || !ready || paused || gap || lost || !client) return;
     let live = true;
@@ -398,7 +400,7 @@ export function useMobilePtySession({
         if (result.next === after && after === result.end) setSynced(true);
         if (result.state === "exited" && !result.hasMore && result.next === after) {
           setPaused(true);
-          setError(new Error("PTY process exited"));
+          setExited({ exitCode: result.exitCode });
           return;
         }
         return { output: result.next > after, hasMore: result.hasMore };
@@ -412,12 +414,14 @@ export function useMobilePtySession({
     };
     const scheduler = new PtyReadScheduler(() => live && waiting.current === null, read);
     wakeReader.current = scheduler.wake;
+    wakeReaderAfterAck.current = scheduler.wakeAfterAck;
     scheduler.wake();
     return () => {
       live = false;
       controller.abort();
       scheduler.stop();
       if (wakeReader.current === scheduler.wake) wakeReader.current = undefined;
+      if (wakeReaderAfterAck.current === scheduler.wakeAfterAck) wakeReaderAfterAck.current = undefined;
     };
   }, [available, list.isError, lease, ready, paused, gap, lost, client]);
   const controlsDisabled = !available || list.isError || busy || !hydrated || !targetMatches;
@@ -452,6 +456,7 @@ export function useMobilePtySession({
     paused,
     gap,
     lost,
+    exited,
     nonce,
     attempt,
     createFailed,
@@ -467,7 +472,7 @@ export function useMobilePtySession({
     create,
     attach,
     onPacket: packet,
-    interrupt: () => input(PTY_KEYS.interrupt),
+    interrupt: () => input(PTY_INTERRUPT),
     /** Sends one key (base64 bytes) through the same ordered, receipt-checked input queue. */
     sendKey: input,
     /** Back to the terminal list without closing the terminal. */
@@ -477,6 +482,7 @@ export function useMobilePtySession({
       setPaused(true);
       setLease(null);
       fresh();
+      void list.refetch();
     },
     checkCreation: () => {
       if (!attempt) return;

@@ -10,7 +10,7 @@ export class ApprovalCommandRefused extends Error {
     super(
       reason === "unsupported"
         ? "This Host cannot verify which request you are answering. Update the Host before responding."
-        : "This request cannot be verified. Refresh the conversation or update its execution client.",
+        : "This request cannot be verified. Refresh the session or update its execution client.",
     );
     this.name = "ApprovalCommandRefused";
   }

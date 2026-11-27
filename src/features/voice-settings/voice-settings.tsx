@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { router, type Href } from "expo-router";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
+import { useLocale } from "@/i18n";
 import { PreferenceStorageNotice } from "@/ui/preference-storage-notice";
+import { confirmAction } from "@/ui/confirm";
 import AudioLines from "lucide-react-native/icons/audio-lines";
-import { ActionMenu, Body, Button, ConfirmationCard, Disclosure, ErrorNotice, NavigationGroup, NavigationRow, QueryState, Section, SettingIcon, StateView, StatusText, ValueRow } from "@/ui/primitives";
+import { ActionMenu, Body, Button, Disclosure, ErrorNotice, NavigationGroup, NavigationRow, QueryState, Section, SettingIcon, StateView, StatusText, ValueRow } from "@/ui/primitives";
 import { formatBytes } from "../settings/local-data-sizes";
 import { SettingsPage } from "../settings/settings-page";
 import { downloadPercent, modelBusy, modelRowState, parseLocalModels, parseModelJob, type LocalVoiceModel, type ModelAction } from "./voice-models-model";
@@ -14,8 +16,9 @@ import { ConversationStyleGroup, DictationGroup, speechSummary, VoiceGroup } fro
 import { useVoicePreferences } from "./voice-preferences";
 import { MicrophonePriority } from "./microphone-priority";
 import { MicrophoneAccessRow } from "./microphone-access";
+import { pushOnce } from "@/ui/navigation";
 
-/** Where Settings → Voice assistant lives; the settings index and the assistant's settings both link here. */
+/** Where Settings → Voice and microphone lives; the settings index and the assistant's settings both link here. */
 export const VOICE_SETTINGS_ROUTE = "/settings/voice";
 
 /**
@@ -30,28 +33,28 @@ export function useVoiceSettingsSummary() {
   return copy("Ses: {p0}", "Voice: {p0}", { p0: speechSummary(preferences.speech, preferences.speaker, copy) });
 }
 
-/** Settings index row: opens the Voice assistant page. */
+/** Settings index row: opens the Voice and microphone page, named as the assistant sheet's row. */
 export function VoiceSettings() {
   const copy = useCopy();
   const summary = useVoiceSettingsSummary();
   return (
     <NavigationRow
-      label={copy("Sesli asistan", "Voice assistant")}
+      label={copy("Ses ve mikrofon", "Voice and microphone")}
       icon={<SettingIcon glyph={AudioLines} />}
       detail={summary}
-      onPress={() => router.push(VOICE_SETTINGS_ROUTE as Href)}
+      onPress={() => pushOnce(VOICE_SETTINGS_ROUTE as Href)}
     />
   );
 }
 
-/** Settings → Voice assistant: Microphone, Voice, Dictation and Conversation style, as the desktop groups them. */
+/** Settings → Voice and microphone: the one place for voice and audio — speaking voice, microphone, speech recognition and turn taking. */
 export function VoiceSettingsScreen() {
   const copy = useCopy();
   const machine = useActiveMachine();
   const storageError = useMachines((state) => state.storageError);
   // The computer these choices serve is the page's scope pill, in the shared scope row.
   return (
-    <SettingsPage title={copy("Sesli asistan", "Voice assistant")} scope={machine && !storageError ? { computer: machine.name } : undefined}>
+    <SettingsPage title={copy("Ses ve mikrofon", "Voice and microphone")} scope={machine && !storageError ? { computer: machine.name } : undefined}>
       <VoiceSettingsBody />
     </SettingsPage>
   );
@@ -88,13 +91,9 @@ export function VoiceSettingsBody() {
         </NavigationGroup>
       </Section>
       {ready ? <>
-        <DictationGroup />
+        {/* The computer's own models matter only while it recognizes speech: folded into that group. */}
+        <DictationGroup localModels={<LocalModels key={connection.token} supported={localSupported} computer={machine.name} current={connection.isCurrent} />} />
         <ConversationStyleGroup />
-        <LocalModels key={connection.token} supported={localSupported} computer={machine.name} current={connection.isCurrent} />
-        <Body muted>{copy(
-          "Uyandırma sözcüklerini ve dikte sözlüğünü masaüstündeki Ses ayarlarından düzenleyebilirsin.",
-          "Manage wake phrases and the dictation dictionary in Voice settings on desktop.",
-        )}</Body>
       </> : null}
     </>
   );
@@ -105,8 +104,7 @@ export function VoiceSettingsBody() {
  * action when a model is missing; Test and Remove sit in the row's menu once it is installed.
  */
 function LocalModels({ supported, computer, current }: { supported: boolean; computer: string; current(): boolean }) {
-  const copy = useCopy();
-  const [confirming, setConfirming] = useState<LocalVoiceModel | null>(null);
+  const copy = useCopy(), locale = useLocale();
   const models = useHostQuery<LocalVoiceModel[]>(["voice", "models"], "voice.local.models", {}, { enabled: supported,
     queryFn: async (client, signal) => parseLocalModels(await client.request("voice.local.models", {}, { signal })) });
   const status = useHostQuery(["voice", "modelStatus"], "voice.local.modelStatus", {}, { enabled: supported,
@@ -138,23 +136,25 @@ function LocalModels({ supported, computer, current }: { supported: boolean; com
     switch (modelRowState(model, job)) {
       case "downloading": {
         const percent = downloadPercent(job);
-        return percent === undefined ? copy("İndiriliyor…", "Downloading…") : `${copy("İndiriliyor…", "Downloading…")} ${percent}% · ${formatBytes(job.bytesDone ?? 0)} / ${formatBytes(job.bytesTotal ?? 0)}`;
+        // The percent sign follows the app language ("%45" in Turkish).
+        return percent === undefined ? copy("İndiriliyor…", "Downloading…") : `${copy("İndiriliyor…", "Downloading…")} ${new Intl.NumberFormat(locale, { style: "percent" }).format(percent / 100)} · ${formatBytes(job.bytesDone ?? 0)} / ${formatBytes(job.bytesTotal ?? 0)}`;
       }
       case "testing": return copy("Sınanıyor…", "Testing…");
       case "removing": return copy("Kaldırılıyor…", "Removing…");
-      case "installed": return copy("{p0} üzerinde yüklü", "Installed on {p0}", { p0: computer });
-      case "failed": return job.detail ?? copy("İşlem başarısız", "Action failed");
+      case "installed": return copy("Yüklü", "Installed");
+      // The computer's own reason follows the localized summary.
+      case "failed": return job.detail ? `${copy("İşlem başarısız", "Action failed")} · ${job.detail}` : copy("İşlem başarısız", "Action failed");
       default: return copy("Yüklü değil", "Not installed");
     }
   };
   const activeModel = working ? models.data?.find(model => model.id === job.id) : undefined;
   return (
     <Disclosure
-      label={copy("Yazıya dökme modelleri", "Transcription models")}
+      label={copy("Yazıya çevirme modelleri", "Transcription models")}
       defaultExpanded={working}
       detail={activeModel ? `${activeModel.label} · ${label(activeModel)}` : undefined}
     >
-      {!supported ? <StateView size="compact" title={copy("Ses modelleri için {p0} üzerindeki bycoda’yı güncelleyin.", "Update bycoda on {p0} for voice models.", { p0: computer })} /> : <>
+      {!supported ? <StateView size="compact" title={copy("Ses modelleri için {p0} üzerindeki bycoda’yı güncelle.", "Update bycoda on {p0} for voice models.", { p0: computer })} /> : <>
         {setup.data?.state === "installing" ? <StatusText tone="live" label={copy("Ses kurulumu sürüyor.", "Voice setup is running.")} /> : null}
         <QueryState query={models} loading="inline" compact />
         {models.data?.length ? <NavigationGroup>
@@ -169,7 +169,10 @@ function LocalModels({ supported, computer, current }: { supported: boolean; com
               : model.installed
                 ? <ActionMenu label={copy("{p0} işlemleri", "{p0} actions", { p0: model.label })} actions={[
                   { key: "test", label: copy("Sına", "Test"), disabled: busy, onPress: () => run(model, "test") },
-                  { key: "remove", label: copy("Kaldır", "Remove"), destructive: true, disabled: busy, onPress: () => setConfirming(model) },
+                  { key: "remove", label: copy("Kaldır", "Remove"), destructive: true, reviewed: true, disabled: busy, onPress: () => confirmAction(
+                    copy("Model kaldırılsın mı?", "Remove model?"),
+                    copy("{p0}, {p1} üzerinden silinsin mi? Yeniden indirmek gerekir.", "Remove {p0} from {p1}? You would need to download it again.", { p0: model.label, p1: computer }),
+                    copy("Kaldır", "Remove"), () => run(model, "delete")) },
                 ]} />
                 : <Button label={copy("İndir", "Download")} tone="quiet" density="compact" disabled={busy}
                   accessibilityLabel={copy("{p0} modelini {p1} üzerine indir", "Download {p0} to {p1}", { p0: model.label, p1: computer })}
@@ -179,15 +182,6 @@ function LocalModels({ supported, computer, current }: { supported: boolean; com
             </ValueRow>;
           })}
         </NavigationGroup> : null}
-        {confirming ? (
-          <ConfirmationCard
-            message={copy("{p0}, {p1} üzerinden silinsin mi? Yeniden indirmek gerekir.", "Remove {p0} from {p1}? You would need to download it again.", { p0: confirming.label, p1: computer })}
-            cancelLabel={copy("Vazgeç", "Cancel")}
-            confirmLabel={copy("Kaldır", "Remove")}
-            onCancel={() => setConfirming(null)}
-            onConfirm={() => { const model = confirming; setConfirming(null); run(model, "delete"); }}
-          />
-        ) : null}
         {action.error ? <ErrorNotice error={action.error} /> : null}
       </>}
     </Disclosure>

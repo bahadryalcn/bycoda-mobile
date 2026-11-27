@@ -26,11 +26,11 @@ vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, label);
   return {
-    Disclosure: Wrapper,
+    Disclosure: Wrapper, ScopeLine: () => null,
+    ValueRow: ({ label, value }: { label: string; value?: string }) => createElement("p", null, `${label}: ${value ?? ""}`),
     FormActions: ({ submitLabel, onSubmit, disabled, busy, feedback }: { submitLabel: string; onSubmit: () => void; disabled?: boolean; busy?: boolean; feedback?: import("react").ReactNode }) => { state.submit = onSubmit; return createElement("div", null, feedback, createElement("button", { disabled: disabled || busy, onClick: onSubmit }, `Confirm ${submitLabel}`)); }, Body: Wrapper, Row: Wrapper, Sheet: Wrapper, NavigationGroup: Wrapper, CodePanel: Wrapper, CodeText: Wrapper,
     Button, QueryState: ({ query }: any) => query.error ? createElement("p", null, query.error.message) : null, MutationState: () => null, ErrorText: () => null, ToggleField: () => null,
     StateView: ({ title, description }: any) => createElement("p", null, title, description), StatusLine: ({ label }: any) => createElement("p", null, label), Notice: ({ message, onRetry }: any) => createElement("div", null, message, onRetry ? createElement(Button, { label: "Retry", onPress: onRetry }) : null),
-    ConfirmationCard: ({ confirmLabel, onConfirm, disabled }: { confirmLabel: string; onConfirm: () => void; disabled?: boolean }) => createElement(Button, { label: `Confirm ${confirmLabel}`, onPress: onConfirm, disabled }),
   };
 });
 let root: ReturnType<typeof createRoot> | undefined;

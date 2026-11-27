@@ -20,3 +20,15 @@ it("fits the frame inside the available area", () => {
   expect(fitFrameWidth({ width: 300, height: 900 }, { width: 100, height: 200 })).toBe(300);
   expect(fitFrameWidth({ width: 0, height: 0 }, undefined)).toBe(0);
 });
+
+it("finds a JPEG start-of-frame past the first header window", () => {
+  // An APP segment of ~6 KB pushes the SOF beyond the first 4 KB of base64.
+  const app = 6000;
+  const bytes = new Uint8Array(4 + app + 11);
+  bytes.set([0xff, 0xd8, 0xff, 0xe1, app >>> 8, app & 255]);
+  bytes.set([0xff, 0xc0, 0, 11, 8, 0x09, 0xfc, 0x04, 0x9b, 3, 0], 4 + app);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  expect(frameDimensions("image/jpeg", btoa(binary))).toEqual({ width: 1179, height: 2556 });
+  expect(frameDimensions("image/jpeg", btoa(binary.slice(0, 5000)))).toBeUndefined();
+});

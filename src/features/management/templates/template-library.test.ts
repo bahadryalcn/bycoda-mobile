@@ -93,6 +93,8 @@ vi.mock("@/ui/primitives", () => {
     Notice: ({ message }: any) => createElement("p", null, message),
     ErrorText: ({ error }: any) =>
       error ? createElement("p", { role: "alert" }, error.message) : null,
+    NoResults: ({ onClearSearch }: any) =>
+      createElement("div", null, "No matching results", createElement(Button, { label: "Clear search", onPress: onClearSearch })),
     Empty: ({ title, action }: any) =>
       createElement(
         "div",
@@ -283,7 +285,7 @@ it("searches name, trigger and body, retains search after closing a pristine edi
 
 it.each([
   "The message is too long.",
-  "This conversation is not available for insertion. Your draft is unchanged.",
+  "This session is not available for insertion. Your draft is unchanged.",
 ])("keeps the selected template open after insertion is refused: %s", async (message) => {
   insert.mockImplementationOnce(() => {
     throw new Error(message);

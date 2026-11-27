@@ -10,6 +10,9 @@ import { credentials, useMachines } from "@/state/machines";
 import { assertAppAccess, useSecurity } from "@/state/security";
 import { useCopy } from "@/ui/copy";
 import { flushWorkspaceDrafts } from "../workspace/draft-guard";
+import { LONG_AWAY_MS } from "@/state/app-resume";
+import { duringSystemPrompt } from "@/state/system-prompt";
+import { pairingPhoneName } from "./phone-name";
 import { connectComputer } from "./computer-connection";
 import { pairingCodeExpired } from "./connection-lifecycle";
 import {
@@ -22,16 +25,19 @@ import {
 } from "./pairing-code";
 import { newProofSeed, proofKeyOf } from "@/remote/device-proof";
 import { redeemMobilePairingCode } from "./pairing-redeem";
-import { ConnectionRecoveryError, ConnectionRemovalError } from "./recovery";
+import { ConnectionRemovalError } from "./recovery";
+import { selectionError } from "./use-switch-computer";
 import type {
   ConnectionDraft,
   ConnectionEntryState,
   ComputerConnectionInput,
 } from "./connection-types";
 import type { MobileMachine } from "@/remote/types";
+import { leaveTo } from "@/ui/navigation";
 
 const emptyDraft: ConnectionDraft = { name: "", endpoint: "", token: "", target: null };
-const phoneName = "Bycoda phone";
+/** "inactive" is a system sheet over the app (permission, Control Center, Face ID), not a stay away. */
+const visible = (state: string | null | undefined) => state === "active" || state === "inactive";
 
 export function useComputerConnection(returnToPreviousAfterConnect = false) {
   const copy = useCopy();
@@ -43,14 +49,19 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
   const rejectedClaim = useRef<string | null>(null);
   const mounted = useRef(true);
   const generation = useRef(0);
-  const foreground = useRef(AppState.currentState === "active");
+  const foreground = useRef(visible(AppState.currentState));
+  const leftAt = useRef<number | null>(null);
+  /** The typed device key was cleared after a long stay away; the form says so once. */
+  const [tokenCleared, setTokenCleared] = useState(false);
   const access = useSecurity((state) => state.status);
+  const typedToken = useRef("");
+  typedToken.current = form.values.token;
 
   const assertAccess = () => {
     assertAppAccess();
     if (
       !mounted.current ||
-      (process.env.EXPO_OS !== "web" && (!foreground.current || AppState.currentState !== "active"))
+      (process.env.EXPO_OS !== "web" && (!foreground.current || !visible(AppState.currentState)))
     ) {
       throw new PairingFailure("access");
     }
@@ -67,18 +78,25 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
 
   useEffect(() => {
     if (process.env.EXPO_OS === "web") return;
-    // Reason: leaving the app (Wi-Fi, VPN, Tailscale) aborts pending work and drops the typed
-    // secret only. The scanned code and form text stay in memory for the current flow; the
-    // redeem ticket is re-checked for expiry before use. Android blur (system dialogs) is ignored.
-    const background = () => {
-      generation.current++;
-      request.current?.abort();
-      form.patch({ token: "" });
-      operation.reset();
-    };
+    // Reason: going to the background (Wi-Fi, VPN, Tailscale settings) aborts pending work. A system
+    // sheet ("inactive": the local network permission, Control Center, Face ID) does not. The typed
+    // secret survives a short trip to copy the address and key; a long stay away clears it. The scanned
+    // code and form text stay; the redeem ticket is re-checked for expiry before use.
     const changed = AppState.addEventListener("change", (state) => {
-      foreground.current = state === "active";
-      if (!foreground.current) background();
+      foreground.current = visible(state);
+      if (state === "background") {
+        leftAt.current ??= Date.now();
+        generation.current++;
+        request.current?.abort();
+        operation.reset();
+      } else if (state === "active" && leftAt.current !== null) {
+        const away = Date.now() - leftAt.current;
+        leftAt.current = null;
+        if (away >= LONG_AWAY_MS && typedToken.current) {
+          form.patch({ token: "" });
+          setTokenCleared(true);
+        }
+      }
     });
     return () => changed.remove();
   }, [form.patch, operation.reset]);
@@ -87,25 +105,41 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
     if (access === "unlocked") return;
     generation.current++;
     request.current?.abort();
+    // The lock drops only the typed secret. The step (scanner, preview, manual or edit form) and the
+    // typed address stay, so unlocking resumes the same flow; the ticket is re-checked before use.
     form.patch({ token: "" });
-    // Permission dialogs can lock the app. Resume the secret-free scanner after unlock.
-    setEntry((current) => (current.kind === "scan" ? current : { kind: "choices" }));
+    if (typedToken.current) setTokenCleared(true);
     operation.reset();
   }, [access, form.patch, operation.reset]);
 
   const cancel = () => {
     generation.current++;
     request.current?.abort();
+    setTokenCleared(false);
     form.reset(emptyDraft);
     setEntry({ kind: "choices" });
     operation.reset();
   };
 
+  /** Opening a step while the app is locked or covered reports it instead of throwing into a press handler. */
+  const allowed = () => {
+    try {
+      assertAccess();
+      return true;
+    } catch (error) {
+      void operation.run(async () => {
+        throw new Error(pairingErrorMessage(error instanceof PairingFailure ? error : new PairingFailure("access"), copy));
+      }).catch(() => undefined);
+      return false;
+    }
+  };
+
   const begin = (
-    kind: "choices" | "methods" | "scan" | "paste" | "manual",
+    kind: "choices" | "scan" | "paste" | "manual",
     mode = connectionMode,
   ) => {
-    assertAccess();
+    if (!allowed()) return;
+    setTokenCleared(false);
     generation.current++;
     request.current?.abort();
     form.reset({ ...emptyDraft, target: { kind: "new" } });
@@ -115,7 +149,8 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
   };
 
   const edit = (machine: MobileMachine) => {
-    assertAccess();
+    if (!allowed()) return;
+    setTokenCleared(false);
     generation.current++;
     request.current?.abort();
     setConnectionMode(machine.lanKey ? "lan" : "tailscale");
@@ -163,8 +198,8 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
         }),
       flushDrafts: flushWorkspaceDrafts,
       getMachines: () => useMachines.getState().machines,
-      saveMachine: (machine, credential, proofSeed) =>
-        useMachines.getState().saveMachine(machine, credential, proofSeed),
+      saveMachine: (machine, credential, proofSeed, options) =>
+        useMachines.getState().saveMachine(machine, credential, proofSeed, options),
       createId: () => Crypto.randomUUID(),
       assertAccess,
       signal,
@@ -173,7 +208,9 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
 
   const connect = async () => {
     if (entry.kind === "preview" && rejectedClaim.current === entry.claimId) return;
-    return operation.run(async () => {
+    // The first local-network connection can raise the iOS Local Network prompt ("inactive"); that
+    // sheet must neither lock the app nor cancel the connection.
+    return operation.run(() => duringSystemPrompt(async () => {
       request.current?.abort();
       const controller = new AbortController();
       request.current = controller;
@@ -189,7 +226,7 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
           if (pairingCodeExpired(entry.code, entry.receivedAt)) throw new PairingFailure("expired");
           // The phone key exists before the credential does; it is persisted with the credential.
           const proofSeed = newProofSeed();
-          const redeemed = await redeemMobilePairingCode(entry.code, entry.claimId, phoneName, {
+          const redeemed = await redeemMobilePairingCode(entry.code, entry.claimId, pairingPhoneName(), {
             signal: controller.signal,
             assertAccess,
             proofKey: proofKeyOf(proofSeed),
@@ -211,8 +248,9 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
           const existing = useMachines
             .getState()
             .machines.find((machine) => machine.id === editingId);
+          // Editing keeps the saved key unless a new one is typed, on every route type.
           const credential =
-            existing?.lanKey && !form.values.token.trim()
+            existing && !form.values.token.trim()
               ? ((await credentials.get(existing.id, existing)) ?? "")
               : form.values.token;
           check();
@@ -240,12 +278,23 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
           throw new PairingFailure("invalid-response");
         }
         check();
+        const edited = !!editingId;
         form.reset(emptyDraft);
+        setTokenCleared(false);
         setEntry({ kind: "choices" });
+        // Editing returns to the Computers list it was opened from; the active computer stays the same.
+        if (edited) return { message: copy("Bağlantı kaydedildi.", "Connection saved.") };
         if (returnToPreviousAfterConnect && router.canGoBack()) router.back();
-        else router.replace("/");
+        // Home is already beneath the Computers page: return to it instead of stacking a second one.
+        else leaveTo("/");
         return { message: copy("Bilgisayar bağlandı.", "Computer connected.") };
       } catch (error) {
+        if (entry.kind === "manual" && error instanceof RemoteHostError && error.kind === "identity")
+          // Manual entry has no pairing code: the address simply belongs to another computer.
+          throw new Error(copy(
+            "Bu adres başka bir bilgisayara ait. Onu yeni bilgisayar olarak ekle.",
+            "This address belongs to a different computer. Add it as a new computer.",
+          ));
         if (
           error instanceof PairingFailure ||
           error instanceof MobilePairingCodeError ||
@@ -263,7 +312,7 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
       } finally {
         if (request.current === controller) request.current = null;
       }
-    });
+    }));
   };
 
   const recover = async (action: () => Promise<void>, message: string) =>
@@ -273,14 +322,7 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
       } catch (error) {
         throw error instanceof ConnectionRemovalError
           ? new Error(copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden aç.", "Saved computers changed. Reopen this review to continue."))
-          : error instanceof ConnectionRecoveryError
-          ? new Error(
-              copy(
-                "Bilgisayar seçilemedi. Kaydedilmiş bağlantıları yeniden yükleyip tekrar dene.",
-                "Computer selection is unavailable. Reload saved connections and try again.",
-              ),
-            )
-          : error;
+          : selectionError(error, copy);
       }
       return { message };
     });
@@ -297,5 +339,6 @@ export function useComputerConnection(returnToPreviousAfterConnect = false) {
     readCode,
     connect,
     recover,
+    tokenCleared,
   };
 }

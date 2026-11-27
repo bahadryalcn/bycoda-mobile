@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { hashKey, notifyManager, useQueryClient } from "@tanstack/react-query";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { hostKey, useHostClient, useHostQuery } from "@/state/queries";
-import { isAppContentVisible, useSecurity } from "@/state/security";
+import { isAppContentRetained, isAppContentVisible, useSecurity } from "@/state/security";
+import { contentRetained } from "@/state/app-resume";
 import { hasProviderPermission } from "../privacy/consent-access";
 import type { HostProject, HostProjectDirectory } from "@/domain/types";
 import { deduplicateProjects } from "./activity-model";
@@ -12,17 +13,22 @@ import { directoryReadFence, directorySyncState, retainDirectorySync, subscribeD
 import { invalidateProjectPrivacy, projectPrivacyKey, projectVisibilityDenied, projectVisibilityExpired, subscribeProjectPrivacy } from "./project-privacy-cache";
 const DIRECTORY_QUERY_KEY = "directory";
 
-/** The reviewed computer is still the active, unlocked, consented one; the same gate guards every cache read. */
-function machineReadable(machine: { id: string; environmentId?: string } | undefined | null): boolean {
+/**
+ * The reviewed computer is still the active, unlocked, consented one; the same gate guards every cache read.
+ * Stream updates apply only in front; shown content stays retained through system surfaces (app-resume.ts).
+ */
+function machineReadable(machine: { id: string; environmentId?: string } | undefined | null, applying = false): boolean {
   const state = useMachines.getState(); const security = useSecurity.getState(); const current = state.machines.find((row) => row.id === machine?.id);
+  const presented = applying ? security.status === "unlocked" && security.appState === "active" && isAppContentVisible() : isAppContentRetained();
   return !!machine && state.activeId === machine.id && state.hydrated && !state.storageError && !state.connectionPending && !!current &&
-    current.environmentId === machine.environmentId && security.status === "unlocked" && security.appState === "active" && isAppContentVisible() && hasProviderPermission(current);
+    current.environmentId === machine.environmentId && presented && hasProviderPermission(current);
 }
 
 export function useProjectDirectory() {
   const machine = useActiveMachine();
   const client = useHostClient();
-  const access = useSecurity((state) => state.status === "unlocked" && state.appState === "active");
+  // A screenshot, shade, prompt or share sheet does not conceal or expire the directory: see app-resume.ts.
+  const access = useSecurity((state) => contentRetained(state, process.env.EXPO_OS !== "web"));
   const cache = useQueryClient();
   const grouped = !!machine?.capabilities?.includes("projects.directory.v1");
   const visibilityKey = useMemo(() => projectPrivacyKey(machine?.id ?? "", grouped), [machine?.id, grouped]);
@@ -56,7 +62,7 @@ export function useProjectDirectory() {
     if (!streamable || !client || !access) return;
     return retainDirectorySync(cache, client, {
       key: visibilityKey,
-      canApply: () => machineReadable(client.machine) &&
+      canApply: () => machineReadable(client.machine, true) &&
         !projectVisibilityExpired(cache, visibilityKey) && !projectVisibilityDenied(cache, visibilityKey),
     });
   }, [streamable, client, access, cache, visibilityKey]);

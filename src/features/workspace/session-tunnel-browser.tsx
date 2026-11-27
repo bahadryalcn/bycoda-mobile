@@ -14,6 +14,8 @@ import {
 import { useHostClient } from "@/state/queries";
 import { useDataSaverActive } from "@/state/data-saver";
 import { useCopy } from "@/ui/copy";
+import { errorMessage, translateErrorText } from "@/ui/error-message";
+import { RemoteHostError } from "@/remote/host-error";
 import { Body, Button, IconButton, Loading, Notice, Sheet, StateView } from "@/ui/primitives";
 import { usePrivateContentAccess } from "@/ui/private-access";
 import { useMobileTheme } from "@/ui/theme";
@@ -31,7 +33,7 @@ type Phase =
   | { kind: "starting" }
   | { kind: "ready"; live: Live }
   | { kind: "failed"; reason: "refused"; refusal: TunnelRefusal }
-  | { kind: "failed"; reason: "error"; message?: string };
+  | { kind: "failed"; reason: "error"; error?: unknown };
 
 const noNavigation: TunnelNavigationChange = {
   url: "",
@@ -80,7 +82,7 @@ export function SessionTunnelBrowser({
       if (cancelled || event.tunnelId !== tunnelId) return;
       setPhase((current) => current.kind === "failed" ? current
         : event.type === "closed" && current.kind !== "ready" ? current
-        : { kind: "failed", reason: "error", message: event.message ?? event.code });
+        : { kind: "failed", reason: "error", error: event.message ?? event.code });
     });
     void (async () => {
       const scan = await client.request<DevServerScan>("devServers.list", { projectId });
@@ -99,7 +101,7 @@ export function SessionTunnelBrowser({
         live: { ...started, port: resolved.value.target.port, url: tunnelPageUrl(started.alias, resolved.value.target.port, resolved.value.path) },
       });
     })().catch((error: unknown) => {
-      if (!cancelled) setPhase({ kind: "failed", reason: "error", message: error instanceof Error ? error.message : undefined });
+      if (!cancelled) setPhase({ kind: "failed", reason: "error", error });
     });
     return () => {
       cancelled = true;
@@ -114,26 +116,30 @@ export function SessionTunnelBrowser({
   const openExternal = (url: string) => { void Linking.openURL(url).catch(() => setLoadError(copy("Bağlantı açılamadı.", "Could not open the link."))); };
   return <Sheet visible title={copy("Telefonda önizleme", "Preview on this phone")} size="full" scroll={false} onClose={onClose}>
     <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.screen, paddingBottom: space.sm }}>
-      <IconButton label={copy("Geri", "Back")} density="compact" disabled={!live || !nav.canGoBack} onPress={() => void webView.current?.goBack()}><ArrowLeft size={20} color={colors.muted} /></IconButton>
-      <IconButton label={copy("İleri", "Forward")} density="compact" disabled={!live || !nav.canGoForward} onPress={() => void webView.current?.goForward()}><ArrowRight size={20} color={colors.muted} /></IconButton>
-      <IconButton label={copy("Yenile", "Reload")} density="compact" disabled={!live} onPress={() => void webView.current?.reload()}><RefreshCw size={20} color={colors.muted} /></IconButton>
+      <IconButton label={copy("Geri", "Back")} reserveTouchTarget disabled={!live || !nav.canGoBack} onPress={() => void webView.current?.goBack()}><ArrowLeft size={20} color={colors.muted} /></IconButton>
+      <IconButton label={copy("İleri", "Forward")} reserveTouchTarget disabled={!live || !nav.canGoForward} onPress={() => void webView.current?.goForward()}><ArrowRight size={20} color={colors.muted} /></IconButton>
+      <IconButton label={copy("Yenile", "Reload")} reserveTouchTarget disabled={!live} onPress={() => void webView.current?.reload()}><RefreshCw size={20} color={colors.muted} /></IconButton>
       <View style={{ flex: 1, minHeight: metrics.touchTarget, justifyContent: "center" }}><Body mono muted numberOfLines={1}>{address}</Body></View>
-      <Button label={copy("Host Tarayıcısında aç", "Open in Host Browser")} tone="quiet" density="compact" onPress={hostBrowser} />
+      <Button label={copy("Bilgisayarın tarayıcısında aç", "Open in Host Browser")} tone="quiet" density="compact" onPress={hostBrowser} />
     </View>
     {loadError ? <Notice tone="warning" message={loadError} /> : null}
     {live && WebView ? <WebView ref={webView} style={{ flex: 1 }} proxyPort={live.proxyPort} alias={live.alias} url={live.url} dataSaver={dataSaver}
       onNavigationChange={(event) => setNav(event.nativeEvent)}
-      onLoadError={(event) => setLoadError(event.nativeEvent.description || event.nativeEvent.code)}
+      onLoadError={(event) => setLoadError(nativeFailureText(event.nativeEvent.description || event.nativeEvent.code, copy) ?? copy("Sayfa yüklenemedi.", "The page could not load."))}
       onExternalLink={(event) => openExternal(event.nativeEvent.url)} />
       : failure || (live && !WebView) ? <StateView illustration="error" title={failure?.title ?? copy("Telefonda önizleme bu sürümde yok.", "Phone preview is not available in this build.")}
-        description={failure?.description} action={{ label: copy("Host Tarayıcısında aç", "Open in Host Browser"), onPress: hostBrowser }} />
+        description={failure?.description} action={{ label: copy("Bilgisayarın tarayıcısında aç", "Open in Host Browser"), onPress: hostBrowser }} />
       : <Loading label={copy("Önizleme hazırlanıyor", "Preparing preview")} />}
   </Sheet>;
 }
 
 function failureCopy(phase: Extract<Phase, { kind: "failed" }>, copy: (tr: string, en: string) => string) {
   if (phase.reason === "error")
-    return { title: copy("Telefonda önizleme açılamadı.", "Could not open the preview on this phone."), description: phase.message };
+    return {
+      title: copy("Telefonda önizleme açılamadı.", "Could not open the preview on this phone."),
+      description: phase.error instanceof RemoteHostError ? errorMessage(phase.error, copy)
+        : nativeFailureText(phase.error instanceof Error ? phase.error.message : phase.error, copy),
+    };
   const refusals: Record<TunnelRefusal, [string, string]> = {
     invalid: ["Bu adres telefonda açılamaz.", "This address cannot be opened on the phone."],
     https: ["HTTPS adresleri telefonda açılamaz.", "HTTPS addresses cannot be opened on the phone."],
@@ -142,4 +148,12 @@ function failureCopy(phase: Extract<Phase, { kind: "failed" }>, copy: (tr: strin
     identity: ["Sunucunun süreç kimliği doğrulanamadı.", "The server's process identity could not be verified."],
   };
   return { title: copy(...refusals[phase.refusal]), description: undefined };
+}
+
+/** Native WebView/tunnel text is English: shown only when a catalog translates it; otherwise logged for diagnostics. */
+function nativeFailureText(raw: unknown, copy: (tr: string, en: string) => string): string | undefined {
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  const known = translateErrorText(raw, copy);
+  if (known === undefined) console.warn(`Phone preview failed: ${raw}`);
+  return known;
 }

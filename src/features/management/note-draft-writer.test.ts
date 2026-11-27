@@ -22,7 +22,8 @@ function disk(options: { failWrites?: number; gate?: Promise<void> } = {}) {
   };
 }
 const stored = (storage: ReturnType<typeof disk>, machine = "computer-a") =>
-  JSON.parse(storage.values.get(noteDraftKey(machine)) ?? "null") as LocalNoteDraft | null;
+  ((JSON.parse(storage.values.get(noteDraftKey(machine)) ?? "null") as { drafts: LocalNoteDraft[] } | null)
+    ?.drafts.at(-1) ?? null);
 const settle = () => vi.advanceTimersByTimeAsync(0);
 
 beforeEach(() => { vi.useFakeTimers(); });

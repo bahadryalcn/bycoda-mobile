@@ -19,7 +19,7 @@ const rows = ["working", "plan", "diff", "code", "shell", "questions", "approval
 export function ContentStressScreen({ header }: { header: ReactNode }) {
   return <ScreenList title="Chat fixtures" header={header} data={rows} keyExtractor={item => item}
     renderItem={({ item }) => <View style={{ gap: space.sm, paddingVertical: space.sm }}>
-      {item === "working" ? <SessionActivityBar activity={deriveSessionActivity({ blocks: [contentStressShell], live: true })} browser={{ host: "localhost:5173" }} onAgents={() => {}} onDevice={() => {}} onBrowser={() => {}} /> : null}
+      {item === "working" ? <SessionActivityBar activity={deriveSessionActivity({ blocks: [contentStressShell], live: true })} browser={{ host: "localhost:5173" }} onDevice={() => {}} onBrowser={() => {}} /> : null}
       {item === "code" ? <MessageCode code={contentStressCode} language="typescript" compact allowPreview={false} /> : null}
       {item === "plan" ? <TranscriptStructured block={contentStressPlan} /> : null}
       {item === "diff" ? <TranscriptStructured block={contentStressDiff} /> : null}

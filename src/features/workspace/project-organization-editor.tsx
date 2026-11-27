@@ -111,7 +111,7 @@ export function OrganizationEditorSheet({
   );
   const editTitle =
     editor?.kind === "folderCreate"
-      ? copy("Konuşma klasörü oluştur", "Create conversation folder")
+      ? copy("Oturum klasörü oluştur", "Create session folder")
       : editor?.kind === "projectName"
         ? copy("Proje görünen adı", "Project display name")
         : editor?.kind === "groupName"
@@ -137,7 +137,7 @@ export function OrganizationEditorSheet({
           header={
             editor?.kind === "sessionOrder" ? (
               <SelectField
-                label={copy("Konuşma listesi", "Conversation list")}
+                label={copy("Oturum listesi", "Session list")}
                 value={form.values.list}
                 disabled={disabled}
                 options={[
@@ -177,7 +177,7 @@ export function OrganizationEditorSheet({
                     ? copy("Klasör adı", "Folder name")
                     : kind === "folderMove"
                       ? copy("Klasörü taşı", "Move folder")
-                      : copy("Konuşmaları sırala", "Order conversations")
+                      : copy("Oturumları sırala", "Order sessions")
                 }
                 disabled={disabled}
                 onPress={() => open({ kind, folderId: editor.folderId })}
@@ -210,7 +210,7 @@ export function OrganizationEditorSheet({
         ) : null}
         {editor?.kind === "folderCreate" ? (
           <MultiSelectField
-            label={copy("Konuşmalar", "Conversations")}
+            label={copy("Oturumlar", "Sessions")}
             values={form.values.ids}
             disabled={disabled}
             searchable
@@ -252,7 +252,7 @@ export function OrganizationEditorSheet({
         {editor?.kind === "sessionMove" ? (
           <>
             <SelectField
-              label={copy("Konuşma", "Conversation")}
+              label={copy("Oturum", "Session")}
               value={form.values.sessionId}
               disabled={disabled}
               searchable

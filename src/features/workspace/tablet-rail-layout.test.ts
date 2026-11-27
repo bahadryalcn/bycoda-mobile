@@ -25,11 +25,12 @@ describe("tablet rail scrolling", () => {
     expect(rail).toContain("alwaysBounceVertical={false}");
   });
 
-  it("keeps the safe-area padding and the sheet outside the scroller", () => {
+  it("keeps the safe-area padding and opens New session as a screen, not a sheet in the scroller", () => {
     const frame = rail.slice(rail.indexOf("paddingTop: insets.top"), rail.indexOf("<ScrollView"));
     expect(frame).toContain("paddingBottom: Math.max(insets.bottom, space.sm)");
     expect(frame).toContain("paddingStart: insets.left + space.sm");
-    expect(rail.indexOf("<NewSessionSheet")).toBeGreaterThan(rail.indexOf("</ScrollView>"));
+    expect(rail).not.toContain("<NewSessionSheet");
+    expect(rail).toContain("openNewChat()");
   });
 
   it("keeps the 48dp targets, tab roles and routes", () => {

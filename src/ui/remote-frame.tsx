@@ -42,7 +42,13 @@ export function RemoteFrame({ uri, label, width, height, onPress, disabled }: {
           cachePolicy="none"
           contentFit="contain"
           transition={0}
-          onLoad={(event) => setNatural(knownFrameSize(event.source.width, event.source.height))}
+          // Keep the previous size object when it did not change, so a Live frame does not add a render.
+          onLoad={(event) => {
+            const next = knownFrameSize(event.source.width, event.source.height);
+            setNatural((previous) =>
+              previous && next && previous.width === next.width && previous.height === next.height ? previous : next,
+            );
+          }}
           style={{ width: "100%", height: "100%" }}
         />
       </View>

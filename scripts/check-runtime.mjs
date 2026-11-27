@@ -12,8 +12,14 @@ const pureContracts = new Set([
   // Public policy update parsing and an unauthenticated fetch, shared with desktop.
   "shared/lib/policyUpdates",
   // Pure typed-array PCM/VAD math and base64 codecs; no DOM, audio device or desktop imports.
-  "features/voice/model/voiceVad",
+  "shared/model/voice-realtime/voiceVad",
+  // Realtime speaker ids, shared with the desktop picker and validated again by the Host.
+  "shared/model/voice-realtime/voiceSpeakers",
+  // Phone voice call wire contract (zod and the shared schemas only).
+  "shared/model/host-contracts/voice",
   "features/voice/model/dictationModels",
+  // Dictation custom words and filler removal: pure string edits (voiceTranscript, voiceFeatureLexicon).
+  "features/voice/model/dictationProcessing",
   "shared/lib/text/truncate",
   // Dependency-free Intl formatter caches; widget timestamps use the selected mobile locale.
   "shared/lib/intl",
@@ -34,7 +40,9 @@ const pureContracts = new Set([
   "shared/model/host-contracts/task-findings",
   "shared/model/host-contracts/schemas",
   "shared/model/host-contracts/tasks",
-  // Work caps share the canonical pure model routing schema; no desktop UI runtime.
+  // Task stop/wait codes are a pure zod contract (schemas only); the card reads `taskNeedsInput`.
+  "shared/model/host-contracts/task-stop",
+  // Model choice reads the canonical pure model routing schema; no desktop UI runtime.
   "shared/model/host-contracts/model-routing",
   // Two constants shared with the desktop and Host: the response byte cap and its error code.
   "shared/model/host-contracts/response-limit",
@@ -55,6 +63,8 @@ const pureContracts = new Set([
   "integrations/device-proof",
   "integrations/account-pair-crypto",
   "features/connections/model/protocol",
+  // Dependency-free tail-stream delta expansion shared with the desktop stream receiver.
+  "features/connections/model/sessionStreamDelta",
   "features/connections/model/sharedQueue",
   "features/sessions/model/queuePersistence",
   "features/inbox/model/remoteInbox",
@@ -71,6 +81,8 @@ const pureContracts = new Set([
   "features/skills/model/cliCommandCatalog",
   "features/source-control/model/selectiveStage",
   "features/notes/noteContext",
+  // Note formatting transforms are dependency-free string edits shared with the desktop editor toolbar.
+  "features/notes/markdownCommands",
   "shared/lib/browserAnnotation",
   "integrations/mobile-pairing",
   // Same-name project hints are pure string helpers shared with the desktop rail.
@@ -90,6 +102,8 @@ const pureContracts = new Set([
   "features/tasks/model/taskInstructions",
   // Dependency-free Intl number formatter cache.
   "shared/i18n/numberFormat",
+  // Dependency-free validator of the provider-authored session goal (Codex `/goal`).
+  "shared/model/providerGoal",
 ]);
 const errors = [];
 const contractRoots = new Set();

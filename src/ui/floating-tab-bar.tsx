@@ -11,7 +11,7 @@ import { NavigationRow } from "./navigation-row";
 import { useAppearance } from "../state/appearance";
 import { useCopy } from "./copy";
 import { useMobileTheme } from "./theme";
-import { fontSize, metrics, opacity, radii, space } from "./tokens";
+import { fontSize, iconSize, lineHeight, metrics, opacity, radii, space } from "./tokens";
 import { haptic } from "./motion";
 import { wideDock } from "./adaptive-layout-model";
 import { useReducedMotionPreference } from "./use-reduced-motion";
@@ -57,15 +57,21 @@ export function TabBadge({ badge, top, end }: { badge: string | number; top: num
         backgroundColor: colors.accentSolid,
         color: colors.primaryText,
         fontSize: fontSize.caption,
+        lineHeight: lineHeight.caption,
         fontVariant: ["tabular-nums"],
       }}
+      // The count sits over a 24dp glyph; at the largest text sizes it would cover the icon.
+      maxFontSizeMultiplier={1.3}
     >
       {badge}
     </Text>
   );
 }
 
-/** Material 3 navigation bar destination: icon in an active-indicator pill, label below. */
+/**
+ * Labeled navigation bar destination: icon, label below and the dock's 4dp accent dot under the
+ * selected one. Like the icon dock, selection is text contrast and the dot, never a filled pill.
+ */
 function BarItem({
   label,
   accessibleLabel = label,
@@ -117,7 +123,6 @@ function BarItem({
           borderRadius: radii.pill,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: focused ? colors.selected : "transparent",
         }}
       >
         {icon}
@@ -136,6 +141,11 @@ function BarItem({
       >
         {label}
       </Text>
+      {/* The slot keeps its height when unselected, so labels do not shift with selection. */}
+      <View
+        accessible={false}
+        style={{ width: space.xs, height: space.xs, borderRadius: radii.pill, backgroundColor: focused ? colors.accent : "transparent" }}
+      />
     </AnimatedPressable>
   );
 }
@@ -413,7 +423,8 @@ export function FloatingTabBar({
                 key={route.key}
                 label={String(label(route))}
                 accessibilityLabel={String(badgeLabel(route))}
-                icon={options.tabBarIcon?.({ focused: selected, color: selected ? colors.text : colors.muted, size: 24 })}
+                intent="navigate"
+                icon={options.tabBarIcon?.({ focused: selected, color: selected ? colors.text : colors.muted, size: iconSize.row })}
                 trailing={
                   badge === TAB_BADGE_DOT ? (
                     <View

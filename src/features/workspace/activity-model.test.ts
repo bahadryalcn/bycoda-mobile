@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeProjectSessions, deduplicateProjects, projectSessionDirectory, runningProjectCounts } from "./activity-model";
+import { activeProjectSessions, deduplicateProjects, projectSessionDirectory, runningProjectCounts, sessionDirectoryView } from "./activity-model";
 import type { HostProject, HostSessionSummary } from "./wire";
 
 const project = (id: string, cwd = id): HostProject => ({ id, cwd, name: "sampleproject" });
@@ -65,5 +65,23 @@ describe("workspace activity", () => {
     expect(projectSessionDirectory(projects, summaries).map((entry) => entry.session.id))
       .toEqual(["running", "ready", "archived"]);
     expect(activeProjectSessions(projects, summaries).map((entry) => entry.session.id)).toEqual(["running"]);
+  });
+});
+
+describe("session directory view", () => {
+  it("is shared while the cache data is unchanged and keeps unchanged rows", () => {
+    const projects = [project("a")];
+    const one = session("one", { updatedAt: 2 });
+    const two = session("two", { updatedAt: 1, status: "idle" });
+    const summaries = [{ projects: { a: { etag: "1", sessions: [one, two] } } }] as never[];
+    const view = sessionDirectoryView(projects, summaries);
+    expect(sessionDirectoryView(projects, [...summaries])).toBe(view);
+    expect(view.sessions.map((row) => row.session.id)).toEqual(["one"]);
+    const moved = session("two", { updatedAt: 3, status: "idle" });
+    const next = sessionDirectoryView(projects, [{ projects: { a: { etag: "2", sessions: [one, moved] } } }] as never[]);
+    expect(next).not.toBe(view);
+    expect(next.directory[0]).toBe(view.directory[0]);
+    expect(next.sessions).toBe(view.sessions);
+    expect(next.directory[1]!.session).toBe(moved);
   });
 });

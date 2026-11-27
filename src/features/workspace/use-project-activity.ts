@@ -1,8 +1,8 @@
-import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { replaceEqualDeep, useQueries, useQueryClient } from "@tanstack/react-query";
 import { hostKey, useHostClient, useHostReadActive } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import { readProjectSummaries, type ProjectSummaries } from "./project-summaries";
-import { projectSessionDirectory } from "./activity-model";
+import { sessionDirectoryView } from "./activity-model";
 import { useProjectList } from "./use-project-directory";
 import { remoteErrorKind } from "@/ui/error-message";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -14,6 +14,15 @@ import { isTransientConnectionError } from "@/state/query-retry";
 /** 5s while healthy; doubles per consecutive failure up to 60s. Resets when a read succeeds. */
 export function activityPollDelay(failures: number) {
   return backoffMs(5_000, failures - 1, 60_000);
+}
+
+/** Groups past the streamed first 32 projects poll slower while that stream is healthy. */
+export const UNSTREAMED_GROUP_POLL_MS = 15_000;
+
+/** Poll delay for a summary group that is not itself streamed. */
+export function activityGroupPollDelay(failures: number, streamHealthy: boolean) {
+  const delay = activityPollDelay(failures);
+  return streamHealthy ? Math.max(delay, UNSTREAMED_GROUP_POLL_MS) : delay;
 }
 
 export function useProjectActivity() {
@@ -61,6 +70,14 @@ export function useProjectActivity() {
           apply: async (value, assertCurrent) => {
             current();
             assertCurrent();
+            // A sibling consumer already wrote this snapshot (the cache keeps a deep-equal copy):
+            // writing again would only notify every observer of the same data.
+            const stored = cache.getQueryData<ProjectSummaries>(queryKey)?.projects?.[projectId];
+            if (stored !== undefined && (stored === value || replaceEqualDeep(stored, value) === stored)) {
+              streamFailing.current = false;
+              setStreamError(undefined);
+              return;
+            }
             await cache.cancelQueries({ queryKey, exact: true }, { silent: true, revert: false });
             current();
             assertCurrent();
@@ -88,6 +105,9 @@ export function useProjectActivity() {
     // 32 reserve room for the mounted transcript within the 64-stream budget.
   }, [streaming, client, cache, liveIdentity]);
   const queries = useQueries({
+    // A hidden tab, a screen under a pushed route or a locked app does not re-render on every
+    // project-stream snapshot another consumer applies; it reads the latest cache on return.
+    subscribed: active,
     queries: groups.map((projectIds, groupIndex) => {
       const liveGroup = streaming && groupIndex === 0;
       const queryKey = hostKey(machine?.id ?? null, ["project-summaries", projectIds]);
@@ -96,6 +116,8 @@ export function useProjectActivity() {
         enabled: !!client && active && projects.directoryReady,
         retry: false,
         staleTime: 5_000,
+        // The project streams reopen on reconnect with fresh snapshots (see reconnect-refresh).
+        meta: { streamOwned: liveGroup },
         refetchInterval: (query: { state: { data?: unknown; error: unknown; fetchFailureCount?: number } }) =>
           (liveGroup && !streamFailing.current) ||
           ["auth", "identity", "unsupported"].includes(remoteErrorKind(query.state.error) ?? "")
@@ -103,7 +125,7 @@ export function useProjectActivity() {
             : query.state.data === undefined && isTransientConnectionError(query.state.error)
               // Leave room for the visible reader's quiet reconnect before the background poll.
               ? 30_000
-              : activityPollDelay(query.state.fetchFailureCount ?? 0),
+              : activityGroupPollDelay(query.state.fetchFailureCount ?? 0, streaming && !streamFailing.current),
         networkMode: "always" as const,
         queryFn: ({ signal }: { signal: AbortSignal }) =>
           readProjectSummaries(
@@ -124,7 +146,8 @@ export function useProjectActivity() {
     ? streamError
     : queries.find((query) => ["auth", "identity"].includes(remoteErrorKind(query.error) ?? ""))
         ?.error;
-  const directory = projectSessionDirectory(
+  // Shared and identity-stable while the cache data is unchanged, so consumers and their rows can skip renders.
+  const { directory, sessions } = sessionDirectoryView(
     projects.data ?? [],
     accessError ? [] : queries.map((query) => query.data),
   );
@@ -133,9 +156,7 @@ export function useProjectActivity() {
   return {
     projects,
     directory,
-    sessions: directory.filter(
-      ({ session }) => !session.archived && (session.status === "running" || session.needsInput),
-    ),
+    sessions,
     complete:
       projects.directoryReady &&
       queries.every(

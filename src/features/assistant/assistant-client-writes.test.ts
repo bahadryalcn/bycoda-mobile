@@ -69,6 +69,14 @@ it("pauses Room once through owner write and refuses missing acknowledgement", a
   await expect(unconfirmed.client.pauseAll()).rejects.toMatchObject({ code: "response" });
   expect(unconfirmed.assistantCalls()).toHaveLength(1);
 });
+it("resumes Room once through owner write and refuses missing acknowledgement", async () => {
+  const f = mockPort(() => ({ ok: true }));
+  await f.client.resumeAll();
+  expect(f.assistantCalls()).toEqual([{ op: "resumeAll" }]);
+  const unconfirmed = mockPort(() => ({}));
+  await expect(unconfirmed.client.resumeAll()).rejects.toMatchObject({ code: "response" });
+  expect(unconfirmed.assistantCalls()).toHaveLength(1);
+});
 it("keeps permission preferences separate from native grants and preserves conflict version", async () => {
   const f = mockPort(() => ({}));
   await expect(

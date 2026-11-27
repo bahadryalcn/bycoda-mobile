@@ -24,4 +24,13 @@ class VoiceRpcPolicyTest {
     for (method in listOf("voice.local.setup", "voice.local.models", "voice.cloud.setKey", "voice.realtime.secret", "sessions.send", "terminal.write", "native.execute", "projects.list")) assertFalse(allowed(method))
     for (op in listOf("snapshot", "threads.open", "threads.list", "presence.set", "jobs.create")) assertFalse(allowed("assistant.request", op, "captured-room"))
   }
+  @Test fun realtimeRelayIsBoundToTheCapturedRoomAndCannotChangeSettings() {
+    for (method in listOf("voice.realtime.audio", "voice.realtime.next", "voice.realtime.interrupt", "voice.realtime.text", "voice.realtime.end")) assertTrue(allowed(method))
+    assertTrue(allowed("voice.realtime.start", thread = "captured-room"))
+    assertFalse(allowed("voice.realtime.start", thread = "different-room"))
+    assertFalse(allowed("voice.realtime.start"))
+    assertTrue(VoiceRpcPolicy.allowed("voice.call.settings.get", null, null, null, "captured-room", "captured-project", false, true))
+    assertFalse(VoiceRpcPolicy.allowed("voice.call.settings.get", null, "captured-room", null, "captured-room", "captured-project", true, false))
+    for (method in listOf("voice.call.settings.set", "voice.realtime.secret")) assertFalse(allowed(method))
+  }
 }

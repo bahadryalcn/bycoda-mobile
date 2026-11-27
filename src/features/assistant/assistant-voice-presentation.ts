@@ -23,18 +23,24 @@ export function assistantVoiceStageLabel(stage: AssistantVoiceStage, computer: s
   switch (stage) {
     case "connect": return copy("{p0} ile ses bağlantısı", "Voice line to {p0}", { p0: computer });
     case "microphone": return copy("Bu telefonun mikrofonu", "This phone's microphone");
-    case "transcription": return copy("{p0} üzerinde ses tanıma", "Transcription on {p0}", { p0: computer });
+    case "transcription": return copy("{p0} üzerinde yazıya çevirme", "Transcription on {p0}", { p0: computer });
     case "reply": return copy("Asistan yanıtı", "Assistant reply");
     case "synthesis": return copy("{p0} üzerinde ses üretimi", "Speech generated on {p0}", { p0: computer });
     case "playback": return copy("Bu telefonda oynatma", "Playback on this phone");
   }
 }
 
-/** The failure title: which step stopped the call. */
+/** The failure title: what did not happen, said as a sentence about the step that stopped the call. */
 export function assistantVoiceFailureTitle(stage: AssistantVoiceStage | undefined, computer: string, copy: Copy): string {
-  return stage
-    ? copy("Durduğu adım: {p0}", "Stopped at: {p0}", { p0: assistantVoiceStageLabel(stage, computer, copy) })
-    : copy("Sesli görüşme kullanılamıyor", "Voice call unavailable");
+  switch (stage) {
+    case "connect": return copy("{p0} ile ses bağlantısı kurulamadı", "Couldn't open the voice line to {p0}", { p0: computer });
+    case "microphone": return copy("Mikrofon kullanılamadı", "The microphone couldn't be used");
+    case "transcription": return copy("Konuşman yazıya çevrilemedi", "Your speech couldn't be transcribed");
+    case "reply": return copy("Asistan yanıt veremedi", "The assistant couldn't reply");
+    case "synthesis": return copy("Yanıt seslendirilemedi", "The reply couldn't be voiced");
+    case "playback": return copy("Yanıt bu telefonda çalınamadı", "The reply couldn't play on this phone");
+    default: return copy("Sesli görüşme kullanılamıyor", "Voice call unavailable");
+  }
 }
 
 export function assistantMicrophoneLevel(pcm: Int16Array): number {
@@ -44,26 +50,5 @@ export function assistantMicrophoneLevel(pcm: Int16Array): number {
   return Math.min(1, Math.sqrt(squares / pcm.length) / 8192);
 }
 
-export const TRANSCRIPT_VISIBILITY_KEY = "bycoda.assistantVoice.transcript.v1";
-type PreferenceStorage = { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<unknown> };
-
-/** Device preference only. A late read never replaces a tap; writes retain tap order. */
-export class AssistantTranscriptPreference {
-  private edited = false;
-  private writes: Promise<unknown> = Promise.resolve();
-  constructor(private readonly storage: PreferenceStorage) {}
-  async load(): Promise<boolean | undefined> {
-    try {
-      const value = await this.storage.getItem(TRANSCRIPT_VISIBILITY_KEY);
-      return this.edited ? undefined : value === "true";
-    } catch { return undefined; }
-  }
-  save(visible: boolean): Promise<unknown> {
-    this.edited = true;
-    this.writes = this.writes.then(async () => {
-      try { await this.storage.setItem(TRANSCRIPT_VISIBILITY_KEY, String(visible)); }
-      catch { /* Visibility still works for this session when device storage is unavailable. */ }
-    });
-    return this.writes;
-  }
-}
+/** The retired device-wide transcript choice; the call screen's views are per call now. */
+export const LEGACY_TRANSCRIPT_VISIBILITY_KEY = "bycoda.assistantVoice.transcript.v1";

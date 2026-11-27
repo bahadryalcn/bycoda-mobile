@@ -30,6 +30,8 @@ vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: () => ({ requestClose: vi.fn
 vi.mock("../shared/format", () => ({ identifier: () => "stable-request" }));
 vi.mock("./member-avatar", () => ({ MemberAvatar: () => null }));
 vi.mock("./member-look-fields", () => ({ MemberLookFields: () => null }));
+vi.mock("../../workspace/model-selection/model-choice-field", () => ({ ModelChoiceField: () => null }));
+vi.mock("../../workspace/model-selection/model-selection-field", () => ({ FixedModelField: () => null }));
 vi.mock("@/ui/limit-presets", () => ({ IntegerTextStepper: () => null }));
 vi.mock("@/ui/number-field", async () => ({ NumberField: (await import("@/ui/primitives")).Field }));
 vi.mock("@/ui/primitives", () => {

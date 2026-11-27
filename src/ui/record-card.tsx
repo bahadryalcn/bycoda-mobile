@@ -1,8 +1,7 @@
 import { useState, type PropsWithChildren, type ReactNode } from "react";
 import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
-import ChevronDown from "lucide-react-native/icons/chevron-down";
-import Circle from "lucide-react-native/icons/circle";
-import CircleCheck from "lucide-react-native/icons/circle-check";
+import { DisclosureChevron } from "./disclosure-motion";
+import { SelectionMark } from "./selection-mark";
 import { Card } from "./layout";
 import { Body } from "./typography";
 import { metrics, opacity, space } from "./tokens";
@@ -92,12 +91,10 @@ export function RecordCard({
       })}
     >
       <View accessible={false} importantForAccessibility="no-hide-descendants" style={{ paddingTop: 1 }}>
-        {selection.selected
-          ? <CircleCheck size={22} strokeWidth={2} color={colors.accent} />
-          : <Circle size={22} strokeWidth={1.75} color={colors.muted} />}
+        <SelectionMark multiple selected={selection.selected} />
       </View>
       <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 120 * Math.max(1, fontScale), minWidth: "auto", gap: space.xs }}>
-        <Body selectable={false} style={uiStyles.title}>{title}</Body>
+        <Body selectable={false} style={uiStyles.label}>{title}</Body>
         {status || metadata ? (
           <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm }}>
             {status}
@@ -131,7 +128,7 @@ export function RecordCard({
       })}
     >
       <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 120 * Math.max(1, fontScale), minWidth: "auto", gap: space.xs }}>
-        <Body selectable={false} style={uiStyles.title}>{title}</Body>
+        <Body selectable={false} style={uiStyles.label}>{title}</Body>
         {status || metadata ? (
           <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm }}>
             {status}
@@ -140,17 +137,16 @@ export function RecordCard({
         ) : null}
       </View>
       {expandable ? (
-        <View style={{ flexShrink: 0, minHeight: 24, justifyContent: "center",
-          transform: [{ rotate: expanded ? "180deg" : "0deg" }] }}
+        <View style={{ flexShrink: 0, minHeight: 24, justifyContent: "center" }}
           accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <ChevronDown size={16} color={colors.muted} />
+          <DisclosureChevron axis="down" expanded={expanded} color={colors.muted} />
         </View>
       ) : null}
     </Pressable>
   );
   return (
     <Card style={{ gap: 0, paddingVertical: space.md, paddingHorizontal: 0, borderWidth: 0,
-      borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border }}>
+      borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.separator }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: space.xs }}>
         {identity}
         {commands && (menu || options.available) ? (

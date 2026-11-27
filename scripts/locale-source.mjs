@@ -114,7 +114,48 @@ export function localeMessagesFromSources(sources) {
   return Object.fromEntries(Object.entries(messages).sort(([a], [b]) => a.localeCompare(b)));
 }
 
-/** Extract copy(tr, en), legacy tr(en, tr), and explicitly consumed/typed tables. */
+const sentence = (text) => /^[A-Z]/.test(text) && /\s/.test(text.trim());
+function thrownText(node) {
+  node = unwrap(node);
+  if (!node) return undefined;
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+  if (ts.isTemplateExpression(node))
+    return node.templateSpans.reduce((text, span, index) => `${text}{p${index}}${span.literal.text}`, node.head.text);
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    const left = thrownText(node.left);
+    const right = thrownText(node.right);
+    return left !== undefined && right !== undefined ? left + right : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * English sentences thrown as errors (`new XError("…")`, `throw "…"`). errorMessage translates
+ * them through the catalogs, keyed by the English text; template values become `{pN}`.
+ * Test doubles (`MockHttpError`) are not user-facing.
+ */
+export function thrownErrorMessagesFromSources(sources) {
+  const messages = {};
+  for (const { fileName, text } of sources) {
+    const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true);
+    const visit = (node) => {
+      if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && /Error$/.test(node.expression.text) &&
+        node.expression.text !== "MockHttpError") {
+        const message = (node.arguments ?? []).map(thrownText).find((value) => value !== undefined && sentence(value));
+        if (message) messages[message] = message;
+      }
+      if (ts.isThrowStatement(node)) {
+        const message = thrownText(node.expression);
+        if (message !== undefined && sentence(message)) messages[message] = message;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return Object.fromEntries(Object.entries(messages).sort(([a], [b]) => a.localeCompare(b)));
+}
+
+/** Extract copy(tr, en), legacy tr(en, tr), explicitly consumed/typed tables and thrown errors. */
 export function localeSource() {
   const sources = [];
   function walk(directory) {
@@ -130,5 +171,5 @@ export function localeSource() {
   }
   walk(path.join(root, "src"));
   walk(path.join(root, "app"));
-  return localeMessagesFromSources(sources);
+  return { ...thrownErrorMessagesFromSources(sources), ...localeMessagesFromSources(sources) };
 }

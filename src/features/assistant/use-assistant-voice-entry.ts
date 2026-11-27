@@ -5,8 +5,11 @@ import { useAssistantCall } from "./assistant-call-state";
 import type { AssistantThread } from "../../../../src/shared/model/host-contracts/assistant";
 
 /** A route command is consumed once, then waits for the existing scope/read guards. No automatic retry. */
-export function useAssistantVoiceEntry({ requested, consume, ready, machineId, environmentId, thread, open, current }: {
-  requested: boolean; consume(): void; ready: boolean; machineId: string; environmentId: string;
+export function useAssistantVoiceEntry({ requested, consume, ready, blocked = false, machineId, environmentId, thread, open, current }: {
+  requested: boolean; consume(): void; ready: boolean;
+  /** The call cannot become ready (assistant off, no access, computer needs an update): stop waiting so the screen can say why. */
+  blocked?: boolean;
+  machineId: string; environmentId: string;
   thread: AssistantThread | null; open(): Promise<AssistantThread | undefined>; current(): boolean;
 }) {
   const [pending, setPending] = useState(requested);
@@ -25,6 +28,10 @@ export function useAssistantVoiceEntry({ requested, consume, ready, machineId, e
     consumed.current = true;
     start(); consume();
   }, [requested, consume]);
+  // A request that can never become ready is dropped instead of showing "Connecting…" forever.
+  useEffect(() => {
+    if (pending && blocked) setPending(false);
+  }, [pending, blocked]);
   // Use the normal open/start paths only after snapshot, project and connection validation.
   useEffect(() => {
     if (!pending || !ready || !current() || opening || openingRequest.current) return;

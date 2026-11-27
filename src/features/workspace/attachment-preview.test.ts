@@ -5,7 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 import { PrivateContentAccessProvider } from "@/ui/private-access";
 import type { MessageContext } from "@/ui/media-policy";
-import { AttachmentFile } from "./transcript-attachments";
+import { AttachmentFile, LocalMessageAttachments, UserMessageAttachments } from "./transcript-attachments";
+import type { Block } from "./wire";
 
 const state = vi.hoisted(() => {
   const machine = { id: "machine", name: "Computer", endpoint: "https://synthetic.invalid", environmentId: "host", lanKey: "synthetic" };
@@ -13,9 +14,10 @@ const state = vi.hoisted(() => {
   return { machine, client: { machine, request: transport }, transport, active: true, allowed: true, available: true, epoch: 0,
     actions: new Map<string, () => void>(), reload: undefined as undefined | (() => void), previewCheck: undefined as undefined | (() => boolean), previewContext: undefined as undefined | MessageContext,
     imageFail: undefined as undefined | (() => void),
+    tiles: [] as any[], gallery: undefined as any,
     kind: "success", confirm: vi.fn(), load: vi.fn(async () => ({ uri: "file:///synthetic/report.txt", name: "Report.txt", mimeType: "text/plain" })) };
 });
-vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children) }));
+vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children), useWindowDimensions: () => ({ width: 390, height: 800, fontScale: 1 }) }));
 vi.mock("@/state/data-saver", () => ({ useDataSaverActive: () => false }));
 vi.mock("lucide-react-native/icons/file", () => ({ default: () => null }));
 vi.mock("expo-image", () => ({ Image: ({ contentFit, accessibilityLabel, onError }: any) => { state.imageFail = onError; return h("span", { "data-image-fit": contentFit }, accessibilityLabel); } }));
@@ -30,14 +32,18 @@ vi.mock("panelui-native/components/attachment", () => {
 vi.mock("./composer-links", () => ({ ComposerLinks: () => null }));
 vi.mock("./attachment-presentation", () => ({ composerLinks: () => [] }));
 vi.mock("./draft-append", () => ({ appendToDraft: () => {} }));
-vi.mock("@/ui/media-viewer", () => ({ MediaViewer: () => null }));
+vi.mock("@/ui/media-viewer", () => ({ MediaViewer: () => null, MediaGallery: (props: any) => { state.gallery = props; return null; } }));
+vi.mock("@/ui/media-grid", () => ({
+  MediaGrid: ({ children }: PropsWithChildren) => h("div", { "data-grid": true }, children),
+  MediaTile: (props: any) => { state.tiles[props.frame.index] = props; return h("button", { "aria-label": props.label, "data-status": props.status, onClick: props.onPress }, props.overflow ? `+${props.overflow}` : null); },
+}));
 vi.mock("@/ui/media-video", () => ({ InlineVideo: () => null }));
 vi.mock("@/ui/use-media-sharing", () => ({ useMediaSharing: () => ({ share: () => {}, busy: false, error: null }) }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: (...args: unknown[]) => state.confirm(...args) }));
 vi.mock("lucide-react-native/icons/image", () => ({ default: () => null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
-vi.mock("@/ui/tokens", () => ({ colors: {}, space: {}, radii: {} }));
-vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/tokens", () => ({ colors: {}, space: {}, radii: {}, metrics: {} }));
+vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, values?: Record<string, unknown>) => en.replace(/\{(\w+)\}/g, (_: string, key: string) => String(values?.[key] ?? `{${key}}`)) }));
 vi.mock("@/state/machines", () => ({ useMachines: { getState: () => ({ activeId: state.machine.id, machines: [state.machine] }) } }));
 vi.mock("@/state/connection-scope", () => {
   const scopes = new Map<number, any>();
@@ -53,6 +59,7 @@ vi.mock("@/ui/media-loader", () => ({ loadSessionMedia: (...args: unknown[]) => 
   return state.load(...args as []);
 } }));
 vi.mock("@/ui/chat-controls", () => ({ ChatSummary: ({ label, onPress, disabled }: any) => { state.actions.set("Open", onPress); return h("button", { disabled, onClick: onPress }, label); } }));
+vi.mock("@/ui/file-chip", () => ({ FileKindTile: () => null, FileChip: ({ name, onPress, disabled }: any) => { state.actions.set("Open", onPress); return h("button", { disabled, onClick: onPress }, name); } }));
 vi.mock("@/ui/document-preview", async () => {
   const { usePrivateContentAccess } = await import("@/ui/private-access");
   return { DocumentPreview: ({ uri, onReload, context }: any) => { state.reload = onReload; state.previewCheck = usePrivateContentAccess().check; state.previewContext = context; return h("p", { "data-document": true }, uri); } };
@@ -80,13 +87,13 @@ it("opens a downloaded PDF in the document reader", async () => {
   expect(container.querySelector("[data-document]")?.textContent).toBe("file:///report.pdf");
 });
 
-it("shows the whole sent image instead of cropping screenshots to the thumbnail square", async () => {
-  await render("photo", { name: "Screenshot.png", image: true, mimeType: "image/png", thumbnail: true });
+it("shows the whole received image instead of cropping it", async () => {
+  await render("photo", { name: "Screenshot.png", image: true, mimeType: "image/png" });
   expect(container.querySelector("[data-image-fit]")?.getAttribute("data-image-fit")).toBe("contain");
 });
 
 it("offers a guarded retry when a downloaded image cannot be decoded", async () => {
-  await render("photo", { name: "Screenshot.png", image: true, mimeType: "image/png", thumbnail: true });
+  await render("photo", { name: "Screenshot.png", image: true, mimeType: "image/png" });
   expect(state.imageFail).toBeTypeOf("function");
   await act(async () => state.imageFail!());
   expect(container.textContent).toContain("Preview could not be opened.");
@@ -98,7 +105,7 @@ it("offers a guarded retry when a downloaded image cannot be decoded", async () 
   await act(async () => retry());
   expect(state.load).toHaveBeenCalledTimes(2);
 });
-afterEach(async () => { await act(async () => root?.unmount()); root = undefined; cache?.clear(); state.actions.clear(); state.load.mockClear(); state.confirm.mockClear(); state.transport.mockClear(); state.kind = "success"; state.active = state.allowed = state.available = true; state.epoch = 0; state.reload = state.previewCheck = state.previewContext = undefined; vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root?.unmount()); root = undefined; cache?.clear(); state.actions.clear(); state.load.mockClear(); state.confirm.mockClear(); state.transport.mockClear(); state.kind = "success"; state.active = state.allowed = state.available = true; state.epoch = 0; state.reload = state.previewCheck = state.previewContext = undefined; state.tiles = []; state.gallery = undefined; vi.unstubAllGlobals(); });
 
 it("rejects captured reload after closing and reopening the same attachment", async () => {
   await render(); await open(); expect(state.load).toHaveBeenCalledOnce(); const oldReload = state.reload!;
@@ -202,4 +209,118 @@ it("passes the filename-derived MIME to the reader when MIME is missing", async 
   state.active = state.allowed = state.available = true;
   await render("missing-mime", { name: "portrait.png", image: true, mimeType: undefined, size: 1024 });
   expect(state.load).toHaveBeenCalledWith(expect.anything(), "missing-mime", "portrait.png", "image/png", expect.anything());
+});
+
+async function renderMessage(attachments: { id: string; name: string; size: number; kind?: "image" | "file"; mimeType?: string }[], text = "") {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  cache = new QueryClient({ defaultOptions: { queries: { retry: false } } }); container = document.createElement("div"); root = createRoot(container);
+  const block = { id: "message", role: "user", text, attachments: attachments.map(file => ({ kind: "image", mimeType: "image/jpeg", ...file })) } as unknown as Block;
+  await act(async () => root!.render(h(QueryClientProvider, { client: cache }, h(PrivateContentAccessProvider, { value: { allowed: true, check: () => true } }, h(UserMessageAttachments, { block, context })))));
+  await flush();
+}
+const photos = (count: number, size = 100 * 1024) => Array.from({ length: count }, (_, index) => ({ id: `photo-${index + 1}`, name: `${1000427071 + index}.jpg`, size }));
+
+it("shows seven sent photos as a 2x2 grid of tiles with +3, never as file rows", async () => {
+  state.load.mockImplementation(async (...args: unknown[]) => ({ uri: `file:///synthetic/${args[1]}.jpg`, name: String(args[2]), mimeType: "image/jpeg" }));
+  try {
+    await renderMessage(photos(7));
+    expect(container.querySelectorAll("[data-status]")).toHaveLength(4);
+    expect([...container.querySelectorAll("[data-status]")].map(tile => tile.getAttribute("data-status"))).toEqual(["ready", "ready", "ready", "ready"]);
+    // Only the four visible tiles read; the photos behind "+3" wait for the gallery.
+    expect(state.load).toHaveBeenCalledTimes(4);
+    expect(state.tiles[1].label).toBe("Image 2 of 7, 1000427072.jpg");
+    expect(state.tiles[3].overflow).toBe(3);
+    expect(state.tiles[3].label).toBe("Image 4 of 7, 1000427074.jpg, 3 more images");
+    expect(container.textContent).toContain("+3");
+    expect(container.textContent).not.toContain("KB");
+  } finally { state.load.mockReset(); state.load.mockImplementation(async () => ({ uri: "file:///synthetic/report.txt", name: "Report.txt", mimeType: "text/plain" })); }
+});
+
+it("opens the gallery at the tapped photo with every photo of the message", async () => {
+  state.load.mockImplementation(async (...args: unknown[]) => ({ uri: `file:///synthetic/${args[1]}.jpg`, name: String(args[2]), mimeType: "image/jpeg" }));
+  try {
+    await renderMessage(photos(7));
+    await act(async () => state.tiles[1].onPress());
+    expect(state.gallery.index).toBe(1);
+    expect(state.gallery.items.map((item: any) => item.key)).toEqual(photos(7).map(photo => photo.id));
+    // Photos behind "+3" are pages too; they read once the gallery comes near them.
+    expect(state.gallery.items.map((item: any) => item.uri)).toEqual([...photos(4).map(photo => `file:///synthetic/${photo.id}.jpg`), undefined, undefined, undefined]);
+    await act(async () => state.gallery.onClose()); expect(state.gallery).toBeDefined();
+    await act(async () => state.tiles[3].onPress());
+    expect(state.gallery.index).toBe(3);
+  } finally { state.load.mockReset(); state.load.mockImplementation(async () => ({ uri: "file:///synthetic/report.txt", name: "Report.txt", mimeType: "text/plain" })); }
+});
+
+it("keeps a large photo behind a confirmed download tile of the same frame", async () => {
+  await renderMessage([{ id: "large", name: "large.jpg", size: 6 * 1024 * 1024 }]);
+  expect(state.tiles[0].status).toBe("download");
+  expect(state.tiles[0].detail).toBe("6.0 MB");
+  expect(state.load).not.toHaveBeenCalled();
+  await act(async () => state.tiles[0].onPress());
+  expect(state.confirm).toHaveBeenCalledOnce(); expect(state.load).not.toHaveBeenCalled();
+  await act(async () => (state.confirm.mock.calls[0] as unknown as [string, string, string, () => void])[3]()); await flush();
+  expect(state.load).toHaveBeenCalledOnce();
+});
+
+it("shows a failed photo as a retry tile", async () => {
+  state.kind = "network";
+  await renderMessage([{ id: "broken", name: "broken.jpg", size: 1024 }]);
+  expect(state.tiles[0].status).toBe("failed");
+  state.kind = "success";
+  await act(async () => state.tiles[0].onPress()); await flush();
+  expect(state.load).toHaveBeenCalledTimes(2);
+  expect(state.tiles[0].status).toBe("ready");
+});
+
+it("opens a small sent file from its chip in one tap, without a separate Download step", async () => {
+  await renderMessage([{ id: "notes", name: "notes.txt", size: 100, kind: "file", mimeType: "text/plain" }]);
+  expect(state.load).not.toHaveBeenCalled();
+  expect(container.querySelector("[data-status]")).toBeNull();
+  await press("Open");
+  expect(state.confirm).not.toHaveBeenCalled();
+  expect(container.querySelector("[data-document]")).not.toBeNull();
+});
+
+const resetLoad = () => { state.load.mockReset(); state.load.mockImplementation(async () => ({ uri: "file:///synthetic/report.txt", name: "Report.txt", mimeType: "text/plain" })); };
+const loadedIds = () => state.load.mock.calls.map((call) => (call as unknown[])[1]);
+
+it("reads photos behind +N only while the gallery shows them or a neighbour page", async () => {
+  state.load.mockImplementation(async (...args: unknown[]) => ({ uri: `file:///synthetic/${args[1]}.jpg`, name: String(args[2]), mimeType: "image/jpeg" }));
+  try {
+    await renderMessage(photos(7));
+    expect(loadedIds()).toEqual(["photo-1", "photo-2", "photo-3", "photo-4"]);
+    await act(async () => state.tiles[3].onPress()); await flush();
+    expect(state.gallery.index).toBe(3);
+    expect(loadedIds()).toEqual(["photo-1", "photo-2", "photo-3", "photo-4", "photo-5"]);
+    expect(state.gallery.items.map((item: any) => item.status ?? "ready")).toEqual(["ready", "ready", "ready", "ready", "ready", "loading", "loading"]);
+    await act(async () => state.gallery.onIndexChange(5)); await flush();
+    expect(loadedIds()).toEqual(["photo-1", "photo-2", "photo-3", "photo-4", "photo-5", "photo-6", "photo-7"]);
+  } finally { resetLoad(); }
+});
+
+it("sizes a lone photo from its loaded image once and keeps that frame after a remount", async () => {
+  state.load.mockImplementation(async (...args: unknown[]) => ({ uri: `file:///synthetic/${args[1]}.jpg`, name: String(args[2]), mimeType: "image/jpeg" }));
+  try {
+    await renderMessage([{ id: "screenshot", name: "screenshot.png", size: 1024 }]);
+    expect(state.tiles[0].frame).toMatchObject({ width: 280, height: 210 });
+    await act(async () => state.tiles[0].onImageLoad({ width: 1170, height: 2532 }));
+    expect(state.tiles[0].frame).toMatchObject({ width: 166, height: 360 });
+    await act(async () => root!.unmount()); root = undefined;
+    await renderMessage([{ id: "screenshot", name: "screenshot.png", size: 1024 }]);
+    expect(state.tiles[0].frame).toMatchObject({ width: 166, height: 360 });
+  } finally { resetLoad(); }
+});
+
+it("keeps a delivered outbox message's photos inert and shows a placeholder once its file is gone", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  container = document.createElement("div"); root = createRoot(container);
+  const files = [1, 2].map((n) => ({ id: `local-${n}`, name: `local-${n}.jpg`, mimeType: "image/jpeg", kind: "image" as const, size: 1024, uri: `file:///staged/local-${n}.jpg` }));
+  state.gallery = undefined;
+  await act(async () => root!.render(h(LocalMessageAttachments, { files })));
+  expect(state.tiles[0].onPress).toBeTypeOf("function");
+  await act(async () => root!.render(h(LocalMessageAttachments, { files, delivered: true })));
+  expect(state.tiles.slice(0, 2).map((tile) => [tile.onPress, tile.onLongPress])).toEqual([[undefined, undefined], [undefined, undefined]]);
+  await act(async () => state.tiles[1].onImageError());
+  expect(state.tiles[1].status).toBe("unavailable");
+  expect(state.gallery).toBeUndefined();
 });

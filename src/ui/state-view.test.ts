@@ -11,7 +11,7 @@ vi.mock("./illustrations", () => ({ Illustration: "Illustration" }));
 vi.mock("./status-line", () => ({ StatusLine: "StatusLine" }));
 vi.mock("./duotone-icon", () => ({ Inbox: "DuotoneIcon", Info: "DuotoneIcon", CircleCheck: "DuotoneIcon", TriangleAlert: "DuotoneIcon", CircleAlert: "DuotoneIcon" }));
 vi.mock("./styles", () => ({ uiStyles: { title: {}, grow: {}, stateColumn: { maxWidth: 320 } } }));
-vi.mock("./tokens", () => ({ colors: {}, semanticColors: {}, iconSize: { status: 16 } }));
+vi.mock("./tokens", () => ({ colors: {}, semanticColors: {}, iconSize: { status: 16, row: 20 }, space: { xxs: 2, xs: 4, sm: 6 } }));
 vi.mock("lucide-react-native/icons/inbox", () => ({ default: "Icon" }));
 vi.mock("lucide-react-native/icons/info", () => ({ default: "Icon" }));
 vi.mock("lucide-react-native/icons/circle-check", () => ({ default: "Icon" }));
@@ -50,7 +50,9 @@ it("renders one status line for the line size", () => {
 });
 it("keeps a compact section state to two description lines and a compact action", () => {
   const tree = StateView({ title: "x", description: "y", size: "compact", action: { label: "A", onPress: vi.fn() } });
-  expect(find(tree, "Body")[0].props.numberOfLines).toBe(2);
+  // The inline title is a Body too (not a heading); the description is the second one.
+  expect(find(tree, "Heading")).toHaveLength(0);
+  expect(find(tree, "Body")[1].props.numberOfLines).toBe(2);
   expect(find(tree, "ActionButton")[0].props.inline).toBe(true);
   // An explicit size wins over the legacy flag.
   expect(find(StateView({ title: "x", compact: true, size: "region" }), "EmptyStateHeader")).toHaveLength(1);

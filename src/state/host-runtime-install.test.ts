@@ -286,6 +286,33 @@ describe("mobile app lifecycle and authenticated trust composition", () => {
       vi.useRealTimers();
     }
   });
+  it("suspends on background instead of retrying against the closed native gate", async () => {
+    vi.useFakeTimers();
+    try {
+      const installed = await installMobileHostRuntime();
+      releases.push(installed.dispose);
+      const provider = getHostWsRuntimeProvider()!;
+      const machine = {
+        id: binding.machineId,
+        name: "Host",
+        environmentId: binding.environmentId,
+        endpoint: "https://host.example",
+        capabilities: descriptor.capabilities,
+      };
+      const lease = await provider.acquire(machine, async () => descriptor, () => undefined);
+      releases.push(lease.release);
+      await vi.waitFor(() => expect(lease.state()).toBe("ready"));
+      const acquire = vi.mocked(fixture.native!.acquireCredential);
+      const before = acquire.mock.calls.length;
+      fixture.appState.set("background");
+      expect(lease.state()).toBe("suspended");
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(acquire).toHaveBeenCalledTimes(before);
+      expect(lease.state()).toBe("suspended");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("closes immediately when the app locks, regardless of the background grace", async () => {
     const installed = await installMobileHostRuntime();
     releases.push(installed.dispose);
@@ -377,7 +404,7 @@ describe("mobile app lifecycle and authenticated trust composition", () => {
         async () => ({ ...descriptor, mobileTls: undefined }),
         () => undefined,
       ),
-    ).rejects.toMatchObject({ kind: "unsupported" });
+    ).rejects.toMatchObject({ kind: "network" });
     expect(fixture.native!.acquireCredential).not.toHaveBeenCalled();
     provider.remember(machine, descriptor);
     expect(() =>

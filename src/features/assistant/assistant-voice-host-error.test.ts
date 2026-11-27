@@ -15,7 +15,7 @@ describe("voice refusals from the computer", () => {
   it("names the computer's reason instead of the generic not-ready sentence", () => {
     const error = refused("Voice settings changed. Disconnect voice in other windows before reconnecting.");
     expect(assistantVoiceErrorMessage(error, english)).toBe(
-      "The computer is using voice with other settings. End voice on the computer and try again, or update Bycoda on the computer so this phone can join it.");
+      "The computer is using voice with other settings. End voice on the computer and try again, or update bycoda on the computer so this phone can join it.");
     expect(assistantCallErrorMessage(error, turkish)).toContain("başka ayarlarla");
     expect(assistantVoiceErrorMessage(refused("Voice setup is still running."), english)).toBe(
       "Voice setup is still running on the computer. Try again when it finishes.");
@@ -27,8 +27,8 @@ describe("voice refusals from the computer", () => {
       "Voice is not set up on the computer (missing: faster-whisper, Whisper model). On the computer, open Settings → Voice assistant and install the missing files.");
   });
 
-  it("shows an unknown computer reason as sent and keeps the generic line without one", () => {
-    expect(voiceHostMessage(refused("OpenRouter is not signed in."), english)).toBe("OpenRouter is not signed in.");
+  it("shows an unknown computer reason under a localized summary and keeps the generic line without one", () => {
+    expect(voiceHostMessage(refused("OpenRouter is not signed in."), english)).toBe("The computer couldn't use voice."+String.fromCharCode(10)+"OpenRouter is not signed in.");
     expect(voiceHostMessage(new HostWsError("unavailable"), english)).toBeUndefined();
     expect(assistantVoiceErrorMessage(new HostWsError("unavailable"), english)).toBe("This computer is not ready for this request. Try again shortly.");
   });
@@ -40,7 +40,7 @@ describe("voice refusals from the computer", () => {
   });
 
   it("asks to update the computer when its socket cannot carry phone voice", () => {
-    expect(assistantVoiceErrorMessage(new HostWsError("unsupported"), english)).toBe("Update Bycoda on the computer to use voice from this phone.");
+    expect(assistantVoiceErrorMessage(new HostWsError("unsupported"), english)).toBe("Update bycoda on the computer to use voice from this phone.");
   });
 
   // A refusal repeated for two and a half minutes of automatic reopening before the call reported it.

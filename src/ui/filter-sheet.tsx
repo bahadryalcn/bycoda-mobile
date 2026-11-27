@@ -2,7 +2,7 @@ import type { ComponentType, PropsWithChildren } from "react";
 import { ScrollView, View, useWindowDimensions } from "react-native";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import { ChoiceChip, IconButton } from "./buttons";
-import { metrics, radii, space } from "./tokens";
+import { iconSize, metrics, radii, space } from "./tokens";
 import { FormActions, Sheet } from "./dialogs";
 import { useCopy } from "./copy";
 import { Body } from "./typography";
@@ -24,7 +24,7 @@ export function FilterButton({ count, onPress, label: customLabel, icon: Icon = 
   return (
     <View>
       <IconButton label={count ? `${label} · ${count}` : label} onPress={onPress}>
-        <Icon size={18} color={count ? colors.accent : colors.muted} />
+        <Icon size={iconSize.action} color={count ? colors.accent : colors.muted} />
       </IconButton>
       {count ? (
         <View accessible={false} pointerEvents="none" style={{
@@ -36,8 +36,13 @@ export function FilterButton({ count, onPress, label: customLabel, icon: Icon = 
   );
 }
 
-/** Filter edits stay local until Apply; the shared sheet action area never scrolls away. */
-export function FilterSheet({ visible, title, onClose, onApply, onReset, applyDisabled = false, children }: PropsWithChildren<{
+/**
+ * Filter edits stay local until Apply; the shared sheet action area never scrolls away. Staged edits
+ * end in Apply, while `useCollapsibleSearch` (which applies live) ends in Done. Pass `activeCount`
+ * (applied or staged non-default filters) so Reset shows only when there is something to reset,
+ * like the live search sheet; without it Reset always shows.
+ */
+export function FilterSheet({ visible, title, onClose, onApply, onReset, applyDisabled = false, activeCount, children }: PropsWithChildren<{
   visible: boolean;
   /** Defaults to "Filters"; matches the trigger's `label`. */
   title?: string;
@@ -45,13 +50,15 @@ export function FilterSheet({ visible, title, onClose, onApply, onReset, applyDi
   onApply: () => void;
   onReset: () => void;
   applyDisabled?: boolean;
+  activeCount?: number;
 }>) {
   const copy = useCopy();
+  const resettable = activeCount === undefined || activeCount > 0;
   return (
     <Sheet visible={visible} title={title ?? copy("Filtreler", "Filters")} size="compact" onClose={onClose}>
       {children}
       <FormActions submitLabel={copy("Uygula", "Apply")} onSubmit={onApply} disabled={applyDisabled}
-        cancelLabel={copy("Sıfırla", "Reset")} onCancel={onReset} />
+        {...(resettable ? { cancelLabel: copy("Sıfırla", "Reset"), onCancel: onReset } : {})} />
     </Sheet>
   );
 }
@@ -61,7 +68,9 @@ export function FilterSheet({ visible, title, onClose, onApply, onReset, applyDi
  * away without a second toolbar row per option. The row is the list's only quick filter; secondary
  * filters stay in FilterSheet. Chips grow with large text instead of clipping their label.
  */
-export function FilterChipRow<T extends string>({ label, value, options, onChange, disabled = false }: {
+export function FilterChipRow<T extends string>({ label, value, options, onChange, disabled = false, wrap = false }: {
+  /** Inside the filter sheet: chips wrap onto lines instead of scrolling sideways. */
+  wrap?: boolean;
   /** Spoken name of the filter; not shown, the chips name themselves. */
   label: string;
   value: T;
@@ -72,10 +81,21 @@ export function FilterChipRow<T extends string>({ label, value, options, onChang
   useMobileTheme();
   const { fontScale } = useWindowDimensions();
   const grow = fontScale > 1 ? { height: "auto" as const, minHeight: metrics.chipHeight, paddingVertical: space.xs } : null;
+  if (wrap) return (
+    <View accessibilityLabel={label} style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+      {options.map((option) => (
+        <ChoiceChip key={option.value} label={option.label} selected={!disabled && value === option.value}
+          disabled={disabled} style={grow} onPress={() => onChange(option.value)} />
+      ))}
+    </View>
+  );
   return (
     <ScrollView
       horizontal
       accessibilityLabel={label}
+      // Chips that fit never bounce or glow sideways; only an overflowing row scrolls.
+      alwaysBounceHorizontal={false}
+      overScrollMode="never"
       showsHorizontalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       style={{ flexGrow: 0 }}
@@ -89,7 +109,12 @@ export function FilterChipRow<T extends string>({ label, value, options, onChang
   );
 }
 
-/** Applied state only: staged choices stay inside the filter editor until Apply. */
+/**
+ * Applied state only: staged choices stay inside the filter editor until Apply.
+ * @deprecated The design system has no applied-filter summary rows; the filter icon's dot shows
+ * applied state. Do not add consumers; the remaining Jira board and pull request callers migrate
+ * with their owners.
+ */
 export function AppliedFilters({ filters, result }: {
   filters: readonly (string | false | null | undefined)[];
   result?: string;

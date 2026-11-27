@@ -1,3 +1,4 @@
+import { numberFormat } from "../../../../src/shared/i18n/numberFormat";
 import type { SessionUsageReport } from "./usage-model";
 
 type Metrics = SessionUsageReport["totals"];
@@ -45,10 +46,19 @@ export function providerUsage(rows: SessionUsageReport["rows"]): ProviderUsage[]
   return list.map((entry) => ({ ...entry, share: max > 0 && entry.tokens !== null ? entry.tokens / max : 0 }));
 }
 
-/** 1.2K / 3.4M style reading for dense summaries; exact values stay in the detail rows. */
-export function compactTokens(value: number | null): string {
+/**
+ * Compact reading in the app language ("1.2K"; Turkish "1,2 B" for thousand, "3,4 Mr" for billion):
+ * a fixed K/M/B suffix misreads where "B" means thousand. Exact values stay in the detail rows.
+ */
+export function compactTokens(value: number | null, locale = "en"): string {
   if (value === null) return "—";
-  if (value < 1000) return String(value);
+  if (value < 1000) return numberFormat(locale).format(value);
+  const text = numberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(value);
+  // A runtime without compact notation prints the full number; keep the reading short anyway.
+  return text === numberFormat(locale, { maximumFractionDigits: 1 }).format(value) ? legacyCompact(value) : text;
+}
+
+function legacyCompact(value: number): string {
   const units: [number, string][] = [[1e9, "B"], [1e6, "M"], [1e3, "K"]];
   for (const [size, suffix] of units) {
     if (value >= size) {

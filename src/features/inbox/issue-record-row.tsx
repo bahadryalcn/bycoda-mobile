@@ -7,8 +7,10 @@ import { fontSize, lineHeight } from "@/ui/tokens";
  * Issue identity owns the row width; state, draft and caption wrap below it. The ordinary workflow
  * state (open, closed, approved) is quiet text; only a state the owner must act on keeps a tinted badge.
  */
-export function IssueRecordRow({ label, detail, state, stateTone, stateBadge, extraBadges, caption, disabled, onPress }: {
+export function IssueRecordRow({ label, detail, icon, state, stateTone, stateBadge, extraBadges, caption, disabled, onPress }: {
   label: string;
+  /** Leading mark, e.g. the provider logo, so the source reads before the title. */
+  icon?: ReactNode;
   detail?: string;
   state: string;
   stateTone?: BadgeProps["tone"];
@@ -22,7 +24,7 @@ export function IssueRecordRow({ label, detail, state, stateTone, stateBadge, ex
   onPress: () => void;
 }) {
   const badges = extraBadges?.filter(Boolean) ?? [];
-  return <NavigationRow label={label} labelLines={2} detail={detail} detailLines={2}
+  return <NavigationRow label={label} labelLines={2} detail={detail} detailLines={2} icon={icon}
     accessibilityLabel={[label, detail, state, ...badges, caption].filter(Boolean).join(". ")}
     supporting={state || badges.length || caption ? <Row>
       {state ? stateBadge ?? <ProviderState label={state} tone={stateTone} /> : null}

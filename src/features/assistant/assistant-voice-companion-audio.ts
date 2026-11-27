@@ -1,13 +1,13 @@
 import { File, Paths } from "expo-file-system";
 import type { NativeVoiceCompanion } from "../../../modules/bycoda-voice-companion";
-import { decodePcmBase64 } from "../../../../src/features/voice/model/voiceVad";
+import { decodePcmBase64 } from "../../../../src/shared/model/voice-realtime/voiceVad";
 import type { SpeechChunk, VoiceCapture } from "./assistant-voice";
 let captureSequence = 0;
 let playbackSequence = 0;
 
 /** The native session (Android service, iOS call engine) outlives one utterance. Its ID fences every native action. */
 export function companionVoiceCapture(native: NativeVoiceCompanion, onBuffer: (data: Int16Array, rate: number) => void,
-  onEnded?: (reason: string, error?: string) => void): VoiceCapture {
+  onEnded?: (reason: string, error?: string) => void, batchBytes?: number): VoiceCapture {
   const session = native.getState();
   if (!session.active || !session.sessionId) throw new Error("Start a voice session while Bycoda is visible before recording.");
   const id = session.sessionId;
@@ -23,7 +23,8 @@ export function companionVoiceCapture(native: NativeVoiceCompanion, onBuffer: (d
     async start() {
       if (stopped) return;
       starting = true;
-      try { await native.startCapture(id, captureId); }
+      // Older native builds take two arguments; only a realtime call asks for its smaller batch.
+      try { await (batchBytes === undefined ? native.startCapture(id, captureId) : native.startCapture(id, captureId, batchBytes)); }
       catch (error) { stopped = true; listener.remove(); throw error; }
       if (stopped) native.stopCapture(id, captureId);
     },

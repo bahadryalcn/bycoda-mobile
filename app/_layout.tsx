@@ -8,7 +8,7 @@ import { startDiagnostics } from "../src/features/diagnostics/diagnostics-runtim
 import { AppProviders } from "../src/app-providers";
 import { KeyboardCommandsProvider, KeyboardScreen } from "../src/features/keyboard/keyboard-provider";
 import { ScreenChromeProvider } from "../src/ui/layout";
-import { ScreenComputerControl } from "../src/ui/screen-chrome";
+import { ScreenComputerControl, ScreenHeaderRow } from "../src/ui/screen-chrome";
 import { MachinePill } from "../src/ui/machine-bar";
 import { HeaderBackButton } from "../src/ui/header-back-button";
 import { stackBackItem } from "../src/ui/stack-back";
@@ -16,8 +16,10 @@ import { useCopy } from "../src/ui/copy";
 import { useReducedMotionPreference } from "../src/ui/use-reduced-motion";
 import { useMobileTheme } from "../src/ui/theme";
 import { useRestoreLastSession } from "../src/features/workspace/last-session";
+import { NavigationAnchor } from "../src/ui/navigation";
 import { useAssistantWindowReserve } from "../src/features/assistant/assistant-window-reserve";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
+import { View } from "react-native";
 import { AppErrorScreen } from "../src/ui/error-boundary";
 
 /**
@@ -30,6 +32,34 @@ export const unstable_settings = { anchor: "(tabs)" };
 /** The switchable computer pill pages show in their shared scope row. */
 function ComputerControl() {
   return <MachinePill />;
+}
+
+/**
+ * A pushed page's one top row: Back, then its title and scope pills on the left, its icon actions
+ * on the right. The native title is cleared so the page identity is not drawn twice.
+ */
+function HeaderRow({ identity, actions }: { identity: ReactNode; actions?: ReactNode }) {
+  const back = <HeaderBackButton onPress={() => router.back()} />;
+  // `null` returns a page that no longer fits the top row to the stack's own title and Back.
+  if (identity === null) return (
+    <Stack.Screen options={{
+      headerTitle: undefined,
+      headerLeft: ({ canGoBack }) => canGoBack ? back : null,
+      unstable_headerLeftItems: ({ canGoBack }) => canGoBack ? [stackBackItem(back)] : [],
+      headerRight: undefined,
+    }} />
+  );
+  return (
+    <Stack.Screen options={{
+      headerTitle: "",
+      headerLeft: ({ canGoBack }) => <View style={{ flexDirection: "row", alignItems: "center" }}>{canGoBack ? back : null}{identity}</View>,
+      unstable_headerLeftItems: ({ canGoBack }) => [
+        ...(canGoBack ? [stackBackItem(back)] : []),
+        { type: "custom" as const, element: <>{identity}</>, hidesSharedBackground: true },
+      ],
+      headerRight: actions ? () => actions : undefined,
+    }} />
+  );
 }
 
 // Module scope: capture starts before the first render so early warnings and crashes are kept.
@@ -62,7 +92,10 @@ function RootNavigation() {
   };
   return (
     <ThemeProvider value={navigationTheme}>
+        {/* A cold deep link's page gets its parent tab beneath it, so every Back lands there. */}
+        <NavigationAnchor />
         <ScreenComputerControl value={ComputerControl}>
+        <ScreenHeaderRow value={HeaderRow}>
         <ScreenChromeProvider nativeTitle bottomInset={assistantReserve}>
           <Stack
             screenLayout={({ children }) => <KeyboardScreen>{children}</KeyboardScreen>}
@@ -92,6 +125,14 @@ function RootNavigation() {
             <Stack.Screen name="project/[id]" options={{ title: copy("Proje", "Project") }} />
             {/* The chat screen draws its own compact 48dp header so the first frame never shifts. */}
             <Stack.Screen name="session/[id]" options={{ title: copy("Oturum", "Session"), headerShown: false }} />
+            {/* One empty new session per stack: its draft is phone-wide, so a second copy (rail, ⌘N,
+                palette from an open session above it) would hold a stale editor of the same draft.
+                Opening it again brings the existing one to the front. */}
+            <Stack.Screen
+              name="session/new"
+              dangerouslySingular
+              options={{ title: copy("Yeni oturum", "New session"), headerShown: false }}
+            />
             <Stack.Screen name="session-reference" options={{ title: copy("Oturum", "Session") }} />
             <Stack.Screen
               name="sessions"
@@ -102,7 +143,8 @@ function RootNavigation() {
             <Stack.Screen name="pull-requests/[id]" options={{ title: copy("Pull request", "Pull request") }} />
             <Stack.Screen name="licenses" options={{ title: copy("Açık kaynak lisansları", "Open-source licenses") }} />
             <Stack.Screen name="tools/[tool]" options={{ title: copy("Araçlar", "Tools") }} />
-            <Stack.Screen name="legal/[document]" options={{ title: copy("Yardım", "Help") }} />
+            {/* The document screen names itself (Privacy, Terms or Help); no wrong placeholder meanwhile. */}
+            <Stack.Screen name="legal/[document]" options={{ title: "" }} />
             <Stack.Screen
               name="demo"
               options={{ title: copy("Uygulamayı keşfet", "Explore the app") }}
@@ -113,6 +155,7 @@ function RootNavigation() {
             />
           </Stack>
         </ScreenChromeProvider>
+        </ScreenHeaderRow>
         </ScreenComputerControl>
     </ThemeProvider>
   );

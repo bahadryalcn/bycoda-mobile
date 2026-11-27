@@ -12,8 +12,8 @@ describe("Settings root values", () => {
     expect(notificationSummary({ status: "pending" }, copy)).toBeUndefined();
     expect(notificationSummary({ status: "error", error: new Error("timed out") }, copy)).toBe("Status unavailable");
     expect(notificationSummary(ready(true), copy)).toBe("On");
-    expect(notificationSummary(ready(false, "undetermined", true), copy)).toBe("Permission needed");
-    expect(notificationSummary(ready(false), copy)).toBe("Off");
+    expect(notificationSummary(ready(false, "undetermined", true), copy)).toBe("Off");
+    expect(notificationSummary(ready(false), copy)).toBe("Off in phone settings");
   });
 
   it("counts allowed phone permissions once every read settled", () => {

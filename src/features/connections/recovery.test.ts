@@ -153,7 +153,14 @@ describe("reviewed local connection removal", () => {
     expect(actions.remove).toHaveBeenCalledExactlyOnceWith(review.id, review);
     expect(actions.remove.mock.calls[0][1]).not.toBe(review);
   });
-  it.each([{ endpoint: "https://replacement.invalid" }, { environmentId: "env-b" }, { lanKey: "key-b" }])(
+  it.each([{ endpoint: "https://tailnet.invalid", lanKey: undefined }, { lanKey: "key-b" }])(
+    "keeps the review through a route change of the same computer: %j", async change => {
+      const { state, actions } = removalFixture(); Object.assign(state.machines[0], change);
+      expect(matchesSavedComputer(review, state)).toBe(true);
+      await removeSavedComputer(review, actions);
+      expect(actions.remove).toHaveBeenCalledOnce();
+    });
+  it.each([{ environmentId: "env-b" }])(
     "rejects a same-id replacement before draft flushing: %j", async change => {
       const { state, actions } = removalFixture(); Object.assign(state.machines[0], change);
       expect(matchesSavedComputer(review, state)).toBe(false);
@@ -164,7 +171,7 @@ describe("reviewed local connection removal", () => {
     "rechecks %s after retaining workspace drafts", async reason => {
       const { state, actions } = removalFixture(); let valid = true; actions.reviewValid = () => valid;
       actions.flushDrafts.mockImplementation(async () => {
-        if (reason === "replacement") state.machines[0].endpoint = "https://new.invalid";
+        if (reason === "replacement") state.machines[0].environmentId = "env-new";
         if (reason === "missing") state.machines = [];
         if (reason === "storage") state.storageError = "Cannot read saved connections";
         if (reason === "pending") state.connectionPending = true;

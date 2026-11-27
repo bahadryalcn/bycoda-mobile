@@ -7,6 +7,7 @@ import { confirmAction } from "@/ui/confirm";
 import { Body, Field, FormActions, MutationState, Notice, Stack } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { identifier } from "../shared/format";
+import { crewInputDefinitelyRejected } from "./runtime-model";
 
 export function StartCrewEditor({
   definition,
@@ -45,6 +46,10 @@ export function StartCrewEditor({
       { projectId, definitionId: definition.id, prompt, requestId },
       {
         onSuccess: onClose,
+        // A definite refusal created nothing: unlock the draft so it can be corrected and sent again.
+        onError: (error) => {
+          if (crewInputDefinitelyRejected(error)) setSubmitted(false);
+        },
         onSettled: () => {
           sending.current = false;
         },
@@ -101,7 +106,7 @@ export function StartCrewEditor({
             copy("Ekip çalışmasını başlat", "Start crew work"),
             copy(
               "Koordinatör bilgisayarda yeni bir oturum açacak ve işi ekibe dağıtabilecek.",
-              "The coordinator will start a new conversation on the computer and may delegate work to crew members.",
+              "The coordinator will start a new session on the computer and may delegate work to crew members.",
             ),
             copy("Başlat", "Start"),
             submit,

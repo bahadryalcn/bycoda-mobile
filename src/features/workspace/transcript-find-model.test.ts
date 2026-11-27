@@ -8,6 +8,7 @@ import {
   nextTranscriptResult,
   currentTranscriptFind,
   matchingTranscriptActivity,
+  matchingTranscriptAgents,
 } from "./transcript-find-model";
 
 const block = (
@@ -97,6 +98,26 @@ describe("loaded transcript find", () => {
     const olderRows = entries([block("older", "tool", "old command")]);
     expect(matchingTranscriptActivity([...olderRows, ...rows], hit)?.id).toBe("activity:a");
     expect(matchingTranscriptActivity(entries([block("a", "tool", "needle a")]), hit)).toBeUndefined();
+  });
+  it("routes a hit on a subagent run to its agents entry, not the inspector", () => {
+    const run = (id: string, name: string) => block(id, "tool", name, { agentRun: { name, steps: [] }, tool: { status: "completed" } });
+    const rows = entries([block("u", "user", "go"), run("a", "Review needle"), run("b", "Tests")], "messages");
+    const hit = findTranscript(rows, "needle").find((result) => result.blockId === "a")!;
+    expect(hit.entryId).toBe("agents:a");
+    expect(matchingTranscriptAgents(rows, hit)?.id).toBe("agents:a");
+    expect(matchingTranscriptActivity(rows, hit)).toBeUndefined();
+    expect(matchingTranscriptAgents(rows, { ...hit, blockId: "missing" })).toBeUndefined();
+  });
+  it("reaches a run by the name, assignment and steps its row and details show", () => {
+    const run = block("a", "tool", "Task", {
+      tool: { title: "Task", status: "completed" },
+      agentRun: { name: "Audit login", prompt: "Check the token refresh", steps: [{ id: "s", kind: "tool", text: "Read auth/session.ts" }] },
+    } as Partial<Block>);
+    const rows = entries([block("u", "user", "go"), run], "messages");
+    for (const query of ["audit login", "token refresh", "auth/session"]) {
+      const hit = findTranscript(rows, query).find((result) => result.blockId === "a");
+      expect(hit && matchingTranscriptAgents(rows, hit)?.id).toBe("agents:a");
+    }
   });
   it("wraps navigation and preserves active identity after earlier messages load", () => {
     const original = findTranscript(

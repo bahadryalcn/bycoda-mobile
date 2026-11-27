@@ -14,7 +14,8 @@ export type SessionListFilters = {
 
 export const defaultSessionListFilters: SessionListFilters = { hiddenProviders: [], managed: false, time: "recent" };
 
-export const SESSION_TIME_FILTERS: readonly SessionTimeFilter[] = ["recent", "all", "today", "7d", "30d"];
+/** Time choices offered in the filter sheet. The default "recent" window already covers seven days, so "7d" is not repeated. */
+export const SESSION_TIME_FILTERS: readonly SessionTimeFilter[] = ["today", "recent", "30d", "all"];
 
 const dayMs = 24 * 60 * 60 * 1000;
 

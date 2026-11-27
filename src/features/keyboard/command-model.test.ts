@@ -7,7 +7,7 @@ describe("appCommands", () => {
   it("lists unique ids with the palette destinations", () => {
     const commands = appCommands(copy);
     expect(new Set(commands.map((c) => c.id)).size).toBe(commands.length);
-    expect(findCommand(commands, "new")?.destination).toEqual({ pathname: "/sessions", params: { new: "1" } });
+    expect(findCommand(commands, "new")?.destination).toEqual({ pathname: "/session/[id]", params: { id: "new" } });
     expect(findCommand(commands, "tool:terminals")?.destination).toEqual({ pathname: "/tools/[tool]", params: { tool: "terminals" } });
     expect(commands.map((c) => c.id)).toEqual(expect.arrayContaining(["computers", "settings", "account", "tools", "tool:devices"]));
   });

@@ -13,6 +13,7 @@ import {
   ToggleField,
   QueryState,
   Notice,
+  SegmentedControl,
 } from "@/ui/primitives";
 import { haptic } from "@/ui/motion";
 import { useCopy } from "@/ui/copy";
@@ -96,11 +97,16 @@ export function GoalEditor({
   );
   const crewsRefreshFailed =
     crews.isError && (!isTransientConnectionError(crews.error) || crewsGraceElapsed);
+  // The Host contract carries the crew choice only as `executor`; absent is one agent.
+  const crewDefinitionId =
+    draft.executor?.kind === "crew" ? draft.executor.crewDefinitionId : undefined;
+  const crewChosen = draft.executor?.kind === "crew";
   const crewValid =
-    !draft.crewDefinitionId ||
-    (crewsSupported &&
+    !crewChosen ||
+    (!!crewDefinitionId &&
+      crewsSupported &&
       crews.isSuccess &&
-      crewDirectory?.definitions.some((crew) => crew.id === draft.crewDefinitionId));
+      crewDirectory?.definitions.some((crew) => crew.id === crewDefinitionId));
   const update = (patch: Partial<HostGoalInput>) => {
     if (!busy && !delivery.busy && !delivery.pending) form.patch(patch);
   };
@@ -132,10 +138,7 @@ export function GoalEditor({
         : !normalized.model.trim()
           ? copy("Bir model seçin.", "Choose a model.")
           : !crewValid
-            ? copy(
-                "Gelişmiş bölümündeki ekip seçimini kontrol edin.",
-                "Check the crew selection in Advanced.",
-              )
+            ? copy("Ekip seçimini kontrol edin.", "Check the crew selection.")
             : !agentValid
               ? copy(
                   "Gelişmiş bölümündeki süre sınırını kontrol edin.",
@@ -143,8 +146,8 @@ export function GoalEditor({
                 )
               : !opening.isCurrent()
                 ? copy(
-                    "Seçili bilgisayar değişti. Ayarları yeniden açın.",
-                    "The selected computer changed. Reopen the settings.",
+                    "Seçili bilgisayar değişti. Bu sayfayı kapatıp yeniden açın.",
+                    "The selected computer changed. Close this page and open it again.",
                   )
                 : undefined;
   return (
@@ -179,18 +182,68 @@ export function GoalEditor({
         onChange={(ids) =>
           update({
             projectIds: ids,
-            crewDefinitionId:
-              ids.length === 1 && ids[0] === draft.leadProjectId
-                ? draft.crewDefinitionId
-                : undefined,
+            executor:
+              ids.length === 1 && ids[0] === draft.leadProjectId ? draft.executor : undefined,
             leadProjectId: ids.includes(draft.leadProjectId) ? draft.leadProjectId : (ids[0] ?? ""),
           })
         }
       />
+      {crewsSupported && crewDirectory === undefined && (
+        <QueryState query={crews} loading="inline" />
+      )}
+      {crewsSupported && crewDirectory !== undefined && crewsRefreshFailed && (
+        <Notice
+          tone="warning"
+          message={copy(
+            "Ekip listesi yenilenemedi. Seçiminiz korunur; kaydetmeden önce yeniden deneyin.",
+            "The crew list could not be refreshed. Your selection is kept; retry before saving.",
+          )}
+          retryLabel={copy("Yeniden dene", "Retry")}
+          retrying={crews.isFetching}
+          onRetry={() => {
+            if (opening.isCurrent() && !crews.isFetching) void crews.refetch().catch(() => {});
+          }}
+        />
+      )}
+      {crewsSupported && crews.isSuccess && crewDirectory?.definitions.length ? (
+        <SegmentedControl
+          label={copy("Çalışan türü", "Worker type")}
+          value={crewChosen ? "crew" : "agent"}
+          disabled={busy}
+          options={[
+            { value: "agent", label: copy("Ajan", "Agent") },
+            { value: "crew", label: copy("Ekip", "Crew") },
+          ]}
+          onChange={(value) => {
+            const first = crewDirectory?.definitions[0]?.id;
+            update({
+              executor:
+                value === "crew" && first ? { kind: "crew", crewDefinitionId: first } : undefined,
+            });
+          }}
+        />
+      ) : null}
+      {crewChosen ? (
+        <SelectField
+          label={copy("Ekip", "Crew")}
+          hint={copy(
+            "Ekip görevleri yürütür; aşağıdaki model yalnızca planı hazırlar.",
+            "The crew runs the tasks; the model below only prepares the plan.",
+          )}
+          value={crewDefinitionId ?? ""}
+          disabled={busy || !crewsSupported || !crews.isSuccess}
+          options={(crewDirectory?.definitions ?? []).map((crew) => ({
+            value: crew.id,
+            label: crew.name,
+          }))}
+          onChange={(id) => update({ executor: { kind: "crew", crewDefinitionId: id } })}
+        />
+      ) : null}
       <AgentFields
         disabled={busy}
         value={draft}
         projectId={draft.leadProjectId}
+        routingRole="goal.planner"
         onChange={(agent) => update(agent)}
       />
       <Disclosure label={copy("Gelişmiş", "Advanced")}>
@@ -202,65 +255,7 @@ export function GoalEditor({
               .filter((project) => draft.projectIds.includes(project.id))
               .map((project) => ({ value: project.id, label: project.name, detail: project.cwd }))}
             disabled={busy || !draft.projectIds.length}
-            onChange={(leadProjectId) => update({ leadProjectId, crewDefinitionId: undefined })}
-          />
-        ) : null}
-        {crewsSupported && crewDirectory === undefined && (
-          <QueryState query={crews} loading="inline" />
-        )}
-        {crewsSupported && crewDirectory !== undefined && crewsRefreshFailed && (
-          <Notice
-            tone="warning"
-            message={copy(
-              "Ekip listesi yenilenemedi. Seçiminiz korunur; kaydetmeden önce yeniden deneyin.",
-              "The crew list could not be refreshed. Your selection is kept; retry before saving.",
-            )}
-            retryLabel={copy("Yeniden dene", "Retry")}
-            retrying={crews.isFetching}
-            onRetry={() => {
-              if (opening.isCurrent() && !crews.isFetching) void crews.refetch().catch(() => {});
-            }}
-          />
-        )}
-        {!opening.isCurrent() && (
-          <Notice
-            tone="warning"
-            message={copy(
-              "Seçili bilgisayar değişti. Ayarları yeniden açın.",
-              "The selected computer changed. Reopen the settings.",
-            )}
-          />
-        )}
-        {crewsSupported && crews.isSuccess && crewDirectory?.definitions.length ? (
-          <SelectField
-            label={copy("Çalışan türü", "Worker type")}
-            hint={copy(
-              "Ekip yalnızca tek projeli epic için kullanılabilir.",
-              "Crews are available for single-project epics.",
-            )}
-            value={draft.crewDefinitionId ? "crew" : "agent"}
-            disabled={busy}
-            options={[
-              { value: "agent", label: copy("Ajan", "Agent") },
-              { value: "crew", label: copy("Ekip", "Crew") },
-            ]}
-            onChange={(value) =>
-              update({
-                crewDefinitionId: value === "crew" ? crewDirectory?.definitions[0]?.id : undefined,
-              })
-            }
-          />
-        ) : null}
-        {draft.crewDefinitionId ? (
-          <SelectField
-            label={copy("Ekip", "Crew")}
-            value={draft.crewDefinitionId}
-            disabled={busy || !crewsSupported || !crews.isSuccess}
-            options={(crewDirectory?.definitions ?? []).map((crew) => ({
-              value: crew.id,
-              label: crew.name,
-            }))}
-            onChange={(crewDefinitionId) => update({ crewDefinitionId })}
+            onChange={(leadProjectId) => update({ leadProjectId, executor: undefined })}
           />
         ) : null}
         <AgentFields

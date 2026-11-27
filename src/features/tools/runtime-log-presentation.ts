@@ -41,6 +41,18 @@ export function advanceLogPoll(
 export const logPollInterval = (state: LogPollState) =>
   state.unchanged >= LOG_POLL_IDLE_AFTER ? LOG_POLL_IDLE_MS : LOG_POLL_ACTIVE_MS;
 
+/**
+ * The last `limit` UTF-16 units of a log, without splitting a surrogate pair at the cut. A plain
+ * slice, so a 256 KB buffer is never segmented whole just to show its end.
+ */
+export function logTail(output: string, limit: number): { text: string; truncated: boolean } {
+  if (output.length <= limit) return { text: output, truncated: false };
+  let start = output.length - limit;
+  const code = output.charCodeAt(start);
+  if (code >= 0xdc00 && code <= 0xdfff) start += 1;
+  return { text: output.slice(start), truncated: true };
+}
+
 export const logLevelTone = (level: RuntimeLogLevel) =>
   level === "error" ? "danger" : level === "warn" ? "warning" : "default";
 

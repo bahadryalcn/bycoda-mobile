@@ -16,6 +16,7 @@ import {
 } from "../../ui/primitives";
 import { BeadButton } from "../../ui/bead-button";
 import { DotField } from "../../ui/dot-field";
+import { HiddenContentContext } from "../../ui/use-owner-visible";
 import { fontSize, lineHeight, metrics, space } from "../../ui/tokens";
 
 import { Illustration } from "../../ui/illustrations";
@@ -204,7 +205,8 @@ export function SecurityGate({ children }: PropsWithChildren) {
             security.status === "unlocked" ? "auto" : "no-hide-descendants"
           }
         >
-          {children}
+          {/* The hidden workspace stops its decorative loops until it is unlocked again. */}
+          <HiddenContentContext.Provider value={security.status !== "unlocked"}>{children}</HiddenContentContext.Provider>
         </View>
       ) : null}
       {!opened.current ? (

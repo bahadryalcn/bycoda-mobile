@@ -18,6 +18,7 @@ import {
   Skeleton,
   StateView,
   Stack,
+  NoResults,
 } from "@/ui/primitives";
 import { useMobileTheme } from "@/ui/theme";
 import { iconSize } from "@/ui/tokens";
@@ -141,34 +142,19 @@ export function TemplateLibrary({
               },
             }}
           />
+        ) : state.hydrated && !state.error && !rows.length && term && state.rows.length ? (
+          <NoResults searching onClearSearch={() => { setSearch(""); searchRef.current?.focus(); }} />
         ) : state.hydrated && !state.error && !rows.length ? (
+          // Search misses are handled above; this is the library's own first-use state.
           <Empty
             compact={false}
-            illustration={term && state.rows.length ? "search-empty" : "inbox-empty"}
-            title={
-              term && state.rows.length
-                ? copy("Eşleşen sonuç yok", "No matching results")
-                : copy("Henüz şablon yok", "No templates yet")
-            }
-            detail={
-              term && state.rows.length
-                ? undefined
-                : copy(
-                    "Sık kullandığınız istemleri şablon olarak kaydedip tek dokunuşla ekleyin.",
-                    "Save prompts you reuse as templates and insert them in one tap.",
-                  )
-            }
-            action={
-              term && state.rows.length
-                ? {
-                    label: copy("Aramayı temizle", "Clear search"),
-                    onPress: () => {
-                      setSearch("");
-                      searchRef.current?.focus();
-                    },
-                  }
-                : { label: copy("Yeni şablon", "New template"), onPress: addTemplate }
-            }
+            illustration="inbox-empty"
+            title={copy("Henüz şablon yok", "No templates yet")}
+            detail={copy(
+              "Sık kullandığınız istemleri şablon olarak kaydedip tek dokunuşla ekleyin.",
+              "Save prompts you reuse as templates and insert them in one tap.",
+            )}
+            action={{ label: copy("Yeni şablon", "New template"), onPress: addTemplate }}
           />
         ) : undefined
       }

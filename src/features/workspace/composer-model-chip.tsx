@@ -11,6 +11,7 @@ import { RemoteHostError } from "@/remote/host-error";
 import { Notice, QueryState } from "@/ui/primitives";
 import { ChatToolbarAction } from "@/ui/chat-controls";
 import { useCopy } from "@/ui/copy";
+import { errorMessage } from "@/ui/error-message";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
 import {
@@ -155,6 +156,8 @@ export function ComposerModelChip({
     form.reset(draftOf(session));
     setReviewed(session);
     setOpen(true);
+    // The catalog refreshes slowly in the background; the picker shows a fresh one.
+    void catalog.refetch();
   };
   // Session options, session settings and the context ring open this same sheet and draft.
   const requested = useModelSheetRequest((state) => state.target);
@@ -210,7 +213,7 @@ export function ComposerModelChip({
                   compactDisabled={context.compactDisabled || form.dirty || configure.isPending}
                   compactReason={form.dirty
                     ? copy("Önce seçimlerini kaydet veya bırak.", "Save or discard your choices first.")
-                    : copy("Geçerli işlemin bitmesini bekleyin", "Wait for the current operation to finish")}
+                    : copy("Geçerli işlemin bitmesini bekle", "Wait for the current operation to finish")}
                   onCompact={context.onCompact ? () => {
                     setOpen(false);
                     context.onCompact?.();
@@ -223,7 +226,8 @@ export function ComposerModelChip({
         visible={open}
         onClose={() => setOpen(false)}
         dirty={form.dirty}
-        pending={configure.isPending || blocked}
+        // Only a save in flight spins Save and holds the sheet; a blocked session explains itself below.
+        pending={configure.isPending}
         onSave={() => {
           void save();
         }}
@@ -257,60 +261,66 @@ export function ComposerModelChip({
         model={model}
         settings={modelSettings}
         disabled={blocked || running || configure.isPending}
+        // One notice per action area, the most urgent first.
         notice={
-          <>
+          conflict ? (
+            <Notice
+              tone="warning"
+              message={copy(
+                "Oturum değişti. Ayarları kapatıp yeniden incele.",
+                "Session changed. Close settings and review again.",
+              )}
+            />
+          ) : uncertain ? (
+            <Notice
+              tone="warning"
+              message={copy(
+                "Değişikliğin kaydedilip kaydedilmediği bilinmiyor. Otomatik olarak yeniden denenmeyecek.",
+                "It is unknown whether the change was saved. It will not be retried automatically.",
+              )}
+              action={{
+                label: copy("Geçerli modeli kontrol et", "Check current model"),
+                onPress: () => {
+                  configure.reset();
+                  form.reset(draftOf(session));
+                  setReviewed(session);
+                },
+              }}
+            />
+          ) : failure ? (
+            <Notice
+              tone="danger"
+              message={`${errorMessage(failure, copy)} ${copy("Seçimin korundu; Kaydet ile yeniden dene.", "Your choice is kept; press Save to try again.")}`}
+            />
+          ) : running ? (
+            <Notice
+              tone="info"
+              message={copy(
+                "Model, mevcut çalışma tamamlanınca değiştirilebilir.",
+                "The model can change after the current run finishes.",
+              )}
+            />
+          ) : blocked ? (
+            <Notice
+              tone="info"
+              message={copy(
+                "Bu oturumda başka bir işlem sürüyor veya bağlantı bekleniyor. Bitince kaydedebilirsin.",
+                "Another action is in progress in this session or the connection is pending. You can save once it finishes.",
+              )}
+            />
+          ) : unavailableAccount ? (
+            <Notice
+              tone="warning"
+              message={copy(
+                "Kaydedilmiş hesap kullanılamıyor. Modeli değiştirmek için kullanılabilir bir hesap seç.",
+                "The saved account is unavailable. Choose an available account to change the model.",
+              )}
+            />
+          ) : catalog.data?.errors?.[harness] ? (
+            <Notice tone="danger" message={catalog.data.errors[harness]} />
+          ) : (
             <QueryState query={catalog} />
-            {catalog.data?.errors?.[harness] ? (
-              <Notice tone="danger" message={catalog.data.errors[harness]} />
-            ) : null}
-            {conflict ? (
-              <Notice
-                tone="warning"
-                message={copy(
-                  "Oturum değişti. Ayarları kapatıp yeniden inceleyin.",
-                  "Session changed. Close settings and review again.",
-                )}
-              />
-            ) : null}
-            {running ? (
-              <Notice
-                tone="info"
-                message={copy(
-                  "Model, mevcut çalışma tamamlanınca değiştirilebilir.",
-                  "The model can change after the current run finishes.",
-                )}
-              />
-            ) : uncertain ? (
-              <Notice
-                tone="warning"
-                message={copy(
-                  "Değişikliğin kaydedilip kaydedilmediği bilinmiyor. Otomatik olarak yeniden denenmeyecek.",
-                  "It is unknown whether the change was saved. It will not be retried automatically.",
-                )}
-                action={{
-                  label: copy("Geçerli modeli kontrol et", "Check current model"),
-                  onPress: () => {
-                    configure.reset();
-                    form.reset(draftOf(session));
-                    setReviewed(session);
-                  },
-                }}
-              />
-            ) : failure ? (
-              <Notice
-                tone="danger"
-                message={`${failure.message} ${copy("Seçimin korundu; Kaydet ile yeniden dene.", "Your choice is kept; press Save to try again.")}`}
-              />
-            ) : unavailableAccount ? (
-              <Notice
-                tone="warning"
-                message={copy(
-                  "Kaydedilmiş hesap kullanılamıyor. Modeli değiştirmek için kullanılabilir bir hesap seçin.",
-                  "The saved account is unavailable. Choose an available account to change the model.",
-                )}
-              />
-            ) : undefined}
-          </>
+          )
         }
         onChange={(next, settings) => {
           if (!unavailableAccount)

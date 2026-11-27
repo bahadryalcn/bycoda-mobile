@@ -100,9 +100,9 @@ export function TaskEditor({ initial, save, busy, onClose }: TaskEditorProps) {
         disabled={busy}
         value={draft}
         projectId={draft.projectId}
-        onChange={(agent) =>
-          set({ ...agent, modelSettings: { ...agent.modelSettings, ...draft.modelSettings } })
-        }
+        routingRole="task.worker"
+        // The model picker hands over the complete settings of the chosen model and effort.
+        onChange={(agent) => set(agent)}
       />
       <Disclosure label={copy("Gelişmiş", "Advanced")}>
         <AgentFields
@@ -164,7 +164,7 @@ export function TaskEditor({ initial, save, busy, onClose }: TaskEditorProps) {
           />
           <ToggleField
             disabled={busy}
-            label={copy("Varsayılan süre sınırını kullan", "Use Work run limit")}
+            label={copy("Varsayılan süre sınırını kullan", "Use the default run limit")}
             detail={copy(
               "Bilgisayardaki varsayılan görev süresi kullanılır.",
               "Use the default task duration on the computer.",

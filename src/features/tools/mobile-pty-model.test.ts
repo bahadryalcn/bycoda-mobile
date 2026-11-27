@@ -60,8 +60,19 @@ it("preserves byte cursors across split UTF8 and refuses foreign epochs, gap tai
   ).toBe(true);
 });
 
-it("encodes the special keys as the bytes a terminal expects", async () => {
-  const { PTY_KEYS } = await import("./mobile-pty-model");
-  const text = (value: string) => Buffer.from(value, "base64").toString("latin1");
-  expect(Object.values(PTY_KEYS).map(text)).toEqual(["\x1b", "\t", "\x03", "\x1b[A", "\x1b[B", "\x1b[C", "\x1b[D"]);
+it("encodes key-bar keys, pasted text and sticky modifiers as the bytes a terminal expects", async () => {
+  const { PTY_INTERRUPT, ptyModifiedInput, ptyInput } = await import("./mobile-pty-model");
+  const { terminalKeyInput } = await import("./terminal-keys");
+  const text = (value: string) => Buffer.from(value, "base64").toString("utf8");
+  const base64 = (value: string) => Buffer.from(value, "utf8").toString("base64");
+  const ctrl = { ctrl: true, alt: false };
+  expect(text(PTY_INTERRUPT)).toBe("\x03");
+  expect(text(ptyInput(terminalKeyInput("up")))).toBe("\x1b[A");
+  expect(text(ptyInput(terminalKeyInput("up", ctrl)))).toBe("\x1b[1;5A");
+  expect(text(ptyInput(terminalKeyInput("tab", ctrl)))).toBe("\t");
+  expect(text(ptyInput("ğü ok"))).toBe("ğü ok");
+  expect(text(ptyModifiedInput(base64("c"), ctrl))).toBe("\x03");
+  expect(text(ptyModifiedInput(base64("dir"), ctrl))).toBe("\x04ir");
+  expect(text(ptyModifiedInput(base64("ğ"), ctrl))).toBe("ğ");
+  expect(text(ptyModifiedInput(base64("b"), { ctrl: false, alt: true }))).toBe("\x1bb");
 });

@@ -1,10 +1,10 @@
 import { useRef, type PropsWithChildren } from "react";
-import { router } from "expo-router";
 import { useMachines } from "@/state/machines";
 import { Screen, StateView } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { NO_COMPUTER_ACTION, NO_COMPUTER_TITLE } from "@/ui/no-computer";
 import { RouteMachine } from "./route-machine";
+import { leaveTo, pushOnce } from "@/ui/navigation";
 
 export function WorkspaceRouteScope({
   machineId,
@@ -46,11 +46,11 @@ function BoundWorkspaceRoute({
           }
           action={{
             label: noComputer ? copy(...NO_COMPUTER_ACTION) : copy("Bilgisayar seç", "Choose computer"),
-            onPress: () => router.push("/machines"),
+            onPress: () => pushOnce("/machines"),
           }}
           secondaryAction={{
             label: copy("Projelere dön", "Back to projects"),
-            onPress: () => router.replace("/"),
+            onPress: () => leaveTo("/"),
           }}
         />
       </Screen>

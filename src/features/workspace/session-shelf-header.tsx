@@ -17,7 +17,7 @@ export function SessionShelfHeader({
   const copy = useCopy();
   const title = {
     pinned: copy("Sabitlenenler", "Pinned"),
-    needs: copy("Senden bekleyenler", "Needs you"),
+    needs: copy("Seni bekliyor", "Needs you"),
     running: copy("Çalışıyor", "Working"),
     recent: copy("Son", "Recent"),
     snoozed: copy("Ertelenmiş", "Snoozed"),

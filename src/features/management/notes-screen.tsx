@@ -1,4 +1,4 @@
-import { ManagementToolbar } from "./shared/collection-toolbar";
+import { useManagementToolbar } from "./shared/collection-toolbar";
 import { useLocalDraftEpoch } from "@/state/use-local-draft-epoch";
 import { useMobileTheme } from "@/ui/theme";
 import { iconSize } from "@/ui/tokens";
@@ -16,13 +16,14 @@ import {
   useRef,
   useState,
   type ComponentRef,
+  type ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AppliedFilters, FilterButton, FilterSheet } from "@/ui/filter-sheet";
-import ArrowDownUp from "lucide-react-native/icons/arrow-down-up";
 import History from "lucide-react-native/icons/history";
 import Plus from "lucide-react-native/icons/plus";
+import { confirmAction } from "@/ui/confirm";
 import {
+  ActionMenu,
   Body,
   NavigationGroup,
   NavigationRow,
@@ -72,11 +73,40 @@ export function NotesScreen() {
   };
   const [grouping, setGrouping] = useState<NoteGrouping>("none");
   const [ordering, setOrdering] = useState<NoteOrdering>("updated");
-  const [viewDraft, setViewDraft] = useState<{
-    grouping: NoteGrouping;
-    ordering: NoteOrdering;
-  } | null>(null);
   const machine = useActiveMachine();
+  // Grouping and order are a per-computer view preference that outlives this page.
+  const viewKey = machine ? `bycoda.mobile.notes-view.${machine.id}` : null;
+  const viewLoaded = useRef<string | null>(null);
+  useEffect(() => {
+    if (!viewKey) return;
+    let current = true;
+    AsyncStorage.getItem(viewKey).then(
+      (raw) => {
+        if (!current) return;
+        viewLoaded.current = viewKey;
+        try {
+          const saved = raw ? (JSON.parse(raw) as { grouping?: string; ordering?: string }) : {};
+          setGrouping(["none", "project", "tag"].includes(saved.grouping ?? "") ? (saved.grouping as NoteGrouping) : "none");
+          setOrdering(["updated", "created", "title"].includes(saved.ordering ?? "") ? (saved.ordering as NoteOrdering) : "updated");
+        } catch {
+          // An unreadable preference falls back to the default view.
+        }
+      },
+      () => {
+        if (current) viewLoaded.current = viewKey;
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [viewKey]);
+  const changeView = (next: { grouping?: NoteGrouping; ordering?: NoteOrdering }) => {
+    const value = { grouping: next.grouping ?? grouping, ordering: next.ordering ?? ordering };
+    setGrouping(value.grouping);
+    setOrdering(value.ordering);
+    if (viewKey && viewLoaded.current === viewKey)
+      void AsyncStorage.setItem(viewKey, JSON.stringify(value)).catch(() => {});
+  };
   const lastDraftMachine = useRef(machine?.id);
   if (machine?.id) lastDraftMachine.current = machine.id;
   const draftKey = lastDraftMachine.current
@@ -109,28 +139,59 @@ export function NotesScreen() {
     }
   }, [draftKey, draftEpoch]);
   const close = () => dispatch({ type: "close", expected: flow });
-  // Whether this computer has a saved local draft, re-read whenever the editor closes or the draft changes.
-  const [savedDraft, setSavedDraft] = useState<LocalNoteDraft | null>(null);
+  // This computer's saved local drafts (one per note), re-read whenever the editor closes or a draft changes.
+  const [savedDrafts, setSavedDrafts] = useState<LocalNoteDraft[]>([]);
+  const [draftsRevision, reloadDrafts] = useReducer((value: number) => value + 1, 0);
   const draftClosed = flow.kind === "closed";
   useEffect(() => {
     if (!localDraft || !draftClosed) {
-      setSavedDraft(null);
+      setSavedDrafts([]);
       return;
     }
     let current = true;
-    localDraft.recover().then(
-      (draft) => {
-        if (current) setSavedDraft(draft);
+    localDraft.recoverAll().then(
+      (drafts) => {
+        if (current) setSavedDrafts(drafts);
       },
       () => {
-        if (current) setSavedDraft(null);
+        if (current) setSavedDrafts([]);
       },
     );
     return () => {
       current = false;
     };
-  }, [localDraft, draftClosed]);
-  const editorProps = { save, remove, draftOwner: localDraft, onClose: close };
+  }, [localDraft, draftClosed, draftsRevision]);
+  const discardDraft = (draft: LocalNoteDraft) =>
+    confirmAction(
+      copy("Taslağı sil", "Delete draft"),
+      copy(
+        "Bu telefondaki kaydedilmemiş değişiklikler silinecek. Bilgisayardaki not değişmez.",
+        "The unsaved changes on this phone will be deleted. The note on the computer is unchanged.",
+      ),
+      copy("Sil", "Delete"),
+      () => {
+        if (!localDraft) return;
+        void localDraft.discard(draft.id).then(reloadDrafts, reloadDrafts);
+      },
+      copy("Vazgeç", "Cancel"),
+    );
+  // The open note places its save status, view toggle and menu in the sheet header.
+  const [editorHeader, setEditorHeader] = useState<ReactNode>();
+  const projectLabel = (cwd?: string) =>
+    cwd ? projects.data?.find((project) => project.cwd === cwd)?.name : undefined;
+  const editorProps = {
+    save,
+    remove,
+    draftOwner: localDraft,
+    onClose: close,
+    setHeader: setEditorHeader,
+    projectLabel,
+    onReopen: (id: string) => {
+      save.reset();
+      dispatch({ type: "close", expected: flow });
+      dispatch({ type: "open", id });
+    },
+  };
   const editorOpen = flow.kind !== "closed";
   const busy = save.isPending || remove.isPending || recovery.isPending;
   const visible = useMemo(
@@ -156,11 +217,67 @@ export function NotesScreen() {
       },
     });
   };
+  const toolbar = useManagementToolbar({
+    search: <SearchField
+                      placeholder={copy("Ara", "Search")}
+                      ref={searchInput}
+                      label={copy(
+                        "Başlık, metin veya etikette ara",
+                        "Search note titles, text and tags",
+                      )}
+                      value={search}
+                      onChangeText={setSearch}
+                    />,
+    view: {
+      label: copy("Görünüm", "View"),
+      applied: (grouping !== "none" ? 1 : 0) + (ordering !== "updated" ? 1 : 0),
+      onReset: () => changeView({ grouping: "none", ordering: "updated" }),
+      filters: (
+        <>
+          <SectionHeader title={copy("Gruplama", "Grouping")} />
+          <SegmentedControl
+            hideLabel
+            label={copy("Gruplama", "Grouping")}
+            value={grouping}
+            options={[
+              { value: "none", label: copy("Yok", "None") },
+              { value: "project", label: copy("Proje", "Project") },
+              { value: "tag", label: copy("Etiket", "Tag") },
+            ]}
+            onChange={(next) => changeView({ grouping: next })}
+          />
+          <SectionHeader title={copy("Sıralama", "Order")} />
+          <SegmentedControl
+            hideLabel
+            label={copy("Sıralama", "Order")}
+            value={ordering}
+            options={[
+              { value: "updated", label: copy("Düzenleme", "Edited") },
+              { value: "created", label: copy("Oluşturma", "Created") },
+              { value: "title", label: copy("Başlık", "Title") },
+            ]}
+            onChange={(next) => changeView({ ordering: next })}
+          />
+        </>
+      ),
+    },
+  });
   const listState = (
     <QueryState
       size="region"
       query={query}
       empty={visible?.length === 0}
+      noResults={{
+        searching: !!search.trim() && !!query.data?.notes.length,
+        onClearSearch: clearSearch,
+        // The computer returns only its latest notes; say what the search covered.
+        title:
+          query.data && query.data.total > query.data.notes.length
+            ? copy("Son {p0} notta eşleşme yok", "No matches in the latest {p0} notes", {
+                p0: query.data.notes.length,
+              })
+            : undefined,
+      }}
       emptyTitle={
         search.trim() && query.data?.notes.length
           ? copy("Eşleşen sonuç yok", "No matching results")
@@ -192,6 +309,7 @@ export function NotesScreen() {
         actions={
           !editorOpen ? (
             <>
+              {toolbar.actions}
               {!offersFirstNote ? (
                 <IconButton
                   label={copy("Yeni not", "New note")}
@@ -208,104 +326,49 @@ export function NotesScreen() {
           <>
             {!editorOpen ? (
               <>
-                <FilterSheet
-                  visible={viewDraft !== null}
-                  title={copy("Gruplama ve sıralama", "Grouping and sorting")}
-                  onClose={() => setViewDraft(null)}
-                  onReset={() => setViewDraft({ grouping: "none", ordering: "updated" })}
-                  onApply={() => {
-                    if (viewDraft) {
-                      setGrouping(viewDraft.grouping);
-                      setOrdering(viewDraft.ordering);
-                    }
-                    setViewDraft(null);
-                  }}
-                >
-                  <SegmentedControl
-                    label={copy("Gruplama", "Grouping")}
-                    value={(viewDraft ?? { grouping }).grouping}
-                    options={[
-                      { value: "none", label: copy("Yok", "None") },
-                      { value: "project", label: copy("Proje", "Project") },
-                      { value: "tag", label: copy("Etiket", "Tag") },
-                    ]}
-                    onChange={(next) =>
-                      setViewDraft({
-                        grouping: next,
-                        ordering: (viewDraft ?? { ordering }).ordering,
-                      })
-                    }
-                  />
-                  <SegmentedControl
-                    label={copy("Sıralama", "Order")}
-                    value={(viewDraft ?? { ordering }).ordering}
-                    options={[
-                      { value: "updated", label: copy("Düzenleme", "Edited") },
-                      { value: "created", label: copy("Oluşturma", "Created") },
-                      { value: "title", label: copy("Başlık", "Title") },
-                    ]}
-                    onChange={(next) =>
-                      setViewDraft({
-                        grouping: (viewDraft ?? { grouping }).grouping,
-                        ordering: next,
-                      })
-                    }
-                  />
-                </FilterSheet>
-                <ManagementToolbar
-                  search={
-                    <SearchField
-                      placeholder={copy("Ara", "Search")}
-                      ref={searchInput}
-                      label={copy(
-                        "Başlık, metin veya etikette ara",
-                        "Search note titles, text and tags",
-                      )}
-                      value={search}
-                      onChangeText={setSearch}
-                    />
-                  }
-                  actions={
-                    <FilterButton
-                      label={copy("Gruplama ve sıralama", "Grouping and sorting")}
-                      icon={ArrowDownUp}
-                      count={(grouping !== "none" ? 1 : 0) + (ordering !== "updated" ? 1 : 0)}
-                      onPress={() => setViewDraft({ grouping, ordering })}
-                    />
-                  }
-                />
-                <AppliedFilters
-                  filters={[
-                    grouping !== "none" &&
-                      (grouping === "project"
-                        ? copy("Projeye göre grupla", "Group by project")
-                        : copy("Etikete göre grupla", "Group by tag")),
-                    ordering !== "updated" &&
-                      (ordering === "created"
-                        ? copy("Son oluşturulanlar", "Recently created")
-                        : copy("Başlığa göre sırala", "Sort by title")),
-                  ]}
-                />
+                {toolbar.sheet}
               </>
             ) : null}
-            {/* A saved local draft is offered where the list starts instead of behind a one-item menu. */}
-            {!editorOpen && savedDraft ? (
+            {/* Saved local drafts are offered where the list starts, one row per note. */}
+            {!editorOpen && savedDrafts.length ? (
               <NavigationGroup>
-                <NavigationRow
-                  label={copy("Kaydedilmemiş taslak", "Unsaved draft")}
-                  detail={savedDraft.title.trim() || undefined}
-                  icon={<RowIcon glyph={History} />}
-                  trailing={<Body style={{ color: colors.accent }}>{copy("Aç", "Open")}</Body>}
-                  busy={recovery.isPending}
-                  disabled={busy}
-                  onPress={() => {
+                {savedDrafts.map((saved) => {
+                  const open = () => {
                     void recovery.run(async () => {
-                      const draft = localDraft ? await localDraft.recover() : null;
+                      const draft = localDraft ? await localDraft.recover(saved.id) : null;
                       if (draft) dispatch({ type: "recover", initial: draft, expected: flow });
                       return draft;
                     });
-                  }}
-                />
+                  };
+                  return (
+                    <NavigationRow
+                      key={saved.id}
+                      label={copy("Kaydedilmemiş taslak", "Unsaved draft")}
+                      detail={saved.title.trim() || saved.body.trim().split("\n")[0] || undefined}
+                      icon={<RowIcon glyph={History} />}
+                      trailing={
+                        <ActionMenu
+                          label={copy("Diğer işlemler", "More actions")}
+                          subtitle={saved.title.trim() || undefined}
+                          reserveTouchTarget
+                          actions={[
+                            { key: "open", label: copy("Aç", "Open"), disabled: busy, onPress: open },
+                            {
+                              key: "discard",
+                              label: copy("Taslağı sil", "Delete draft"),
+                              destructive: true,
+                              disabled: busy,
+                              onPress: () => discardDraft(saved),
+                            },
+                          ]}
+                        />
+                      }
+                      busy={recovery.isPending}
+                      disabled={busy}
+                      onPress={open}
+                    />
+                  );
+                })}
               </NavigationGroup>
             ) : null}
             <MutationState mutation={recovery} />
@@ -320,25 +383,25 @@ export function NotesScreen() {
             )}
             {!editorOpen ? (
               <>
-                <MutationState
-                  mutation={save}
-                  success={copy("Not bilgisayara kaydedildi.", "Note saved to computer.")}
-                />
+                {/* Notes save automatically; only a failed last save is reported after closing. */}
+                <MutationState mutation={save} />
                 <MutationState mutation={remove} success={copy("Not silindi.", "Note deleted.")} />
               </>
             ) : null}
             <Sheet
               visible={editorOpen}
               size="full"
+              scroll={false}
+              headerAction={editorHeader}
               title={
                 flow.kind === "draft" && flow.initial.expectedUpdatedAt === 0
                   ? copy("Yeni not", "New note")
-                  : copy("Notu düzenle", "Edit note")
+                  : copy("Not", "Note")
               }
               onClose={close}
             >
               {flow.kind === "draft" && (
-                <NoteEditor key={flow.initial.id} initial={flow.initial} {...editorProps} />
+                <NoteEditor key={flow.initial.id} initial={flow.initial} unsaved {...editorProps} />
               )}
               {flow.kind === "existing" && (
                 <ExistingNote key={flow.id} id={flow.id} {...editorProps} />
@@ -370,7 +433,8 @@ export function NotesScreen() {
                   : item.grouping === "tag"
                     ? `#${item.group}`
                     : (projects.data?.find((project) => project.cwd === item.group)?.name ??
-                      item.group)
+                      (item.group.split(/[\\/]/).filter(Boolean).at(-1) ||
+                        copy("Bilinmeyen proje", "Unknown project")))
               }
             />
           ) : (

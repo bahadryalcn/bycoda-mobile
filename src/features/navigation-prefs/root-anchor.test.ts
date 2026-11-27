@@ -29,18 +29,21 @@ describe("root router anchor", () => {
   it("keeps the back arrow gated on canGoBack, which the anchor makes true for deep links", () => {
     expect(layout).toMatch(/headerLeft: \(\{ canGoBack \}\) => canGoBack \?/);
   });
+
+  it("mounts the anchor alignment that puts a cold link's parent tab beneath it", () => {
+    expect(layout).toMatch(/<NavigationAnchor \/>/);
+  });
 });
 
 describe("guards beside the anchor", () => {
   it("keeps the session header's own fallback for a stack with nothing to pop", () => {
-    expect(read("src/features/workspace/session-header.tsx")).toMatch(
-      /router\.canGoBack\(\) \? router\.back\(\) : router\.replace\("\/sessions"\)/,
-    );
+    expect(read("src/features/workspace/session-header.tsx")).toMatch(/goBack\("\/sessions"\)/);
   });
 
   it("restores the last session by pushing over Home and only without an explicit launch target", () => {
     const restore = read("src/features/workspace/last-session.ts");
-    expect(restore).toMatch(/router\.push\(\{\s*pathname: "\/session\/\[id\]"/);
+    // Pushed as an external entry: from Home the Sessions tab goes beneath it (src/ui/navigation.ts).
+    expect(restore).toMatch(/openExternalEntry\(\{\s*pathname: "\/session\/\[id\]"[\s\S]*?\{ push: true \}\)/);
     expect(restore).toMatch(/if \(input\.initialUrl \|\| input\.launchedFromNotification\) return null;/);
   });
 

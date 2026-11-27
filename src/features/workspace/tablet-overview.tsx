@@ -21,6 +21,7 @@ import type { ActiveSession } from "./activity-model";
 import { useProjectActivity } from "./use-project-activity";
 import { useSnoozeNow } from "./session-clock";
 import { useLatestCallback } from "./use-latest-callback";
+import { openNewChat } from "./new-chat-navigation";
 import { SessionListRow } from "./session-list-row";
 import { queryOwnsRegion } from "./query-region";
 import { tabletDirectoryIsEmpty, tabletOverviewModel, tabletOverviewWakes } from "./tablet-overview-model";
@@ -39,8 +40,7 @@ export function TabletOverview() {
       router.navigate({ pathname: "/session/[id]", params: { id, projectId, machineId } });
   }, [machineId, canReadProject]);
   const openNewSession = useCallback(() => {
-    if (machineId && connection.isCurrent())
-      router.navigate({ pathname: "/sessions", params: { new: "1" } });
+    if (machineId && connection.isCurrent()) openNewChat();
   }, [machineId, connection]);
   const query = {
     data: activity.directory.length ? activity.directory : undefined,

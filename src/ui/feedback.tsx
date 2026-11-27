@@ -1,9 +1,8 @@
 import { decorativeSvgProps } from "./accessibility";
 import { useMobileTheme } from "./theme";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Badge as PanelBadge } from "panelui-native/components/badge";
-import { Spinner } from "panelui-native/components/spinner";
 import { Alert } from "panelui-native/components/alert";
 import { Skeleton as PanelSkeleton } from "panelui-native/components/skeleton";
 import Info from "lucide-react-native/icons/info";
@@ -11,6 +10,8 @@ import CircleCheck from "lucide-react-native/icons/circle-check";
 import TriangleAlert from "lucide-react-native/icons/triangle-alert";
 import CircleAlert from "lucide-react-native/icons/circle-alert";
 import { Body } from "./typography";
+import { BusyIndicator } from "./busy-glyph";
+import { TextAction } from "./status-line";
 import { Button } from "./buttons";
 import { lineHeight, metrics, radii, space } from "./tokens";
 import { useDelayedVisible } from "./use-delayed-visible";
@@ -90,6 +91,8 @@ export function StatusText({ label, tone = "default", dot = tone !== "default" }
  * Thin wrapper over StateView. `compact` (default) is the inline icon row for a sub-section among
  * other content. When the empty state is all a page, list or sheet shows, pass `compact={false}`
  * with an `illustration` so it fills the region centered instead of leaving a blank page.
+ * @deprecated Use `StateView` directly (`size="compact"`, `description` instead of `detail`); this
+ * second API for the same state remains only until its callers move.
  */
 export function Empty({ title, detail, compact = true, action, secondaryAction, illustration }: EmptyProps) {
   return (
@@ -104,17 +107,14 @@ export function Empty({ title, detail, compact = true, action, secondaryAction, 
   );
 }
 
-export function Loading({ label, centered = false, showLabel = !!label || centered, immediate = false }: LoadingProps) {
+export function Loading({ label, centered = false, showLabel = !!label || centered, immediate = false, delayed = centered && !immediate }: LoadingProps) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
-  const animate = useFeedbackAnimation();
-  // A full-region spinner waits like a skeleton, so a fast load never flashes it.
-  const visible = useDelayedVisible(centered && !immediate ? undefined : 0);
+  // A read's spinner waits like a skeleton, so a fast load never flashes it; an action's shows at once.
+  const visible = useDelayedVisible(delayed ? undefined : 0);
   const content = (
     <>
-      {animate ? <Spinner size={centered ? "md" : "sm"} color={colors.accent} /> : (
-        <View accessible={false} style={{ width: 16, height: 16, borderRadius: radii.pill, borderWidth: 2, borderColor: colors.border, borderTopColor: colors.accent }} />
-      )}
+      <BusyIndicator size={centered ? "md" : "sm"} color={colors.accent} />
       {showLabel ? (
         <Body muted style={centered ? uiStyles.stateDescription : uiStyles.caption}>
           {label ?? copy("Yükleniyor…", "Loading…")}
@@ -147,19 +147,20 @@ const LINE_WIDTHS = ["92%", "86%", "95%", "64%"] as const;
 /**
  * Region placeholder shaped like the content it replaces, so nothing jumps when data arrives:
  * `list` draws rows (leading tile, title, meta) at the session-row height; `content` draws a
- * heading and paragraph lines. Static shapes fill the first loading frame. Shimmer starts
- * only on longer reads. The resolved state immediately owns the region.
+ * heading and paragraph lines. The region is reserved from the first loading frame, but the
+ * shapes (and their shimmer) appear only after the shared reveal delay, so a fast or cached read
+ * never flashes a placeholder. The resolved state immediately owns the region.
  */
 export function Skeleton({ variant = "list", label, rows, loading = true }: { variant?: "list" | "content"; label?: string; rows?: number; loading?: boolean }) {
   const [regionHeight, setRegionHeight] = useState(0);
   const { colors } = useMobileTheme();
   const copy = useCopy();
   const animate = useFeedbackAnimation();
-  const shimmer = useDelayedVisible(undefined, loading);
+  const revealed = useDelayedVisible(undefined, loading);
   const rowCount = rows ?? (regionHeight > 0 ? Math.max(1, Math.floor(regionHeight / metrics.rowHeightSession)) : 6);
   if (!loading) return null;
   // Upstream has no pause prop. Unmount its loops and preserve the same shapes.
-  const Placeholder = animate && shimmer ? PanelSkeleton : View;
+  const Placeholder = animate && revealed ? PanelSkeleton : View;
   const bar = (height: number, width: string, fill = colors.raised) => (
     <Placeholder style={{ height, width: width as `${number}%`, backgroundColor: fill, borderRadius: 4 }} />
   );
@@ -173,7 +174,7 @@ export function Skeleton({ variant = "list", label, rows, loading = true }: { va
       onLayout={variant === "list" && rows === undefined ? (event) => setRegionHeight(event.nativeEvent.layout.height) : undefined}
       style={variant === "list" && rows === undefined ? { flexGrow: 1 } : undefined}
     >
-        <View importantForAccessibility="no-hide-descendants">
+        <View importantForAccessibility="no-hide-descendants" style={{ opacity: revealed ? 1 : 0 }}>
           {variant === "list"
             ? Array.from({ length: rowCount }, (_, index) => (
                 <View
@@ -207,8 +208,6 @@ export function Skeleton({ variant = "list", label, rows, loading = true }: { va
     </View>
   );
 }
-
-/** Zero-height anchor: the dissolving placeholder paints over the content that replaced it. */
 
 /** Field-level validation: 13/17 danger text with a 14px alert icon. */
 export function FieldError({ message }: FieldErrorProps) {
@@ -288,13 +287,9 @@ export function Notice({ tone = "info", message, children, onRetry, retryLabel, 
                   ? current : { message, lines: nativeEvent.lines.length })}
               style={[uiStyles.noticeText, uiStyles.noticeMeasure]}>{message}</Body>
             {long ? (
-              <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }}
-                hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
-                onPress={() => setExpanded(open ? null : message)} style={{ alignSelf: "flex-start" }}>
-                <Text style={[uiStyles.statusLineAction, { color: semantic.text }]}>
-                  {open ? copy("Daha az", "Less") : copy("Ayrıntılar", "Details")}
-                </Text>
-              </Pressable>
+              <TextAction expanded={open} color={semantic.text}
+                label={open ? copy("Daha az", "Less") : copy("Ayrıntılar", "Details")}
+                onPress={() => setExpanded(open ? null : message)} />
             ) : null}
           </View>
         </View>
@@ -308,4 +303,4 @@ export function Notice({ tone = "info", message, children, onRetry, retryLabel, 
   );
 }
 
-export { StatusLine } from "./status-line";
+export { StatusLine, TextAction } from "./status-line";

@@ -6,7 +6,7 @@ const turkish = (tr: string) => tr;
 const english = (_tr: string, en: string) => en;
 const reasons: AssistantCallFailure[] = [
   "unlock", "message-pending", "native-unavailable", "connection-changed", "send-unreviewed", "project-unverified",
-  "project-unavailable", "result-unknown", "reply-hidden", "stopped", "no-speech", "not-started",
+  "project-unavailable", "result-unknown", "reply-refused", "reply-hidden", "stopped", "no-speech", "not-started",
   "audio-taken", "idle-timeout", "microphone-failed", "app-closed",
 ];
 
@@ -30,7 +30,9 @@ describe("assistant call failure text", () => {
   });
 
   it("keeps vetted diagnostics from other errors and never prints a non-Error object", () => {
-    expect(assistantCallErrorMessage(new Error("Model file missing"), turkish)).toBe("Model file missing");
+    // An uncatalogued English diagnostic stays as detail below the translated summary.
+    expect(assistantCallErrorMessage(new Error("Model file missing"), turkish)).toBe("İşlem tamamlanamadı.\n\nModel file missing");
+    expect(assistantCallErrorMessage(new Error("Model file missing"), english)).toBe("Model file missing");
     expect(assistantCallErrorMessage({ code: 1 }, english)).toBe("Could not complete this action.");
     expect(assistantCallErrorMessage({ code: 1 }, turkish)).toBe("İşlem tamamlanamadı.");
   });
@@ -38,6 +40,14 @@ describe("assistant call failure text", () => {
   it("shows the underlying cause under an unknown send result", () => {
     const error = new AssistantCallError("result-unknown", new Error("Socket closed before the reply"));
     expect(assistantCallErrorMessage(error, english)).toBe("The message result is unknown. Review it in the conversation before speaking again.\nSocket closed before the reply");
+  });
+  // "The message result is unknown. Check it…" was followed by "Connection interrupted. Check this command's result…".
+  it("says once why a sent message's result is unknown", () => {
+    const overdue = new AssistantCallError("result-unknown", new HostWsError("deadline", true));
+    expect(assistantCallErrorMessage(overdue, english)).toBe("The reply is taking longer than expected; the assistant may still be working on it. See the result in the conversation.");
+    for (const cause of [new HostWsError("internal", true), new HostWsError("network")])
+      expect(assistantCallErrorMessage(new AssistantCallError("result-unknown", cause), english)).toBe("The connection dropped while the message was sent, so its result is unknown. Check it in the conversation before speaking again.");
+    expect(assistantCallErrorMessage(new AssistantCallError("result-unknown"), english)).toBe("The message result is unknown. Review it in the conversation before speaking again.");
   });
   // The phone's Wi-Fi dropped during transcription and the call said "check this command's result".
   it("names a dropped voice line outside the reply step instead of asking to check a command", () => {

@@ -48,6 +48,23 @@ function uncertainResult(message: string, error: unknown): InboxJobError {
   });
 }
 
+/**
+ * Wait before the next receipt check. The desktop reports a finished job on its next heartbeat
+ * (every 1.5 s while it works), so a flat 1 s poll added up to a second after the result was
+ * already on the Host. The first checks come sooner; a slow job settles at one check a second,
+ * and after about 7 s (a desktop that is busy or offline) at one every 2 s, so a screen of
+ * parallel reads does not keep the radio busy for the whole deadline.
+ */
+export function inboxReceiptPollDelay(poll: number): number {
+  return poll >= INBOX_RECEIPT_SLOW_AFTER_POLLS ? 2_000 : Math.min(1_000, 400 + poll * 200);
+}
+
+/** Receipt checks before the poll slows down (about 6.8 s of waiting). */
+const INBOX_RECEIPT_SLOW_AFTER_POLLS = 8;
+
+/** How long a provider read may wait for the desktop before its section shows a retryable error. */
+export const INBOX_READ_DEADLINE_MS = 60_000;
+
 /** Keep one durable request ID and poll its receipt. Accepted writes are never replayed. */
 export async function runInboxJob<Action extends InboxJobAction>(
   client: InboxRpcClient,
@@ -83,15 +100,20 @@ export async function runInboxJob<Action extends InboxJobAction>(
     }
   }
 
-  const deadline = Date.now() + 145_000;
+  // A read that the desktop has not answered by now is reported (with Retry) instead of leaving
+  // its section on a placeholder; a write keeps the full deadline because it is never replayed.
+  const deadline = Date.now() + (writes ? 145_000 : INBOX_READ_DEADLINE_MS);
+  let polls = 0;
   while (receipt.state === "queued" || receipt.state === "running") {
     if (Date.now() > deadline) {
       throw new InboxJobError(
-        "The desktop did not report the result. Refresh the conversation before retrying.",
+        writes
+          ? "The desktop did not report the result. Refresh the conversation before retrying."
+          : "Your computer did not answer in time. Check that Bycoda is open on it and try again.",
         writes,
       );
     }
-    await pause(1_000, signal);
+    await pause(inboxReceiptPollDelay(polls++), signal);
     try {
       receipt = await client.request<RemoteInboxReceipt>(
         "inbox.provider.result",

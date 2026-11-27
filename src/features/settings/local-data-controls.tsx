@@ -5,12 +5,13 @@ import { router } from "expo-router";
 import Animated from "react-native-reanimated";
 import { View } from "react-native";
 import ShieldOff from "lucide-react-native/icons/shield-off";
-import UserX from "lucide-react-native/icons/user-x";
+import MonitorX from "lucide-react-native/icons/monitor-x";
 import Trash2 from "lucide-react-native/icons/trash";
 import { useInfoHint } from "../../ui/info-hint";
 import { enterItem } from "../../ui/motion";
 import { space } from "../../ui/tokens";
 import { useMachines, withDisconnectedComputers } from "../../state/machines";
+import { removeMachineAndQueries } from "../../state/machine-removal";
 import { assertAppAccess } from "../../state/security";
 import { useAsyncAction } from "../../state/actions";
 import {
@@ -85,7 +86,7 @@ export function LocalDataControls() {
     const target = review.kind;
     let retainedDrafts = 0;
     try { await action.run(async () => {
-      if (!mounted.current || latest.current !== review) throw new Error("Reopen the local data review before continuing.");
+      if (!mounted.current || latest.current !== review) throw new Error(copy("Devam etmeden önce yerel veri incelemesini yeniden aç.", "Reopen the local data review before continuing."));
       assertAppAccess();
       if (target === "connections") {
         await disconnectSavedComputers({
@@ -99,8 +100,7 @@ export function LocalDataControls() {
           flush: flushWorkspaceDrafts,
           cancelQueries: async () => { await Promise.all(review.machines.map(machine => cache.cancelQueries({ queryKey: ["machine", machine.id] }))); },
           remove: async (id, expected) => {
-            await useMachines.getState().removeMachine(id, expected);
-            if (!useMachines.getState().machines.some(machine => machine.id === id)) cache.removeQueries({ queryKey: ["machine", id] });
+            await removeMachineAndQueries(cache, id, expected);
           },
         });
       } else if (target === "drafts") {
@@ -161,7 +161,8 @@ export function LocalDataControls() {
     "Kayıtlı bilgisayarlar ve taslaklar yalnız bu telefonda tutulur. Telefondan kaldırmak bilgisayardaki cihaz iznini iptal etmez; telefon kaybolursa onu bilgisayardan ayrıca iptal et.",
     "Saved computers and drafts stay on this phone. Removing them here does not revoke the device on your computer; if this phone is lost, revoke it there.",
   );
-  const sectionInfo = useInfoHint(sectionHelp, "visible");
+  // Optional help behind the info icon; the review sheet itself states each consequence.
+  const sectionInfo = useInfoHint(sectionHelp);
   const remainingComputers = confirmation?.machines.filter(machine => state.machines.some(current => current.id === machine.id)) ?? [];
   const reviewIntro = <Stack>{storageIssue}<Body>{consequence}</Body>{stale ? <Notice tone="warning" message={copy("Kaydedilmiş bilgisayarlar değişti. Devam etmek için bu incelemeyi yeniden aç.", "Saved computers changed. Reopen this review to continue.")} /> : null}</Stack>;
   // Friendly identity only: internal computer and environment ids are never shown in this review.
@@ -169,9 +170,7 @@ export function LocalDataControls() {
   return (
     <Stack style={{ gap: space.lg }}>
       <View style={{ gap: space.sm }}>
-        <SectionHeader title={copy("Bu telefondaki veriler", "Data on this phone")} trailing={sectionInfo.button} />
-        {sectionInfo.panel}
-        {!confirmation ? storageIssue : null}
+        <SectionHeader title={copy("Gizlilik", "Privacy")} />
         <Animated.View entering={enterItem(0)}>
           <NavigationGroup>
             <NavigationRow
@@ -188,12 +187,15 @@ export function LocalDataControls() {
       </View>
       <LocalDataCaches />
       <Animated.View entering={enterItem(1)} style={{ gap: space.sm }}>
+        <SectionHeader title={copy("Bu telefondan kaldır", "Remove from this phone")} trailing={sectionInfo.button} />
+        {sectionInfo.panel}
+        {!confirmation ? storageIssue : null}
         <NavigationGroup>
           <NavigationRow
             label={copy("Kaydedilmiş bilgisayarları kaldır", "Remove saved computers")}
             tone="danger"
             intent="command"
-            icon={<SettingIcon glyph={UserX} tone="danger" />}
+            icon={<SettingIcon glyph={MonitorX} tone="danger" />}
             disabled={unavailable || !state.machines.length}
             onPress={() => {
               openReview("connections");

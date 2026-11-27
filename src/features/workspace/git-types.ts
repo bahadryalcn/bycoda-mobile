@@ -25,12 +25,8 @@ export type GitMutationStatus = {
 };
 
 export type GitHeaderProps = {
-  navigationActions?: ReactNode;
   busy?: boolean;
   index: GitDiffIndex;
-  refreshing: boolean;
-  onRefresh: () => void;
-  onToggleBranches: () => void;
   /** Pull request linked to this checkout's session. */
   linkedPr?: { number: number; state: string };
 };
@@ -76,24 +72,9 @@ export type GitBranchesPanelProps = {
   children?: ReactNode;
 };
 
-export type GitChangesPanelProps = {
-  files: GitChangedFile[];
-  busy: boolean;
-  onSelect: (selection: GitSelection) => void;
-  onAction: (action: GitFileAction, path?: string) => void;
-};
-
 export type GitCommitPanelProps = {
-  busy?: boolean;
   index: GitDiffIndex;
-  canRunWorkspace: boolean;
-  message: string;
-  onMessageChange: (value: string) => void;
   generation?: ReturnType<typeof import("./use-git-commit-generation").useGitCommitGeneration>;
-  fetching: boolean;
-  onFetch: () => void;
-  onChoose: (confirmation: GitConfirmation, stageAll?: boolean) => void;
-  children?: ReactNode;
 };
 
 export type GitDiffPanelProps = {
@@ -109,7 +90,7 @@ export type GitDiffPanelProps = {
   children?: ReactNode;
 };
 
-export type GitConfirmationCardProps = {
+export type GitConfirmationReviewProps = {
   confirmation: GitConfirmation;
   busy: boolean;
   onCancel: () => void;

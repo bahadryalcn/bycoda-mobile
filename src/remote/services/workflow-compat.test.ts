@@ -91,6 +91,7 @@ async function connected(extraMethods: string[] = [], extraCapabilities: string[
     "automations.delete": { deleted: true },
     "automations.runs": [automationRun],
     "automations.runNow": automationRun,
+    "automations.decide": automationRun,
     "files.write": null,
   };
   f.respond((request) => replies[request.method]);
@@ -121,7 +122,7 @@ async function connected(extraMethods: string[] = [], extraCapabilities: string[
   return { ...f, client, acquire, credential, fetcher };
 }
 
-it("sends all 11 Sprint and seven Automation methods through the negotiated subset without regenerating caller IDs", async () => {
+it("sends all 11 Sprint and eight Automation methods through the negotiated subset without regenerating caller IDs", async () => {
   const f = await connected();
   const sprintCalls: Array<[string, Record<string, unknown>]> = [
     ["sprints.list", {}],
@@ -235,8 +236,9 @@ it("sends all 11 Sprint and seven Automation methods through the negotiated subs
   await api.automations.runs(automation.id);
   await api.automations.runNow(automation.id);
   expect(await f.client.request("automations.propose", proposalInput)).toEqual(proposal);
+  await f.client.request("automations.decide", { automationId: automation.id, runId: automationRun.id, approve: true });
   const calls = f.sent.filter((request) => request.method !== "connection.hello");
-  expect(calls).toHaveLength(18);
+  expect(calls).toHaveLength(19);
   expect(new Set(calls.map((request) => request.method))).toEqual(new Set(workflowMethods));
   expect(calls.find((request) => request.method === "automations.propose")?.params).toEqual(proposalInput);
   const save = calls.find((request) => request.method === "automations.save")!;

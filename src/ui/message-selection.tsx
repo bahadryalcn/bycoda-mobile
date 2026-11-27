@@ -145,6 +145,9 @@ export function SelectableProse(props: {
   compactMedia?: boolean;
   mentions?: boolean;
   codeSize?: number;
+  /** Same file-chip decisions as the visible paragraph, so the layer's characters match it. */
+  fileChips?: boolean;
+  codeFile?: (text: string) => string | null;
   style: StyleProp<TextStyle>;
   children: ReactNode;
 }) {
@@ -160,6 +163,8 @@ function ProseLayer({
   compactMedia = false,
   mentions = false,
   codeSize = 12,
+  fileChips = false,
+  codeFile,
   style,
   children,
 }: Parameters<typeof SelectableProse>[0] & { registry: Registry }) {
@@ -170,9 +175,9 @@ function ProseLayer({
       text !== undefined
         ? { text, runs: [] }
         : nodes
-          ? selectionSource(nodes, { compactMedia, mentions, codeSize })
+          ? selectionSource(nodes, { compactMedia, mentions, codeSize, fileChips, codeFile })
           : null,
-    [text, nodes, compactMedia, mentions, codeSize],
+    [text, nodes, compactMedia, mentions, codeSize, fileChips, codeFile],
   );
   const selectable = !!source?.text.trim();
   // Reason: the message's long-press hit test measures only paragraphs that can be selected.

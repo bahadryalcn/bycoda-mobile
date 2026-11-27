@@ -18,8 +18,13 @@ private let hostSocketIdleTimeout: TimeInterval = 40
 /** A background voice peer cannot browse, navigate, execute tools or address another Room. */
 enum VoiceRpcPolicy {
   private static let voiceMethods: Set<String> = ["voice.local.start", "voice.local.transcribe", "voice.cloud.transcribe", "voice.local.release", "voice.local.speak", "voice.local.speechNext", "voice.local.keepAlive"]
+  /** The computer-side realtime voice of this call: lease-bound audio, replies and the call's read-only settings. */
+  private static let realtimeMethods: Set<String> = ["voice.realtime.audio", "voice.realtime.next", "voice.realtime.interrupt", "voice.realtime.text", "voice.realtime.end"]
   static func allowed(_ method: String, op: String?, requestedThread: String?, threadId: String, hasThread: Bool, emptyParams: Bool) -> Bool {
-    if method == "connection.hello" || method == "environment.describe" || voiceMethods.contains(method) { return true }
+    if method == "connection.hello" || method == "environment.describe" || voiceMethods.contains(method) || realtimeMethods.contains(method) { return true }
+    if method == "voice.call.settings.get" { return emptyParams }
+    // The realtime voice may speak only for the call's captured Room.
+    if method == "voice.realtime.start" { return requestedThread == threadId }
     if method == "projects.directory" { return emptyParams }
     guard method == "assistant.request" else { return false }
     switch op {
@@ -70,9 +75,18 @@ struct HostTunnelStart: Record {
 private enum HostSocketFailure: Error { case rejected(String) }
 private func failure(_ code: String) -> Error { HostSocketFailure.rejected(code) }
 private func safe(_ value: Double) -> Bool { value.isFinite && value >= 0 && value <= 9_007_199_254_740_991 && value.rounded() == value }
+/** Compiled once per pattern: bulk chunk reads validate the same descriptor patterns hundreds of times. NSCache is thread-safe. */
+private let compiledPatterns = NSCache<NSString, NSRegularExpression>()
 private func matches(_ value: String, _ pattern: String) -> Bool {
   let full = NSRange(location: 0, length: value.utf16.count)
-  guard let expression = try? NSRegularExpression(pattern: pattern), let match = expression.firstMatch(in: value, range: full) else { return false }
+  let expression: NSRegularExpression
+  if let cached = compiledPatterns.object(forKey: pattern as NSString) { expression = cached }
+  else {
+    guard let compiled = try? NSRegularExpression(pattern: pattern) else { return false }
+    compiledPatterns.setObject(compiled, forKey: pattern as NSString)
+    expression = compiled
+  }
+  guard let match = expression.firstMatch(in: value, range: full) else { return false }
   return match.range == full
 }
 

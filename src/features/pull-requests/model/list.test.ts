@@ -1,18 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { defaultPrFilters, isBotActivity, isTestFile, matchPrItem, prListItems, prListQuery, readPrRoute } from "./list";
+import { defaultPrFilters, isBotActivity, isTestFile, matchPrItem, prListItems, prListKeepsPrevious, prListQuery, prRouteFallbackQuery, readPrRoute } from "./list";
 import { readPrChecks, readPrLabels, readPrReviewers } from "./results";
+import { prCheckBucket, prChecksSummary, prCheckUrl, shortSha, sortPrChecks } from "./checks";
 import type { RemoteInboxItem } from "../../../../../src/features/inbox/model/remoteInbox";
 const item: RemoteInboxItem = { provider: "github", kind: "pr", number: 1, repo: "owner/repo", projectPath: "C:/repo", title: "PR", url: "https://github.com/owner/repo/pull/1", state: "open", draft: false, labels: [], assignees: [], updatedAt: "2026-11-17", createdAt: "2026-11-10" };
 describe("PR list and local display", () => {
-  it("applies provider-side state, ownership, review and sort qualifiers", () => {
-    expect(prListQuery({ state: "closed", mine: true, reviewRequested: true, sort: "oldest" })).toEqual({ providers: ["github"], githubKinds: ["pr"], state: "all", assignedToMe: false, search: "is:closed is:unmerged author:@me review-requested:@me sort:created-asc" });
-    expect(prListQuery({ ...defaultPrFilters, state: "merged" }).search).toContain("is:merged");
+  it("reads the code hosts' pull requests with the desktop's state rule, Assigned to me and search", () => {
+    expect(prListQuery(defaultPrFilters)).toEqual({ providers: ["github", "gitlab", "azuredevops"], githubKinds: ["pr"], state: "all", assignedToMe: false, search: "" });
+    expect(prListQuery({ ...defaultPrFilters, view: { ...defaultPrFilters.view, statuses: ["open"] }, assigned: true, search: "parser" }))
+      .toMatchObject({ state: "open", assignedToMe: true, search: "parser" });
+    expect(prRouteFallbackQuery({ repo: "owner/repo" })).toMatchObject({ providers: ["github"], state: "all", search: "repo:owner/repo sort:updated-desc" });
   });
-  it("orders created and updated independently and excludes other providers/states", () => {
-    const second = { ...item, number: 2, createdAt: "2026-11-12", updatedAt: "2026-11-15" };
-    expect(prListItems([item, second, { ...item, state: "merged" }, { ...item, provider: "gitlab" }], defaultPrFilters).map(row => row.number)).toEqual([1, 2]);
-    expect(prListItems([item, second], { ...defaultPrFilters, sort: "created" }).map(row => row.number)).toEqual([2, 1]);
-    expect(prListItems([item, second], { ...defaultPrFilters, sort: "oldest" }).map(row => row.number)).toEqual([1, 2]);
+  it("lists pull and merge requests only, narrowed and ordered by the shared Inbox view", () => {
+    const second = { ...item, number: 2, title: "A first", updatedAt: "2026-11-18" };
+    const rows = [item, second, { ...item, number: 3, state: "MERGED" }, { ...item, number: 4, provider: "gitlab" as const }, { ...item, number: 5, kind: "issue" as const }];
+    expect(prListItems(rows, defaultPrFilters.view).map(row => row.number)).toEqual([2, 1, 3, 4]);
+    expect(prListItems(rows, { ...defaultPrFilters.view, statuses: ["merged"] }).map(row => row.number)).toEqual([3]);
+    expect(prListItems(rows, { ...defaultPrFilters.view, provider: "gitlab" }).map(row => row.number)).toEqual([4]);
+    expect(prListItems([item, second], { ...defaultPrFilters.view, sort: "title" }).map(row => row.number)).toEqual([2, 1]);
+  });
+  it("keeps a previous read on screen only for the same project", () => {
+    const previous = { projectId: "p", query: prListQuery(defaultPrFilters) };
+    expect(prListKeepsPrevious(previous, "p")).toBe(true);
+    expect(prListKeepsPrevious(previous, "other")).toBe(false);
+    expect(prListKeepsPrevious(undefined, "p")).toBe(false);
   });
   it("recognizes test files and bots without hiding ordinary files or humans", () => {
     for (const path of ["src/foo.test.ts", "src/foo.spec.tsx", "__tests__/a.ts", "tests/a.rs", "api/test_api.py", "api/api_test.go"]) expect(isTestFile(path)).toBe(true);
@@ -49,5 +60,22 @@ describe("PR result trust boundary", () => {
     expect(() => readPrLabels({ labels: [], available: [] })).toThrow();
     expect(readPrReviewers({ reviewRequests: [{ login: "alice" }], latestReviews: [{ author: { login: "bob" }, state: "APPROVED" }] }).latestReviews).toHaveLength(1);
     expect(() => readPrReviewers({ reviewRequests: [{}], latestReviews: [] })).toThrow();
+  });
+});
+describe("PR checks presentation", () => {
+  const check = (state: string, name = state) => ({ name, workflow: "CI", state, url: null });
+  it("summarizes failures first and omits empty buckets", () => {
+    expect(prChecksSummary([check("pass"), check("pass"), check("skipping"), check("fail"), check("weird")])).toEqual([
+      { bucket: "fail", count: 1 }, { bucket: "pass", count: 2 }, { bucket: "skipping", count: 1 }, { bucket: "unknown", count: 1 }]);
+    expect(prCheckBucket("PASS")).toBe("pass");
+  });
+  it("orders failing and running checks before the rest, keeping provider order within a state", () => {
+    expect(sortPrChecks([check("pass", "a"), check("fail", "b"), check("pending", "c"), check("pass", "d")]).map(row => row.name)).toEqual(["b", "c", "a", "d"]);
+  });
+  it("opens only https check links and shortens the head SHA", () => {
+    expect(prCheckUrl("https://github.com/o/r/actions/runs/1")).toBe("https://github.com/o/r/actions/runs/1");
+    expect(prCheckUrl("javascript:alert(1)")).toBeUndefined();
+    expect(prCheckUrl(null)).toBeUndefined();
+    expect(shortSha("856d662cb79a2d54c062b8d95bdefd519066f819")).toBe("856d662");
   });
 });

@@ -58,7 +58,7 @@ vi.mock("./device-runtime", () => ({ DeviceRuntime: ({ onClose }: any) => create
 vi.mock("@/ui/primitives", async () => {
   const { QueryState } = await import("@/ui/query-state");
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { RowIcon: () => null, QueryState, Sheet: Group, Body: Group, Disclosure: ({ label, children }: any) => createElement("details", null, createElement("summary", null, label), children), StatusText: () => null,
+  return { RowIcon: () => null, QueryState, Sheet: Group, Body: Group, Disclosure: ({ label, children }: any) => createElement("details", null, createElement("summary", null, label), children), StatusText: () => null, StatusLine: ({ label }: any) => createElement("p", { "data-status-line": true }, label),
     Row: Group, Badge: ({ label }: any) => createElement("span", null, label),
     IconButton: ({label,onPress,disabled}:any) => createElement("button",{onClick:onPress,disabled},label),
     ActionMenu: ({actions}:any) => createElement("div",null,actions.map((action:any)=>createElement("button",{key:action.key,onClick:action.onPress},action.label))),
@@ -131,8 +131,8 @@ it("uses one refresh callback for status and list reads", async () => {
 
 it("keeps expected platform limits as quiet details without a failure retry", async () => {
   fixture.platforms = [{ platform: "ios", available: false, reason: "Requires macOS" }]; await render();
-  expect(node.querySelectorAll("details")).toHaveLength(1);
-  expect(node.querySelector("details")?.textContent).toContain("Requires macOS");
+  expect(node.querySelectorAll("details")).toHaveLength(0);
+  expect(node.querySelector("[data-status-line]")?.textContent).toBe("iOS: Requires macOS");
   expect([...node.querySelectorAll("button")].some(button => button.textContent === "Retry device list")).toBe(false);
 });
 

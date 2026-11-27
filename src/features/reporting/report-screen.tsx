@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { randomUUID } from "expo-crypto";
 import { reportSender } from "./report-config";
-import { Stack as RouterStack, router } from "expo-router";
+import { Stack as RouterStack } from "expo-router";
 import { assertAppAccess } from "@/state/security";
 import { useCopy } from "@/ui/copy";
 import { useInfoHint } from "@/ui/info-hint";
@@ -25,6 +25,7 @@ import {
   updateContentReport,
   useContentReport,
 } from "./report-store";
+import { goBack, pushOnce } from "@/ui/navigation";
 
 export function ContentReportScreen() {
   const copy = useCopy();
@@ -49,7 +50,7 @@ export function ContentReportScreen() {
   const staleReview = !!discarding && (!reviewCurrent || retired.current);
   const title = copy("İçerik şikâyet et", "Report content");
   const doneLabel = copy("Tamam", "Done");
-  const close = () => { if (router.canGoBack()) router.back(); else router.replace("/settings"); };
+  const close = () => goBack("/settings");
   if (status === "sent") {
     const acknowledge = () => {
       if (!active.current) return;
@@ -203,7 +204,7 @@ export function ContentReportScreen() {
         <NavigationRow
           label={copy("Gizlilik politikası", "Privacy policy")}
           trailing={privacyInfo.button}
-          onPress={() => router.push("/legal/privacy")}
+          onPress={() => pushOnce("/legal/privacy")}
         />
       </NavigationGroup>
       {privacyInfo.panel}

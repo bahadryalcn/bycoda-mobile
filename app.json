@@ -14,13 +14,16 @@
         "applinks:link.bycoda.codes"
       ],
       "bundleIdentifier": "com.bycoda.mobile",
+      "appleTeamId": "L5W93P9L5Y",
+      "usesAppleSignIn": true,
       "buildNumber": "1",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         },
         "NSLocalNetworkUsageDescription": "Connect to your Bycoda computer on your private network.",
-        "NSMicrophoneUsageDescription": "Speak to your Bycoda assistant. Audio is processed on your connected computer.",
+        "NSMicrophoneUsageDescription": "Speak to your Bycoda assistant and dictate messages. Audio is processed on your connected computer, or on this phone if you choose phone dictation.",
+        "NSSpeechRecognitionUsageDescription": "When you choose phone dictation, Bycoda uses speech recognition to turn what you say into text. It runs on this phone when supported.",
         "UIBackgroundModes": ["audio"]
       },
       "privacyManifests": {
@@ -124,6 +127,7 @@
       ],
       "expo-secure-store",
       "@clerk/expo",
+      "expo-apple-authentication",
       [
         "expo-notifications",
         {
@@ -136,7 +140,7 @@
         {
           "photosPermission": "Choose photos to attach to your Bycoda messages.",
           "cameraPermission": "Allow Bycoda to scan the pairing QR code on your computer.",
-          "microphonePermission": "Speak to your Bycoda assistant. Audio is processed on your connected computer."
+          "microphonePermission": "Speak to your Bycoda assistant and dictate messages. Audio is processed on your connected computer, or on this phone if you choose phone dictation."
         }
       ],
       [
@@ -278,9 +282,21 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Speak to your Bycoda assistant. Audio is processed on your connected computer.",
+          "microphonePermission": "Speak to your Bycoda assistant and dictate messages. Audio is processed on your connected computer, or on this phone if you choose phone dictation.",
           "enableBackgroundRecording": false,
           "enableBackgroundPlayback": false
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Speak to your Bycoda assistant and dictate messages. Audio is processed on your connected computer, or on this phone if you choose phone dictation.",
+          "speechRecognitionPermission": "When you choose phone dictation, Bycoda uses speech recognition to turn what you say into text. It runs on this phone when supported.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.as",
+            "com.samsung.android.bixby.agent"
+          ]
         }
       ],
       [

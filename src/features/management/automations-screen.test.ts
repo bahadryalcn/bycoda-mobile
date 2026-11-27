@@ -29,11 +29,22 @@ vi.mock("../workspace/use-project-directory", () => ({ useProjectList: () => ({
 }) }));
 vi.mock("./automations/automation-editor", () => ({ AutomationEditor: () => null }));
 vi.mock("./automations/automation-card", () => ({ AutomationCard: () => null }));
-vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null, FilterButton: () => null, FilterSheet: () => null }));
+vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null, FilterButton: () => null, FilterSheet: () => null, FilterChipRow: () => null }));
 vi.mock("@/ui/screen-list", () => ({ ScreenList: ({ header, actions, data, ListEmptyComponent }: { header: React.ReactNode; actions: React.ReactNode; data: unknown[]; ListEmptyComponent?: React.ReactNode }) => createElement("main", null, createElement("nav", null, actions), header, data.length ? null : ListEmptyComponent) }));
-vi.mock("@/ui/primitives", () => {
+vi.mock("@/ui/primitives", async () => {
+  const reactForMock = await import("react");
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Body: Group, Button: () => null, Sheet: () => null, MutationState: () => null, SelectField: () => null, SearchField: () => null, SearchToolbar: () => null,
+  return { SectionHeader: ({ title }: { title: string }) => createElement("h3", null, title), SegmentedControl: () => null,
+    // The collection sheet renders inline here: the search field always, the filters after the filter icon.
+    useCollapsibleSearch: function useCollapsibleSearchMock(field: unknown, options: { filters?: unknown; filtersLabel?: string } = {}) {
+      const [open, setOpen] = reactForMock.useState(false);
+      return {
+        open, trigger: null, field: null,
+        filterTrigger: options.filters ? createElement("button", { onClick: () => setOpen(true) }, options.filtersLabel ?? "Filters") : null,
+        sheet: createElement(reactForMock.Fragment, null, field as never, open ? options.filters as never : null),
+      };
+    },
+     Body: Group, Button: () => null, Sheet: () => null, MutationState: () => null, SelectField: () => null, SearchField: () => null, SearchToolbar: () => null,
     QueryState: ({ query, empty, emptyAction }: { query: QueryLike; empty?: boolean; emptyAction?: { label: string; onPress(): void } }) =>
       getQueryPresentation(query, empty) === "empty" && emptyAction ? createElement("button", { onClick: emptyAction.onPress }, emptyAction.label) : null,
     IconButton: ({ label, disabled }: { label: string; disabled?: boolean }) => createElement("button", { disabled }, label),

@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
-import { Sheet, NavigationGroup, NavigationRow, SectionHeader } from "@/ui/primitives";
+import { Sheet, NavigationGroup, NavigationRow, SectionHeader, ToggleField } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useSheetGuard } from "@/ui/sheet-guard";
 
 export type ProjectMenuItem = {
   key: string;
+  /** A boolean view option renders as a switch row and keeps the sheet open. */
+  kind?: "command" | "toggle";
   label: string;
   detail?: string;
   icon?: ReactNode;
@@ -41,7 +43,10 @@ function ProjectMenuItems({ sections }: { sections: readonly ProjectMenuSection[
     return (
       <NavigationGroup key={section.key}>
         <SectionHeader title={section.title} />
-        {items.map((item) => (
+        {items.map((item) => item.kind === "toggle" ? (
+          <ToggleField key={item.key} label={item.label} icon={item.icon} value={!!item.selected}
+            disabled={item.disabled} onChange={() => item.onPress()} />
+        ) : (
           <NavigationRow
             key={item.key}
             label={item.label}

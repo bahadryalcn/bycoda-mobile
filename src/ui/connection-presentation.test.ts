@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { connectionPhase } from "./connection-presentation";
+import { CONNECTION_BLIP_GRACE_MS, connectionPhase, settleConnectionPhase } from "./connection-presentation";
 
 const state = {
   paired: true,
@@ -77,5 +77,25 @@ describe("connection presentation", () => {
     expect(connectionPhase({ ...state, probeStalled: true })).toBe("checking");
     expect(connectionPhase({ ...state, probeStalled: true, errorAt: 99_500 })).toBe("disconnected");
     expect(connectionPhase({ ...state, probeStalled: false })).toBe("connected");
+  });
+  it("holds a proven connection through a short blip and shows a lasting one", () => {
+    const connected = settleConnectionPhase("connected", { connected: false, blipSince: null }, 1_000);
+    expect(connected.phase).toBe("connected");
+    const blip = settleConnectionPhase("checking", connected.memory, 2_000);
+    expect(blip).toEqual({ phase: "connected", memory: { connected: true, blipSince: 2_000 }, holdUntil: 2_000 + CONNECTION_BLIP_GRACE_MS });
+    const still = settleConnectionPhase("disconnected", blip.memory, 2_000 + CONNECTION_BLIP_GRACE_MS - 1);
+    expect(still.phase).toBe("connected");
+    // Healing inside the grace never shows the blip and clears it.
+    expect(settleConnectionPhase("connected", still.memory, 3_000).memory).toEqual({ connected: true, blipSince: null });
+    const lasting = settleConnectionPhase("disconnected", still.memory, 2_000 + CONNECTION_BLIP_GRACE_MS);
+    expect(lasting.phase).toBe("disconnected");
+    expect(settleConnectionPhase("disconnected", lasting.memory, 99_000).phase).toBe("disconnected");
+  });
+  it("never holds a lasting phase or a computer that was not connected yet", () => {
+    const memory = { connected: true, blipSince: null };
+    for (const phase of ["locked", "access", "permission", "storage", "startup-failed", "unpaired"] as const)
+      expect(settleConnectionPhase(phase, memory, 1_000).phase).toBe(phase);
+    expect(settleConnectionPhase("checking", { connected: false, blipSince: null }, 1_000).phase).toBe("checking");
+    expect(settleConnectionPhase("offline", memory, 1_000).phase).toBe("connected");
   });
 });

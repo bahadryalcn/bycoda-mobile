@@ -1,5 +1,5 @@
 import { ActionReviewSheet } from "@/ui/action-review-sheet";
-import { Body, Disclosure, Notice, Stack } from "@/ui/primitives";
+import { Body, Notice, Stack } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import type { worktreeCreateRequest } from "./worktree-create-model";
 
@@ -15,7 +15,7 @@ export function WorktreeCreateReview({ request, machineName, sourcePath, default
       <Body mono selectable>{request.branch}</Body>
       {!request.existing ? <><Body muted>{copy("Başlangıç dalı", "Base branch")}</Body><Body mono selectable>{request.base}</Body></> : null}
       <Notice message={copy("Hedef klasörü bilgisayardaki bycoda belirler.", "bycoda on the computer chooses the destination folder.")} />
-      <Disclosure label={copy("Ayrıntılar", "Details")}><Body mono selectable>{request.projectId}</Body>{defaultRoot ? <Body mono selectable>{defaultRoot}</Body> : null}</Disclosure>
+      <Body mono muted selectable>{request.projectId}</Body>{defaultRoot ? <Body mono muted selectable>{defaultRoot}</Body> : null}
     </Stack>
   </ActionReviewSheet>;
 }

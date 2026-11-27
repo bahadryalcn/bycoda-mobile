@@ -1,8 +1,6 @@
 import type { HostTerminal, HostTerminalRead } from "../../../../src/features/host-tools/terminalTypes";
-import { utf8Bytes } from "@/remote/transport-validation";
 
 export const TERMINAL_OUTPUT_LIMIT = 65_536;
-export const TERMINAL_COMMAND_LIMIT = 16_384;
 export type TerminalOutput = { output: string; cursor: number; truncated: boolean; hasMore: boolean; terminal?: HostTerminal };
 
 export const emptyTerminalOutput = (): TerminalOutput => ({ output: "", cursor: 0, truncated: false, hasMore: false });
@@ -10,10 +8,20 @@ export const emptyTerminalOutput = (): TerminalOutput => ({ output: "", cursor: 
 export const TERMINAL_POLL_MS = 1500;
 export const TERMINAL_POLL_MAX_MS = 30_000;
 
-/** Background poll delay: more pages continue quickly; failures back off exponentially up to the cap. */
-export function terminalPollDelay(failures: number, hasMore: boolean): number {
+/** Unchanged reads polled at the base rate before a quiet terminal is read less often. */
+const TERMINAL_QUIET_READS = 3;
+const TERMINAL_QUIET_STEPS = [3000, 6000, 10_000] as const;
+
+/**
+ * Background poll delay: more pages continue quickly; failures back off exponentially up to the
+ * cap; a quiet buffer (consecutive unchanged reads) steps from 1.5 s through 3 s and 6 s to 10 s.
+ */
+export function terminalPollDelay(failures: number, hasMore: boolean, unchanged = 0): number {
   if (hasMore) return 100;
-  if (failures <= 0) return TERMINAL_POLL_MS;
+  if (failures <= 0) {
+    if (unchanged <= TERMINAL_QUIET_READS) return TERMINAL_POLL_MS;
+    return TERMINAL_QUIET_STEPS[Math.min(unchanged - TERMINAL_QUIET_READS, TERMINAL_QUIET_STEPS.length) - 1]!;
+  }
   return Math.min(TERMINAL_POLL_MS * 2 ** Math.min(failures, 5), TERMINAL_POLL_MAX_MS);
 }
 
@@ -25,13 +33,6 @@ export function sameTerminalOutput(a: TerminalOutput, b: TerminalOutput): boolea
 
 export function projectTerminals(terminals: readonly HostTerminal[], projectId: string): HostTerminal[] {
   return terminals.filter((terminal) => terminal.projectId === projectId && typeof terminal.id === "string" && terminal.id.length > 0);
-}
-
-/** A newline is sent only by the explicit Send command action, never by keyboard submission. */
-export function terminalCommandInput(command: string): string | undefined {
-  if (!command.trim() || command.length > TERMINAL_COMMAND_LIMIT || /[\u0000\u0003\u001b]/.test(command)) return undefined;
-  const input = command.endsWith("\n") ? command : `${command}\n`;
-  return utf8Bytes(input) <= TERMINAL_COMMAND_LIMIT ? input : undefined;
 }
 
 export function appendTerminalOutput(previous: TerminalOutput, snapshot: HostTerminalRead, projectId: string, id: string): TerminalOutput {
@@ -54,4 +55,23 @@ export function terminalDisplayOutput(output: string): string {
     .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
     .replace(/\r\n/g, "\n").replace(/\r/g, "\n")
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
+}
+
+type StateCopy = (tr: string, en: string, values?: Record<string, string | number>) => string;
+
+/** One name per terminal state in every terminal view: running, or closed. */
+export function terminalStateLabel(running: boolean, copy: StateCopy): string {
+  return running ? copy("Çalışıyor", "Running") : copy("Kapandı", "Closed");
+}
+
+/** The status line of a terminal whose shell ended, with its exit code when known. */
+export function terminalClosedLabel(exitCode: number | null | undefined, copy: StateCopy): string {
+  return exitCode === null || exitCode === undefined
+    ? copy("Kapandı.", "Closed.")
+    : copy("Kapandı. Çıkış kodu: {p0}", "Closed. Exit code: {p0}", { p0: exitCode });
+}
+
+/** The shell as its program name; a full path stays out of the row. */
+export function terminalShellName(shell: string | undefined): string {
+  return shell?.split(/[\\/]/).filter(Boolean).at(-1) ?? "";
 }

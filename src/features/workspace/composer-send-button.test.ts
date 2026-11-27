@@ -1,57 +1,116 @@
-import { afterEach, expect, it, vi } from "vitest";
+// @vitest-environment happy-dom
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ComposerSendButton } from "./composer-send-button";
-const state = vi.hoisted(() => ({ toast: vi.fn(), haptic: vi.fn() }));
+
+type ButtonProps = {
+  label: string;
+  hint?: string;
+  disabled?: boolean;
+  busy?: boolean;
+  onPress(): void;
+  onLongPress?: () => void;
+  longPressLabel?: string;
+};
+type Option = { key: string; label: string; detail?: string; selected?: boolean; disabled?: boolean; onPress(): void };
+type SheetProps = { open: boolean; label: string; items: Option[]; onClose(): void };
+const state = vi.hoisted(() => ({
+  toast: vi.fn(),
+  haptic: vi.fn(),
+  button: undefined as ButtonProps | undefined,
+  sheet: undefined as SheetProps | undefined,
+}));
 vi.mock("lucide-react-native/icons/arrow-up", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/corner-down-right", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/list-plus", () => ({ default: () => null }));
-vi.mock("@/ui/chat-controls", () => ({ ChatCircleAction: () => null }));
+vi.mock("@/ui/chat-controls", () => ({ ChatCircleAction: (props: ButtonProps) => { state.button = props; return null; } }));
+vi.mock("@/ui/anchored-menu", () => ({ AnchoredMenu: (props: SheetProps) => { state.sheet = props; return null; } }));
+vi.mock("react-native", () => ({ View: ({ children }: { children?: unknown }) => children }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, values?: Record<string, string>) => en.replace(/\{(p\d+)\}/g, (_match, key: string) => values?.[key] ?? key) }));
 vi.mock("@/ui/motion", () => ({ haptic: { select: state.haptic } }));
 vi.mock("@/ui/toast", () => ({ showToast: state.toast }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
-afterEach(() => { state.toast.mockReset(); state.haptic.mockReset(); });
-const render = (props: Partial<Parameters<typeof ComposerSendButton>[0]> = {}) => ComposerSendButton({ mode: "steer", alternate: "queue", disabled: false, busy: false, onSend: vi.fn(), ...props });
 
-it("does not announce success after a void alternate submission callback", () => {
-  const send = vi.fn(); const view = render({ onSend: send });
-  view.props.onLongPress();
+let root: Root, node: HTMLDivElement;
+beforeEach(() => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  node = document.createElement("div");
+  root = createRoot(node);
+});
+afterEach(() => {
+  act(() => root.unmount());
+  state.toast.mockReset(); state.haptic.mockReset();
+  state.button = undefined; state.sheet = undefined;
+  vi.unstubAllGlobals();
+});
+const render = (props: Partial<Parameters<typeof ComposerSendButton>[0]> = {}) => {
+  act(() => root.render(createElement(ComposerSendButton, { mode: "steer", alternate: "queue", disabled: false, busy: false, onSend: vi.fn(), ...props })));
+  return state.button!;
+};
+const choose = (key: string) => act(() => state.sheet!.items.find((option) => option.key === key)!.onPress());
+
+it("shows the default mode on tap and opens the anchored Steer now / Queue menu on long press", () => {
+  const send = vi.fn();
+  const button = render({ onSend: send });
+  expect(button.label).toBe("Steer");
+  expect(button.longPressLabel).toBe("Choose how to send");
+  expect(button.hint).toBe("Press and hold to choose Steer now or Queue.");
+  expect(state.sheet?.open).toBe(false);
+  act(() => button.onLongPress!());
+  expect(send).not.toHaveBeenCalled();
+  expect(state.haptic).toHaveBeenCalledOnce();
+  expect(state.sheet?.open).toBe(true);
+  expect(state.sheet?.label).toBe("Choose how to send");
+  expect(state.sheet?.items.map((option) => [option.label, option.detail, option.selected])).toEqual([
+    ["Steer now", "Interrupts what the agent is doing", true],
+    ["Queue", "Runs after the current turn", false],
+  ]);
+  choose("queue");
   expect(send).toHaveBeenCalledExactlyOnceWith("queue");
-  expect(state.haptic).toHaveBeenCalledOnce();
-  expect(state.toast).not.toHaveBeenCalled();
-  expect(view.props.longPressLabel).toBe("Queue");
-  expect(view.props.hint).toBe("Press and hold for Queue. Send after the agent finishes.");
-});
-it("describes the long-press alternate for each mode and names none when there is no alternate", () => {
-  expect(render({ mode: "queue", alternate: "steer" }).props.hint).toBe("Press and hold for Steer. Send to the running agent now.");
-  expect(render({ mode: "send", alternate: null }).props.hint).toBeUndefined();
-});
-it("does not infer delivery from an unresolved send promise", async () => {
-  let finish!: () => void;
-  const pending = new Promise<void>(resolve => { finish = resolve; });
-  const send = vi.fn(() => pending); const view = render({ onSend: send });
-  view.props.onLongPress();
-  expect(state.toast).not.toHaveBeenCalled();
-  finish(); await pending;
   expect(state.toast).not.toHaveBeenCalled();
 });
-it("keeps tap on current mode and long press on its named alternate", () => {
-  const send = vi.fn(); const view = render({ mode: "queue", alternate: "steer", onSend: send });
-  view.props.onPress(); view.props.onLongPress();
+it("marks queue as the default when Settings prefers it, and tap keeps the default", () => {
+  const send = vi.fn();
+  const button = render({ mode: "queue", alternate: "steer", onSend: send });
+  expect(button.label).toBe("Queue");
+  act(() => button.onPress());
+  act(() => state.button!.onLongPress!());
+  expect(state.sheet?.items.find((option) => option.selected)?.key).toBe("queue");
+  choose("steer");
   expect(send.mock.calls).toEqual([[], ["steer"]]);
-  expect(view.props.label).toBe("Queue");
-  expect(view.props.longPressLabel).toBe("Steer");
-  expect(state.haptic).toHaveBeenCalledOnce();
 });
-it.each([{ disabled: true }, { busy: true }])("retains disabled/busy protection for alternate accessibility callbacks: %j", props => {
-  const send = vi.fn(); const view = render({ ...props, onSend: send });
-  view.props.onPress(); view.props.onLongPress?.();
+it.each([{ disabled: true }, { busy: true }])("offers no long press while disabled or busy, and tap does nothing: %j", (props) => {
+  const send = vi.fn();
+  const button = render({ ...props, onSend: send });
+  act(() => button.onPress());
+  expect(button.onLongPress).toBeUndefined();
   expect(send).not.toHaveBeenCalled();
   expect(state.haptic).not.toHaveBeenCalled();
-  expect(view.props.disabled).toBe(!!props.disabled);
-  expect(view.props.busy).toBe(!!props.busy);
+  expect(state.sheet?.open).toBe(false);
+  expect(button.disabled).toBe(!!props.disabled);
+  expect(button.busy).toBe(!!props.busy);
 });
-it("has no alternate action when no eligible alternate exists", () => {
-  const view = render({ mode: "send", alternate: null });
-  expect(view.props.onLongPress).toBeUndefined();
-  expect(view.props.longPressLabel).toBeUndefined();
+it("offers no choice when only one mode can be delivered or the agent is idle", () => {
+  for (const props of [{ mode: "send" as const, alternate: null }, { mode: "steer" as const, alternate: null }]) {
+    const button = render(props);
+    expect(button.onLongPress).toBeUndefined();
+    expect(button.longPressLabel).toBeUndefined();
+    expect(button.hint).toBeUndefined();
+  }
+});
+it("retires an open choice when the run ends and does not reopen it for the next run", () => {
+  const button = render();
+  act(() => button.onLongPress!());
+  expect(state.sheet?.open).toBe(true);
+  render({ mode: "send", alternate: null });
+  expect(state.sheet?.open).toBe(false);
+  render();
+  expect(state.sheet?.open).toBe(false);
+});
+it("closes an open choice when the draft stops being sendable", () => {
+  const button = render();
+  act(() => button.onLongPress!());
+  render({ disabled: true });
+  expect(state.sheet?.open).toBe(false);
 });

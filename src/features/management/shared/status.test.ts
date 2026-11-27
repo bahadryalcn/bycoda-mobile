@@ -26,3 +26,8 @@ it("localizes a skipped automation run", () => {
   expect(statusLabel("skipped", copy)).toBe("Skipped");
   expect(statusLabel("skipped", (tr) => tr)).toBe("Atlanan");
 });
+
+it("names an unrecognized record state neutrally", () => {
+  expect(Status({ value: "new-host-state" }).props.label).toBe("Unknown");
+  expect(statusLabel("new-host-state", copy)).toBe("new host state");
+});

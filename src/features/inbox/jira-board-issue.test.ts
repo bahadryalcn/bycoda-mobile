@@ -32,7 +32,7 @@ vi.mock("@/ui/primitives", () => {
   const Button = ({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) => {
     state.presses.set(label, onPress); return createElement("button", { disabled, onClick: onPress }, label);
   };
-  return { Body: Wrap, Heading: Wrap, Row: Wrap, NavigationGroup: Wrap, ValueRow: ({ label, value }: { label: string; value?: string }) => createElement("p", null, `${label}: ${value}`), Badge: ({ label }: { label: string }) => createElement("span", null, label), StatusText: ({ label }: { label: string }) => createElement("span", null, label), Stack: Wrap, QueryState: () => null, MutationState: () => null,
+  return { SectionHeader: ({ title, trailing }: { title: string; trailing?: ReactNode }) => createElement("h3", null, title, trailing), Body: Wrap, Heading: Wrap, Row: Wrap, NavigationGroup: Wrap, ValueRow: ({ label, value }: { label: string; value?: string }) => createElement("p", null, `${label}: ${value}`), Badge: ({ label }: { label: string }) => createElement("span", null, label), StatusText: ({ label }: { label: string }) => createElement("span", null, label), Stack: Wrap, QueryState: () => null, MutationState: () => null,
     Sheet: ({ children, footer, title, onClose }: PropsWithChildren<{ footer?: ReactNode; title: string; onClose: () => void }>) =>
       createElement("div", { role: "dialog", "aria-label": title }, children, footer, createElement(Button, { label: `Close ${title}`, onPress: onClose })),
     Notice: ({ message }: { message: string }) => createElement("p", null, message), Button,
@@ -54,7 +54,7 @@ const issue = { identifier: "ENG-7", title: "Reviewed issue", state: "Open", pro
 const snapshot = { snapshotId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", projectCwd: "G:/Projects/reviewed-project",
   board: { id: 7, name: "Engineering", kind: "kanban" }, configuration: { rankSnapshotAvailable: true,
     sprints: [{ id: 3, name: "Active sprint" }] }, page: { issues: [issue, { identifier: "ENG-8", title: "Anchor" }] } };
-const defaults = { origin: { machineId: "machine", projectId: "project" }, snapshot, issue, canWrite: true, onChanged: vi.fn(), onClose: vi.fn() };
+const defaults = { origin: { machineId: "machine", projectId: "project" }, snapshot, issue, canWrite: true, onChanged: vi.fn() };
 let props = { ...defaults };
 let container: HTMLDivElement; let root: ReturnType<typeof createRoot> | undefined;
 async function render() { await act(async () => root!.render(createElement(JiraBoardIssueActions, props as never))); }
@@ -67,104 +67,65 @@ async function choose(label: string, value: string) {
   select.value = value; select.dispatchEvent(new Event("change", { bubbles: true }));
 }); }
 async function click(label: string) { await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === label)!.click()); }
-const review = () => container.querySelector('[role="dialog"][aria-label="Review Jira action"]');
-async function openReview() { await choose("Change status", "4"); await click("Review action"); }
-it("shows issue details and metadata alongside actions", async () => {
-  await mount();
-  for (const value of ["Readable description", "Reporter", "High", "bug", "Ada", "Updated"]) expect(container.textContent).toContain(value);
-});
-
-it.each(["access lost", "action completed"])("shows only the shared close when %s", async outcome => {
-  await mount();
-  if (outcome === "access lost") state.project = "other";
-  else state.result = { outcome: "submitted" };
-  await render();
-  const closes = [...container.querySelectorAll("button")].filter(control => control.textContent?.startsWith("Close"));
-  expect(closes).toHaveLength(1);
-  if (outcome === "access lost") expect(container.textContent).toContain("Record access is unavailable.");
-  await act(async () => closes[0]!.click());
-  expect(defaults.onClose).toHaveBeenCalledOnce();
-});
-
-it.each(["project","auth"])("conceals Jira identity and fields across %s loss, keeping choices on restoration",async kind=>{
-  await mount();await choose("Change status","4");await click("Review action");
-  const confirm=state.presses.get("Request approval on computer")!;
-  if(kind==="project")state.project="other";
-  else state.readError=Object.assign(Error("Access expired"),{kind:"auth"});
-  await render();
-  for(const value of ["ENG-7","Reviewed issue","Engineering","Readable description","Reporter","High","Ada","Start work"])
-    expect(container.textContent).not.toContain(value);
-  await act(async()=>confirm());expect(state.submit).not.toHaveBeenCalled();
-  state.project="project";state.readError=null;await render();
-  expect((container.querySelector('select[aria-label="Change status"]') as HTMLSelectElement).value).toBe("4");
-  await act(async()=>confirm());expect(state.submit).not.toHaveBeenCalled();
-});
 afterEach(async () => {
   await act(async () => root?.unmount()); root = undefined; container?.remove(); props = { ...defaults };
   state.project = "project"; state.readError = null; state.busy = false; state.ready = true; state.draftError = null; state.pending = null; state.result = null;
   state.presses.clear(); state.changes.clear(); vi.clearAllMocks(); vi.unstubAllGlobals();
 });
+it("names the board it acts on and says the computer approves the change", async () => {
+  await mount();
+  expect(container.querySelector("h3")?.textContent).toBe("BoardEngineering");
+  await choose("Change status", "4");
+  expect(container.textContent).toContain("You approve the change on your computer.");
+});
+it("hides its actions when the record's computer or project is no longer current", async () => {
+  await mount(); await choose("Change status", "4"); const apply = state.presses.get("Apply")!;
+  state.project = "other"; await render();
+  expect(container.textContent).not.toContain("Engineering"); expect(container.querySelector("select")).toBeNull();
+  await act(async () => apply()); expect(state.submit).not.toHaveBeenCalled();
+  state.project = "project"; await render();
+  expect((container.querySelector('select[aria-label="Change status"]') as HTMLSelectElement).value).toBe("4");
+});
 it.each([
-  ["transition", "Change status", "4", "Change status · Start work (#4)", { transitionId: "4" }],
-  ["sprint", "Target sprint", "3", "Move to sprint · Active sprint (#3)", { target: "sprint", sprintId: 3 }],
-  ["rank", "Displayed anchor issue", "ENG-8", "Before · ENG-8 · Anchor", { target: "rank", beforeKey: "ENG-8" }],
-  ["backlog", "", "", "Move to backlog", { target: "backlog" }],
-  ["board", "", "", "Move to board", { target: "board" }],
-])("reviews %s by readable name and submits only the exact reviewed command", async (action, field, value, description, target) => {
+  ["transition", "Change status", "4", { transitionId: "4" }],
+  ["sprint", "Target sprint", "3", { target: "sprint", sprintId: 3 }],
+  ["rank", "Displayed anchor issue", "ENG-8", { target: "rank", beforeKey: "ENG-8" }],
+  ["backlog", "", "", { target: "backlog" }],
+  ["board", "", "", { target: "board" }],
+])("sends %s at once, like the desktop's status picker, as exactly the command shown", async (action, field, value, target) => {
   await mount(); if (action !== "transition") await choose("Action", action as string);
   if (field) await choose(field as string, value as string);
-  await click("Review action"); expect(state.submit).not.toHaveBeenCalled();
-  expect(review()?.textContent).toContain(description); expect(review()?.textContent).toContain("Engineering");
-  expect(review()?.textContent).toContain("ENG-7 · Reviewed issue"); expect(review()?.textContent).not.toContain("snapshotId");
-  await click("Details"); expect(review()?.textContent).toContain(snapshot.projectCwd); expect(review()?.textContent).toContain(snapshot.snapshotId);
-  await click("Request approval on computer");
+  await click("Apply");
   expect(state.submit).toHaveBeenCalledExactlyOnceWith({ action: action === "transition" ? "jira-board-transition" : "jira-board-move",
     input: { projectId: "project", snapshotId: snapshot.snapshotId, key: "ENG-7", confirm: "CHANGE_JIRA_BOARD", ...target as object } });
-  expect(review()).toBeNull();
 });
-it("reviews after-position with the exact displayed anchor", async () => {
+it("ranks after the exact displayed anchor", async () => {
   await mount(); await choose("Action", "rank"); await choose("Displayed anchor issue", "ENG-8"); await choose("Rank direction", "after");
-  await click("Review action"); expect(review()?.textContent).toContain("After · ENG-8 · Anchor"); await click("Request approval on computer");
+  await click("Apply");
   expect(state.submit.mock.calls[0]![0].input).toMatchObject({ afterKey: "ENG-8" }); expect(state.submit.mock.calls[0]![0].input).not.toHaveProperty("beforeKey");
 });
-it("keeps field-requiring transitions unavailable and rejects a changed origin", async () => {
+it("keeps field-requiring transitions unavailable and offers Apply only for a complete choice", async () => {
   await mount(); expect(container.textContent).toContain("Complete transitions requiring additional fields in Jira");
   expect(container.querySelector('select[aria-label="Change status"]')?.textContent).not.toContain("Requires custom field");
-  await openReview(); state.project = "other"; await click("Request approval on computer"); expect(state.submit).not.toHaveBeenCalled();
+  expect([...container.querySelectorAll("button")].find(button => button.textContent === "Apply")!.disabled).toBe(true);
+  expect(container.textContent).toContain("Choose a new status to continue.");
 });
-it("cancel preserves choices, retires its callback and permits a new review", async () => {
-  await mount(); await openReview(); const old = state.presses.get("Request approval on computer")!;
-  await click("Cancel"); expect(review()).toBeNull(); expect((container.querySelector('select[aria-label="Change status"]') as HTMLSelectElement).value).toBe("4");
-  await act(async () => old()); expect(state.submit).not.toHaveBeenCalled(); await click("Review action");
-  await act(async () => old()); expect(state.submit).not.toHaveBeenCalled(); await click("Request approval on computer"); expect(state.submit).toHaveBeenCalledOnce();
+it("sends a retained Apply only for the command it was shown with", async () => {
+  await mount(); await choose("Change status", "4"); const old = state.presses.get("Apply")!;
+  await choose("Action", "backlog"); await act(async () => old()); expect(state.submit).not.toHaveBeenCalled();
+  await click("Apply"); expect(state.submit.mock.calls[0]![0].input.target).toBe("backlog");
 });
-it("rejects repeated retained confirmation and hidden-editor changes", async () => {
-  await mount(); await click("Move or rank"); const change = state.changes.get("Action")!; await openReview();
-  const confirm = state.presses.get("Request approval on computer")!;
-  await act(async () => change("backlog")); expect(review()?.textContent).toContain("Start work");
-  await act(async () => { confirm(); confirm(); }); expect(state.submit).toHaveBeenCalledOnce();
-});
-it.each(["write", "busy", "not-ready", "draft-error", "pending", "result"])("retires a review across %s loss and restoration", async (kind) => {
-  await mount(); await openReview(); const confirm = state.presses.get("Request approval on computer")!;
+it.each(["write", "busy", "not-ready", "draft-error", "pending", "result"])("sends nothing while %s holds the section", async (kind) => {
+  await mount(); await choose("Change status", "4"); const apply = state.presses.get("Apply")!;
   if (kind === "write") props = { ...props, canWrite: false };
   if (kind === "busy") state.busy = true;
   if (kind === "not-ready") state.ready = false;
   if (kind === "draft-error") state.draftError = Error("Saved draft unavailable");
   if (kind === "pending") state.pending = { command: { input: { key: "ENG-7" }, action: "jira-board-transition" } };
   if (kind === "result") state.result = { outcome: "submitted" };
-  await render(); expect(review()).toBeNull(); await act(async () => confirm()); expect(state.submit).not.toHaveBeenCalled();
-  props = { ...props, canWrite: true }; state.busy = false; state.ready = true; state.draftError = null; state.pending = null; state.result = null;
-  await render(); await act(async () => confirm()); expect(state.submit).not.toHaveBeenCalled(); expect(review()).toBeNull();
+  await render(); await act(async () => apply()); expect(state.submit).not.toHaveBeenCalled();
 });
-it("retires retained confirmation on unmount", async () => {
-  await mount(); await openReview(); const confirm = state.presses.get("Request approval on computer")!;
-  await act(async () => root!.unmount()); root = undefined; await act(async () => confirm()); expect(state.submit).not.toHaveBeenCalled();
-});
-
-it("rejects an obsolete editor review and an obsolete review dismissal", async () => {
-  await mount(); await choose("Change status", "4"); const oldReview = state.presses.get("Review action")!;
-  await choose("Action", "backlog"); await act(async () => oldReview()); expect(review()).toBeNull();
-  await click("Review action"); const oldCancel = state.presses.get("Cancel")!; await click("Cancel");
-  await click("Review action"); await act(async () => oldCancel()); expect(review()).not.toBeNull();
-  await click("Request approval on computer"); expect(state.submit.mock.calls[0]![0].input.target).toBe("backlog");
+it("sends nothing from a retained Apply after unmount", async () => {
+  await mount(); await choose("Change status", "4"); const apply = state.presses.get("Apply")!;
+  await act(async () => root!.unmount()); root = undefined; await act(async () => apply()); expect(state.submit).not.toHaveBeenCalled();
 });

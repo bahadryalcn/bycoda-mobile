@@ -16,6 +16,7 @@ import {
   SearchField,
   SelectField,
   Sheet,
+  NoResults,
 } from "@/ui/primitives";
 import { ChatAction } from "@/ui/chat-controls";
 import { RecordAccessUnavailable } from "./unavailable-state";
@@ -144,18 +145,23 @@ function SessionFilesScope({ scope, session, connection }: { scope: SessionScope
             style={{ backgroundColor: colors.panel }}
             data={readable ? filtered : []}
             keyExtractor={(file) => file.key}
-            ListEmptyComponent={
+            ListEmptyComponent={files.length && (searchKey || activeFilters) ? (
+              <NoResults searching={!!searchKey} filtered={!!activeFilters}
+                title={copy("Aramana uyan dosya yok", "No files match your search")}
+                onClearSearch={() => changeSearch("")} onClearFilters={resetFilters} />
+            ) : (
               <Empty
                 compact={false}
+                illustration={files.length ? "search-empty" : "inbox-empty"}
                 title={
                   files.length
                     ? copy("Aramana uyan dosya yok", "No files match your search")
                     : copy("Yüklenen mesajlarda dosya yok", "No files in loaded messages")
                 }
                 action={searchKey ? { label: copy("Aramayı temizle", "Clear search"), onPress: () => changeSearch("") }
-                  : activeFilters ? { label: copy("Sıfırla", "Reset"), onPress: resetFilters } : undefined}
+                  : activeFilters ? { label: copy("Filtreleri temizle", "Clear filters"), onPress: resetFilters } : undefined}
               />
-            }
+            )}
             footer={
               session.history?.before !== undefined ? (
                 <>

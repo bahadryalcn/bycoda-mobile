@@ -5,7 +5,7 @@ import { HierarchyFrame, HierarchyWidthProvider } from "@/ui/hierarchy-frame";
 import { useMobileTheme } from "@/ui/theme";
 import { sameSessionListConnectionFailure } from "./session-list-feedback";
 import type { ProjectSessionsProps } from "./sessions-panel-types";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLatestCallback } from "./use-latest-callback";
 import { View } from "react-native";
 import { space } from "@/ui/tokens";
@@ -13,9 +13,11 @@ import { router } from "expo-router";
 import { useActiveMachine } from "@/state/machines";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import { useHostClient, useHostQuery } from "@/state/queries";
-import { NewSessionSheet } from "./new-session-sheet";
+import { openNewChat } from "./new-chat-navigation";
 import { useScreenContentInsets } from "@/ui/screen-content-insets";
-import { Button, SectionHeader, SearchField, ScreenList, QueryState } from "@/ui/primitives";
+import { Row, SectionHeader, SearchField, ScreenList, QueryState } from "@/ui/primitives";
+import { SessionFilterChip } from "./session-filter-chip";
+import { useCollapsibleSearch } from "@/ui/search-field";
 import { getQueryPresentation } from "@/ui/query-presentation";
 import { useCopy } from "@/ui/copy";
 import { SwipeActionsGroup } from "@/ui/swipe-actions";
@@ -65,20 +67,17 @@ function ProjectSessionsConnection({
   const readable = useLatestCallback(() => mounted.current && !!machine && connection.isCurrent() && canReadProject());
   const openSession = useLatestCallback((sessionId: string) => {
     if (!machine || !readable()) return;
-    setCreating(false);
     router.navigate({
       pathname: "/session/[id]",
       params: { id: sessionId, projectId, machineId: machine.id },
     });
   });
   const [search, setSearch] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
   const [archived, setArchived] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [shelfCollapsed, setShelfCollapsed] = useState<Partial<Record<SessionShelfId, boolean>>>(
     {},
   );
-  const [creating, setCreating] = useState(initialCreating);
   const client = useHostClient();
   // Live project streams already deliver session summaries; poll the full list only when they
   // are down. The interval is re-evaluated after each fetch, so a dropped stream resumes 5s polling.
@@ -149,15 +148,24 @@ function ProjectSessionsConnection({
   const ownsRegion = queryOwnsRegion(listQuery, !visible.length);
   const presentation = getQueryPresentation(listQuery, !visible.length);
   const showEmptyCreate = presentation === "empty" && !search.trim() && !archived;
+  // A tap opens the empty new session with this project (and worktree folder) selected; a
+  // `create=session` link opens it the same way, once.
   const openCreate = () => {
-    if (readable()) setCreating(true);
+    if (readable() && machine) openNewChat({ projectId, machineId: machine.id, ...(cwd ? { cwd } : {}) });
   };
+  const createdInitially = useRef(false);
+  useEffect(() => {
+    if (!initialCreating || createdInitially.current || !machine || !readable()) return;
+    createdInitially.current = true;
+    openNewChat({ projectId, machineId: machine.id, ...(cwd ? { cwd } : {}) });
+  }, [initialCreating, machine, readable, projectId, cwd]);
   const listState = (
     <QueryState
       query={listQuery}
       loading="list"
       loadingLabel={copy("Oturumlar yükleniyor…", "Loading sessions…")}
       empty={!visible.length ? emptyTitle : undefined}
+      noResults={{ searching: !!search.trim(), title: copy("Aramana uyan oturum yok.", "No sessions match your search."), onClearSearch: () => setSearch("") }}
       emptyIllustration={search.trim() ? "search-empty" : archived ? "inbox-empty" : "no-sessions"}
       emptyDetail={
         !search.trim() && !archived
@@ -179,6 +187,21 @@ function ProjectSessionsConnection({
       }
     />
   );
+  // Search and the Archived view share the Sessions tab's collection sheet; refresh is pull-to-refresh.
+  const searchControl = useCollapsibleSearch(
+    <SearchField label={copy("Oturum ara", "Search sessions")} value={search} onChangeText={setSearch} />,
+    {
+      activeFilters: Number(archived),
+      onResetFilters: () => { if (readable()) setArchived(false); },
+      filters: <>
+        <SectionHeader title={copy("Yalnızca göster", "Show only")} />
+        <Row>
+          <SessionFilterChip label={copy("Arşivlenmiş", "Archived")} selected={archived}
+            onPress={() => { if (readable()) setArchived((value) => !value); }} />
+        </Row>
+      </>,
+    },
+  );
   const content = (
     <HierarchyWidthProvider>
       <SwipeActionsGroup fill>
@@ -192,22 +215,9 @@ function ProjectSessionsConnection({
         ListHeaderComponent={
           <View style={[uiStyles.stack, { gap: space.sm }]}>
             {archived ? (
-              <SectionHeader flush title={copy("Arşivlenmiş oturumlar", "Archived sessions")}
-                trailing={<Button
-                  label={copy("Etkin oturumlar", "Active sessions")}
-                  tone="quiet"
-                  density="compact"
-                  onPress={() => { if (readable()) setArchived(false); }}
-                />} />
+              <SectionHeader flush title={copy("Arşivlenmiş oturumlar", "Archived sessions")} />
             ) : null}
-            {/* Always visible, like the Sessions tab; refresh is pull-to-refresh. */}
-            <SearchField
-              label={copy("Oturum ara", "Search sessions")}
-              value={search}
-              onChangeText={setSearch}
-            />
-            {/* The one new-session editor, with this project (and worktree folder) preselected. */}
-            <NewSessionSheet visible={creating} project={{ id: projectId, cwd }} onClose={() => setCreating(false)} />
+            {searchControl.sheet}
           </View>
         }
         renderItem={({ item }) => {
@@ -261,24 +271,14 @@ function ProjectSessionsConnection({
     </HierarchyWidthProvider>
   );
   return renderFrame(<View style={{ flex: 1 }}>{content}</View>, {
-    searchOpen,
-    hasSearch: !!search.trim(),
-    toggleSearch: () => {
-      if (!readable()) return;
-      // A closed field must not keep filtering the list out of sight.
-      if (searchOpen) setSearch("");
-      setSearchOpen(!searchOpen);
-    },
+    searchTrigger: searchControl.trigger,
+    filterTrigger: searchControl.filterTrigger,
     showCreateInHeader: !showEmptyCreate && (listQuery.data !== undefined || presentation === "error"),
     createDisabled: false,
     create: openCreate,
     archived,
     toggleArchived: () => {
       if (readable()) setArchived((value) => !value);
-    },
-    refreshing: sessions.isFetching,
-    refresh: () => {
-      if (readable() && !sessions.isFetching) void sessions.refetch();
     },
   });
 }

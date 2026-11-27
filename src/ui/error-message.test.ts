@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { RemoteHostError } from "../remote/host-error";
 import { ApprovalCommandRefused } from "../domain/approval-command";
 import { DraftWriteError } from "../state/local-draft-storage";
 import { errorMessage, remoteErrorKind } from "./error-message";
+import { translate, type Locale } from "../localization";
 
 const tr = (turkish: string, _english: string) => turkish;
 const en = (_turkish: string, english: string) => english;
@@ -24,10 +25,17 @@ it("localizes approval identity refusals without suggesting uncertain delivery",
     const error = new ApprovalCommandRefused(reason);
     expect(errorMessage(error, en)).toBe(error.message);
     expect(errorMessage(error, tr)).toContain(
-      reason === "unsupported" ? "Host'u güncelle" : "istek doğrulanamıyor",
+      reason === "unsupported" ? "Bilgisayardaki bycoda" : "istek doğrulanamıyor",
     );
     expect(error.uncertain).toBe(false);
     expect(errorMessage(error, tr)).not.toContain("uygulanmış olabilir");
+  }
+});
+
+it("never shows the Host's generic English failure", () => {
+  for (const message of ["Host request failed", "Host request failed."]) {
+    expect(errorMessage(remote("host", message), tr)).toBe("Bilgisayar bu isteği tamamlayamadı. Yeniden dene.");
+    expect(errorMessage(remote("host", message), en)).toBe("The computer could not complete this request. Try again.");
   }
 });
 
@@ -36,7 +44,7 @@ describe("shared remote error copy", () => {
     ["network", "Bilgisayara ulaşılamadı. Bağlantıyı kontrol edip yeniden dene."],
     ["timeout", "Bilgisayarın yanıt vermesi çok uzun sürdü. Sonucu kontrol etmek için yenile."],
     ["aborted", "İstek iptal edildi."],
-    ["unsupported", "Bu özellik için bilgisayarındaki Bycoda’yı güncelle."],
+    ["unsupported", "Bu özellik için bilgisayarındaki bycoda’yı güncelle."],
     ["identity", "Bu adresteki bilgisayar değişmiş. Doğru bilgisayarı yeniden bağla."],
   ] as const)("localizes real %s errors", (kind, expected) => {
     expect(errorMessage(remote(kind), tr)).toBe(expected);
@@ -50,11 +58,11 @@ describe("shared remote error copy", () => {
     ],
     [
       "This device credential is invalid or revoked. Pair the computer again.",
-      "Cihaz anahtarı geçersiz veya iptal edilmiş. Bilgisayar bağlantısını yenile.",
+      "Bu telefonun erişimi kaldırılmış veya geçersiz. Bilgisayarı yeniden eşleştir.",
     ],
     [
       "Pair this computer with a valid bycoda device credential.",
-      "Cihaz anahtarı geçersiz veya iptal edilmiş. Bilgisayar bağlantısını yenile.",
+      "Bu telefonun erişimi kaldırılmış veya geçersiz. Bilgisayarı yeniden eşleştir.",
     ],
     [
       "The saved device credential could not be read. Unlock the app or pair this computer again.",
@@ -75,10 +83,17 @@ describe("shared remote error copy", () => {
   });
 
   it.each(["host", "protocol", "auth"] as const)(
-    "preserves detailed arbitrary %s errors",
+    "keeps detailed arbitrary %s errors below a translated summary",
     (kind) => {
       const message = "Validation: checkout branch review/ui is missing (HTTP 409).";
-      expect(errorMessage(remote(kind, message), tr)).toBe(message);
+      const [summary, detail] = errorMessage(remote(kind, message), tr).split("\n\n");
+      expect(summary).toBe(
+        kind === "auth"
+          ? "Bilgisayara erişim reddedildi. Bu bilgisayarı yeniden bağla."
+          : "Bilgisayar bu isteği tamamlayamadı.",
+      );
+      expect(detail).toBe(message);
+      expect(errorMessage(remote(kind, message), en)).toBe(message);
     },
   );
 
@@ -88,12 +103,13 @@ describe("shared remote error copy", () => {
       uncertain: true,
     });
     expect(remoteErrorKind(error)).toBeUndefined();
-    expect(errorMessage(error, tr)).toBe(error.message);
+    expect(errorMessage(error, tr)).toBe(`İşlem tamamlanamadı.\n\n${error.message}`);
   });
 
   it("preserves local validation details and explicit caller messages", () => {
-    expect(errorMessage(new Error("Name must be unique."), tr)).toBe("Name must be unique.");
-    expect(errorMessage("Choose a branch first.", tr)).toBe("Choose a branch first.");
+    expect(errorMessage(new Error("Name must be unique."), tr)).toBe("İşlem tamamlanamadı.\n\nName must be unique.");
+    expect(errorMessage(new Error("Name must be unique."), en)).toBe("Name must be unique.");
+    expect(errorMessage("Choose a branch first.", en)).toBe("Choose a branch first.");
     expect(errorMessage(remote("network"), tr, "Ek yüklenemedi.")).toBe("Ek yüklenemedi.");
     expect(errorMessage({}, tr)).toBe("İşlem tamamlanamadı.");
   });
@@ -166,9 +182,58 @@ it("never tells a failed read that its action may have been applied", () => {
 
 it("shows a known English app or socket error in the screen's language", () => {
   const schema = new Error("The mobile app and Host use incompatible data. Update both and reconnect.");
-  expect(errorMessage(schema, tr)).toBe("Mobil uygulama ile Host verileri uyumsuz. İkisini de güncelleyip yeniden bağlan.");
+  expect(errorMessage(schema, tr)).toBe("Mobil uygulama ile bilgisayardaki bycoda uyumsuz. İkisini de güncelleyip yeniden bağlan.");
   expect(errorMessage(schema, en)).toBe(schema.message);
   expect(errorMessage(new Error("Speech could not be recognized. Try again."), tr)).toBe("Konuşma anlaşılamadı. Yeniden dene.");
-  // An unknown message stays as it is.
-  expect(errorMessage(new Error("Unlisted detail"), tr)).toBe("Unlisted detail");
+  // An unknown message keeps its English only as detail below a translated summary.
+  expect(errorMessage(new Error("Unlisted detail"), tr)).toBe("İşlem tamamlanamadı.\n\nUnlisted detail");
+  expect(errorMessage(new Error("Unlisted detail"), en)).toBe("Unlisted detail");
+});
+
+describe("central catalog translation of thrown English", () => {
+  const withLocale = (locale: Locale) =>
+    Object.assign((turkish: string, english: string) => translate(locale, turkish, english), { locale });
+
+  it("fills catalog placeholders from the thrown text, in the active language only", () => {
+    const message = "Remove notes.md from Desk? You would need to download it again.";
+    expect(errorMessage(new Error(message), withLocale("tr"))).toBe(
+      "notes.md, Desk üzerinden silinsin mi? Yeniden indirmek gerekir.",
+    );
+    expect(errorMessage(new Error(message), withLocale("de"))).toBe(
+      "notes.md von Desk entfernen? Du müsstest es erneut herunterladen.",
+    );
+    expect(errorMessage(new Error(message), withLocale("en"))).toBe(message);
+  });
+
+  it("translates string errors and keeps unknown ones as detail under a localized summary", () => {
+    const known = "The mobile app and Host use incompatible data. Update both and reconnect.";
+    expect(errorMessage(known, withLocale("tr"))).toContain("bilgisayardaki bycoda uyumsuz");
+    const unknown = "Unlisted string failure";
+    const [summary, detail] = errorMessage(unknown, withLocale("de")).split("\n\n");
+    expect(summary).toBe(translate("de", "İşlem tamamlanamadı.", "Could not complete this action."));
+    expect(detail).toBe(unknown);
+  });
+
+  it("translates a Host message and the transport's unknown-outcome sentence separately", () => {
+    const suffix = "The command ran; its outcome is unknown. Do not repeat it before checking.";
+    const error = remote("host", `This computer is busy. Try again shortly. ${suffix}`, true);
+    const text = errorMessage(error, tr);
+    expect(text.startsWith("Bilgisayar meşgul. Biraz sonra yeniden dene.")).toBe(true);
+    expect(text).not.toContain("This computer is busy");
+    expect(errorMessage(error, en).startsWith(error.message)).toBe(true);
+  });
+
+  it("does not read the Turkish catalog for another language", async () => {
+    vi.resetModules();
+    const required: string[] = [];
+    vi.doMock("../localization", async (original) => {
+      const actual = await original<typeof import("../localization")>();
+      return { ...actual, catalogFor: (locale: Locale) => (required.push(locale), actual.catalogFor(locale)) };
+    });
+    const fresh = await import("./error-message");
+    fresh.errorMessage(new Error("Unlisted detail"), withLocale("de"));
+    fresh.errorMessage(new Error("Unlisted detail"), en);
+    expect(required).not.toContain("tr");
+    vi.doUnmock("../localization");
+  });
 });

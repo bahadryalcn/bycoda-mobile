@@ -17,7 +17,7 @@ vi.mock("@/ui/chat-activity", () => ({
   ChatActivity: ({ status, detail, title }: { status: string; detail: string; title: string }) =>
     createElement("button", { "data-status": status, "data-title": title }, detail),
 }));
-import { ActivityGroup } from "./activity-group";
+import { ActivityGroup, stepDelta } from "./activity-group";
 
 const action = (id: string, status?: string): Block => ({
   id,
@@ -64,5 +64,27 @@ describe("activity group state presentation", () => {
       { id: "x", role: "tool", text: "pnpm test", tool: { kind: "execute", status: "completed" } },
     ]);
     expect(html).toContain('data-title="Read a.ts · Ran a command"');
+  });
+});
+
+describe("settled fold row", () => {
+  it("reads Worked for the turn's duration, keeping what the work was for the spoken detail", () => {
+    const turn: Block = { id: "u", role: "user", text: "go", durationMs: 46_000 };
+    const html = renderToStaticMarkup(
+      createElement(ActivityGroup, { blocks: [action("a", "completed")], live: false, turn, onInspect: vi.fn() }),
+    );
+    expect(html).toContain('data-title="Worked for 46 s"');
+    const running = renderToStaticMarkup(
+      createElement(ActivityGroup, { blocks: [action("a", "running"), action("b", "running")], live: true, turn, onInspect: vi.fn() }),
+    );
+    expect(running).not.toContain("Worked for");
+  });
+  it("sums a step's added and removed lines from its file changes", () => {
+    expect(stepDelta({ id: "e", role: "tool", text: "", tool: { fileChanges: [
+      { path: "a.ts", counts: { additions: 3, deletions: 1 } },
+      { path: "b.ts", counts: { additions: 2, deletions: 0 } },
+    ] as never } })).toEqual({ added: 5, removed: 1 });
+    expect(stepDelta({ id: "e", role: "tool", text: "", tool: { fileChanges: [{ path: "a.ts" }] as never } })).toBeUndefined();
+    expect(stepDelta(undefined)).toBeUndefined();
   });
 });

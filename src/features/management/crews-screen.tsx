@@ -1,4 +1,4 @@
-import { ManagementToolbar } from "./shared/collection-toolbar";
+import { useManagementToolbar } from "./shared/collection-toolbar";
 import { useRef, useState, type ComponentRef } from "react";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "./shared/search";
@@ -27,6 +27,7 @@ import { ManagementList } from "./shared/management-list";
 import { ProjectScopePill } from "../workspace/project-scope-pill";
 import { ProjectPicker } from "../workspace/project-picker";
 import { useRequiredProjectScope } from "./shared/required-project-scope";
+import { useProjectList } from "../workspace/use-project-directory";
 import { identifier } from "./shared/format";
 import { CrewEditor } from "./crews/crew-editor";
 import { ProfileEditor } from "./crews/profile-editor";
@@ -63,6 +64,7 @@ export function CrewsScreen() {
     roleLabels.find((option) => option.value === role)?.label ?? role;
   const machine = useActiveMachine();
   const { projectId, setProjectId, current: localScope, revision } = useRequiredProjectScope();
+  const projectDirectory = useProjectList();
   const supported = machine?.capabilities?.includes("crews.v1") === true;
   const executionSupported = machine?.capabilities?.includes("crews.tasks.v1") === true;
   const deleteSupported = machine?.capabilities?.includes("crews.delete.v1") === true;
@@ -81,7 +83,7 @@ export function CrewsScreen() {
       : [
           { value: "all", label: copy("Tümü", "All") },
           { value: "project", label: copy("Bu proje", "This project") },
-          { value: "host", label: copy("Bilgisayar geneli", "Host-wide") },
+          { value: "host", label: copy("Bilgisayar geneli", "Computer-wide") },
         ];
   const clearSearch = () => {
     setSearch("");
@@ -177,11 +179,36 @@ export function CrewsScreen() {
         value: newDefinition(identifier(), projectId),
       });
   };
+  const toolbar = useManagementToolbar({
+    search: <SearchField
+                    placeholder={copy("Ara", "Search")}
+                    ref={searchInput}
+                    label={
+                      tab === "definitions"
+                        ? copy("Ekip adında ara", "Search crew names")
+                        : tab === "runs"
+                          ? copy("Çalışma başlığında ara", "Search work titles")
+                          : copy("Üye adında ara", "Search member names")
+                    }
+                    value={search}
+                    onChangeText={setSearch}
+                  />,
+    status: {
+                  label: tab === "runs" ? copy("Durum", "Status") : copy("Kapsam", "Scope"),
+                  value: filter,
+                  unfilteredValue: "all",
+                  options: filterOptions,
+                  onChange: setFilter,
+                  filterable: rows.length > 0,
+                },
+  });
   const listState = (
     <QueryState
       size="region"
       query={query}
       empty={!!directory && !visible.length}
+      noResults={{ searching: !!search.trim() && rows.length > 0, filtered: filter !== "all" && rows.length > 0,
+        onClearSearch: clearSearch, onClearFilters: () => setFilter("all") }}
       emptyTitle={
         (search.trim() || filter !== "all") && rows.length
           ? copy("Eşleşen sonuç yok", "No matching results")
@@ -231,14 +258,17 @@ export function CrewsScreen() {
       ListEmptyComponent={
         supported && !!projectId ? (
           listState
+        ) : supported && !projectDirectory.directoryReady ? (
+          // The project directory is still loading: a loading list, not an empty state.
+          <QueryState size="region" query={{ status: "pending", isPending: true, fetchStatus: "fetching" }} />
         ) : supported ? (
-          // No project is known yet (directory loading or none registered); crews are per project.
+          // The computer has no project yet; crews are per project.
           <>
             <StateView
               size="region"
-              title={copy("Bir proje seç", "Choose a project")}
+              title={copy("Bir proje seçin", "Choose a project")}
               description={copy(
-                "Ekipler proje başına tutulur. Yukarıdan bir proje seç.",
+                "Ekipler proje başına tutulur. Yukarıdan bir proje seçin.",
                 "Crews are kept per project. Choose a project above.",
               )}
               action={{ label: copy("Proje seçin", "Choose a project"), onPress: () => setChoosingProject(true) }}
@@ -251,13 +281,14 @@ export function CrewsScreen() {
       }
       data={visible}
       keyExtractor={(row) => `${machine?.id}:${projectId}:${row.kind}:${row.value.id}`}
-      actions={
-        showCreateInHeader ? (
+      actions={<>
+        {supported && projectId ? toolbar.actions : null}
+        {showCreateInHeader ? (
           <IconButton label={createLabel} disabled={!canCreate} onPress={create}>
             <Plus size={iconSize.action} strokeWidth={2} color={colors.accent} />
           </IconButton>
-        ) : undefined
-      }
+        ) : null}
+      </>}
       header={
         <>
           {!supported ? (
@@ -290,32 +321,8 @@ export function CrewsScreen() {
                   },
                 ]}
               />
-              {tab === "runs" ? <ActiveCrews /> : null}
-              <ManagementToolbar
-                search={
-                  <SearchField
-                    placeholder={copy("Ara", "Search")}
-                    ref={searchInput}
-                    label={
-                      tab === "definitions"
-                        ? copy("Ekip adında ara", "Search crew names")
-                        : tab === "runs"
-                          ? copy("Çalışma başlığında ara", "Search work titles")
-                          : copy("Üye adında ara", "Search member names")
-                    }
-                    value={search}
-                    onChangeText={setSearch}
-                  />
-                }
-                status={{
-                  label: tab === "runs" ? copy("Durum", "Status") : copy("Kapsam", "Scope"),
-                  value: filter,
-                  unfilteredValue: "all",
-                  options: filterOptions,
-                  onChange: setFilter,
-                  filterable: rows.length > 0,
-                }}
-              />
+              {tab === "runs" && projectId ? <ActiveCrews projectId={projectId} /> : null}
+              {toolbar.sheet}
               {!visible.some(
                 (row) =>
                   row.kind === "definition" && row.value.id === remove.variables?.definitionId,
@@ -338,8 +345,12 @@ export function CrewsScreen() {
                 editor.kind === "start"
                   ? copy("Ekip çalışmasını başlat", "Start crew work")
                   : editor.kind === "profile"
-                    ? copy("Kütüphane üyesi", "Library member")
-                    : copy("Ekip ayarları", "Crew settings")
+                    ? editor.value.updatedAt
+                      ? copy("Kütüphane üyesini düzenle", "Edit library member")
+                      : copy("Yeni kütüphane üyesi", "New library member")
+                    : editor.directory.definitions.some((crew) => crew.id === editor.value.id)
+                      ? copy("Ekibi düzenle", "Edit crew")
+                      : copy("Yeni ekip", "New crew")
               }
               onClose={() => setEditor(null)}
             >

@@ -21,3 +21,17 @@ export function subagentSteps(block: Block) {
   return { report, steps: (block.agentRun?.steps ?? []).filter((step) =>
     !(report && step.kind === "message" && (step.id.endsWith(":report") || step.text.trim() === report))) };
 }
+
+/**
+ * Whether a list may offer Stop for this run: the same preconditions the details' Stop checks
+ * (a running, non-Workflow Claude run of this exact turn on a computer that can stop it). The
+ * details review stays the authority; this only decides whether the shortcut appears.
+ */
+export function subagentStopOffered(input: {
+  block: Block; runId?: string; parentProvider?: string; capabilities?: readonly string[]; disabled?: boolean; interrupted?: boolean;
+}): boolean {
+  const { block, runId } = input;
+  return !input.interrupted && !input.disabled && activeSubagent(block) && !block.agentRun?.workflow &&
+    !!runId && runId !== "desktop" && !!block.tool?.callId && input.parentProvider === "claude" &&
+    input.capabilities?.includes("sessions.stopItem.claude") === true;
+}

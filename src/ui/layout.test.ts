@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, createElement, type PropsWithChildren } from "react";
+import { act, createElement, Fragment, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -13,7 +13,7 @@ vi.mock("./tokens", async () => {
 vi.mock("./typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("react-native", () => ({
   View: ({ children,onLayout }: PropsWithChildren<{onLayout?:(event:any)=>void}>) => {if(onLayout)fixture.frames.push(onLayout);return createElement("div", null, children);},
-  useWindowDimensions: () => ({height:800,fontScale:1}),
+  useWindowDimensions: () => ({width:430,height:800,fontScale:1}),
   ScrollView: ({children,style,contentContainerStyle}:PropsWithChildren<{style?:any;contentContainerStyle?:any}>) => {fixture.footerStyle=style;fixture.footerContent=contentContainerStyle;return createElement("aside", {"data-action-scroll":true},children);},
   Text: ({ children }: PropsWithChildren) => createElement("span", null, children),
   StyleSheet: { flatten: (style: unknown) => style },
@@ -40,12 +40,12 @@ vi.mock("./header-back-button", () => ({ HeaderBackButton: () => null }));
 vi.mock("./scope-line", () => ({ ScopeLine: () => null, ScopePills: ({ scope }: { scope: { computer?: string; project?: string } }) => createElement("span", { "data-scope-pills": true }, [scope.computer, scope.project].filter(Boolean).join(" | ")) }));
 vi.mock("./motion", () => ({ reveal: undefined }));
 vi.mock("./use-pull-refresh", () => ({ usePullRefresh: vi.fn() }));
-import { LargeTitle, Screen, ScreenChromeProvider, ScreenHeading, sectionTitleText, useScreenHeading } from "./layout";
+import { Screen, ScreenChromeProvider, ScreenHeading, sectionTitleText, useScreenHeading } from "./layout";
 
 describe("page identity and action ownership", () => {
-  it("uses PanelUI header parts for ordinary and large identity without dropping actions", () => {
+  it("uses PanelUI header parts for the page identity without dropping actions", () => {
     const props = { title: "Projects", subtitle: "Computer", actions: createElement("button", null, "Add") };
-    for (const heading of [createElement(ScreenHeading, props), createElement(LargeTitle, props)]) {
+    for (const heading of [createElement(ScreenHeading, props)]) {
       const html = renderToStaticMarkup(heading);
       for (const part of ["root", "title", "description", "actions"]) {
         expect(html).toContain(`data-page-header="${part}"`);
@@ -235,5 +235,31 @@ describe("tab title row trailing command", () => {
     const pushed = renderToStaticMarkup(createElement(ScreenChromeProvider, { nativeTitle: true, headerTrailing: createElement("button", null, "Voice assistant") },
       createElement(ScreenHeading, { title: "Tasks", actions: createElement("button", null, "Add") })));
     expect(pushed).not.toContain("Voice assistant");
+  });
+});
+
+describe("pushed page top row", () => {
+  it("counts icon actions through fragments and fits title and pills only when they keep readable names", async () => {
+    const { countActions, fitsHeaderRow } = await import("./layout");
+    expect(countActions(createElement(Fragment, null, createElement("button"), null, createElement(Fragment, null, createElement("button"))))).toBe(2);
+    expect(fitsHeaderRow({ width: 430, fontScale: 1, title: "Notes", pills: 2, actions: 1 })).toBe(true);
+    // Narrow phone with three icons, long title or large text: pills move to the row below.
+    expect(fitsHeaderRow({ width: 360, fontScale: 1, title: "Tasks", pills: 2, actions: 3 })).toBe(false);
+    expect(fitsHeaderRow({ width: 430, fontScale: 1.4, title: "Notes", pills: 2, actions: 1 })).toBe(false);
+  });
+  it("hands title, pills and actions to the native top row when they fit, else keeps the scope row", async () => {
+    const { ScreenHeaderRow } = await import("./screen-chrome");
+    const rows: { identity: unknown; actions?: unknown }[] = [];
+    const Bridge = (props: { identity: unknown; actions?: unknown }) => { rows.push(props); return null; };
+    const pill = createElement("button", null, "Project pill");
+    const render = (title: string) => renderToStaticMarkup(createElement(ScreenHeaderRow, { value: Bridge as never },
+      createElement(ScreenChromeProvider, { nativeTitle: true },
+        createElement(ScreenHeading, { title, scopeControl: pill, actions: createElement("button", null, "Add") }))));
+    const fitted = render("Notes");
+    expect(rows.at(-1)?.identity).toBeTruthy();
+    expect(fitted).not.toContain("Project pill");
+    const crowded = render("A very long page title that cannot share its row");
+    expect(crowded).toContain("Project pill");
+    expect(crowded).toContain("Add");
   });
 });

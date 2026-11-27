@@ -4,12 +4,12 @@ import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "reac
 import ChevronsUpDown from "lucide-react-native/icons/chevrons-up-down";
 import { FlatList, StyleSheet, View, useWindowDimensions, type HostInstance } from "react-native";
 import { AnimatedPressable } from "panelui-native/primitives/animated-pressable";
-import Check from "lucide-react-native/icons/check";
 import { Sheet } from "./dialogs";
 import { Body } from "./typography";
 import { Button } from "./buttons";
 import { SearchField } from "./search-field";
 import { Empty, FieldError, Loading } from "./feedback";
+import { NoResults } from "./no-results";
 import { useLocale } from "@/i18n";
 import { usePrivateContentAccess, type PrivateContentAccess } from "./private-access";
 import { normalizeSearch } from "./search-matching";
@@ -18,6 +18,8 @@ import { useCopy } from "./copy";
 import { useReducedMotionPreference } from "./use-reduced-motion";
 import { InfoHint, UnitHint, isUnitHint } from "./info-hint";
 import { useInNavigationGroup } from "./navigation-row";
+import { rowPressMotion, useRowPress } from "./row-press";
+import { SelectionMark } from "./selection-mark";
 import { GroupHeading, SubgroupHeading } from "./group-heading";
 import { metrics, opacity, radii, space, gapIcon } from "./tokens";
 import { filterSelection, selectionLabels, toggleSelection, type SelectionOption } from "./selection-model";
@@ -220,60 +222,14 @@ function SelectionField<T extends string>({
   const empty = loading
     ? <Loading label={copy("Seçenekler yükleniyor", "Loading options")} immediate />
     : freeEntry ? undefined : (
-      <Empty compact
-        title={searchKey ? copy("Eşleşen seçenek yok.", "No matching options.") : copy("Kullanılabilir seçenek yok.", "No options available.")}
-        action={searchKey ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined}
-      />
+      searchKey ? <NoResults compact searching title={copy("Eşleşen seçenek yok.", "No matching options.")} onClearSearch={clearSearch} />
+        : <Empty compact title={copy("Kullanılabilir seçenek yok.", "No options available.")} />
     );
   const renderOption = (item: SelectionFieldOption<T>) => {
     const selected = values.includes(item.value);
     const off = !available || !!item.disabled ||
       (!!multiple && !selected && max !== undefined && values.length >= max);
-    return (
-      // Select/Combobox items require their own root and expose menuitem semantics.
-      // Keep the guarded Sheet, virtualized rows and checkbox/radio contract here.
-      <AnimatedPressable
-        pressScale={1}
-        pressOpacity={reducedMotion ? 1 : opacity.pressed}
-        accessibilityRole={multiple ? "checkbox" : "radio"}
-        accessibilityLabel={[item.subgroup, item.label, item.group, item.detail].filter(Boolean).join(". ")}
-        accessibilityState={{ checked: selected, disabled: off }}
-        aria-checked={selected}
-        aria-disabled={off}
-        disabled={off}
-        onPress={() => choose(item.value)}
-        style={{
-          minHeight: metrics.touchTarget,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: space.md,
-          paddingHorizontal: space.md,
-          // Effort variants sit under their model's name.
-          ...(item.subgroup ? { paddingLeft: space.md + space.lg } : {}),
-          paddingVertical: space.sm,
-          borderRadius: radii.control,
-          backgroundColor: selected ? colors.fill : "transparent",
-          ...(off ? { opacity: opacity.disabled } : {}),
-        }}
-      >
-        <SelectionIcon>{item.icon}</SelectionIcon>
-        <View style={[uiStyles.grow, { gap: 2 }]}>
-          {/* The fill and the mark carry the selection; the label keeps its reading colour. */}
-          <Body>{item.label}</Body>
-          {item.detail ? <Body muted style={uiStyles.caption}>{item.detail}</Body> : null}
-        </View>
-        {multiple ? (
-          <View accessible={false} style={{
-            width: 20, height: 20, borderRadius: radii.badge, alignItems: "center", justifyContent: "center",
-            ...(selected ? { backgroundColor: colors.accent } : { borderWidth: 1.5, borderColor: colors.muted }),
-          }}>
-            {selected ? <Check color={colors.primaryText} strokeWidth={3} size={14} /> : null}
-          </View>
-        ) : selected ? (
-          <Check color={colors.accent} strokeWidth={2.6} size={20} />
-        ) : null}
-      </AnimatedPressable>
-    );
+    return <SelectOptionRow item={item} selected={selected} off={off} multiple={!!multiple} onPress={() => choose(item.value)} />;
   };
   const groupHeading = (item: SelectionFieldOption<T>, index: number) => {
     const previous = filtered[index - 1];
@@ -287,7 +243,8 @@ function SelectionField<T extends string>({
       </View>
     );
   };
-  const showHint = !row && !hideLabel && !!hint && !isUnitHint(hint);
+  // A sentence of help sits behind the info icon after the trigger, in a field or a settings row alike.
+  const showHint = !hideLabel && !!hint && !isUnitHint(hint);
   return (
     <View style={row ? undefined : [uiStyles.field, (error || isUnitHint(hint)) && { paddingBottom: space.xs }]}>
       <View style={showHint ? { flexDirection: "row", alignItems: "center", gap: space.xs } : undefined}>
@@ -307,7 +264,9 @@ function SelectionField<T extends string>({
             !row && uiStyles.input,
             row && {
               paddingHorizontal: grouped ? space.sm : 0,
-              marginHorizontal: grouped ? -space.sm : 0,
+              // The row's press fill reaches the group's edge unless the info icon ends the row.
+              marginLeft: grouped ? -space.sm : 0,
+              marginRight: grouped && !showHint ? -space.sm : 0,
               paddingVertical: space.row,
             },
             compact && !row && { paddingVertical: space.xxs },
@@ -341,7 +300,7 @@ function SelectionField<T extends string>({
           </View>
           <ChevronsUpDown size={16} strokeWidth={2} color={colors.tertiary} />
         </AnimatedPressable>
-        {showHint ? <InfoHint text={hint} /> : null}
+        {showHint ? <InfoHint text={hint} subject={label} /> : null}
       </View>
       {row && grouped ? <View accessible={false} style={uiStyles.separator} /> : null}
       {error ? <FieldError message={error} /> : <UnitHint hint={hint} />}
@@ -402,4 +361,50 @@ function SelectionIcon({ children }: { children?: ReactNode }) {
     style={{ flexShrink: 0, alignItems: "center", justifyContent: "center" }}>
     {typeof children === "string" || typeof children === "number" ? <Body>{children}</Body> : children}
   </View>;
+}
+
+/**
+ * One option of the picker sheet: the shared list-row measure (52 high, 15/21 medium label, 13/17 muted
+ * detail), the row press fill and the one `SelectionMark`. Select/Combobox items require their own root
+ * and expose menuitem semantics, so the guarded Sheet keeps its checkbox/radio rows here.
+ */
+function SelectOptionRow<T extends string>({ item, selected, off, multiple, onPress }: {
+  item: SelectionFieldOption<T>; selected: boolean; off: boolean; multiple: boolean; onPress: () => void;
+}) {
+  const { colors, uiStyles, pressedFill } = useMobileTheme();
+  const press = useRowPress();
+  return (
+    <AnimatedPressable
+      {...rowPressMotion}
+      {...press.handlers}
+      accessibilityRole={multiple ? "checkbox" : "radio"}
+      accessibilityLabel={[item.subgroup, item.label, item.group, item.detail].filter(Boolean).join(". ")}
+      accessibilityState={{ checked: selected, disabled: off }}
+      aria-checked={selected}
+      aria-disabled={off}
+      disabled={off}
+      onPress={onPress}
+      style={{
+        minHeight: metrics.rowHeightProject,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: space.md,
+        paddingHorizontal: space.md,
+        // Effort variants sit under their model's name.
+        ...(item.subgroup ? { paddingLeft: space.md + space.lg } : {}),
+        paddingVertical: space.row,
+        borderRadius: radii.control,
+        backgroundColor: press.pressed ? pressedFill : selected ? colors.fill : "transparent",
+        ...(off ? { opacity: opacity.disabled } : {}),
+      }}
+    >
+      <SelectionIcon>{item.icon}</SelectionIcon>
+      <View style={[uiStyles.grow, { gap: space.xxs }]}>
+        {/* The fill and the mark carry the selection; the label keeps its reading colour. */}
+        <Body style={uiStyles.label}>{item.label}</Body>
+        {item.detail ? <Body muted style={uiStyles.caption}>{item.detail}</Body> : null}
+      </View>
+      <SelectionMark selected={selected} multiple={multiple} />
+    </AnimatedPressable>
+  );
 }

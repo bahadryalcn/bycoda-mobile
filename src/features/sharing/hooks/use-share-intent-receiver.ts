@@ -1,7 +1,8 @@
 import { useEffect } from "react";
-import { router, useRootNavigationState } from "expo-router";
+import { useRootNavigationState } from "expo-router";
 import { useShareIntent } from "expo-share-intent";
 
+import { openExternalEntry } from "../../../ui/navigation";
 import { launchFromShare, useLaunchRequest } from "../model/launch-request";
 
 let sequence = 0;
@@ -13,7 +14,7 @@ let sequence = 0;
  * Mounted once with the app lifecycle.
  */
 export function useShareIntentReceiver() {
-  const routerReady = !!useRootNavigationState()?.key;
+  const routerReady = !!useRootNavigationState()?.key;
   // resetOnBackground off: the share is moved into our queue at once, so nothing is lost
   // if the app is backgrounded while the sheet is still opening.
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntent({
@@ -29,7 +30,7 @@ export function useShareIntentReceiver() {
     if (!request) return;
     useLaunchRequest.getState().queue(request);
     sequence += 1;
-    router.navigate(`/sessions?new=1&n=share${sequence}`);
+    openExternalEntry(`/sessions?new=1&n=share${sequence}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- resetShareIntent is recreated on every render; the intent itself is the trigger.
   }, [hasShareIntent, shareIntent, routerReady]);
 }

@@ -4,7 +4,7 @@ import type { CrewAgent, SavedCrewAgent } from "@/remote/contracts/crews";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostMutation } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
-import { Body, MutationState, SelectField } from "@/ui/primitives";
+import { Body, MutationState, SegmentedControl } from "@/ui/primitives";
 import { MemberEditor } from "./member-editor";
 import type { CrewCatalogRead } from "./presentation";
 
@@ -73,20 +73,21 @@ export function ProfileEditor({
               )}
             </Body>
           ) : (
-            <SelectField
-              label={copy("Kapsam", "Scope")}
-              hint={copy("Ekipler bu profilin kendi kopyasını tutar. Profili değiştirmek var olan ekipleri değiştirmez.", "Crews retain their own copy of this profile. Editing it does not change existing crews.")}
-              value={scope}
-              onChange={setScope}
-              disabled={!supported || save.isPending}
-              options={[
-                { value: "project", label: copy("Bu proje", "This project") },
-                {
-                  value: "host",
-                  label: copy("Bu bilgisayardaki tüm projeler", "All projects on this computer"),
-                },
-              ]}
-            />
+            <>
+              <SegmentedControl
+                label={copy("Kapsam", "Scope")}
+                value={scope}
+                onChange={setScope}
+                disabled={!supported || save.isPending}
+                options={[
+                  { value: "project", label: copy("Bu proje", "This project") },
+                  { value: "host", label: copy("Tüm projeler", "All projects") },
+                ]}
+              />
+              <Body muted>
+                {copy("Ekipler bu profilin kendi kopyasını tutar. Profili değiştirmek var olan ekipleri değiştirmez.", "Crews retain their own copy of this profile. Editing it does not change existing crews.")}
+              </Body>
+            </>
           )}
         </>
       }

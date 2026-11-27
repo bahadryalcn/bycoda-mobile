@@ -24,8 +24,9 @@ export function isComputersUnavailable(error: unknown): boolean {
 export function routeKinds(computer: Pick<Computer, "routes">): { lan: boolean; tailscale: boolean; public: boolean } {
   const found = { lan: false, tailscale: false, public: false };
   for (const route of computer.routes) {
-    // An unkeyed HTTPS address with no known kind is a private proxy; it reads as the Tailscale kind.
-    const kind = routeKind(route) ?? "tailscale";
+    // Same rule as pairing (`pairingRouteIsPublic`): an unkeyed HTTPS address that is not a tailnet
+    // name is saved as a public-internet route, so the list labels it that way before pairing too.
+    const kind = routeKind(route) ?? "public";
     found[kind] = true;
   }
   return found;
@@ -76,6 +77,8 @@ export function useAccountComputers(): { state: AccountComputersState; refetch: 
     queryFn: () => account.runtime!.client.listComputers(),
     enabled,
     retry: retryAccountComputers,
+    // Short focus returns (notification shade) reuse a recent list; well inside ONLINE_WINDOW_MS.
+    staleTime: 30_000,
   });
   const refetch = () => {
     if (enabled) void query.refetch();

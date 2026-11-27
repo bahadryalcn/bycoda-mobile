@@ -2,32 +2,36 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { providerName } from "../workspace/provider-choices";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { Stack, router, useLocalSearchParams } from "expo-router";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import { useHostQuery } from "@/state/queries";
 import { hostKey } from "@/state/host-request";
 import type { HostProject } from "@/domain/types";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
-import { Body, Button, Disclosure, IconButton, Notice, QueryState, ScreenList, SectionHeader, SegmentedControl, StateView } from "@/ui/primitives";
+import { Button, Disclosure, IconButton, NavigationRow, QueryState, ScreenList, SectionHeader, SegmentedControl, StateView, StatusLine } from "@/ui/primitives";
+import { useLocale } from "@/i18n";
 import { MetricRow } from "@/ui/metric-row";
 import { useCopy } from "@/ui/copy";
 import { useInfoHint } from "@/ui/info-hint";
 import { useMobileTheme } from "@/ui/theme";
-import { iconSize, space } from "@/ui/tokens";
+import { iconSize, metrics, space } from "@/ui/tokens";
 import {
   readUsageReport,
   usageDuration,
   usageNumber,
+  type DurationUnits,
   type SessionUsageReport,
 } from "./usage-model";
 import { compactTokens, providerUsage, shortSessionId, totalTokens } from "./usage-breakdown";
 import { UsageCost } from "./usage-cost";
-import { UsageLimits } from "./usage-limits";
+import { UsageLimits, UsageLimitsStatus } from "./usage-limits";
 import { ProviderShare, UsageKpis } from "./usage-charts";
 import { UsageUnavailable, type UsageTab } from "./usage-summary";
 import { toolLabels } from "./tool-labels";
 import { ProjectPicker } from "../workspace/project-picker";
+import { sessionHref } from "../workspace/tablet-quick-panel-model";
+import { pushOnce } from "@/ui/navigation";
 
 /**
  * Account limits and cost are computer-level and open without a project; only the Tokens tab reads
@@ -42,11 +46,19 @@ export function UsageScreen({ project, onSelectProject, scopeControl }: {
   scopeControl?: ReactNode;
 }) {
   const copy = useCopy();
+  const locale = useLocale();
   const machine = useActiveMachine();
   const cache = useQueryClient();
-  // Limits is what a phone user checks most; a deep link may ask for another tab.
+  // Limits is what a phone user checks most; a computer without it opens on the first tab it serves.
+  // A deep link may ask for another tab.
   const params = useLocalSearchParams<{ tab?: string }>();
-  const [tab, setTab] = useState<UsageTab>(() => params.tab === "tokens" || params.tab === "cost" ? params.tab : "limits");
+  const [tab, setTab] = useState<UsageTab>(() => {
+    if (params.tab === "tokens" || params.tab === "cost" || params.tab === "limits") return params.tab;
+    const served = machine?.capabilities ?? [];
+    return served.includes("usage.limits.read") ? "limits"
+      : served.includes("usage.cost.read") ? "cost"
+        : served.includes("usage.sessions.read") ? "tokens" : "limits";
+  });
   const [choosingProject, setChoosingProject] = useState(false);
   const projectId = project?.id ?? null;
   const selectedKey = hostKey(machine?.id ?? null, [tab === "limits" ? "usage-limits" : tab === "cost" ? "usage-cost" : "session-usage"]);
@@ -84,6 +96,8 @@ export function UsageScreen({ project, onSelectProject, scopeControl }: {
     },
   );
   const report = supported ? query.data : undefined;
+  // One page holds at most 50 sessions; counts drawn from its rows describe that page, not the range.
+  const paged = !!cursor || !!report?.nextCursor;
   const hasTotals = report && (report.rows.length > 0 || Object.values(report.totals).some(value => value !== null && value !== 0));
   useEffect(() => {
     if (pageIsCurrent) return;
@@ -152,8 +166,16 @@ export function UsageScreen({ project, onSelectProject, scopeControl }: {
       <RefreshCw size={iconSize.action} strokeWidth={2} color={colors.accent} />
     </IconButton>
   );
+  // Pinned beside the native title (owner decision): Limits adds its quiet "updated" time and any warning glyph.
+  const headerActions = (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 1 }}>
+      {tab === "limits" && machine?.capabilities?.includes("usage.limits.read") ? <UsageLimitsStatus /> : null}
+      {refreshControl}
+    </View>
+  );
   return (
     <>
+    <Stack.Screen options={{ title: copy(...toolLabels.usage), headerRight: () => headerActions }} />
     {choosingProject ? (
       <ProjectPicker visible onClose={() => setChoosingProject(false)} onSelect={(selected) => {
         setChoosingProject(false);
@@ -165,13 +187,11 @@ export function UsageScreen({ project, onSelectProject, scopeControl }: {
       // The shared scope row leads with the switchable computer pill; Tokens adds the project pill.
       computerSwitch
       scopeControl={tab === "tokens" ? scopeControl : undefined}
-      actions={refreshControl}
       refreshState={selectedSupported ? { refreshing: refreshing && refreshOrigin === "pull", onRefresh: startRefresh("pull") } : undefined}
       data={tab === "tokens" ? report?.rows ?? [] : []}
       keyExtractor={(row) => row.sessionId}
       header={
         <View style={{ gap: space.sm }}>
-          <Stack.Screen options={{ title: copy(...toolLabels.usage) }} />
           <SegmentedControl
             hideLabel
             label={copy("Kullanım görünümü", "Usage view")}
@@ -211,7 +231,7 @@ export function UsageScreen({ project, onSelectProject, scopeControl }: {
                 }}
               />
             </View>
-            <View style={{ minHeight: 48, justifyContent: "center" }}>{calcInfo.button}</View>
+            <View style={{ minHeight: metrics.touchTarget, justifyContent: "center" }}>{calcInfo.button}</View>
           </View>
           {calcInfo.panel}
           {!supported ? (
@@ -233,21 +253,21 @@ export function UsageScreen({ project, onSelectProject, scopeControl }: {
                 "Bu sayfada gözlemlenen tur yok.",
                 "No observed turns on this page.",
               )}
-              emptyDetail={report ? `${usageWindowDate(report.sampledAt)} · UTC` : undefined}
+              emptyDetail={report ? usageWindowDate(report.sampledAt, locale) : undefined}
               emptyAction={cursor ? { label: copy("İlk sayfa", "First page"), onPress: () => navigate("first", () => setCursor(undefined)) } : undefined}
             />
           )}
           {report ? (
             <>
               {hasTotals ? <UsageKpis items={[
-                { title: copy("Toplam token", "Total tokens"), value: compactTokens(totalTokens(report.totals)) },
-                { title: copy("Tur", "Turns"), value: usageNumber(report.totals.turns) },
-                { title: copy("Oturum", "Sessions"), value: usageNumber(report.rows.length) },
+                { title: copy("Toplam token", "Total tokens"), value: compactTokens(totalTokens(report.totals), locale) },
+                { title: copy("Tur", "Turns"), value: usageNumber(report.totals.turns, locale) },
+                { title: paged ? copy("Bu sayfadaki oturumlar", "Sessions on this page") : copy("Oturum", "Sessions"), value: usageNumber(report.rows.length, locale) },
               ]} /> : null}
               {report.coverage.truncated || report.coverage.undatedTurns > 0 ? (
-                <Notice
+                <StatusLine
                   tone="warning"
-                  message={copy(
+                  label={copy(
                     "Kapsam kısmi; bu değerler tüm kullanımın toplamı değildir.",
                     "Coverage is partial; these values are not total usage.",
                   )}
@@ -255,7 +275,7 @@ export function UsageScreen({ project, onSelectProject, scopeControl }: {
               ) : null}
               {hasTotals && providerUsage(report.rows).length ? (
                 <View style={{ gap: space.sm }}>
-                  <SectionHeader title={copy("Sağlayıcıya göre", "By provider")} />
+                  <SectionHeader title={paged ? copy("Sağlayıcıya göre · bu sayfa", "By provider · this page") : copy("Sağlayıcıya göre", "By provider")} />
                   <ProviderShare rows={providerUsage(report.rows)} />
                 </View>
               ) : null}
@@ -267,7 +287,7 @@ export function UsageScreen({ project, onSelectProject, scopeControl }: {
             </>
           ) : null}
           </> : null}
-          {tab === "tokens" && report?.rows.length ? <SectionHeader title={copy("Oturumlar", "Sessions")} count={report.rows.length} /> : null}
+          {tab === "tokens" && report?.rows.length ? <SectionHeader title={paged ? copy("Bu sayfadaki oturumlar", "Sessions on this page") : copy("Oturumlar", "Sessions")} count={report.rows.length} /> : null}
           {tab === "tokens" && ((!!cursor && (!query.isSuccess || !!report?.rows.length)) || action === "first") ? (
             <Button
               tone="quiet"
@@ -279,7 +299,7 @@ export function UsageScreen({ project, onSelectProject, scopeControl }: {
           ) : null}
         </View>
       }
-      renderItem={({ item }) => <SessionRow row={item} />}
+      renderItem={({ item }) => <SessionRow row={item} projectId={projectId} machineId={machine?.id} />}
       footer={
         tab === "tokens" && (report?.nextCursor || action === "next") ? (
           <Button
@@ -297,50 +317,59 @@ export function UsageScreen({ project, onSelectProject, scopeControl }: {
     </>
   );
 }
-function usageWindowDate(value: number) {
-  return new Date(value).toLocaleString(undefined, {
-    timeZone: "UTC", year: "numeric", month: "short", day: "numeric",
-    hour: "2-digit", minute: "2-digit", hour12: false,
+/** When the Host sampled the report, in the phone's time and the app language. */
+function usageWindowDate(value: number, locale: string) {
+  return new Date(value).toLocaleString(locale, {
+    year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
   });
+}
+
+function useDurationUnits(): DurationUnits {
+  const copy = useCopy();
+  return { hour: copy("sa", "h"), minute: copy("dk", "min"), second: copy("sn", "s") };
 }
 export function UsageValues({ value }: { value: SessionUsageReport["totals"] }) {
   const copy = useCopy();
-  const fields: [string, string][] = [
-    [copy("Gözlemlenen turlar", "Observed turns"), usageNumber(value.turns)],
-    [copy("Ölçülen turlar", "Timed turns"), usageNumber(value.timedTurns)],
-    [copy("Tur süresi", "Turn duration"), usageDuration(value.durationMs)],
-    [copy("Giriş token’ları", "Input tokens"), usageNumber(value.inputTokens)],
-    [copy("Çıkış token’ları", "Output tokens"), usageNumber(value.outputTokens)],
-    [copy("Önbellekten okunan token’lar", "Cache read tokens"), usageNumber(value.cacheReadTokens)],
-    [
-      copy("Önbelleğe yazılan token’lar", "Cache write tokens"),
-      usageNumber(value.cacheWriteTokens),
-    ],
+  const locale = useLocale();
+  const units = useDurationUnits();
+  // An unknown reading is left out, never shown as a dash.
+  const count = (reading: number | null) => (reading === null ? null : usageNumber(reading, locale));
+  const fields: [string, string | null][] = [
+    [copy("Gözlemlenen turlar", "Observed turns"), count(value.turns)],
+    [copy("Ölçülen turlar", "Timed turns"), count(value.timedTurns)],
+    [copy("Tur süresi", "Turn duration"), value.durationMs === null ? null : usageDuration(value.durationMs, locale, units)],
+    [copy("Giriş token’ları", "Input tokens"), count(value.inputTokens)],
+    [copy("Çıkış token’ları", "Output tokens"), count(value.outputTokens)],
+    [copy("Önbellekten okunan token’lar", "Cache read tokens"), count(value.cacheReadTokens)],
+    [copy("Önbelleğe yazılan token’lar", "Cache write tokens"), count(value.cacheWriteTokens)],
   ];
   return (
     <View style={{ gap: space.xs }}>
-      {fields.map(([label, reading]) => (
-        <MetricRow key={label} label={label} value={reading} />
-      ))}
+      {fields.flatMap(([label, reading]) => (reading === null ? [] : [<MetricRow key={label} label={label} value={reading} />]))}
     </View>
   );
 }
 
-/** One observed session: provider as the title, the shortened id beside it, and the reading on the right. */
-function SessionRow({ row }: { row: SessionUsageReport["rows"][number] }) {
+/** One observed session: the shared row opens it; unknown readings are left out of its detail. */
+function SessionRow({ row, projectId, machineId }: { row: SessionUsageReport["rows"][number]; projectId: string | null; machineId?: string }) {
   const copy = useCopy();
-  const { colors } = useMobileTheme();
+  const locale = useLocale();
+  const units = useDurationUnits();
   const tokens = totalTokens(row);
+  const detail = [
+    tokens === null ? null : `${compactTokens(tokens, locale)} ${copy("token", "tokens")}`,
+    `${usageNumber(row.turns, locale)} ${copy("tur", "turns")}`,
+    row.durationMs === null ? null : usageDuration(row.durationMs, locale, units),
+  ].filter(Boolean).join(" · ");
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.separator }}>
-      <View style={{ flex: 1, minWidth: 0, gap: space.xs }}>
-        <Body style={{ fontWeight: "600" }}>{providerName(row.provider)}</Body>
-        <Body muted mono>{`${copy("Oturum", "Session")} ${shortSessionId(row.sessionId)}`}</Body>
-      </View>
-      <View style={{ alignItems: "flex-end", minWidth: 0, gap: space.xs }}>
-        <Body mono>{tokens === null ? "—" : `${compactTokens(tokens)} ${copy("token", "tokens")}`}</Body>
-        <Body muted>{`${usageNumber(row.turns)} ${copy("tur", "turns")} · ${usageDuration(row.durationMs)}`}</Body>
-      </View>
-    </View>
+    <NavigationRow
+      label={providerName(row.provider)}
+      detail={detail}
+      metadata={`${copy("Oturum", "Session")} ${shortSessionId(row.sessionId)}`}
+      disabled={!projectId || !machineId}
+      onPress={() => {
+        if (projectId && machineId) pushOnce(sessionHref({ id: row.sessionId, projectId, machineId, title: "" }) as never);
+      }}
+    />
   );
 }

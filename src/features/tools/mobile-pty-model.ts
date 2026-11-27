@@ -5,6 +5,7 @@ import type {
   MobilePtyTerminal,
 } from "../../../../src/features/host-tools/mobilePtyTypes";
 export type { MobilePtyLease, MobilePtyList, MobilePtyRead, MobilePtyTerminal };
+import { createTerminalUtf8Reader, terminalBase64Utf8, withTerminalModifiers, type TerminalModifiers } from "./terminal-keys";
 const record = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 const text = (value: unknown, max = 256): value is string =>
@@ -133,13 +134,15 @@ export function readMobilePtyOutput(
   return value as MobilePtyRead;
 }
 
-/** Terminal key bytes (base64) for the special-keys row; the PTY write API takes base64 input. */
-export const PTY_KEYS = {
-  escape: "Gw==",
-  tab: "CQ==",
-  interrupt: "Aw==",
-  up: "G1tB",
-  down: "G1tC",
-  right: "G1tD",
-  left: "G1tE",
-} as const;
+/** Base64 PTY input for typed text or key-bar bytes (the PTY write API takes base64). */
+export function ptyInput(text: string): string {
+  return terminalBase64Utf8(text);
+}
+
+/** Applies the armed sticky Ctrl/Alt to input the terminal view reported as base64 UTF-8, as in the terminal tool. */
+export function ptyModifiedInput(dataBase64: string, modifiers: TerminalModifiers): string {
+  return ptyInput(withTerminalModifiers(createTerminalUtf8Reader()(dataBase64), modifiers));
+}
+
+/** Ctrl-C. */
+export const PTY_INTERRUPT = ptyInput("\u0003");

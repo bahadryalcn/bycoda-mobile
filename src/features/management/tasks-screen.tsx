@@ -1,4 +1,4 @@
-import { ManagementToolbar } from "./shared/collection-toolbar";
+import { useManagementToolbar } from "./shared/collection-toolbar";
 import { useEditorRecord } from "./shared/use-editor-record";
 import { ManagementList } from "./shared/management-list";
 import { useRef, useState, type ComponentRef } from "react";
@@ -47,6 +47,11 @@ import { GitDeliverySheet } from "../workspace/git-delivery";
 
 const newTaskStatus = "todo";
 
+/** Active work refreshes every 5 s; an idle list is read less often to spare battery and heat. */
+export function tasksPollInterval(tasks: readonly Pick<HostTask, "status">[] | undefined): number {
+  return tasks?.some((task) => ["queued", "running", "verifying"].includes(task.status)) ? 5000 : 15_000;
+}
+
 export function TasksScreen() {
   const { colors } = useMobileTheme();
   const copy = useCopy();
@@ -80,7 +85,7 @@ export function TasksScreen() {
     ["tasks", scoped ? null : projectId],
     "tasks.list",
     projectId && !scoped ? { projectId } : {},
-    { interval: 5000 },
+    { interval: tasksPollInterval },
   );
   const query = scoped
     ? { ...listQuery, data: listQuery.data?.filter((task) => task.projectId === projectId) }
@@ -97,18 +102,12 @@ export function TasksScreen() {
   const [editor, setEditor] = useState<TaskEditorFlow>(null);
   const [deliveryTask, setDeliveryTask] = useState<HostTask | null>(null);
   const [reviewTask, setReviewTask] = useState<HostTask | null>(null);
-  const editProjectId = editor?.kind === "edit" ? editor.projectId : null;
-  const editQuery = useHostQuery<HostTask[]>(
-    ["tasks", editProjectId],
-    "tasks.list",
-    editProjectId ? { projectId: editProjectId } : {},
-    { enabled: editor?.kind === "edit" },
-  );
+  // Editing uses the row the list already polls; no separate read delays the sheet.
   const fetchedDraft =
     editor?.kind === "new"
       ? editor.initial
       : editor?.kind === "edit"
-        ? editQuery.data?.find((task) => task.id === editor.id)
+        ? listQuery.data?.find((task) => task.id === editor.id)
         : undefined;
   const draft = useEditorRecord(
     editor?.kind === "new" ? editor.initial.id : (editor?.id ?? null),
@@ -190,11 +189,30 @@ export function TasksScreen() {
       await listQuery.refetch();
     },
   });
+  const toolbar = useManagementToolbar({
+    search: <SearchField
+                      placeholder={copy("Ara", "Search")}
+                      ref={searchInput}
+                      label={copy("Görevlerde ara", "Search tasks")}
+                      value={search}
+                      onChangeText={setSearch}
+                    />,
+    status: {
+                    label: copy("Durum", "Status"),
+                    value: filter,
+                    unfilteredValue: "all",
+                    options: filterOptions,
+                    onChange: setFilter,
+                    filterable: hasScopedTasks,
+                  },
+  });
   const listState = (
     <QueryState
       size="region"
       query={query}
       empty={visible?.length === 0}
+      noResults={{ searching: searchActive, filtered: statusHidesTasks,
+        onClearSearch: clearSearch, onClearFilters: () => setFilter("all") }}
       emptyTitle={
         linkedTaskId
           ? copy("Görev artık bulunamadı.", "The task is no longer available.")
@@ -233,40 +251,27 @@ export function TasksScreen() {
                 router.replace({ pathname: "/manage/[section]", params: { section: "tasks" } })
               }
             />
-          ) : showCreateInHeader ? (
-            <IconButton
-              label={copy("Yeni görev", "New task")}
-              disabled={!canCreate}
-              onPress={start}
-            >
-              <Plus size={iconSize.action} strokeWidth={2} color={colors.accent} />
-            </IconButton>
-          ) : undefined
+          ) : (
+            <>
+              {toolbar.actions}
+              {machine ? bulk.entry : null}
+              {showCreateInHeader ? (
+                <IconButton
+                  label={copy("Yeni görev", "New task")}
+                  disabled={!canCreate}
+                  onPress={start}
+                >
+                  <Plus size={iconSize.action} strokeWidth={2} color={colors.accent} />
+                </IconButton>
+              ) : null}
+            </>
+          )
         }
         header={
           <>
             {!linkedTaskId ? (
               <>
-                <ManagementToolbar
-                  search={
-                    <SearchField
-                      placeholder={copy("Ara", "Search")}
-                      ref={searchInput}
-                      label={copy("Görevlerde ara", "Search tasks")}
-                      value={search}
-                      onChangeText={setSearch}
-                    />
-                  }
-                  status={{
-                    label: copy("Durum", "Status"),
-                    value: filter,
-                    unfilteredValue: "all",
-                    options: filterOptions,
-                    onChange: setFilter,
-                    filterable: hasScopedTasks,
-                  }}
-                />
-                {machine ? bulk.entry : null}
+                {toolbar.sheet}
                 {bulk.feedback}
                 {!providers.length ? (
                   <>
@@ -299,19 +304,22 @@ export function TasksScreen() {
             ) : null}
             <MutationState mutation={reorder} />
             {editor?.kind === "edit" && !draft && (
-              <Card>
-                <QueryState query={editQuery} empty={editQuery.data?.length === 0} />
-                <Button
-                  label={copy("Düzenlemeyi kapat", "Close editor")}
-                  onPress={() => setEditor(null)}
-                />
-                {editQuery.isSuccess && (
+              // The sheet opens at once; loading and a removed task are shown in its body.
+              <Sheet
+                visible
+                size="form"
+                title={copy("Görevi düzenle", "Edit task")}
+                onClose={() => setEditor(null)}
+              >
+                {listQuery.data === undefined ? (
+                  <QueryState query={listQuery} loading="inline" />
+                ) : (
                   <Notice
                     tone="warning"
                     message={copy("Görev artık bulunamadı.", "The task is no longer available.")}
                   />
                 )}
-              </Card>
+              </Sheet>
             )}
             {draft && (
               <Sheet

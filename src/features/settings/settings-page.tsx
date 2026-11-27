@@ -1,11 +1,12 @@
 import { useMemo, useRef, useState, type PropsWithChildren, type ReactNode } from "react";
-import { Stack as RouterStack, router } from "expo-router";
+import { Stack as RouterStack, type Href } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { Screen, type PageScope } from "@/ui/primitives";
 import { SheetGuardContext, useSheetGuards } from "@/ui/sheet-guard";
 import { confirmAction } from "@/ui/confirm";
 import { useCopy } from "@/ui/copy";
 import { settingsRoutes } from "./settings-routes";
+import { goBack } from "@/ui/navigation";
 
 /**
  * One pushed Settings page: the native header title, the shared back button from the root stack
@@ -27,7 +28,7 @@ export function SettingsPage({ title, scope, footer, children }: PropsWithChildr
     const leave = (afterClose?: () => void) => {
       const { dirty, pending } = latest.current;
       if (pending) return;
-      const go = afterClose ?? (() => { if (router.canGoBack()) router.back(); else router.replace(settingsRoutes.root); });
+      const go = afterClose ?? (() => goBack(settingsRoutes.root as Href));
       if (!dirty) { go(); return; }
       confirmAction(
         copy("Değişiklikler kaydedilmedi", "Unsaved changes"),

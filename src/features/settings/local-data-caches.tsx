@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Directory, Paths } from "expo-file-system";
 import { clearMediaCache } from "@/ui/media-loader";
-import { Body, NavigationGroup, NavigationRow, Stack, ValueRow } from "@/ui/primitives";
+import Eraser from "lucide-react-native/icons/eraser";
+import { NavigationGroup, NavigationRow, Notice, Section, SettingIcon, ValueRow } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
+import { showToast } from "@/ui/toast";
 import { formatBytes, savedDraftBytes, type LocalDataSizes } from "./local-data-sizes";
 
 const directorySize = (directory: Directory) => (directory.exists ? (directory.size ?? 0) : 0);
@@ -30,26 +32,35 @@ export function LocalDataCaches() {
   // Measured when the section opens and again after clearing; sizes are never kept in a store.
   useEffect(refresh, [refresh]);
   const clear = () => {
-    try { clearMediaCache(); } catch { setFailed(true); }
+    const freed = sizes?.media ?? 0;
+    try { clearMediaCache(); } catch {
+      showToast({ tone: "danger", message: copy("Medya önbelleği temizlenemedi.", "The media cache could not be cleared.") });
+      refresh();
+      return;
+    }
+    showToast({ message: copy("{p0} boşaltıldı.", "{p0} freed.", { p0: formatBytes(freed) }) });
     refresh();
   };
+  // Unknown sizes are omitted rather than shown as a placeholder.
   const row = (label: string, bytes: number | undefined) => (
-    <ValueRow label={label} value={bytes === undefined ? "…" : formatBytes(bytes)} />
+    <ValueRow label={label} value={bytes === undefined ? undefined : formatBytes(bytes)} />
   );
   return (
-    <Stack>
+    <Section title={copy("Depolama", "Storage")}>
       <NavigationGroup>
         {row(copy("Medya önbelleği", "Media cache"), sizes?.media)}
         {row(copy("Ek taslakları", "Attachment drafts"), sizes?.attachments)}
         {row(copy("Kaydedilmiş taslaklar", "Saved drafts"), sizes?.drafts)}
         <NavigationRow
-          label={copy("Önbellekleri temizle", "Clear caches")}
+          label={copy("Medya önbelleğini temizle", "Clear media cache")}
           intent="command"
+          icon={<SettingIcon glyph={Eraser} />}
+          separator={false}
           disabled={!sizes || sizes.media === 0}
           onPress={clear}
         />
       </NavigationGroup>
-      {failed ? <Body muted>{copy("Boyutlar okunamadı.", "Sizes could not be read.")}</Body> : null}
-    </Stack>
+      {failed ? <Notice tone="warning" message={copy("Boyutlar okunamadı.", "Sizes could not be read.")} onRetry={refresh} /> : null}
+    </Section>
   );
 }

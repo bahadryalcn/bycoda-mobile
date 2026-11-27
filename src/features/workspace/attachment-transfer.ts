@@ -13,8 +13,8 @@ export async function uploadAttachment(client: HostTransport, file: StagedAttach
   assertCurrent();
   validateAttachment(file);
   if (file.browserAnnotation && (file.browserAnnotation.sessionId !== sessionId || !client.machine.capabilities?.includes("browser.annotation")))
-    throw new Error("Browser attachment belongs to another conversation or is unsupported");
-  if (!isScopedStagedFile(file, `${client.machine.id}:${sessionId}`, custody)) throw new Error("This attachment belongs to another conversation. Choose it again.");
+    throw new Error("Browser attachment belongs to another session or is unsupported");
+  if (!isScopedStagedFile(file, `${client.machine.id}:${sessionId}`, custody)) throw new Error("This attachment belongs to another session. Choose it again.");
   const local = new File(file.uri);
   if (!local.exists || local.size !== file.size) throw new Error("The selected file is no longer available. Remove it and choose it again.");
   const ownerId = supportsAttachmentOwnership(client) ? attachmentOwnerId(sessionId) : undefined;

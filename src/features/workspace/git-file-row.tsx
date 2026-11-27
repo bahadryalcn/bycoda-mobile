@@ -2,14 +2,14 @@ import { useMobileTheme } from "@/ui/theme";
 import { View } from "react-native";
 import Minus from "lucide-react-native/icons/minus";
 import Plus from "lucide-react-native/icons/plus";
-import { Badge, Body, IconButton, PressableCard } from "@/ui/primitives";
-import { space, fontSize, lineHeight } from "@/ui/tokens";
+import { Body, IconButton, PressableCard, StatusText } from "@/ui/primitives";
+import { iconSize, space, fontSize, lineHeight } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useLocale } from "@/i18n";
 import { gitChangeLabel, gitFilePresentation } from "./git-file-presentation";
 import type { GitChangedFile } from "./wire";
 
-/** Preview and staging are separate touch targets; a tone badge names the change type. */
+/** Preview and staging are separate touch targets; quiet toned status text names the change type. */
 export function GitFileRow({
   file,
   staged,
@@ -35,7 +35,7 @@ export function GitFileRow({
   const status = gitFilePresentation(file.status);
   const stageLabel = staged ? copy("Stage’den çıkar", "Unstage") : copy("Stage’e al", "Stage");
   const changeLabel = gitChangeLabel(status.kind, copy);
-  const stageState = staged ? copy("Stage’de", "Staged") : copy("Stage’de değil", "Unstaged");
+  const stageState = staged ? copy("Stage’de", "Staged") : copy("Stage dışında", "Unstaged");
   return (
     <View
       style={{ flexDirection: "row", alignItems: "center", minHeight: 52, paddingEnd: space.xs }}
@@ -70,7 +70,7 @@ export function GitFileRow({
             {name}
           </Body>
           <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm }}>
-            <Badge label={changeLabel} tone={status.tone} />
+            <StatusText label={changeLabel} tone={status.tone} dot={false} />
             {directory ? (
               <Body
                 selectable={false}
@@ -107,9 +107,9 @@ export function GitFileRow({
       </PressableCard>
       <IconButton label={`${stageLabel}: ${file.relative}`} onPress={onStage} disabled={busy}>
         {staged ? (
-          <Minus size={18} color={colors.muted} />
+          <Minus size={iconSize.action} color={colors.muted} />
         ) : (
-          <Plus size={18} color={colors.muted} />
+          <Plus size={iconSize.action} color={colors.muted} />
         )}
       </IconButton>
     </View>

@@ -48,6 +48,7 @@ vi.mock("@/ui/primitives", () => {
     SearchField: ({ label, value, onChangeText }: any) => { state.search = onChangeText; return h("input", { "aria-label": label, value, onChange: (event: any) => onChangeText(event.target.value) }); },
     SelectField: ({ label, value, onChange, options }: any) => { state.filters.set(label, onChange); return h("select", { "aria-label": label, value, onChange: (event: any) => onChange(event.target.value) }, options.map((option: any) => h("option", { key: option.value, value: option.value }, option.label))); },
     Empty: ({ title, action }: any) => h("div", null, title, action ? h(Button, { label: action.label, onPress: action.onPress }) : null),
+    NoResults: ({ title, searching, filtered, onClearSearch, onClearFilters }: any) => h("div", null, title ?? "No matching results", searching && onClearSearch ? h(Button, { label: "Clear search", onPress: onClearSearch }) : filtered && onClearFilters ? h(Button, { label: "Clear filters", onPress: onClearFilters }) : null),
     ScreenList: ({ data, renderItem, footer, ListEmptyComponent, header }: any) => h("div", { "data-list": true }, header, data.length ? data.map((item: any) => h("div", { key: item.key }, renderItem({ item }))) : ListEmptyComponent, footer),
   };
 });

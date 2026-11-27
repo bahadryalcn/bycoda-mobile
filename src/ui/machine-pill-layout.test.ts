@@ -25,6 +25,7 @@ vi.mock("./motion", () => ({ haptic: { select: vi.fn() } }));
 vi.mock("./primitives", () => ({
   Body: ({ children }: PropsWithChildren) => createElement("span", null, children),
   Button: ({ label }: { label: string }) => createElement("button", null, label),
+  RowIcon: () => null,
   NavigationGroup: ({ children }: PropsWithChildren) => children,
   NavigationRow: ({ label, detail, metadata, accessibilityLabel }: { label: string; detail?: string; metadata?: string; accessibilityLabel?: string }) =>
     createElement("button", { "aria-label": accessibilityLabel }, [label, detail, metadata].filter(Boolean).join(" ")),
@@ -39,6 +40,8 @@ vi.mock("./busy-indicator", () => ({
 vi.mock("expo-router", () => ({ router: {} }));
 vi.mock("lucide-react-native/icons/settings-2", () => ({ default: () => null }));
 vi.mock("../features/connections/connection-feedback", () => ({ ConnectionFeedback: () => null }));
+vi.mock("../features/connections/active-computer-status", () => ({ RetryConnectionRow: () => null }));
+vi.mock("../features/connections/storage-error-copy", () => ({ storageErrorText: (error: string | null) => error ?? undefined }));
 vi.mock("../features/connections/use-switch-computer", () => ({ useSwitchComputer: () => ({ operation: {}, busy: false, switchTo: async () => undefined }) }));
 vi.mock("panelui-native/components/menu", async () => {
   const { createContext, useContext } = await import("react");
@@ -102,12 +105,12 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 const render = () => renderToStaticMarkup(createElement(MachinePill));
 
-it("keeps the status in its own non-shrinking text beside a shrinking computer name", () => {
+it("keeps the status in its own bounded text beside a shrinking computer name", () => {
   state.errorAt = 99_500;
   const html = render();
-  // Name yields (ellipsis); status keeps its width so a long name cannot push it out.
+  // Both yield (ellipsis): the status is capped, so neither a long name nor a long status hides the other.
   expect(html).toContain(`data-lines="1" data-shrink="1">${LONG_NAME}</span>`);
-  expect(html).toMatch(/data-lines="1" data-shrink="0" data-color="d">Disconnected<\/span>/);
+  expect(html).toMatch(/data-lines="1" data-shrink="1" data-color="d">Disconnected<\/span>/);
   expect(html).not.toContain(`${LONG_NAME} · `);
 });
 

@@ -22,7 +22,10 @@ function cancelled(signal?: AbortSignal) {
   throw Object.assign(new Error("Transcript decoding was cancelled."), { name: "AbortError" });
 }
 
-export type JsonDecodeOptions = { signal?: AbortSignal; assertCurrent?: () => void };
+/** Characters that end a run of plain string text: a quote, a backslash or a control character. */
+const STRING_STOP = /["\\\u0000-\u001f]/g;
+
+export type JsonDecodeOptions ={ signal?: AbortSignal; assertCurrent?: () => void };
 
 export function assertDecodeCurrent(options: JsonDecodeOptions) {
   cancelled(options.signal);
@@ -82,6 +85,9 @@ export async function parseJsonParts(
   let ticks = 0,
     units = 0,
     sliceStarted = Date.now();
+  // Where the current plain-string run ends in parts[stopPart], found once per run.
+  let stopPart = -1,
+    stopAt = 0;
   const invalid = (): never => {
     throw new SyntaxError(`Invalid JSON at UTF-16 offset ${position}.`);
   };
@@ -163,6 +169,29 @@ export async function parseJsonParts(
       }
     }
     const text = parts[part];
+    if (mode === "string" && escape === 0) {
+      // Plain string text (a long base64 frame, say) needs no per-unit step: find the next quote,
+      // backslash or control character natively once, then advance toward it in steps that
+      // still end at the 16 Ki unit yield point.
+      if (stopPart !== part || stopAt < offset) {
+        STRING_STOP.lastIndex = offset;
+        stopAt = STRING_STOP.exec(text)?.index ?? text.length;
+        stopPart = part;
+      }
+      if (units >= 16 * 1024) {
+        ticks = 1023;
+        continue;
+      }
+      const target = Math.min(stopAt, offset + (16 * 1024 - units));
+      if (target > offset) {
+        const skipped = target - offset;
+        offset = target;
+        position += skipped;
+        units += skipped;
+        if (units >= 16 * 1024) ticks = 1023;
+        continue;
+      }
+    }
     const code = text.charCodeAt(offset);
     const char = text[offset];
     let consume = true;

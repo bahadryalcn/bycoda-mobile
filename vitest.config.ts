@@ -11,5 +11,6 @@ export default defineConfig({
       { find: /^panelui-native\/hooks\/use-back-handler$/, replacement: local("./src/ui/back-handler-test-double.ts") },
     ],
   },
-  test: { environment: "node", include: ["src/**/*.test.ts"], reporters: ["default"] },
+  // Route files (app/) and component tests (.test.tsx) are collected too, so no test silently never runs.
+  test: { environment: "node", include: ["src/**/*.test.{ts,tsx}", "app/**/*.test.{ts,tsx}", "modules/*/{src,js}/**/*.test.ts"], reporters: ["default"] },
 });

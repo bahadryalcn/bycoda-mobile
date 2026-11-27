@@ -1,4 +1,4 @@
-/** Poll pacing for the device Live view: identical frames back off, any change returns to the base rate. */
+/** Poll pacing for the device Live view: identical frames and an idle viewer back off, any change returns to the base rate. */
 export type PacedFrame = { mime: string; base64: string; capturedAt?: string };
 export type FramePace = { frame: PacedFrame; repeats: number };
 
@@ -19,10 +19,23 @@ export function paceFrame(previous: FramePace | undefined, frame: PacedFrame): F
   return { frame, repeats: same ? previous.repeats + 1 : 0 };
 }
 
-export function liveFrameInterval(pace: FramePace | undefined): number {
+/** Without a tap, key, refresh or toggle for this long, a constantly changing screen polls slower. */
+export const LIVE_IDLE_MS = 60_000;
+export const LIVE_IDLE_FRAME_MS = 9_000;
+/** After this long without input the view polls at the static-screen maximum. */
+export const LIVE_LONG_IDLE_MS = 300_000;
+
+/** Poll interval from the screen's repeats and how long the person has not touched the view. */
+export function liveFrameInterval(pace: FramePace | undefined, idleMs = 0): number {
   const repeats = pace?.repeats ?? 0;
-  if (repeats < 2) return LIVE_FRAME_BASE_MS;
-  if (repeats < 4) return LIVE_FRAME_BASE_MS * 2;
-  if (repeats < 8) return LIVE_FRAME_BASE_MS * 4;
-  return LIVE_FRAME_MAX_MS;
+  const paced =
+    repeats < 2
+      ? LIVE_FRAME_BASE_MS
+      : repeats < 4
+        ? LIVE_FRAME_BASE_MS * 2
+        : repeats < 8
+          ? LIVE_FRAME_BASE_MS * 4
+          : LIVE_FRAME_MAX_MS;
+  const idleFloor = idleMs >= LIVE_LONG_IDLE_MS ? LIVE_FRAME_MAX_MS : idleMs >= LIVE_IDLE_MS ? LIVE_IDLE_FRAME_MS : 0;
+  return Math.max(paced, idleFloor);
 }

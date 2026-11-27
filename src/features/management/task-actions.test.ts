@@ -17,6 +17,24 @@ const task = (patch: Partial<HostTask>): HostTask => ({
   updatedAt: 1,
   ...patch,
 });
+/** The Host's stop after the repair loop ended on an external check. */
+const repairStop = (message: string): NonNullable<HostTask["stop"]> => ({
+  code: "repair_exhausted",
+  repair: "external",
+  message,
+  actor: "host",
+  nextAction: "provide_input",
+  at: 1,
+});
+/** The Host's stop after a review failed the worker's result. */
+const reviewStop = (message: string): NonNullable<HostTask["stop"]> => ({
+  code: "run_failed",
+  phase: "review",
+  message,
+  actor: "provider",
+  nextAction: "retry",
+  at: 1,
+});
 describe("mobile task actions follow the host", () => {
   it("leaves crew task delivery acceptance to the crew review owner", () => {
     expect(taskActions(task({ status: "review", crewRunId: "crew-run" })).complete).toBe(false);
@@ -35,12 +53,10 @@ describe("mobile task actions follow the host", () => {
     expect(taskActions({ ...failed, sessionId: undefined }).recheck).toBe(false);
     expect(taskActions({ ...failed, verification: undefined }).recheck).toBe(false);
     expect(
-      taskActions({ ...failed, repairStop: { reason: "external", message: "Needs input" } })
-        .recheck,
+      taskActions({ ...failed, stop: repairStop("Needs input") }).recheck,
     ).toBe(false);
-    expect(taskActions({ ...failed, error: "Review failed: Needs another check" }).recheck).toBe(
-      false,
-    );
+    // A canonical review failure can be taken over, so recheck stays off.
+    expect(taskActions({ ...failed, stop: reviewStop("Needs another check") }).recheck).toBe(false);
   });
   it("includes verification in Running and keeps reviewed/done work out of Edit", () => {
     expect(taskMatchesFilter(task({ status: "verifying" }), "running")).toBe(true);
@@ -64,7 +80,7 @@ describe("mobile task actions follow the host", () => {
       taskActions(
         task({
           status: "blocked",
-          repairStop: { reason: "external", message: "Needs credentials" },
+          stop: repairStop("Needs credentials"),
         }),
       ).queueBlocked,
     ).toBe(true);
@@ -83,10 +99,10 @@ describe("mobile task actions follow the host", () => {
 
 
 it("offers finish with findings only for capable hosts and canonical failures", () => {
-  const failed = task({ status: "blocked", sessionId: "worker", error: "Review failed: Defect", verification: { review: { verdict: "fail", note: "Defect", sessionId: "reviewer" } } });
+  const failed = task({ status: "blocked", sessionId: "worker", stop: reviewStop("Defect"), verification: { review: { verdict: "fail", note: "Defect", sessionId: "reviewer" } } });
   expect(taskActions(failed).finishWithFindings).toBe(false);
   expect(taskActions(failed, ["tasks.finish-with-findings"]).finishWithFindings).toBe(true);
-  expect(taskActions({ ...failed, error: "Permission denied" }, ["tasks.finish-with-findings"]).finishWithFindings).toBe(false);
+  expect(taskActions({ ...failed, stop: { ...reviewStop("Permission denied"), code: "permission_required", nextAction: "provide_input" } }, ["tasks.finish-with-findings"]).finishWithFindings).toBe(false);
 });
 
 it("preserves inherited versus explicit unlimited run limits", () => {

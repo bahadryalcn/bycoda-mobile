@@ -1,10 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent, type TextInputProps } from "react-native";
+import Animated from "react-native-reanimated";
 import { AIInput } from "panelui-native/components/ai-input";
 import { fontSize, interfaceFont, lineHeight, metrics, radii, space } from "./tokens";
 import { useMobileTheme } from "./theme";
 import { ComposerActionArea } from "./composer-actions";
 import { COMPOSER_FIELD_PADDING, COMPOSER_MAX_LINES, composerToolbarLayout } from "./chat-composer-model";
+import { reveal } from "./motion";
 
 /** Reserve the complete action height inside the composer capsule. */
 const TOOLBAR_HEIGHT = metrics.touchTarget + space.xs;
@@ -17,6 +19,10 @@ export type ComposerModelPresentation = { iconOnly: boolean };
  * full-width field that starts at one line (48dp) and grows to five before scrolling, then one
  * non-wrapping toolbar row `[leading] [model, flex] [status] [secondary] [submit]`. The toolbar is
  * visible at rest too, so focusing the field never changes the capsule height.
+ *
+ * `actionRow` temporarily takes the toolbar's place (a dictation recording row), as PanelUI's
+ * `AIInput.Recording` does: the field, its draft, focus and keyboard stay mounted, and the row keeps
+ * the toolbar's container, height floor and layout callback, so composer measurement is unchanged.
  */
 export function ChatComposer({
   value,
@@ -32,6 +38,8 @@ export function ChatComposer({
   inlineSubmit = false,
   inlineLeading,
   onToolbarLayout,
+  actionRow,
+  mono = false,
 }: {
   value: string;
   onValueChange: (value: string) => void;
@@ -52,8 +60,12 @@ export function ChatComposer({
   /** Optional recovery action in the short editor row. Add stays in the toolbar in this case. */
   inlineLeading?: ReactNode;
   onToolbarLayout?: (event: LayoutChangeEvent) => void;
+  /** Replaces the toolbar's controls (and the short-frame actions beside the field) while set. */
+  actionRow?: ReactNode;
+  /** Monospace text at the composer's own size (terminal commands), as `Input mono` does. */
+  mono?: boolean;
 }) {
-  const { colors } = useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const { fontScale, width } = useWindowDimensions();
   const [toolbarWidth, setToolbarWidth] = useState(0);
   const [leadingWidth, setLeadingWidth] = useState(0);
@@ -67,6 +79,8 @@ export function ChatComposer({
     fontScale: scale,
   });
   const { style, placeholder, accessibilityLabel, ...rest } = field;
+  // A replacing action row owns every action; nothing else sits beside the field meanwhile.
+  const besideField = inlineSubmit && !actionRow;
   const duplicatePlaceholder = process.env.EXPO_OS === "ios" && !!placeholder && placeholder === accessibilityLabel;
   const nativeScale = Number.isFinite(fontScale) && fontScale > 0 ? fontScale : 1;
   const textScale = field.allowFontScaling === false ? 1 : Math.min(nativeScale, field.maxFontSizeMultiplier || Infinity);
@@ -76,7 +90,7 @@ export function ChatComposer({
   const available = typeof maxHeight === "number" ? maxHeight - padding * 2 : line * COMPOSER_MAX_LINES;
   const lines = Math.max(1, Math.min(COMPOSER_MAX_LINES, Math.floor(available / line)));
   const minimum = Math.max(metrics.composerFieldMin - padding * 2, Math.ceil(line));
-  const fieldType = { fontSize: fontSize.input, lineHeight: lineHeight.input, fontFamily: interfaceFont };
+  const fieldType = { fontSize: fontSize.input, lineHeight: lineHeight.input, fontFamily: mono ? uiStyles.mono.fontFamily : interfaceFont };
   const measureWidth = (set: (width: number) => void) => (event: LayoutChangeEvent) => {
     const next = Math.ceil(event.nativeEvent.layout.width);
     if (Number.isFinite(next) && next >= 0) set(next);
@@ -93,7 +107,7 @@ export function ChatComposer({
       style={{
         backgroundColor: colors.raised,
         borderRadius: radii.composer,
-        borderWidth: 1,
+        borderWidth: StyleSheet.hairlineWidth,
         borderColor: colors.border,
         // Clips child surfaces to the rounded capsule; content never depends on it.
         overflow: "hidden",
@@ -101,9 +115,9 @@ export function ChatComposer({
       }}
     >
       {top}
-      <View style={inlineSubmit ? { flexDirection: "row", alignItems: "flex-end" } : undefined}>
-        {inlineSubmit ? <View style={{ paddingStart: space.xs }}>{inlineLeading ?? leading}</View> : null}
-        <View style={{ minWidth: 0, paddingVertical: padding, ...(inlineSubmit ? { flex: 1 } : {}) }}>
+      <View style={besideField ? { flexDirection: "row", alignItems: "flex-end" } : undefined}>
+        {besideField ? <View style={{ paddingStart: space.xs }}>{inlineLeading ?? leading}</View> : null}
+        <View style={{ minWidth: 0, paddingVertical: padding, ...(besideField ? { flex: 1 } : {}) }}>
           <AIInput.Field
             placeholder={duplicatePlaceholder ? "" : placeholder}
             accessibilityLabel={accessibilityLabel}
@@ -133,7 +147,7 @@ export function ChatComposer({
             </View>
           ) : null}
         </View>
-        {inlineSubmit ? <View style={{ flexDirection: "row", gap: space.xs, paddingEnd: space.xs }}>
+        {besideField ? <View style={{ flexDirection: "row", gap: space.xs, paddingEnd: space.xs }}>
           {submit}
         </View> : null}
       </View>
@@ -151,20 +165,27 @@ export function ChatComposer({
           paddingBottom: space.xs,
         }}
       >
-        <View key="leading" onLayout={measureWidth(setLeadingWidth)}
-          style={{ flexShrink: 0, flexDirection: "row", alignItems: "center", gap: space.xs }}>
-          {inlineSubmit && !inlineLeading ? null : leading}
-        </View>
-        <View key="model" style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center" }}>
-          {typeof model === "function" ? model({ iconOnly: layout.iconOnly }) : model}
-        </View>
-        {status && layout.showStatus ? <View key="status" style={{ flexShrink: 0 }}>{status}</View> : null}
-        <View key="trailing" onLayout={measureWidth(setTrailingWidth)}
-          style={{ flexShrink: 0, flexDirection: "row", alignItems: "center", gap: space.xs }}>
-          <ComposerActionArea />
-          {secondarySubmit}
-          {inlineSubmit ? null : submit}
-        </View>
+        {actionRow ? (
+          <Animated.View key="action-row" entering={reveal}
+            style={{ flex: 1, minWidth: 0, minHeight: metrics.touchTarget, flexDirection: "row", alignItems: "center", gap: space.xs }}>
+            {actionRow}
+          </Animated.View>
+        ) : [
+          <View key="leading" onLayout={measureWidth(setLeadingWidth)}
+            style={{ flexShrink: 0, flexDirection: "row", alignItems: "center", gap: space.xs }}>
+            {inlineSubmit && !inlineLeading ? null : leading}
+          </View>,
+          <View key="model" style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center" }}>
+            {typeof model === "function" ? model({ iconOnly: layout.iconOnly }) : model}
+          </View>,
+          status && layout.showStatus ? <View key="status" style={{ flexShrink: 0 }}>{status}</View> : null,
+          <View key="trailing" onLayout={measureWidth(setTrailingWidth)}
+            style={{ flexShrink: 0, flexDirection: "row", alignItems: "center", gap: space.xs }}>
+            <ComposerActionArea />
+            {secondarySubmit}
+            {inlineSubmit ? null : submit}
+          </View>,
+        ]}
       </AIInput.Toolbar>
     </AIInput>
   );

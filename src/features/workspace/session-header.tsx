@@ -1,14 +1,14 @@
 import type { ReactNode } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
-import { router, useCanGoBack, useIsFocused } from "expo-router";
+import { useCanGoBack, useIsFocused } from "expo-router";
 import { KeyboardController } from "react-native-keyboard-controller";
-import { useBackHandler } from "panelui-native/hooks/use-back-handler";
+import { useScreenBackHandler } from "@/ui/screen-back-handler";
 import { useSecurity } from "@/state/security";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body } from "@/ui/typography";
 import { HeaderBackButton, PressableCard } from "@/ui/primitives";
 import { useMobileTheme } from "@/ui/theme";
-import { fontSize, lineHeight, metrics, radii, space } from "@/ui/tokens";
+import { fontSize, hitSlopFor, lineHeight, metrics, radii, space } from "@/ui/tokens";
 import type { MobileColors } from "@/ui/tokens";
 import { ProviderIcon } from "@/ui/provider-identity";
 import { ChatAction } from "@/ui/chat-controls";
@@ -17,7 +17,9 @@ import List from "lucide-react-native/icons/list";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import type { RemoteProvider } from "@/domain/types";
 import { sessionDisplayTitle } from "./session-title";
-import type { SessionHeaderTone } from "./session-header-model";
+import { SESSION_HEADER_FADE, type SessionHeaderTone } from "./session-header-model";
+import { goBack, leaveTo } from "@/ui/navigation";
+import { LinearGradient } from "expo-linear-gradient";
 
 /**
  * Two icon buttons laid out at their 48dp touch size (plus gap), so a late snapshot
@@ -33,12 +35,12 @@ export function useTabletSessionBackFallback(tablet: boolean) {
   const focused = useIsFocused();
   const canGoBack = useCanGoBack();
   const unlocked = useSecurity((state) => state.status === "unlocked");
-  useBackHandler(tablet && focused && unlocked && !canGoBack, () => {
+  useScreenBackHandler(tablet && focused && unlocked && !canGoBack, () => {
     if (KeyboardController.isVisible()) {
       void KeyboardController.dismiss().catch(() => undefined);
       return;
     }
-    router.replace("/chats");
+    leaveTo("/chats");
   });
 }
 
@@ -53,6 +55,7 @@ export function SessionHeader({
   showBack = true,
   onShowSessions,
   onRefresh,
+  onFloatingHeight,
 }: {
   title: string;
   context?: string;
@@ -65,6 +68,11 @@ export function SessionHeader({
   onShowSessions?: () => void;
   /** Offline or failed status: the status line becomes its own recovery action. */
   onRefresh?: () => void;
+  /**
+   * Floats the header over the content below it (the conversation scrolls under a soft fade at its
+   * lower edge) and reports its measured height, which the content must reserve.
+   */
+  onFloatingHeight?: (height: number) => void;
 }) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
@@ -77,7 +85,7 @@ export function SessionHeader({
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
         {provider ? <ProviderIcon provider={provider} size={16} /> : null}
         <Body numberOfLines={stacked ? 3 : 2} accessibilityRole="header" style={{ flex: 1, minWidth: 0, fontSize: fontSize.title, lineHeight: lineHeight.title, fontWeight: "600", color: colors.text }}>
-          {sessionDisplayTitle(title, title)}
+          {sessionDisplayTitle(title, copy("Yeni oturum", "New session"))}
         </Body>
       </View>
       {context || status ? <SubtitleTarget
@@ -100,7 +108,8 @@ export function SessionHeader({
       </SubtitleTarget> : null}
     </View>
   );
-  return (
+  const floating = !!onFloatingHeight;
+  const bar = (
     <View
       style={{
         paddingTop: insets.top,
@@ -111,7 +120,7 @@ export function SessionHeader({
       }}
     >
       <View style={{ minHeight: metrics.headerHeight, flexDirection: "row", alignItems: "center" }}>
-        {showBack ? <HeaderBackButton onPress={() => (router.canGoBack() ? router.back() : router.replace("/sessions"))} /> : null}
+        {showBack ? <HeaderBackButton onPress={() => goBack("/sessions")} /> : null}
         {onShowSessions ? <ChatAction label={copy("Oturumlar", "Sessions")} onPress={onShowSessions}><List size={20} color={colors.muted} /></ChatAction> : null}
         {stacked ? null : heading}
         <View style={{ width: SESSION_HEADER_ACTIONS_WIDTH, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: space.xs, marginStart: stacked ? "auto" : undefined }}>
@@ -121,12 +130,34 @@ export function SessionHeader({
       {stacked ? heading : null}
     </View>
   );
+  if (!floating) return bar;
+  // The title and actions keep a solid ground for legibility; only the fade below lets content
+  // show through, and touches there reach the list.
+  return (
+    <View
+      pointerEvents="box-none"
+      onLayout={(event) => onFloatingHeight(Math.ceil(event.nativeEvent.layout.height))}
+      style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 2 }}
+    >
+      {bar}
+      <LinearGradient
+        pointerEvents="none"
+        colors={[colors.background, `${colors.background}00`]}
+        style={{ height: SESSION_HEADER_FADE }}
+      />
+    </View>
+  );
 }
 
 const subtitleRow = { flexDirection: "row", alignItems: "center", gap: space.xs } as const;
+/** The one-line caption grows to the 48dp touch target vertically; it already spans the title width. */
+const subtitleSlop = (() => {
+  const { top, bottom } = hitSlopFor(lineHeight.caption);
+  return { top, bottom };
+})();
 
 /** The context/status line is a Refresh button only while the computer can be refreshed. */
 function SubtitleTarget({ label, onPress, children }: { label: string; onPress?: () => void; children: ReactNode }) {
   if (!onPress) return <View accessible aria-label={label} style={subtitleRow}>{children}</View>;
-  return <PressableCard label={label} onPress={onPress} hitSlop={{ top: space.sm, bottom: space.sm }} style={subtitleRow}>{children}</PressableCard>;
+  return <PressableCard label={label} onPress={onPress} hitSlop={subtitleSlop} style={subtitleRow}>{children}</PressableCard>;
 }

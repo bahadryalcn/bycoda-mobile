@@ -7,12 +7,11 @@ import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type Host
 import { createContext, useContext, useId, useLayoutEffect, useSyncExternalStore, useCallback, useMemo, useRef, useState } from "react";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import X from "lucide-react-native/icons/x";
-import { Card } from "./layout";
-import { Button, IconButton } from "./buttons";
+import { IconButton } from "./buttons";
 import { metrics, radii } from "./tokens";
 import { space } from "./tokens";
 import { useCopy } from "./copy";
-import type { FormActionsProps, ConfirmationCardProps, SheetProps } from "./component-props";
+import type { FormActionsProps, SheetProps } from "./component-props";
 import { ScreenOverlay, useOverlayProgress } from "./overlays";
 import { ConnectionFeedbackScope } from "./connection-feedback-scope";
 import { ScreenFrameInsets } from "./screen-content-insets";
@@ -97,40 +96,6 @@ function SheetSurface({
     transform: [{ translateY: (1 - (progress?.value ?? 1)) * (full ? 24 : height) }],
   }));
   return <Animated.View style={[style, animation]}>{children}</Animated.View>;
-}
-
-export function ConfirmationCard({
-  message,
-  children,
-  cancelLabel,
-  onCancel,
-  confirmLabel,
-  onConfirm,
-  busy,
-  disabled,
-  tone = "danger",
-  additionalActions,
-}: ConfirmationCardProps) {
-  useMobileTheme();
-  return (
-    <Card>
-      {message ? <Body>{message}</Body> : null}
-      {children}
-      {/* Same action stack as FormActionRow: long labels and large text keep their full width. */}
-      <View style={{ gap: space.xs, alignItems: "stretch" }}>
-        <Button
-          label={confirmLabel}
-          onPress={onConfirm}
-          busy={busy}
-          disabled={disabled}
-          tone={tone}
-          fullWidth
-        />
-        {additionalActions}
-        <Button label={cancelLabel} onPress={onCancel} disabled={busy} tone="quiet" style={{ alignSelf: "center" }} />
-      </View>
-    </Card>
-  );
 }
 
 export function Sheet({
@@ -307,8 +272,8 @@ export function Sheet({
                 >
                   <View
                     style={{
-                      width: 30,
-                      height: 30,
+                      width: metrics.visualControl,
+                      height: metrics.visualControl,
                       borderRadius: radii.pill,
                       backgroundColor: colors.fill,
                       alignItems: "center",

@@ -111,6 +111,7 @@ function DevServersScreenBody({ project }: { project: HostProject }) {
           <QueryState size="region"
               query={scan}
               empty={!servers.length && scan.data?.status !== "error"}
+              noResults={{ searching: !!search.trim() && projectRows.length > 0, onClearSearch: clearSearch }}
               emptyTitle={
                 search.trim() && projectRows.length
                   ? copy("Eşleşen sonuç yok", "No matching results")

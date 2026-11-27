@@ -8,10 +8,13 @@ export type PreferenceStorageOperation = "read" | "save";
 /** A phone-local preference could not be read from, or written to, device storage. */
 export class PreferenceStorageError extends Error {
   readonly operation: PreferenceStorageOperation;
-  constructor(operation: PreferenceStorageOperation) {
+  /** The stored record was unreadable data: defaults are shown and a retry saves them over it. */
+  readonly corrupt: boolean;
+  constructor(operation: PreferenceStorageOperation, corrupt = false) {
     super(`Preference ${operation} failed`);
     this.name = "PreferenceStorageError";
     this.operation = operation;
+    this.corrupt = corrupt;
   }
 }
 
@@ -68,11 +71,18 @@ export function createPreferenceStore<P>({ key, storage, defaults, normalize }: 
         .then(() => storage.getItem(key))
         .then(async (raw) => {
           let stored: unknown = {};
-          try { stored = raw ? JSON.parse(raw) : {}; } catch { stored = {}; }
+          let corrupt = false;
+          try { stored = raw ? JSON.parse(raw) : {}; } catch { corrupt = true; }
           const base = stored && typeof stored === "object" ? stored : {};
           const preferences = normalize({ ...base, ...unsaved });
           loaded = true;
-          if (Object.keys(unsaved).length > 0) {
+          if (corrupt) {
+            // A damaged record is never silently replaced: the user is told settings were reset,
+            // and the next change or a retry saves the shown values over it.
+            console.warn(`Preference record ${key} was unreadable; defaults are shown.`);
+            set({ preferences, storageError: new PreferenceStorageError("read", true) });
+            if (Object.keys(unsaved).length > 0) await save();
+          } else if (Object.keys(unsaved).length > 0) {
             set({ preferences });
             await save();
           } else {
@@ -96,7 +106,7 @@ export function createPreferenceStore<P>({ key, storage, defaults, normalize }: 
       retry: () => retryFlight.run(async () => {
         const error = get().storageError;
         if (!error) return;
-        await (error.operation === "read" ? hydration ?? read() : save());
+        await (error.operation === "read" && !error.corrupt ? hydration ?? read() : save());
       }),
       update: async (patch) => {
         await read();

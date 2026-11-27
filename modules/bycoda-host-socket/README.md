@@ -13,7 +13,7 @@ WHEN_UNLOCKED_THIS_DEVICE_ONLY policy. No native secret getter is registered for
 JavaScript. Existing guarded JS credential access remains a separately owned
 legacy HTTP compatibility exception until that cohort retires.
 
-The native-only SecureStore accessor patch is pinned to 58.0.2 and registered in
+The native-only SecureStore accessor patch is pinned to 58.0.3 and registered in
 `pnpm-workspace.yaml`. A future authorized dependency installation must apply it
 before a native build. No installed package is edited by the verifier:
 

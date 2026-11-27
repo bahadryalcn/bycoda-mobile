@@ -102,7 +102,7 @@ function PendingInput({
     });
   return (
     <Stack>
-      <Body muted>{run.tasks.find((task) => task.id === input.taskId)?.title ?? input.taskId}</Body>
+      <Body muted>{run.tasks.find((task) => task.id === input.taskId)?.title ?? copy("Ekip görevi", "Crew task")}</Body>
       {needsMemberSession &&
         (run.definition.policy.delegateApprovals ? (
           <Notice
@@ -312,10 +312,12 @@ export function CrewRuntimePanel({ run, active, children }: PropsWithChildren<{ 
             {detail.tasks.map((task) => (
               <Disclosure key={task.id} label={task.title}>
                 <Body>{reviewVerdictLabel(task.verification?.review?.verdict, copy)}</Body>
-                <Body>{task.verification?.review?.note}</Body>
-                <Body muted>
-                  {detail.assignments.find((entry) => entry.taskId === task.id)?.files?.join(" · ")}
-                </Body>
+                {task.verification?.review?.note ? <Body>{task.verification.review.note}</Body> : null}
+                {detail.assignments.find((entry) => entry.taskId === task.id)?.files?.length ? (
+                  <Body muted>
+                    {detail.assignments.find((entry) => entry.taskId === task.id)?.files?.join(" · ")}
+                  </Body>
+                ) : null}
                 <Button
                   tone="quiet"
                   label={copy("Teslimi kabul et", "Accept delivery")}
@@ -324,8 +326,8 @@ export function CrewRuntimePanel({ run, active, children }: PropsWithChildren<{ 
                     confirmAction(
                       copy("Teslimi kabul et", "Accept delivery"),
                       copy(
-                        "Host bağımsız incelemeyi ve güncel değişiklikleri tekrar doğrular. Bu işlem commit veya merge yapmaz.",
-                        "The host rechecks independent review and current changes. Acceptance does not commit or merge.",
+                        "Bilgisayar bağımsız incelemeyi ve güncel değişiklikleri yeniden doğrular. Kabul etmek değişiklikleri kaydetmez veya birleştirmez.",
+                        "The computer rechecks the independent review and current changes. Accepting does not commit or merge them.",
                       ),
                       copy("Kabul et", "Accept"),
                       () => {
@@ -411,8 +413,8 @@ export function CrewRuntimePanel({ run, active, children }: PropsWithChildren<{ 
                 <Notice
                   tone="info"
                   message={copy(
-                    "Eşleşen istek bulunamadı. Yeniden denemek aynı metni ve makbuzu kullanır.",
-                    "No matching request was found. Retry uses the same text and receipt.",
+                    "Eşleşen istek bulunamadı. Yeniden denerseniz aynı istek yeniden gönderilir.",
+                    "No matching request was found. Retrying sends the same request again.",
                   )}
                 />
               )}
@@ -476,7 +478,7 @@ export function CrewRuntimePanel({ run, active, children }: PropsWithChildren<{ 
               confirmAction(
                 copy("Çalışmayı tamamla", "Finish work"),
                 copy(
-                  "Tüm teslimler, bağımsız inceleme ve entegrasyon host tarafından doğrulanır. Dosyalar yayımlanmaz.",
+                  "Tüm teslimleri, bağımsız incelemeyi ve entegrasyonu bilgisayar doğrular. Dosyalar yayımlanmaz.",
                   "The host validates deliveries, independent review and integration. Files are not published.",
                 ),
                 copy("Tamamla", "Finish"),

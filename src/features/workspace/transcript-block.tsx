@@ -1,9 +1,15 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
+import CopyIcon from "lucide-react-native/icons/copy";
+import Check from "lucide-react-native/icons/check";
 import Terminal from "lucide-react-native/icons/terminal";
 import ListChecks from "lucide-react-native/icons/list-checks";
 import { Badge, StatusText, Body, Button, NavigationRow, QueryState, Row, RowIcon, Sheet } from "@/ui/primitives";
+import { TextAction } from "@/ui/feedback";
+import { useClipboardFeedback } from "@/ui/use-clipboard-feedback";
+import { AgentAvatar } from "@/ui/agent-avatar";
+import { isOwnerStopNotice } from "../../../../src/features/sessions/model/turnInterruption";
 import { ChatAction, ChatSummary } from "@/ui/chat-controls";
 import { ChatMessage, chatUserBubbleStyle } from "@/ui/chat";
 import { ChatActivity, ChatPlan, ChatStreaming } from "@/ui/chat-activity";
@@ -13,30 +19,33 @@ import { useChatTextStyles } from "@/ui/chat-styles";
 import { useChatAppearance } from "@/state/chat-appearance";
 import { radii, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
-import { friendlyProviderFailure } from "@/ui/error-message";
+import { errorMessage, friendlyProviderFailure } from "@/ui/error-message";
+import { showToast } from "@/ui/toast";
+import { UncertainCommand } from "./commands";
 import { useSessionBlock } from "./session-queries";
 import type { TranscriptBlockProps } from "./session-types";
-import { TranscriptAttachments } from "./transcript-attachments";
+import { hasUserMessageAttachments, TranscriptAttachments, UserMediaColumn, UserMessageAttachments } from "./transcript-attachments";
 import { TranscriptStructured } from "./transcript-structured";
 import { TranscriptActions } from "./transcript-actions";
 import { MessageSelection } from "./selected-text";
 import { SessionArtifacts } from "./session-artifacts";
-import { AgentAvatar } from "@/ui/agent-avatar";
 import {
   activityState,
-  transcriptSenderName,
   canCollapseToolFailure,
   isBlockStreaming,
   readableToolName,
   toolResultTexts,
+  transcriptSenderName,
+  userDraftState,
 } from "./transcript-model";
+import { SystemNoticeRow, isCompactSystemNotice } from "./system-failure-card";
 import { useMobileTheme } from "@/ui/theme";
 import { PlanReview } from "@/features/management/plans/plan-review";
-import { SubagentCard } from "./subagent-card";
+import { TranscriptSubagents } from "./transcript-subagents";
 import { OrchestrationDetails } from "./orchestration-details";
 import { ActivityApproval } from "./activity-inspector-approval";
 import { taskKickoffObjective, userPromptDisplay, userTurn, userTurnAuthorLabel } from "./user-turn";
-import { UserTurnNotice } from "./user-turn-notice";
+import { PENDING_SWEEP_MS, PendingUserMessage, UserTurnNotice } from "./user-turn-notice";
 import { toolKind, workSteps } from "./work-summary";
 import { UserMessageText } from "./user-message-text";
 import { formatMessageTime } from "./transcript-format";
@@ -54,15 +63,23 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   context,
   responseText,
   parentProvider,
-  modelName,
   continuation = false,
+  showAuthor = false,
   onRewind,
+  running = false,
 }: TranscriptBlockProps & {
-  /** The turn's model, shown beside the provider in the assistant header. */
+  /** The turn's model; like desktop, its identity lives in the turn receipt, not above the reply. */
   modelName?: string;
   continuation?: boolean;
+  /** A crew or handoff reply names its agent in one compact line; single-agent replies stay bare. */
+  showAuthor?: boolean;
   /** Desktop's Edit from here: rewind the conversation to this user message. */
   onRewind?: () => void;
+  /**
+   * The session is running. Only draft rows receive it: a draft is sent once the turn is over. The
+   * run id cannot say so, because the Host keeps the last run's id after the run settles.
+   */
+  running?: boolean;
 }) {
   const copy = useCopy();
   const locale = useLocale();
@@ -123,8 +140,9 @@ export const TranscriptBlock = memo(function TranscriptBlock({
                 : value.role === "image"
                   ? copy("Ek", "Attachment")
                   : value.role === "handoff"
-                    ? copy("Agent devri", "Agent handoff")
-                    : value.role;
+                    ? copy("Ajan devri", "Agent handoff")
+                    // An unknown role is never shown as its raw wire id.
+                    : copy("Etkinlik", "Activity");
   const rawText = value.questionAnswers?.length
     ? ""
     : value.role === "user"
@@ -150,6 +168,15 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   const canReport = value.role === "assistant" && !value.streaming && !!text.trim();
   const canAct =
     !value.streaming && (!!text.trim() || !!value.attachments?.length || !!value.image);
+  // A user message's images and files sit above its bubble; with nothing else to say it has no bubble.
+  const bareUserMedia =
+    hasUserMessageAttachments(value) &&
+    !text.trim() &&
+    !value.questionAnswers?.length &&
+    !value.interjection &&
+    !value.remoteContent &&
+    !isError &&
+    value.notice !== "interrupt";
   const actionText = [
     text,
     ...toolResults,
@@ -213,6 +240,8 @@ export const TranscriptBlock = memo(function TranscriptBlock({
       {readFullContent ? <QueryState query={detail} loading="inline" compact /> : null}
       {text && value.role === "tool" && !value.agentRun ? (
         <MessageCode code={text} output compact error={isError} allowPreview={false} context={context} readerTitle={inputBlock ? copy("Komut", "Command") : undefined} copyLabel={inputBlock ? copy("Komutu kopyala", "Copy command") : undefined} />
+      ) : text && value.role === "user" && userDraftState(value) === "pending" ? (
+        <PendingUserMessage text={text} since={value.startedAt} />
       ) : text && value.role === "user" ? (
         <MessageSelection text={text} context={context} role="user" enabled={canAct}>
           <UserMessageText text={text} preview={taskKickoffObjective(text, value.author)} />
@@ -239,16 +268,19 @@ export const TranscriptBlock = memo(function TranscriptBlock({
       {value.tool?.outputTruncated ? (
         <Body muted>{copy("Çıktı kısaltıldı.", "Output was truncated.")}</Body>
       ) : null}
+      {/* The transcript draws runs as their own rows; a run shown here (an inspector record) uses the
+          same flat row, reading its recorded state as it is. */}
       {value.agentRun ? (
-        <SubagentCard
-          block={value}
+        <TranscriptSubagents
+          blocks={[value]}
+          live
           scope={scope}
+          getRevision={getRevision}
           runId={runId}
           parentProvider={parentProvider}
           disabled={disabled}
           onCommand={onCommand}
           context={context}
-          detailsDisabled={!!value.remoteContent && !detail.data}
         />
       ) : null}
       {proposalKey ? (
@@ -276,7 +308,8 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           />
         ) : null}
       </Sheet>
-      <TranscriptStructured block={value} context={context} compactAgent compactOrchestration />
+      {/* The run row above already says model and state; the structured view adds no card inside it. */}
+      <TranscriptStructured block={value.agentRun ? { ...value, agentRun: undefined } : value} context={context} compactAgent compactOrchestration />
       <TranscriptAttachments block={value} context={context} />
       {context?.sessionId && value.role === "assistant" ? (
         <SessionArtifacts
@@ -297,57 +330,60 @@ export const TranscriptBlock = memo(function TranscriptBlock({
       {value.approval ? (
         <ActivityApproval approval={value.approval} scope={scope} runId={runId} disabled={disabled} onCommand={onCommand} />
       ) : null}
-      {value.draft ? (
-        <View style={uiStyles.stack}>
-          <Badge label={copy("Bilgisayarda taslak", "Draft on your computer")} tone="warning" />
-          {value.followUpDelivery === "uncertain" ? (
-            <Body muted>
-              {copy(
-                "Teslim durumu belirsiz. Yeniden göndermeden önce agent’ın çalışmasını kontrol et.",
-                "Delivery is uncertain. Check the agent’s work before sending again.",
-              )}
-            </Body>
-          ) : null}
-          <Row>
-            <Button
-              label={copy("Taslağı gönder", "Send draft")}
-              density="compact"
-              tone="primary"
-              disabled={
-                disabled ||
-                !!runId ||
-                value.followUpDelivery === "pending" ||
-                value.followUpDelivery === "uncertain"
-              }
-              onPress={() => {
-                void onCommand({
-                  type: "send",
-                  sessionId: scope.sessionId,
-                  text: value.text,
-                  draftBlockId: value.id,
-                }).catch(() => {});
-              }}
-            />
-            <Button
-              label={copy("Taslağı kaldır", "Remove draft")}
-              density="compact"
-              tone="quiet"
-              disabled={disabled || value.followUpDelivery === "pending"}
-              onPress={() => {
-                void onCommand({
-                  type: "removeDraft",
-                  sessionId: scope.sessionId,
-                  draftBlockId: value.id,
-                }).catch(() => {});
-              }}
-            />
-          </Row>
-        </View>
-      ) : null}
     </View>
   );
 
+  // A user draft's state reads under its bubble like desktop's UserDraftFooter: an in-flight follow-up
+  // says nothing (its text sweeps), a failed one offers Retry, an uncertain one asks for a check
+  // instead of a blind resend, and a saved draft keeps compact Send and Remove.
+  const draftState = userDraftState(value);
+  // A follow-up still pending after its sweep gets its meta row back, so it can be removed.
+  const pendingSettled = usePendingSettled(draftState === "pending", value.startedAt);
+  const canRemovePending = draftState === "pending" && pendingSettled && !disabled;
+  // A draft action has no error line of its own: a failure is a toast, a lost reply the footer's check.
+  const draftFailed = (cause: unknown) => {
+    if (!(cause instanceof UncertainCommand)) showToast({ tone: "danger", message: errorMessage(cause, copy) });
+  };
+  const sendDraft = () => {
+    void onCommand({ type: "send", sessionId: scope.sessionId, text: value.text, draftBlockId: value.id }).catch(draftFailed);
+  };
+  const removeDraft = () => {
+    void onCommand({ type: "removeDraft", sessionId: scope.sessionId, draftBlockId: value.id }).catch(draftFailed);
+  };
+  const canSendDraft = !disabled && !running;
+  const draftFooter =
+    draftState === "undelivered" ? (
+      <DraftCaption
+        tone="danger"
+        label={copy("Teslim edilemedi", "Not delivered")}
+        actions={[
+          canSendDraft && { label: copy("Yeniden dene", "Retry"), onPress: sendDraft },
+          !disabled && { label: copy("Kaldır", "Remove"), onPress: removeDraft },
+        ]}
+      />
+    ) : draftState === "uncertain" ? (
+      <DraftCaption
+        tone="warning"
+        label={copy(
+          "Teslim edilmiş olabilir; yeniden göndermeden önce ajanın çalışmasını kontrol et",
+          "May have been delivered; check the agent’s work before sending again",
+        )}
+        actions={[!disabled && { label: copy("Kaldır", "Remove"), onPress: removeDraft }]}
+      />
+    ) : draftState === "saved" ? (
+      <DraftCaption
+        tone="neutral"
+        label={copy("Taslak", "Draft")}
+        actions={[
+          canSendDraft && { label: copy("Taslağı gönder", "Send draft"), onPress: sendDraft },
+          !disabled && { label: copy("Taslağı kaldır", "Remove draft"), onPress: removeDraft },
+        ]}
+      />
+    ) : null;
+
   if (turn.kind !== "message") return <UserTurnNotice turn={turn} context={context} />;
+  // MCP sign-in, provider and interruption notices are one compact line, never a "System" card.
+  if (!activityDetail && (isCompactSystemNotice(value) || isOwnerStopNotice(value))) return <SystemNoticeRow block={value} />;
   return (
     <>
       {foldable && (value.plan || value.taskList) ? (
@@ -420,6 +456,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           </Sheet>
         </View>
       ) : (
+        <UserMediaColumn measure={hasUserMessageAttachments(value)}>
         <View
           style={{
             alignSelf: value.role === "user" ? "flex-end" : "stretch",
@@ -433,6 +470,8 @@ export const TranscriptBlock = memo(function TranscriptBlock({
               {promptAuthor}
             </Body>
           ) : null}
+          {value.role === "user" ? <UserMessageAttachments block={value} context={context} /> : null}
+          {bareUserMedia ? null : (
           <ChatMessage
             role={
               value.role === "user" ? "user" : value.role === "assistant" ? "assistant" : "system"
@@ -448,17 +487,22 @@ export const TranscriptBlock = memo(function TranscriptBlock({
                     borderRadius: semantic ? radii.card : 0,
                   }),
               borderColor: semantic?.border ?? colors.separator,
-              borderWidth: semantic ? StyleSheet.hairlineWidth * 2 : 0,
+              borderWidth: semantic ? StyleSheet.hairlineWidth : 0,
               gap: space.xs,
             }}
           >
-            {value.role !== "user" && !continuation ? (
+            {/* Like desktop, a reply has no header; only a crew or handoff reply names its agent. Records keep their label. */}
+            {value.role === "assistant" && showAuthor ? (
+              <Row style={{ flexWrap: "nowrap", gap: space.xs, minHeight: 20 }}>
+                <AgentAvatar author={author} size={18} />
+                <Body muted numberOfLines={1} style={[typography.metadata, uiStyles.grow]}>
+                  {transcriptSenderName(author)}
+                </Body>
+              </Row>
+            ) : null}
+            {value.role !== "user" && value.role !== "assistant" && !continuation ? (
               <Row style={{ flexWrap: "nowrap", gap: space.sm, minHeight: 24 }}>
-                {value.role === "assistant" ? (
-                  <AgentAvatar author={author} size={20} />
-                ) : (
-                  <Terminal size={15} color={semantic?.text ?? colors.muted} />
-                )}
+                <Terminal size={15} color={semantic?.text ?? colors.muted} />
                 <Body
                   numberOfLines={1}
                   style={[
@@ -467,9 +511,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
                     { color: semantic?.text ?? colors.muted },
                   ]}
                 >
-                  {value.role === "assistant"
-                    ? [transcriptSenderName(author), modelName].filter(Boolean).join(" · ")
-                    : label}
+                  {label}
                 </Body>
                 {value.startedAt ? (
                   <Body muted style={typography.metadata}>
@@ -486,15 +528,13 @@ export const TranscriptBlock = memo(function TranscriptBlock({
                 ) : null}
               </Row>
             ) : null}
-            {isBlockStreaming(value) ? (
+            {/* Streaming prose is its own cue; the transcript's one live row keeps the clock. */}
+            {isBlockStreaming(value) && value.role !== "assistant" ? (
               <ChatStreaming label={copy("Yazıyor…", "Writing…")} state="composing" />
-            ) : null}
-            {value.role === "user" && value.turnOutcome === "stopped" ? (
-              <StatusText label={copy("Sen durdurdun", "Stopped by you")} />
             ) : null}
             {isError ? <Badge label={copy("Başarısız", "Failed")} tone="danger" /> : null}
             {value.notice === "interrupt" ? (
-              <StatusText label={copy("Durduruldu", "Interrupted")} tone="warning" />
+              <StatusText label={copy("Kesildi", "Interrupted")} tone="warning" />
             ) : null}
             {activityDetail && status ? (
               <Body muted style={typography.metadata}>
@@ -502,7 +542,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
               </Body>
             ) : null}
             {contents}
-            {continuation && canAct ? (
+            {(continuation || value.role === "assistant") && canAct ? (
               <Row style={{ justifyContent: "flex-end" }}>
                 <ChatAction label={copy("Mesaj seçenekleri", "Message options")} onPress={() => setActions(true)}>
                   <Ellipsis size={16} color={colors.subtle} />
@@ -511,14 +551,17 @@ export const TranscriptBlock = memo(function TranscriptBlock({
             ) : null}
             {planAction}
           </ChatMessage>
-          {value.role === "user" && (value.startedAt || canAct || canRewind) ? (
+          )}
+          {draftFooter}
+          {value.role === "user" && (draftState !== "pending" || pendingSettled) && (value.startedAt || canAct || canRewind || canRemovePending) ? (
             <Row style={{ justifyContent: "flex-end", flexWrap: "nowrap", gap: space.xxs }}>
               {value.startedAt ? (
-                <Body muted style={typography.metadata}>
+                <Body muted style={[typography.metadata, { fontVariant: ["tabular-nums"] }]}>
                   {formatMessageTime(value.startedAt, locale, copy)}
                 </Body>
               ) : null}
-              {canAct || canRewind ? (
+              {canAct && text.trim() ? <UserCopyAction text={text} /> : null}
+              {canAct || canRewind || canRemovePending ? (
                 <ChatAction
                   label={copy("Mesaj seçenekleri", "Message options")}
                   onPress={() => setActions(true)}
@@ -529,6 +572,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
             </Row>
           ) : null}
         </View>
+        </UserMediaColumn>
       )}
       {foldable &&
       !value.plan &&
@@ -561,9 +605,92 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           reportable={canReport}
           role={value.role === "user" ? "user" : value.role === "assistant" ? "assistant" : "activity"}
           onRewind={canRewind ? onRewind : undefined}
+          onRemove={canRemovePending ? removeDraft : undefined}
           onClose={() => setActions(false)}
         />
       ) : null}
     </>
   );
 });
+
+type DraftAction = { label: string; onPress: () => void };
+
+/** One caption line under a draft bubble: its state in tone ink, then quiet text actions. */
+function DraftCaption({
+  tone,
+  label,
+  actions,
+}: {
+  tone: "neutral" | "warning" | "danger";
+  label: string;
+  actions: (DraftAction | false)[];
+}) {
+  const { colors, semanticColors, uiStyles } = useMobileTheme();
+  const ink = tone === "neutral" ? colors.muted : semanticColors[tone].text;
+  return (
+    <View
+      accessibilityRole={tone === "danger" ? "alert" : undefined}
+      style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center", columnGap: space.md, rowGap: space.xxs }}
+    >
+      <Body style={[uiStyles.caption, { color: ink, flexShrink: 1, textAlign: "right" }]}>{label}</Body>
+      {actions.filter((action): action is DraftAction => !!action).map((action) => (
+        <TextAction key={action.label} label={action.label} color={colors.accent} onPress={action.onPress} />
+      ))}
+    </View>
+  );
+}
+
+/** True once a pending follow-up has outlasted its sweep cap (counted from `since` or first display). */
+function usePendingSettled(pending: boolean, since: number | undefined) {
+  const [shownAt] = useState(() => Date.now());
+  const start = since ?? shownAt;
+  const remainingAt = (now: number) => Math.max(0, PENDING_SWEEP_MS - (now - start));
+  const [settled, setSettled] = useState(() => remainingAt(Date.now()) === 0);
+  useEffect(() => {
+    if (!pending) return;
+    const remaining = remainingAt(Date.now());
+    setSettled(remaining === 0);
+    if (!remaining) return;
+    const timer = setTimeout(() => setSettled(true), remaining);
+    return () => clearTimeout(timer);
+  }, [pending, start]);
+  return pending && settled;
+}
+
+/**
+ * The user bubble's meta row copy action: the exact typed text, with brief Copied feedback. The
+ * clipboard feedback (and its security subscription) mounts on the first press, not per bubble.
+ */
+function UserCopyAction({ text }: { text: string }) {
+  const copy = useCopy();
+  const { colors } = useMobileTheme();
+  const [armed, setArmed] = useState(false);
+  if (armed) return <ArmedUserCopyAction text={text} />;
+  return (
+    <ChatAction label={copy("Mesajı kopyala", "Copy message")} onPress={() => setArmed(true)}>
+      <CopyIcon size={15} color={colors.subtle} />
+    </ChatAction>
+  );
+}
+
+function ArmedUserCopyAction({ text }: { text: string }) {
+  const copy = useCopy();
+  const { colors } = useMobileTheme();
+  const clipboard = useClipboardFeedback(text);
+  // The press that armed this copies once; later presses go straight to the hook.
+  const pressed = useRef(false);
+  useEffect(() => {
+    if (pressed.current) return;
+    pressed.current = true;
+    clipboard.copy();
+  }, [clipboard.copy]);
+  return (
+    <ChatAction
+      label={clipboard.copied ? copy("Kopyalandı", "Copied") : copy("Mesajı kopyala", "Copy message")}
+      busy={clipboard.busy}
+      onPress={clipboard.copy}
+    >
+      {clipboard.copied ? <Check size={15} color={colors.subtle} /> : <CopyIcon size={15} color={colors.subtle} />}
+    </ChatAction>
+  );
+}

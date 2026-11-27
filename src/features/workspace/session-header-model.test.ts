@@ -7,10 +7,10 @@ it("reports loading and failed states before a snapshot exists", () => {
   expect(sessionHeaderStatus(undefined, false, copy)).toEqual({ label: "Loading", tone: "muted" });
   expect(sessionHeaderStatus(undefined, true, copy)).toEqual({ label: "Status unavailable", tone: "danger" });
 });
-it("maps run state to a label and dot tone", () => {
-  expect(sessionHeaderStatus(session("running"), false, copy)).toEqual({ label: "Running", tone: "live" });
+it("names only exceptions; live work is left to the transcript's live row and status cluster", () => {
+  expect(sessionHeaderStatus(session("running"), false, copy)).toEqual({ label: "", tone: "live" });
   expect(sessionHeaderStatus(session("interrupted"), false, copy)).toEqual({ label: "Interrupted", tone: "warning" });
-  expect(sessionHeaderStatus(session("idle"), false, copy)).toEqual({ label: "Ready", tone: "muted" });
+  expect(sessionHeaderStatus(session("idle"), false, copy)).toEqual({ label: "", tone: "muted" });
 });
 it("lets a blocking question that needs attention win over the run state", () => {
   const blocking = session("running", { pendingQuestion: { behavior: "blocking" } });
@@ -24,5 +24,5 @@ it("shows a run blocked on an undecided approval as waiting for the owner", () =
   const blocked = session("running", { blocks: [{ id: "a", approval: { decided: false } }] });
   expect(sessionHeaderStatus(blocked, false, copy)).toEqual({ label: "Waiting for your approval", tone: "warning" });
   const decided = session("running", { blocks: [{ id: "a", approval: { decided: true } }] });
-  expect(sessionHeaderStatus(decided, false, copy)).toEqual({ label: "Running", tone: "live" });
+  expect(sessionHeaderStatus(decided, false, copy)).toEqual({ label: "", tone: "live" });
 });

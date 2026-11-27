@@ -5,7 +5,7 @@ const deferred = <T>() => { let resolve!: (value: T) => void, reject!: (error: u
 function setup() {
   let allowed = true;
   const audio = deferred<string>();
-  const deps = { capture: vi.fn(() => audio.promise), send: vi.fn(async () => "Admitted reply"), speak: vi.fn(async () => {}), cancelAudio: vi.fn(), current: () => allowed, state: vi.fn(), error: vi.fn() };
+  const deps = { capture: vi.fn(() => audio.promise), send: vi.fn(async (..._args: unknown[]) => "Admitted reply"), speak: vi.fn(async () => {}), cancelAudio: vi.fn(), current: () => allowed, state: vi.fn(), error: vi.fn() };
   return { loop: new AssistantCallLoop(deps), deps, audio, revoke: () => { allowed = false; } };
 }
 afterEach(() => vi.useRealTimers());
@@ -15,7 +15,7 @@ it("loops one captured target through admitted send and playback without paralle
   expect(s.loop.start({ ...target, threadId: "other" })).toBe(false);
   s.audio.resolve("Recognized phrase");
   await vi.waitFor(() => expect(s.deps.capture).toHaveBeenCalledTimes(2));
-  expect(s.deps.send).toHaveBeenCalledWith("Recognized phrase", target, expect.any(Function));
+  expect(s.deps.send).toHaveBeenCalledWith("Recognized phrase", target, expect.any(Function), "spoken");
   expect(s.deps.speak).toHaveBeenCalledWith("Admitted reply", target, expect.any(Function));
   expect(s.deps.state.mock.calls.map(call => call[0])).toEqual(["listening", "sending", "speaking", "listening"]);
   s.loop.stop(); next.resolve("");
@@ -70,6 +70,92 @@ it("keeps the pending reply and playback active while the microphone is muted", 
   await vi.waitFor(() => expect(s.deps.state).toHaveBeenLastCalledWith("muted", target));
   expect(s.deps.capture).toHaveBeenCalledOnce();
   s.loop.stop();
+});
+it("sends a message typed while a reply plays only after that reply, then speaks its own reply", async () => {
+  const s = setup(), playback = deferred<void>(), next = deferred<string>();
+  s.deps.capture.mockImplementationOnce(() => s.audio.promise).mockImplementation(() => next.promise);
+  s.deps.speak.mockImplementationOnce(() => playback.promise);
+  s.deps.send.mockResolvedValueOnce("Spoken reply").mockResolvedValueOnce("Typed reply");
+  s.loop.start(target); s.audio.resolve("Spoken first");
+  await vi.waitFor(() => expect(s.deps.state).toHaveBeenLastCalledWith("speaking", target));
+  const typed = s.loop.submit("  Typed second  ");
+  await Promise.resolve();
+  expect(s.deps.send).toHaveBeenCalledOnce(); expect(s.loop.queued).toBe(1);
+  playback.resolve();
+  await expect(typed).resolves.toBe("Typed reply");
+  expect(s.deps.send.mock.calls.map(call => [call[0], call[3]])).toEqual([["Spoken first", "spoken"], ["Typed second", "typed"]]);
+  await vi.waitFor(() => expect(s.deps.speak).toHaveBeenCalledWith("Typed reply", target, expect.any(Function)));
+  await vi.waitFor(() => expect(s.deps.capture).toHaveBeenCalledTimes(2));
+  expect(s.deps.state.mock.calls.map(call => call[0])).toEqual(["listening", "sending", "speaking", "sending", "speaking", "listening"]);
+  s.loop.stop(); next.resolve("");
+});
+it("keeps one send in flight: typed messages wait for the reply being awaited and go out in order", async () => {
+  const s = setup(), first = deferred<string>(), next = deferred<string>();
+  s.deps.capture.mockImplementationOnce(() => s.audio.promise).mockImplementation(() => next.promise);
+  s.deps.send.mockImplementationOnce(() => first.promise);
+  s.loop.setSpeakerMuted(true);
+  s.loop.start(target); s.audio.resolve("Spoken");
+  await vi.waitFor(() => expect(s.deps.send).toHaveBeenCalledOnce());
+  const one = s.loop.submit("One"), two = s.loop.submit("Two");
+  await Promise.resolve();
+  expect(s.deps.send).toHaveBeenCalledOnce(); expect(s.loop.queued).toBe(2);
+  first.resolve("Reply");
+  await Promise.all([one, two]);
+  expect(s.deps.send.mock.calls.map(call => call[0])).toEqual(["Spoken", "One", "Two"]);
+  let inFlight = 0, most = 0;
+  for (const result of s.deps.send.mock.results) { inFlight++; most = Math.max(most, inFlight); await result.value; inFlight--; }
+  expect(most).toBe(1);
+  s.loop.stop(); next.resolve("");
+});
+it("ends a capture in progress for a typed message: words already spoken go first", async () => {
+  const s = setup(), next = deferred<string>(), endCapture = vi.fn(() => s.audio.resolve("Half a sentence"));
+  const loop = new AssistantCallLoop({ ...s.deps, endCapture });
+  s.deps.capture.mockImplementationOnce(() => s.audio.promise).mockImplementation(() => next.promise);
+  loop.start(target);
+  await vi.waitFor(() => expect(s.deps.capture).toHaveBeenCalledOnce());
+  const typed = loop.submit("Typed");
+  expect(endCapture).toHaveBeenCalledOnce();
+  await typed;
+  expect(s.deps.send.mock.calls.map(call => call[0])).toEqual(["Half a sentence", "Typed"]);
+  loop.stop(); next.resolve("");
+});
+it("sends a typed message at once when the ended capture heard nothing, and while the microphone is muted", async () => {
+  const s = setup(), next = deferred<string>(), endCapture = vi.fn(() => s.audio.resolve(""));
+  const loop = new AssistantCallLoop({ ...s.deps, endCapture });
+  s.deps.capture.mockImplementationOnce(() => s.audio.promise).mockImplementation(() => next.promise);
+  loop.start(target);
+  await vi.waitFor(() => expect(s.deps.capture).toHaveBeenCalledOnce());
+  await loop.submit("Typed");
+  expect(s.deps.send.mock.calls.map(call => call[0])).toEqual(["Typed"]);
+  await vi.waitFor(() => expect(s.deps.capture).toHaveBeenCalledTimes(2));
+  loop.setMuted(true); next.resolve("");
+  await vi.waitFor(() => expect(s.deps.state).toHaveBeenLastCalledWith("muted", target));
+  await loop.submit("Typed while muted");
+  expect(s.deps.send.mock.calls.map(call => call[0])).toEqual(["Typed", "Typed while muted"]);
+  await vi.waitFor(() => expect(s.deps.state).toHaveBeenLastCalledWith("muted", target));
+  // Muted stays muted: the typed turn never reopened the microphone.
+  expect(s.deps.capture).toHaveBeenCalledTimes(2);
+  loop.stop();
+});
+it("rejects queued typed messages that never went out when the call stops, and a failed typed send stops the call", async () => {
+  const s = setup(), first = deferred<string>();
+  s.deps.send.mockImplementationOnce(() => first.promise);
+  s.loop.start(target); s.audio.resolve("Spoken");
+  await vi.waitFor(() => expect(s.deps.send).toHaveBeenCalledOnce());
+  const waiting = s.loop.submit("Never sent");
+  s.loop.stop();
+  await expect(waiting).rejects.toMatchObject({ reason: "stopped" });
+  first.resolve("Late"); expect(s.deps.send).toHaveBeenCalledOnce();
+  await expect(s.loop.submit("After end")).rejects.toMatchObject({ reason: "stopped" });
+
+  const t = setup(), failure = new Error("delivery unknown");
+  // Muting cancels the capture, as the session's cancelAudio rejects it.
+  t.deps.cancelAudio.mockImplementation(() => t.audio.reject(new Error("stopped")));
+  t.deps.send.mockRejectedValueOnce(failure);
+  t.loop.start(target); t.loop.setMuted(true);
+  await expect(t.loop.submit("Typed")).rejects.toBe(failure);
+  await vi.waitFor(() => expect(t.deps.error).toHaveBeenCalledWith(failure));
+  expect(t.loop.current()).toBe(false); expect(t.deps.speak).not.toHaveBeenCalled();
 });
 it("VAD requires sustained speech followed by silence and never calls silence speech", () => {
   const vad = new AssistantUtteranceVad(); const frame = (value: number, ms: number) => new Int16Array(ms * 16).fill(value);

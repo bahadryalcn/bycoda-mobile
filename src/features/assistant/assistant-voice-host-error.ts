@@ -33,8 +33,14 @@ const known: Record<string, (copy: Copy) => string> = {
   // Hosts before shared phone voice refuse a phone whose voice settings differ from the computer's.
   "Voice settings changed. Disconnect voice in other windows before reconnecting.": copy => alreadyInUse(copy),
   "Another voice configuration is connected.": copy => alreadyInUse(copy),
+  // Older computers refuse a spoken call whenever any dictation holds their recognizer, this phone's own
+  // included, so the sentence must not blame the computer.
   "Voice is in use on this computer without spoken replies. End voice on the computer, then try again.": copy =>
-    copy("Bilgisayarda ses, sesli yanıt olmadan kullanılıyor. Bilgisayarda sesi kapatıp yeniden dene.", "Voice is in use on this computer without spoken replies. End voice on the computer, then try again."),
+    copy("Sesle yazma, sesli yanıt olmadan sürüyor (bu telefonda veya bilgisayarda). Sesle yazmayı bitirip yeniden dene; sürerse bilgisayardaki bycoda’yı güncelle.",
+      "Dictation without spoken replies is running (on this phone or the computer). Finish dictation and try again; if it continues, update bycoda on the computer."),
+  "A voice conversation without spoken replies is running on this computer. End it there, then try again.": copy =>
+    copy("Bilgisayarda sesli yanıtı kapalı bir sesli görüşme sürüyor. Onu bilgisayarda bitirip yeniden dene.",
+      "A voice conversation without spoken replies is running on the computer. End it there, then try again."),
   "Local voice needs Python, faster-whisper and a cached Whisper model on this computer.": copy => recognizerFailed(copy),
   "The local GGUF model could not be loaded.": copy => recognizerFailed(copy),
   "Local voice startup timed out.": copy => startTimedOut(copy),
@@ -55,8 +61,8 @@ const known: Record<string, (copy: Copy) => string> = {
 
 function alreadyInUse(copy: Copy) {
   return copy(
-    "Bilgisayar sesi başka ayarlarla kullanıyor. Bilgisayarda sesi kapatıp yeniden dene veya telefonun katılabilmesi için bilgisayardaki Bycoda’yı güncelle.",
-    "The computer is using voice with other settings. End voice on the computer and try again, or update Bycoda on the computer so this phone can join it.",
+    "Bilgisayar sesi başka ayarlarla kullanıyor. Bilgisayarda sesi kapatıp yeniden dene veya telefonun katılabilmesi için bilgisayardaki bycoda’yı güncelle.",
+    "The computer is using voice with other settings. End voice on the computer and try again, or update bycoda on the computer so this phone can join it.",
   );
 }
 function recognizerFailed(copy: Copy) {
@@ -82,6 +88,8 @@ export function voiceHostMessage(error: unknown, copy: Copy): string | undefined
       "Voice is not set up on the computer (missing: {p0}). On the computer, open Settings → Voice assistant and install the missing files.",
       { p0: missing },
     );
-  // An HTTP Host error is already shown as sent by the shared presenter.
-  return error instanceof HostWsError ? reason : undefined;
+  // An unknown Host reason: a localized summary first, the computer's own words below it (the notice
+  // folds them behind Details). An HTTP Host error is already shown as sent by the shared presenter.
+  return error instanceof HostWsError
+    ? `${copy("Bilgisayar sesi kullanamadı.", "The computer couldn't use voice.")}\n${reason}` : undefined;
 }

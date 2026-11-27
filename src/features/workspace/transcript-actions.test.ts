@@ -15,6 +15,7 @@ vi.mock("lucide-react-native/icons/flag", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/notebook-pen", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/text-select", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/share-2", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { muted: "#888" } }) }));
 import { TranscriptActions } from "./transcript-actions";

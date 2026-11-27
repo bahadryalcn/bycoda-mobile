@@ -1,26 +1,28 @@
-import { useEffect, useState, type PropsWithChildren } from "react";
-import { View } from "react-native";
+import { useEffect } from "react";
+import ChevronDown from "lucide-react-native/icons/chevron-down";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
-import Animated, {
-  cancelAnimation,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { decorativeSvgProps } from "./accessibility";
 import { motionTiming } from "./motion";
-import { space } from "./tokens";
 
+/**
+ * The one expand/collapse indicator. `axis="right"` (default) is a tree or group row whose children
+ * appear below it: a right chevron turning down. `axis="down"` is an in-place section (Disclosure,
+ * RecordCard details): a down chevron turning up. 16 by default; the turn follows the system
+ * reduced-motion setting through `motionTiming`. Decorative: the trigger carries the expanded state.
+ */
 export function DisclosureChevron({
   expanded,
   color,
-  size = 17,
+  size = 16,
+  axis = "right",
   closedAngle = 0,
-  openAngle = 90,
+  openAngle = axis === "down" ? 180 : 90,
 }: {
   expanded: boolean;
   color: string;
   size?: number;
+  axis?: "right" | "down";
   closedAngle?: number;
   openAngle?: number;
 }) {
@@ -29,50 +31,11 @@ export function DisclosureChevron({
     rotation.value = withTiming(expanded ? openAngle : closedAngle, motionTiming);
   }, [expanded, rotation, closedAngle, openAngle]);
   const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.value}deg` }] }));
+  const Glyph = axis === "down" ? ChevronDown : ChevronRight;
   return (
-    <Animated.View accessible={false} style={style}>
-      <ChevronRight size={size} color={color} />
-    </Animated.View>
-  );
-}
-
-/** Retain measured content through collapse instead of unmounting it at the tap. */
-export function DisclosureBody({ expanded, children }: PropsWithChildren<{ expanded: boolean }>) {
-  const [height, setHeight] = useState(0);
-  const [present, setPresent] = useState(expanded);
-  const progress = useSharedValue(expanded ? 1 : 0);
-  useEffect(() => {
-    if (expanded) setPresent(true);
-    progress.value = withTiming(expanded ? 1 : 0, motionTiming, (finished) => {
-      if (finished && !expanded) runOnJS(setPresent)(false);
-    });
-    return () => cancelAnimation(progress);
-  }, [expanded, progress]);
-  const style = useAnimatedStyle(() => ({
-    height: height * progress.value,
-    opacity: progress.value,
-  }));
-  return (
-    <Animated.View
-      style={[{ overflow: "hidden" }, style]}
-      pointerEvents={expanded ? "auto" : "none"}
-      accessibilityElementsHidden={!expanded}
-      importantForAccessibility={expanded ? "auto" : "no-hide-descendants"}
-    >
-      <View
-        onLayout={(event) => {
-          if (present) setHeight(event.nativeEvent.layout.height);
-        }}
-        style={{
-          position: "absolute",
-          display: present ? "flex" : "none",
-          width: "100%",
-          gap: space.sm,
-          paddingBottom: space.sm,
-        }}
-      >
-        {children}
-      </View>
+    <Animated.View accessible={false} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden
+      style={[{ flexShrink: 0 }, style]}>
+      <Glyph {...decorativeSvgProps} size={size} color={color} />
     </Animated.View>
   );
 }

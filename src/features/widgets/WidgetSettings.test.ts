@@ -83,13 +83,13 @@ it("distinguishes unread failure and unsaved choice, with operation-specific ret
   storage.setItem.mockRejectedValue(new Error("Storage full"));
   await act(async () => node.querySelector("button")!.click());
   expect(node.querySelector("button")?.getAttribute("aria-pressed")).toBe("true");
-  expect(node.textContent).toContain("Unsaved");
+  expect(node.textContent).toContain("Not saved");
   expect(node.textContent).toContain("Your choice is kept for this session");
   storage.setItem.mockResolvedValue(undefined);
   await act(async () =>
     [...node.querySelectorAll("button")].find((button) => button.textContent === "Retry")!.click(),
   );
-  expect(node.textContent).not.toContain("Unsaved");
+  expect(node.textContent).not.toContain("Not saved");
   expect(node.textContent).not.toContain("Retry");
   expect(node.querySelector("button")?.getAttribute("aria-pressed")).toBe("true");
 });

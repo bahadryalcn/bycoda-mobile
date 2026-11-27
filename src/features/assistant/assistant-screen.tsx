@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { router, Stack } from "expo-router";
+import { usePreventRemove } from "expo-router/react-navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocale } from "@/i18n";
 import { useCopy } from "@/ui/copy";
@@ -9,43 +10,52 @@ import {
   Button,
   Empty,
   Disclosure,
+  ErrorNotice,
   NavigationGroup,
+  NavigationRow,
   Notice,
   QueryState,
   Screen,
   ScreenList,
-  Section,
-  SegmentedControl,
-  SelectField,
   StateView,
 } from "@/ui/primitives";
-import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
 import { useHostClient, useHostReadActive, hostKey } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { useProjectList } from "../workspace/use-project-directory";
 import { remoteErrorKind } from "@/ui/error-message";
-import { AssistantMobileClient, type OwnerPresence } from "./assistant-client";
+import { usePersistentError } from "@/ui/use-persistent-error";
+import { AssistantMobileClient } from "./assistant-client";
 import { usePendingApprovalCount } from "../approvals/use-approvals";
 import { AssistantComposer } from "./assistant-composer";
 import { minimizeAssistantCompanion, openAssistantCompanion, useAssistantCompanion } from "./assistant-companion-state";
 import { assistantNeedsUpdate } from "./assistant-unavailable";
 import { AssistantReadAloud } from "./assistant-voice-controls";
-import { AssistantCallButton, AssistantCallError } from "./assistant-call-controls";
+import { AssistantCallButton, AssistantCallErrorNotice } from "./assistant-call-controls";
 import { endAssistantCall } from "./assistant-call-session";
 import { useAssistantCall } from "./assistant-call-state";
 import { AssistantVoiceScreen } from "./assistant-voice-screen";
-import { CallVoiceButton } from "../voice-settings/call-voice-button";
+import { AssistantSettingsButton } from "../voice-settings/call-voice-button";
 import { AssistantReplyModel } from "./assistant-reply-model";
-import { AssistantContextLine, AssistantHomeHero, AssistantHomeLoading } from "./assistant-home-hero";
+import { AssistantHomeActions, AssistantHomeHero, AssistantHomeLoading } from "./assistant-home-hero";
+import { AssistantMinimizeButton, useAssistantVoiceBusy } from "./assistant-companion";
 import { useAssistantTranscript } from "./use-assistant-transcript";
 import { useAssistantVoiceEntry } from "./use-assistant-voice-entry";
-import { AssistantPermissions } from "./assistant-permissions";
 import { AssistantActivitySection } from "./assistant-activity-section";
 import { confirmAction } from "@/ui/confirm";
 import { AssistantJobsSection } from "./assistant-jobs-section";
-import { AssistantMessageRow } from "./assistant-message-row";
+import { AssistantConversationsButton } from "./assistant-conversations";
+import { AssistantScopePill } from "./assistant-scope-pill";
+import { TranscriptSkeleton } from "../workspace/transcript-skeleton";
+import { AssistantCallSeparator, AssistantMessageRow } from "./assistant-message-row";
+import {
+  assistantCallBaseline,
+  assistantCallStart,
+  assistantTranscriptRows,
+  updateAssistantCallEpisode,
+  useAssistantCallEpisodes,
+} from "./assistant-call-episode";
 import { AssistantLiveSpeech } from "./assistant-live-speech";
 import { AssistantQuestionsSection } from "./assistant-questions-section";
 import { jobNeedsAttention, jobVisible } from "./assistant-jobs";
@@ -62,9 +72,15 @@ import type {
   AssistantThread,
 } from "../../../../src/shared/model/host-contracts/assistant";
 import { dateTimeFormat } from "../../../../src/shared/lib/intl";
+import { goBack, pushOnce } from "@/ui/navigation";
 
-export function AssistantScreen({ focusJobId, focusQuestions = false, voiceRequested = false }: {
+/** A read answered for another conversation or version than the one asked: the owner tries again. */
+const CONVERSATION_CHANGED = "The conversation changed on the computer. Try again.";
+
+export function AssistantScreen({ focusJobId, focusQuestions = false, voiceRequested = false, homeRequest }: {
   focusJobId?: string;
+  /** Changes each time the header's assistant button is tapped: an idle assistant returns to its home. */
+  homeRequest?: string;
   /** A tapped "the assistant needs you" push: the home opens with its questions in view. */
   focusQuestions?: boolean;
   voiceRequested?: boolean;
@@ -91,13 +107,13 @@ export function AssistantScreen({ focusJobId, focusQuestions = false, voiceReque
           <Empty
             compact={false}
             illustration="connect-computer"
-            title={copy("Önce bir bilgisayar bağlayın", "Connect a computer first")}
+            title={copy("Önce bir bilgisayar bağla", "Connect a computer first")}
             detail={voiceRequested
               ? copy("Sesli görüşme için bağlı bir bilgisayar gerekir.", "A voice call needs a connected computer.")
               : copy("Asistan, bağlı bilgisayarındaki oturumunla çalışır.", "The assistant works with your session on a connected computer.")}
             action={{
               label: copy("Bilgisayar bağla", "Connect a computer"),
-              onPress: () => router.push("/machines"),
+              onPress: () => pushOnce("/machines"),
             }}
           />
         </View>
@@ -112,10 +128,10 @@ export function AssistantScreen({ focusJobId, focusQuestions = false, voiceReque
             illustration="permission"
             title={copy("Erişim gerekiyor", "Access needed")}
             detail={copy(
-              "Asistan için bilgisayar erişimini doğrulayın.",
+              "Asistan için bilgisayar erişimini doğrula.",
               "Verify access to this computer to use the assistant.",
             )}
-            action={{ label: copy("Bilgisayarları aç", "Open computers"), onPress: () => router.push("/machines") }}
+            action={{ label: copy("Bilgisayarları aç", "Open computers"), onPress: () => pushOnce("/machines") }}
           />
         </View>
       </Screen>
@@ -131,6 +147,7 @@ export function AssistantScreen({ focusJobId, focusQuestions = false, voiceReque
       focusJobId={focusJobId}
       focusQuestions={focusQuestions}
       voiceRequested={voiceRequested}
+      homeRequest={homeRequest}
       current={() => connection.isCurrent()}
     />
   );
@@ -145,6 +162,7 @@ function AssistantWorkspace({
   focusJobId,
   focusQuestions,
   voiceRequested,
+  homeRequest,
   current,
 }: {
   client: AssistantMobileClient;
@@ -155,6 +173,7 @@ function AssistantWorkspace({
   focusJobId?: string;
   focusQuestions?: boolean;
   voiceRequested: boolean;
+  homeRequest?: string;
   current(): boolean;
 }) {
   const copy = useCopy(),
@@ -162,7 +181,8 @@ function AssistantWorkspace({
     active = useHostReadActive(),
     projects = useProjectList(),
     cache = useQueryClient();
-  const { uiStyles } = useMobileTheme();
+  // A running call, dictation or read-aloud can be kept in the floating window from the header.
+  const voiceBusy = useAssistantVoiceBusy();
   const voiceMode = useAssistantCompanion(state => state.surface === "voice");
   const transcript = useAssistantTranscript();
   const callPhase = useAssistantCall(state => state.phase);
@@ -170,13 +190,13 @@ function AssistantWorkspace({
   const replyVersion = useAssistantCall(state => state.replyVersion);
   const saved = useAssistantCompanion.getState();
   const sameCompanion = saved.machineId === machineId && saved.environmentId === environmentId;
+  // Entering the assistant opens its home. Only a running call or read-aloud reopens the conversation it
+  // belongs to: restoring any earlier conversation left the owner unable to reach the home again.
+  const resumeThread = sameCompanion && (saved.surface === "voice" || saved.voice !== "idle" || useAssistantCall.getState().phase !== "idle");
   const [projectId, setProjectId] = useState(sameCompanion ? saved.projectId : ""),
-    [thread, setThread] = useState<AssistantThread | null>(sameCompanion ? saved.thread : null),
-    [busyKind, setBusyKind] = useState<
-      "open" | "inspect" | "older" | "stop" | `presence-${OwnerPresence}` | null
-    >(null),
-    [issue, setIssue] = useState(false),
-    [presenceUnknown, setPresenceUnknown] = useState(false);
+    [thread, setThread] = useState<AssistantThread | null>(resumeThread ? saved.thread : null),
+    [busyKind, setBusyKind] = useState<"open" | "older" | null>(null),
+    [issue, setIssue] = useState<unknown>(null);
   const [replyReviewRequired, setReplyReviewRequired] = useState(false);
   const busy = busyKind !== null;
   // Expanded and minimized views share one captured Room selection without keeping a route stack alive.
@@ -192,10 +212,10 @@ function AssistantWorkspace({
   // A tapped push names a job or the waiting questions: they live on the home, so a conversation left
   // open earlier gives way to it (never during a call).
   useEffect(() => {
-    if ((!focusJobId && !focusQuestions) || useAssistantCall.getState().phase !== "idle" || useAssistantCompanion.getState().surface === "voice") return;
+    if ((!focusJobId && !focusQuestions && !homeRequest) || useAssistantCall.getState().phase !== "idle" || useAssistantCompanion.getState().surface === "voice") return;
     selection.current++;
     setThread(null);
-  }, [focusJobId, focusQuestions]);
+  }, [focusJobId, focusQuestions, homeRequest]);
   const access = { ready: projects.directoryReady, visible: projects.isProjectVisible };
   const snapshot = useQuery({
     queryKey: hostKey(machineId, ["assistant", sourceKey, "snapshot"]),
@@ -203,7 +223,8 @@ function AssistantWorkspace({
     enabled: active,
     retry: false,
     networkMode: "always",
-    refetchInterval: active ? 15000 : false,
+    // A call already keeps the radio busy; the home it covers refreshes less often until it ends.
+    refetchInterval: active ? (callActive ? 60000 : 15000) : false,
     refetchIntervalInBackground: false,
   });
   const denied = (error: unknown) =>
@@ -237,7 +258,8 @@ function AssistantWorkspace({
     enabled: active && !!visibleThread,
     retry: false,
     networkMode: "always",
-    refetchInterval: active ? 15000 : false,
+    // During a call every reply refetches the conversation (below), so it is not also polled.
+    refetchInterval: active && !callActive ? 15000 : false,
     refetchIntervalInBackground: false,
   });
   // Voice sends run in the shell-owned call; refresh its authoritative transcript after every reply.
@@ -256,6 +278,23 @@ function AssistantWorkspace({
         ).messages
       : [];
   const messages = raw.filter((message) => assistantMessageVisible(message, access));
+  // One conversation per scope, with each voice call marked where it began. The call screen shows the
+  // current call's messages; the conversation before it stays one tap away.
+  const callEpisodes = useAssistantCallEpisodes((state) => state.episodes);
+  const lastCall = callEpisodes.at(-1);
+  const threadCall = visibleThread && lastCall?.threadId === visibleThread.id ? lastCall : undefined;
+  // The call's messages are those newer than the conversation's newest at its start (Host clock both).
+  useEffect(() => {
+    if (threadCall?.open && threadCall.baseline === undefined && history.data && !history.isPending && current())
+      updateAssistantCallEpisode(threadCall.id, { baseline: assistantCallBaseline(raw) });
+  });
+  const callStart = threadCall ? assistantCallStart(messages, threadCall.baseline) : undefined;
+  const hiddenEarlier = voiceMode && threadCall && !threadCall.earlier ? (callStart ?? messages.length) : 0;
+  const rows = assistantTranscriptRows(
+    hiddenEarlier ? messages.slice(hiddenEarlier) : messages,
+    callEpisodes.filter((episode) => episode.threadId === visibleThread?.id),
+    { trailing: voiceMode && threadCall && callStart === messages.length ? threadCall.startedAt : undefined },
+  );
   const canonicalThread = denied(history.error)
     ? null
     : history.data?.thread && history.data.thread.id === visibleThread?.id
@@ -274,20 +313,22 @@ function AssistantWorkspace({
     if (pending.current || !current() || !active) return;
     pending.current = true;
     setBusyKind(kind);
-    setIssue(false);
+    setIssue(null);
     try {
       await action();
-    } catch {
-      if (current()) setIssue(true);
+    } catch (error) {
+      // The real cause is shown (connection, access, a refused read), never one guessed sentence.
+      if (current()) setIssue(error);
     } finally {
       pending.current = false;
       if (current()) setBusyKind(null);
     }
   };
-  const open = async () => {
+  // Opens the conversation of the current scope, or of the scope just chosen (`scope`, before its state lands).
+  const open = async (scope = projectId) => {
     let opened: AssistantThread | undefined;
     if (useAssistantCall.getState().phase !== "idle") return;
-    const selected = projectId,
+    const selected = scope,
       version = ++selection.current;
     if (selected && (!projects.directoryReady || !projects.isProjectVisible(selected))) return;
     await perform("open", async () => {
@@ -302,41 +343,39 @@ function AssistantWorkspace({
       )
         return;
       if (!response.thread || response.thread.projectId !== (selected || undefined))
-        throw new Error("source");
+        throw new Error(CONVERSATION_CHANGED);
       setThread(response.thread);
       opened = response.thread;
     });
     return opened;
   };
+  // Back from a conversation (header, gesture or the system button) returns to the assistant's home, like
+  // every other list → detail pair; only Back on the home leaves the assistant. Other navigation proceeds.
+  const conversationOpen = !voiceMode && !voiceRequested && !!visibleThread;
+  usePreventRemove(conversationOpen, ({ data, repeat }) => {
+    if (data.action.type === "GO_BACK" || data.action.type === "POP") {
+      selection.current++;
+      setThread(null);
+    } else repeat(); // Lifts the prevention first; re-dispatching while prevented would loop.
+  });
+  const setupMessage = copy("Asistan {p0} üzerinde kapalı. Kurulumu o bilgisayardaki bycoda’da bitir.", "The assistant is off on {p0}. Finish its setup in bycoda on that computer.", { p0: machineName });
+  // Why a call cannot start (assistant off, no access, computer too old, unreadable assistant): the call
+  // screen says it instead of "Connecting…" with no end.
+  // A read that heals itself inside the grace (reconnect, resume) never reaches the call screen.
+  const snapshotError = usePersistentError(!state && !snapshot.isPending ? snapshot.error : null);
+  const voiceUnavailable = state && !configured ? <Notice tone="warning" message={setupMessage} />
+    : snapshotError ? (assistantNeedsUpdate(snapshotError)
+      ? <Notice tone="warning" message={copy("Bu bilgisayar henüz asistanı sunmuyor. Bilgisayarındaki bycoda’yı güncelle.", "This computer does not offer the assistant yet. Update bycoda on your computer.")} />
+      : <ErrorNotice error={snapshotError} onRetry={() => void snapshot.refetch()} />)
+    : undefined;
   const voiceEntry = useAssistantVoiceEntry({
     requested: voiceRequested,
     consume: () => router.setParams({ voice: undefined }),
+    blocked: !!voiceUnavailable,
     ready: writable && configured && !busy && (!projectId || projects.isProjectVisible(projectId)),
     machineId, environmentId, thread: visibleThread, open,
     current: () => current() && (!projectId || projects.isProjectVisible(projectId)),
   });
-  const setPresence = (value: OwnerPresence) =>
-    void perform(`presence-${value}`, async () => {
-      try {
-        await client.setPresence(value);
-      } catch (error) {
-        if (current()) setPresenceUnknown(client.pendingPresence?.status === "unknown");
-        throw error;
-      }
-      await cache.invalidateQueries({
-        queryKey: hostKey(machineId, ["assistant", sourceKey, "snapshot"]),
-      });
-    });
-  const inspect = () =>
-    void perform("inspect", async () => {
-      const value = await client.inspectPresence();
-      if (!current()) return;
-      cache.setQueryData<AssistantResponse>(
-        hostKey(machineId, ["assistant", sourceKey, "snapshot"]),
-        { snapshot: value },
-      );
-      setPresenceUnknown(false);
-    });
   const older = () =>
     void perform("older", async () => {
       if (!visibleThread) return;
@@ -368,7 +407,7 @@ function AssistantWorkspace({
         return;
       if (!response.thread || response.thread.version !== history.data?.thread?.version) {
         await history.refetch();
-        throw new Error("source");
+        throw new Error(CONVERSATION_CHANGED);
       }
       const page = assistantHistoryPage(response.messages ?? [], selected, raw, true);
       setPages((old) => ({
@@ -384,44 +423,8 @@ function AssistantWorkspace({
       }));
       setMore((old) => ({ ...old, [selected]: (response.messages?.length ?? 0) === 100 }));
     });
-  const operationIssue = issue && !presenceUnknown ? (
-    <Notice tone="warning" message={copy(
-      "İşlem tamamlanamadı. Bilgisayar bağlantısını ve erişimi kontrol edin.",
-      "The operation could not be completed. Check this computer connection and access.",
-    )} />
-  ) : null;
-  const presence = state ? (
-    <View style={{ gap: space.sm }}>
-      <SegmentedControl
-        label={copy("Durumum", "My presence")}
-        value={state.presence.state}
-        disabled={busy || presenceUnknown || !writable}
-        options={[
-          { value: "present", label: copy("Buradayım", "Here") },
-          { value: "away", label: copy("Uzağım", "Away") },
-          { value: "dnd", label: copy("Rahatsız etmeyin", "Do not disturb") },
-        ]}
-        onChange={(value) => { if (value !== state.presence.state) setPresence(value as OwnerPresence); }}
-      />
-      {presenceUnknown ? (
-        <>
-          <Notice
-            tone="warning"
-            message={copy(
-              "Durum değişikliği doğrulanamadı. Otomatik olarak yeniden gönderilmeyecek.",
-              "The status change could not be confirmed. It will not be resent automatically.",
-            )}
-          />
-          <Button
-            label={copy("Güncel durumu oku", "Read current status")}
-            onPress={inspect}
-            disabled={busy}
-            busy={busyKind === "inspect"}
-          />
-        </>
-      ) : null}
-    </View>
-  ) : null;
+  // The shared presenter translates the app's own English messages through the catalogs.
+  const operationIssue = issue ? <ErrorNotice error={issue} /> : null;
   const questionCards = state ? (
     <AssistantQuestionsSection
       client={client}
@@ -446,25 +449,14 @@ function AssistantWorkspace({
       <AssistantJobsSection
         client={client}
         jobs={jobs}
+        paused={state.paused}
         holds={state.jobHolds}
         current={current}
         enabled={writable}
         onChanged={refreshAll}
       />
-      <AssistantActivitySection activity={state.activity} access={access} loading={snapshot.isPending} />
-    </>
-  ) : null;
-  // Profile preferences, with the desktop's group names, and the rare pause of all the assistant's work.
-  const preferences = state ? (
-    <>
-      <AssistantPermissions key={sourceKey} profile={state.profile} client={client}
-        projects={projects.directoryReady ? projects.data ?? [] : []} enabled={writable && !busy} current={current} onChanged={refreshAll} />
-      <Button label={copy("Asistanın işlerini duraklat", "Pause the assistant's work")} tone="danger" disabled={!writable || busy} busy={busyKind === "stop"}
-        onPress={() => confirmAction(copy("Asistanın işlerini duraklat", "Pause the assistant's work"),
-          copy("Asistanın çalışmaları duraklatılır. Devam etmek için bilgisayardaki bycoda’dan yeniden başlat.", "The assistant's work pauses. Resume it from bycoda on your computer."),
-          copy("Duraklat", "Pause"),
-          () => { void perform("stop", async () => { await client.pauseAll(); await refreshAll(); }); })} />
-      {operationIssue}
+      {/* The home shows what the assistant did only when it did something; an empty journal is not news. */}
+      <AssistantActivitySection activity={state.activity} access={access} />
     </>
   ) : null;
   const visibleProjectNames = new Map(
@@ -477,81 +469,57 @@ function AssistantWorkspace({
   const scopeHidden = !!projectId && !visibleProjectNames.has(projectId);
   const scopeName = !projectId ? globalScope : visibleProjectNames.get(projectId) ||
     (projects.verifying ? copy("Projeler yükleniyor…", "Loading projects…") : projectScope);
-  const matchingThreadDetails = new Map<string, number>();
+  // Each conversation is titled by what it is about (its summary when visible), with scope and time below.
   const recentOptions = inCall ? [] : threads.map(row => {
     const project = row.projectId ? visibleProjectNames.get(row.projectId) || projectScope : globalScope;
     const purpose = row.purpose === "job-planning" ? copy("Planlama", "Planning") : copy("Konuşma", "Conversation");
-    const label = `${project} · ${purpose}`;
+    const summary = assistantSummaryVisible(row, access) ? row.summary.trim().split("\n")[0]?.trim() : "";
     const date = new Date(row.updatedAt);
     const time = Number.isFinite(date.getTime())
       ? dateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(date)
       : copy("Zaman bilinmiyor", "Time unavailable");
-    const key = JSON.stringify([label, time]);
-    const occurrence = (matchingThreadDetails.get(key) ?? 0) + 1;
-    matchingThreadDetails.set(key, occurrence);
-    return { value: row.id, label, detail: occurrence === 1 ? time : `${time} · ${occurrence.toLocaleString(locale)}` };
+    return { value: row.id, label: summary || purpose, detail: [project, summary ? purpose : "", time].filter(Boolean).join(" · ") };
   });
-  const recentConversations = !inCall ? (
-    <>
-      {visibleThread?.purpose === "job-planning" ? (
-        <Button
-          label={copy("Konuşmayı aç", "Open conversation")}
-          onPress={() => void open()}
-          busy={busyKind === "open"}
-          disabled={busy || callActive || !state || (!!projectId && !projects.isProjectVisible(projectId))}
-        />
-      ) : null}
-        {recentOptions.length ? (
-          <SelectField
-            variant="row"
-            label={copy("Son konuşmalar", "Recent conversations")}
-            value={visibleThread?.id}
-            disabled={busy || callActive}
-            options={recentOptions}
-            onChange={(id) => {
-              if (!current() || pending.current || useAssistantCall.getState().phase !== "idle") return;
-              const selected = threads.find((row) => row.id === id);
-              if (selected && assistantThreadVisible(selected, access)) {
-                selection.current++;
-                setProjectId(selected.projectId ?? "");
-                setThread(selected);
-              }
-            }}
-          />
-        ) : null}
-    </>
-  ) : null;
-  const approvalAction = pendingApprovals ? <Button
-    label={copy("Onaylar ({p0} bekliyor)", "Approvals ({p0} waiting)", { p0: pendingApprovals })}
-    tone="primary" onPress={() => router.push("/approvals")} /> : null;
+  // Waiting approvals are navigation among what waits for the owner, not a second primary button.
+  const approvalAction = pendingApprovals ? <NavigationGroup>
+    <NavigationRow label={copy("Onaylar", "Approvals")} detail={copy("{p0} bekliyor", "{p0} waiting", { p0: pendingApprovals })}
+      separator={false} onPress={() => pushOnce("/approvals")} />
+  </NavigationGroup> : null;
   const title = state?.profile.name || copy("Asistan", "Assistant");
-  const settings = state ? <>
-    <SelectField label={copy("Konuşma kapsamı", "Conversation scope")} value={projectId}
-      disabled={busy || (callActive && callPhase !== "listening" && callPhase !== "muted")} options={[
-        { value: "", label: globalScope },
-        ...(scopeHidden ? [{ value: projectId, label: scopeName, disabled: true }] : []),
-        ...Array.from(visibleProjectNames, ([value, label]) => ({ value, label })),
-      ]} onChange={(value) => {
-        if (value === projectId || !current() || busy || (value && !projects.isProjectVisible(value))) return;
-        const sessionId = useAssistantCall.getState().sessionId;
-        const select = () => {
-          const { phase, sessionId: liveId } = useAssistantCall.getState();
-          if (!current() || (value && !projects.isProjectVisible(value)) ||
-            (phase !== "idle" && (liveId !== sessionId || (phase !== "listening" && phase !== "muted")))) return;
-          if (phase !== "idle") {
-            endAssistantCall();
-            voiceEntry.cancel();
-            useAssistantCompanion.setState({ surface: "chat" });
-          }
-          selection.current++;
-          setProjectId(value);
-          setThread(null);
-        };
-        if (!callActive) select();
-        else confirmAction(copy("Konuşma kapsamı", "Conversation scope"),
-          copy("Kapsamı değiştirmek için bu görüşmeyi bitir.", "End this call to change the conversation scope."),
-          copy("Görüşmeyi bitir", "End voice call"), select);
-      }} />
+  const profileName = state?.profile.name;
+  // The floating window names the assistant as the computer does.
+  useEffect(() => { if (profileName) useAssistantCompanion.setState({ name: profileName }); }, [profileName]);
+  // The conversation's scope, as on the desktop: General or one project of this computer, chosen in the top
+  // row of the home, the conversation and the call. It is the assistant's own choice (the app-wide project
+  // stays), and each scope has its own conversation: an open conversation or call moves to the chosen
+  // scope's conversation, the home stays the home. A live call ends first, after the owner confirms.
+  const changeScope = (value: string) => {
+    if (value === projectId || !current() || busy || (value && !projects.isProjectVisible(value))) return;
+    const sessionId = useAssistantCall.getState().sessionId;
+    const reopen = !!visibleThread || voiceMode;
+    const select = () => {
+      const { phase, sessionId: liveId } = useAssistantCall.getState();
+      if (!current() || (value && !projects.isProjectVisible(value)) ||
+        (phase !== "idle" && (liveId !== sessionId || (phase !== "listening" && phase !== "muted")))) return;
+      if (phase !== "idle") {
+        endAssistantCall();
+        voiceEntry.cancel();
+        useAssistantCompanion.setState({ surface: "chat" });
+      }
+      selection.current++;
+      setProjectId(value);
+      setThread(null);
+      if (reopen) void open(value);
+    };
+    if (!callActive) select();
+    else confirmAction(copy("Konuşma kapsamı", "Conversation scope"),
+      copy("Kapsamı değiştirmek için bu görüşmeyi bitir.", "End this call to change the conversation scope."),
+      copy("Görüşmeyi bitir", "End voice call"), select);
+  };
+  const scopeControl = state ? <AssistantScopePill projectId={projectId} label={scopeName}
+    disabled={busy || (callActive && callPhase !== "listening" && callPhase !== "muted")} onChange={changeScope} /> : undefined;
+  // The reply model saves only on its own Save; the scope lives in the top row, not in this sheet.
+  const settings = state ? (
     <AssistantReplyModel client={client} profile={state.profile} projectId={projectId}
       disabled={!writable || busy} current={current} reviewRequired={replyReviewRequired} onReviewRequired={setReplyReviewRequired}
       onRefresh={async () => {
@@ -566,52 +534,73 @@ function AssistantWorkspace({
           ? { ...previous, snapshot: { ...previous.snapshot, profile } } : previous);
         void cache.invalidateQueries({ queryKey: key }).catch(() => {});
       }} />
-    {/* Switching conversations is navigation: the home lists them; an open conversation keeps the switch here. */}
-    {!home ? recentConversations : null}
-  </> : null;
-  const settingsButton = settings ? (
-    <CallVoiceButton details={!inCall ? preferences : undefined}>{settings}</CallVoiceButton>
   ) : null;
+  const settingsButton = settings ? (
+    <AssistantSettingsButton>{settings}</AssistantSettingsButton>
+  ) : null;
+  // Conversations are navigation, opened from the header rather than listed on the home.
+  const conversationsButton = !inCall && state ? (
+    <AssistantConversationsButton options={recentOptions} selected={visibleThread?.id} disabled={busy || callActive}
+      onSelect={(id) => {
+        if (!current() || pending.current || useAssistantCall.getState().phase !== "idle") return false;
+        const selected = threads.find((row) => row.id === id);
+        if (!selected || !assistantThreadVisible(selected, access)) return false;
+        selection.current++;
+        setProjectId(selected.projectId ?? "");
+        setThread(selected);
+        return true;
+      }} />
+  ) : null;
+  // An open conversation is a pushed page: Back and the name, then the computer (and project) pills on the
+  // left of the one top row, its icon actions on the right (the shared ScreenHeading rule). While a call,
+  // dictation or read-aloud runs, Minimize takes the call's slot: a call cannot start then anyway.
+  const chatOpen = !voiceMode && !!visibleThread;
+  const chatActions = chatOpen && visibleThread ? <>
+    {voiceBusy ? <AssistantMinimizeButton /> : <AssistantCallButton onStart={voiceEntry.start} enabled={writable && configured} />}
+    {conversationsButton}
+    {settingsButton}
+  </> : undefined;
   const header = (
     <>
-      {!voiceMode && visibleThread ? <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
-        <View style={[uiStyles.grow, { alignItems: "flex-start" }]}>
-          <AssistantContextLine machineName={machineName} scope={scopeName} project={!!projectId} />
-        </View>
-        <AssistantCallButton target={{ machineId, environmentId, threadId: visibleThread.id }} onStart={voiceEntry.start}
-          enabled={writable && configured} current={() => current() && (!visibleThread.projectId || projects.isProjectVisible(visibleThread.projectId))} />
-        {settingsButton}
-      </View> : null}
-      {!voiceMode && visibleThread ? <AssistantCallError /> : null}
-      {state || inCall ? approvalAction : null}
+      {chatOpen ? <AssistantCallErrorNotice /> : null}
+      {!home && !inCall && state ? approvalAction : null}
       {/* The call screen shows the connection state once; its chat pane stays on the transcript. */}
       {!inCall && state ? <QueryState query={snapshot} loading="inline" /> : null}
-      {inCall && !visibleThread ? <Empty compact illustration="chat-empty"
-        title={copy("Gösterilebilen mesaj yok", "No messages are available to display")} /> : null}
-      {home ? <AssistantHomeHero name={title} avatar={state.profile.avatar}
-        machineName={machineName} scope={scopeName} project={!!projectId}
-        voiceBusy={voiceEntry.pending} openBusy={busyKind === "open"}
-        voiceDisabled={busy || callActive || !writable || !configured || scopeHidden} openDisabled={busy || !state || scopeHidden}
-        setupNeeded={!configured} compact={!!questions.length || !!jobs.length || !!focusNotice}
-        waiting={{ questions: questions.length, jobs: jobs.length }}
-        onVoice={voiceEntry.start} onOpen={() => void open()} /> : null}
+      {home ? <AssistantHomeHero name={title} machineName={machineName}
+        setupNeeded={!configured} compact={!!questions.length || !!jobs.length || !!focusNotice || !!pendingApprovals} /> : null}
       {home ? <View style={{ gap: space.lg, width: "100%", maxWidth: 520, alignSelf: "center" }}>
-        {presence}
+        {approvalAction}
         {work}
-        {recentOptions.length ? <Section title={copy("Konuşmalar", "Conversations")}><NavigationGroup>{recentConversations}</NavigationGroup></Section> : null}
       </View> : null}
       {!inCall ? operationIssue : null}
       {visibleThread ? (
         <>
-          <QueryState query={history} loading="inline" />
+          {/* Loading is the message skeleton below; this line reports only a failed read. */}
+          <QueryState query={history} loading="none" />
+          {/* A planning conversation has no management tools: one tap returns to the scope's conversation. */}
+          {!inCall && visibleThread.purpose === "job-planning" ? (
+            <Button
+              label={copy("Konuşmayı aç", "Open conversation")}
+              tone="quiet"
+              onPress={() => void open()}
+              busy={busyKind === "open"}
+              disabled={busy || callActive || !state || (!!projectId && !projects.isProjectVisible(projectId))}
+            />
+          ) : null}
           {canonicalThread &&
           assistantSummaryVisible(canonicalThread, access) &&
           canonicalThread.summary ? (
-            <Disclosure label={copy("Konuşma özeti", "Conversation summary")}>
+            // A short summary is read in place; only a long one folds away.
+            canonicalThread.summary.length > 240 ? <Disclosure label={copy("Konuşma özeti", "Conversation summary")}>
               <Body>{canonicalThread.summary}</Body>
-            </Disclosure>
+            </Disclosure> : <Body muted>{canonicalThread.summary}</Body>
           ) : null}
-          {raw.length >= 100 && more[visibleThread.id] !== false ? (
+          {hiddenEarlier && threadCall ? (
+            <Button
+              label={copy("Önceki mesajları yükle", "Load earlier messages")}
+              onPress={() => updateAssistantCallEpisode(threadCall.id, { earlier: true })}
+            />
+          ) : raw.length >= 100 && more[visibleThread.id] !== false ? (
             <Button
               label={copy("Önceki mesajları yükle", "Load earlier messages")}
               onPress={older}
@@ -619,20 +608,27 @@ function AssistantWorkspace({
               busy={busyKind === "older"}
             />
           ) : null}
-          {!history.isPending && !messages.length ? (
+          {/* A call that has not said anything yet shows only its "Call" mark, not an empty conversation. */}
+          {!inCall && !history.isPending && !messages.length ? (
             <Empty
               compact
               illustration="chat-empty"
-              title={copy("Gösterilebilen mesaj yok", "No messages are available to display")}
+              title={copy("Henüz mesaj yok", "No messages yet")}
+              detail={copy("Yaz ya da sesli görüşme başlat.", "Write or start a voice call.")}
             />
           ) : null}
         </>
       ) : null}
     </>
   );
-  const composer = (
+  // The home docks its two ways to start where a conversation's composer sits, always in reach.
+  const homeActions = home ? <AssistantHomeActions
+    voiceBusy={voiceEntry.pending} openBusy={busyKind === "open"}
+    voiceDisabled={busy || callActive || !writable || !configured || scopeHidden} openDisabled={busy || !state || !configured || scopeHidden}
+    onVoice={voiceEntry.start} onOpen={() => void open()} /> : null;
+  const composer = homeActions ?? (
         visibleThread && writable ? (<>
-          {configured ? null : <Notice tone="warning" message={copy("Asistan {p0} üzerinde kapalı. Bilgisayardaki bycoda’dan kurulumu bitirip açın.", "The assistant is off on {p0}. Finish its setup in bycoda on that computer.", { p0: machineName })} />}
+          {configured ? null : <Notice tone="warning" message={setupMessage} />}
           <AssistantComposer
             key={visibleThread.id}
             client={client}
@@ -647,47 +643,63 @@ function AssistantWorkspace({
           />
         </>) : null
   );
+  const lastReply = messages.findLast(message => message.role === "assistant");
   const conversation = (
     <ScreenList
       title={voiceMode ? undefined : title}
+      scope={chatOpen ? { computer: machineName } : undefined}
+      scopeControl={chatOpen ? scopeControl : undefined}
+      computerSwitch={false}
+      actions={chatActions}
+      // The home's hero takes the free height so the orb sits in its middle.
+      headerFill={home}
       // On the home and call stages the backdrop runs behind the whole transcript, not only its top strip.
       style={stage || voiceMode ? { backgroundColor: "transparent" } : undefined}
       header={header}
-      data={messages}
-      ListEmptyComponent={!inCall && !state ? (
+      data={rows}
+      ListEmptyComponent={visibleThread && history.isPending && !denied(history.error) ? (
+        <TranscriptSkeleton label={copy("Konuşma yükleniyor…", "Loading conversation…")} />
+      ) : !inCall && !state ? (
         <>
           <QueryState query={snapshot} loading="centered"
             renderLoading={(label) => <AssistantHomeLoading label={label} />} />
           {!snapshot.isPending && assistantNeedsUpdate(snapshot.error) ? <Empty compact illustration="permission"
-            title={copy("Bilgisayarındaki Bycoda'yı güncelle", "Update bycoda on your computer")}
+            title={copy("Bilgisayarındaki bycoda’yı güncelle", "Update bycoda on your computer")}
             detail={copy("Bu bilgisayar henüz asistanı sunmuyor. Güncelledikten sonra sohbet ve sesli görüşme burada açılır.", "This computer does not offer the assistant yet. After updating, chat and voice calls appear here.")} /> : null}
         </>
       ) : undefined}
-      keyExtractor={(message) => message.id}
-      renderItem={({ item }) => (
-        <AssistantMessageRow message={item} voiceLabel={copy("Sesle", "By voice")} />
+      keyExtractor={(row) => row.id}
+      renderItem={({ item }) => item.kind === "call" ? <AssistantCallSeparator at={item.at} /> : (
+        <>
+          <AssistantMessageRow message={item.message} voiceLabel={copy("Sesle", "By voice")} />
+          {/* Read aloud belongs to the reply it reads: under the last assistant message, not at the list's end. */}
+          {!voiceMode && visibleThread && item.message.id === lastReply?.id ? (
+            <View style={{ alignSelf: "flex-start" }}>
+              <AssistantReadAloud target={{ machineId, environmentId, threadId: visibleThread.id }} text={lastReply.text}
+                enabled={writable} current={() => !visibleThread.projectId || projects.isProjectVisible(visibleThread.projectId)} />
+            </View>
+          ) : null}
+        </>
       )}
       refresh={refreshAll}
-      ListFooterComponent={<>
-        {voiceMode ? <AssistantLiveSpeech target={visibleThread ? { machineId, environmentId, threadId: visibleThread.id } : undefined} /> : null}
-        {!voiceMode && visibleThread ? <AssistantReadAloud target={{ machineId, environmentId, threadId: visibleThread.id }}
-          text={messages.findLast(message => message.role === "assistant")?.text ?? ""}
-          enabled={writable} current={() => !visibleThread.projectId || projects.isProjectVisible(visibleThread.projectId)} /> : null}
-      </>}
+      ListFooterComponent={voiceMode ? <AssistantLiveSpeech target={visibleThread ? { machineId, environmentId, threadId: visibleThread.id } : undefined} /> : undefined}
     />
   );
   return (
     <>
     <Stack.Screen options={{ title, headerShown: !voiceMode && !voiceRequested && !stage }} />
     <AssistantVoiceScreen active={voiceMode || voiceRequested} stage={stage} name={title} computer={machineName}
-      settings={settingsButton}
-      onBack={() => { if (router.canGoBack()) router.back(); else router.replace("/"); }}
-      composer={composer} feedback={<>{inCall && questions.length ? questionCards : null}{approvalAction}<QueryState query={snapshot} loading="none" />{issue ? <Notice tone="warning" message={copy("İşlem tamamlanamadı. Bilgisayar bağlantısını ve erişimi kontrol edin.", "The operation could not be completed. Check this computer connection and access.")} /> : null}</>}
-      scope={{ computer: machineName, project: projectId ? scopeName : undefined }}
-      avatar={state?.profile.avatar} transcriptVisible={transcript.visible}
+      settings={settingsButton} actions={conversationsButton}
+      onBack={() => goBack("/")}
+      composer={composer} feedback={<>{inCall && questions.length ? questionCards : null}{approvalAction}<QueryState query={snapshot} loading="none" />{operationIssue}</>}
+      unavailable={voiceUnavailable}
+      scope={{ computer: machineName }}
+      scopeControl={scopeControl}
+      transcriptVisible={transcript.visible}
       pending={voiceEntry.pending} ready={writable && configured && !busy}
+      composerVisible={transcript.composer} onToggleComposer={transcript.toggleComposer}
       onToggleTranscript={transcript.toggle} onStart={voiceEntry.start}
-      onMinimize={() => { minimizeAssistantCompanion(); if (router.canGoBack()) router.back(); else router.replace("/"); }}
+      onMinimize={() => { minimizeAssistantCompanion(); goBack("/"); }}
       onEnd={() => { voiceEntry.cancel(); endAssistantCall(); useAssistantCall.setState({ asleep: undefined }); useAssistantCompanion.setState({ surface: "chat" }); }}>
       {conversation}
     </AssistantVoiceScreen>

@@ -1,20 +1,21 @@
 import type { GitDiffIndex } from "./wire";
-import { gitAheadCount, gitBehindCount, gitChangedCount } from "./git-commit-model";
+import { gitAheadCount, gitBehindCount } from "./git-commit-model";
 import { linkPullRequestReason } from "./git-link-pr-model";
 
 export type GitSheetKey =
-  | "commit" | "push" | "pull" | "fetch" | "branches" | "history" | "stashes" | "management" | "createPr" | "linkPr" | "refresh";
+  | "push" | "pull" | "fetch" | "branches" | "history" | "stashes" | "management" | "createPr" | "linkPr";
 type CopyFn = (tr: string, en: string, values?: Record<string, string | number>) => string;
 
-/** Which git actions apply now, each with the reason when it does not. */
+/**
+ * Which git actions apply now, each with the reason when it does not. Commit lives only in the
+ * page's commit box and refresh is pull-to-refresh, so neither repeats here.
+ */
 export function gitSheetActions(
   index: Pick<GitDiffIndex, "files" | "branch" | "defaultBranch" | "aheadOfDefault" | "headPushed" | "ahead" | "behind" | "remote" | "conflicts" | "operation">,
   opts: { busy: boolean; canRunWorkspace: boolean; /** Present only on Hosts that can link pull requests. */ linkPr?: { hasSession: boolean; linked?: { number: number } } },
   copy: CopyFn,
 ): { key: GitSheetKey; label: string; detail: string; disabled: boolean }[] {
-  const staged = index.files.filter((file) => file.staged).length;
   const blocked = !!index.conflicts?.length || !!index.operation;
-  const draftOnly = index.files.length === 0 && !blocked;
   const remoteReason = !index.remote ? copy("Bu dalın uzak deposu yok.", "This branch has no remote.") : "";
   const workspace = opts.busy || !opts.canRunWorkspace;
   const prReason = !index.remote ? remoteReason
@@ -29,10 +30,6 @@ export function gitSheetActions(
     detail: linkReason || (opts.linkPr.linked ? copy("#{p0} bağlı", "#{p0} linked", { p0: opts.linkPr.linked.number })
       : copy("Mevcut bir pull request’i bu oturuma bağla", "Attach an existing pull request to this session")) }] : [];
   return [
-    { key: "commit", label: draftOnly ? copy("Commit mesajı", "Commit message") : copy("Commit", "Commit"), disabled: opts.busy,
-      detail: blocked ? copy("Çakışmaları veya devam eden işlemi önce bitir.", "Finish conflicts or the running operation first.")
-        : draftOnly ? copy("Kaydedilecek değişiklik yok.", "Nothing to commit.")
-        : gitChangedCount(index.files.length, staged, copy) },
     { key: "push", label: copy("Push", "Push"), disabled: opts.busy || !index.remote || index.ahead === 0,
       detail: remoteReason || (index.ahead === 0 ? copy("Gönderilecek yerel commit yok.", "No local commits to push.")
         : gitAheadCount(index.ahead, copy)) },
@@ -52,8 +49,6 @@ export function gitSheetActions(
     { key: "createPr", label: copy("Pull request oluştur", "Create pull request"), disabled: workspace || !!prReason,
       detail: prReason || copy("Oluştur veya mevcut pull request’i gör", "Create one or view the existing pull request") },
     ...linkRow,
-    { key: "refresh", label: copy("Yenile", "Refresh"), disabled: opts.busy,
-      detail: copy("Durumu yeniden oku", "Reload the status") },
   ];
 }
 

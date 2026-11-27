@@ -12,6 +12,12 @@ import {
   transcriptTailStamp,
   transcriptSenderName,
   toolResultTexts,
+  isFoldedOwnerStop,
+  pendingOutboxRows,
+  bridgeDeliveredOutboxRows,
+  DELIVERED_GRACE_MS,
+  userDraftState,
+  withoutOfferedInterruption,
 } from "./transcript-model";
 import type { Block } from "./wire";
 const block = (id: string, role: Block["role"], fields: Partial<Block> = {}): Block => ({
@@ -396,5 +402,183 @@ describe("readable tool names", () => {
   it("drops the MCP server prefix and underscores", () => {
     expect(readableToolName("mcp__workspace-tools__delegate_task")).toBe("delegate task");
     expect(readableToolName("Read file")).toBe("Read file");
+  });
+});
+
+describe("transcript presentation sharing", () => {
+  it("keeps unchanged live-turn entries' identity while one block streams", () => {
+    const presentation = new TranscriptPresentation();
+    const user = block("u1", "user");
+    const tools = [block("t1", "tool", { tool: { title: "Read", status: "completed" } }), block("t2", "tool", { tool: { title: "Edit", status: "completed" } })];
+    const answer = block("a1", "assistant", { text: "Hel" });
+    const before = presentation.update([user, ...tools, answer], undefined, { view: "messages", running: true });
+    const after = presentation.update([user, ...tools, { ...answer, text: "Hello" }], undefined, { view: "messages", running: true });
+    expect(after.map((entry) => entry.id)).toEqual(before.map((entry) => entry.id));
+    expect(after.slice(0, -1)).toEqual(before.slice(0, -1));
+    after.slice(0, -1).forEach((entry, index) => expect(entry).toBe(before[index]));
+    expect(after.at(-1)).not.toBe(before.at(-1));
+    const last = after.at(-1);
+    expect(last?.kind === "message" ? last.block.text : "").toBe("Hello");
+  });
+  it("rebuilds an activity entry whose blocks grew", () => {
+    const presentation = new TranscriptPresentation();
+    const user = block("u1", "user");
+    const t1 = block("t1", "tool", { tool: { title: "Read", status: "completed" } });
+    const before = presentation.update([user, t1], undefined, { view: "messages", running: true });
+    const after = presentation.update([user, t1, block("t2", "tool", { tool: { title: "Edit", status: "completed" } })], undefined, { view: "messages", running: true });
+    expect(after[0]).toBe(before[0]);
+    expect(after[1]).not.toBe(before[1]);
+    expect(after[1]?.kind === "activity" ? after[1].blocks.length : 0).toBe(2);
+  });
+});
+
+describe("quiet transcript (chat redesign)", () => {
+  const stop = block("stop", "system", { notice: "interrupt", text: "Stopped by you." });
+  it("folds the owner's Stop notice and a quit marker after it out of the messages view only", () => {
+    const source = [
+      block("u1", "user", { durationMs: 46_000, turnOutcome: "stopped" }),
+      block("a1", "assistant"),
+      stop,
+      block("quit", "system", { notice: "interrupt", text: "Turn interrupted when bycoda quit." }),
+    ];
+    const messages = transcriptEntries(source, undefined, { view: "messages", running: false });
+    expect(messages.map((entry) => entry.id)).toEqual(["u1", "a1"]);
+    expect(messages.at(-1)?.footer?.id).toBe("u1");
+    const details = transcriptEntries(source, undefined, { view: "details", running: false });
+    expect(details.map((entry) => entry.id)).toContain("stop");
+    expect(isFoldedOwnerStop(undefined, stop)).toBe(true);
+    expect(isFoldedOwnerStop(block("a", "assistant"), block("cut", "system", { notice: "interrupt", text: "Connection lost." }))).toBe(false);
+  });
+  it("puts a settled turn's duration on its fold row, and on the receipt only without one", () => {
+    const folded = transcriptEntries(
+      [
+        block("u1", "user", { durationMs: 46_000 }),
+        block("t1", "tool", { tool: { title: "Read", status: "completed" } }),
+        block("a1", "assistant"),
+      ],
+      undefined,
+      { view: "messages", running: false },
+    );
+    const work = folded.find((entry) => entry.kind === "activity");
+    expect(work?.foldTurn?.id).toBe("u1");
+    expect(folded.at(-1)?.footer?.id).toBe("u1");
+    expect(folded.at(-1)?.footerDuration).toBeUndefined();
+    const plain = transcriptEntries([block("u1", "user", { durationMs: 3000 }), block("a1", "assistant")], undefined, {
+      view: "messages",
+      running: false,
+    });
+    expect(plain.at(-1)?.footerDuration).toBe(true);
+    const live = transcriptEntries(
+      [block("u1", "user", { durationMs: 1 }), block("t1", "tool", { tool: { title: "Read", status: "completed" } })],
+      undefined,
+      { view: "messages", running: true },
+    );
+    expect(live.find((entry) => entry.kind === "activity")?.foldTurn).toBeUndefined();
+  });
+  it("names host follow-up delivery states apart from saved drafts", () => {
+    expect(userDraftState(block("d", "user", { draft: true, followUpDelivery: "pending" }))).toBe("pending");
+    expect(userDraftState(block("d", "user", { draft: true, followUpDelivery: "uncertain" }))).toBe("uncertain");
+    expect(userDraftState(block("d", "user", { draft: true }))).toBe("saved");
+    expect(userDraftState(block("d", "user"))).toBeUndefined();
+  });
+  it("drops the trailing interruption notice the footer's Continue stands for, keeping its receipt", () => {
+    const entries = transcriptEntries(
+      [block("u1", "user", { durationMs: 5 }), block("a1", "assistant"), block("cut", "system", { notice: "interrupt", text: "Connection lost." })],
+      undefined,
+      { view: "messages", running: false },
+    );
+    const shown = withoutOfferedInterruption(entries);
+    expect(shown.map((entry) => entry.id)).toEqual(["u1", "a1"]);
+    expect(shown.at(-1)?.footer?.id).toBe("u1");
+    const settled = transcriptEntries([block("u1", "user"), block("a1", "assistant")]);
+    expect(withoutOfferedInterruption(settled)).toBe(settled);
+  });
+  it("reconciles outbox rows with Host blocks by command id, never by text", () => {
+    const now = 1_000_000;
+    const id = "0F8FAD5B-D9CB-469F-A165-70867728950E";
+    const rows = [
+      { id, status: "waiting", createdAt: now - 1000 },
+      { id: "b", status: "waiting", createdAt: now - 1000 },
+      { id: "c", status: "delivered", createdAt: now - 1000 },
+      { id: "d", status: "delivered", createdAt: now - 600_000 },
+    ];
+    const blocks = [block(id.toLowerCase(), "user", { text: "same text" }), block("other", "user", { text: "b" })];
+    expect(pendingOutboxRows(rows, blocks, now).map((row) => row.id)).toEqual(["b", "c"]);
+    expect(pendingOutboxRows(rows, [...blocks, block("c", "user")], now).map((row) => row.id)).toEqual(["b"]);
+  });
+  it("keeps the owner's Stop as one compact row when no stopped receipt will say it", () => {
+    const quit = block("quit", "system", { notice: "interrupt", text: "Turn interrupted when bycoda quit." });
+    // No duration: the turn gets no receipt, so the Stop stays and only the quit marker folds.
+    const bare = transcriptEntries([block("u1", "user"), block("a1", "assistant"), stop, quit], undefined, {
+      view: "messages",
+      running: false,
+    });
+    expect(bare.map((entry) => entry.id)).toEqual(["u1", "a1", "stop"]);
+    // A receipt that does not say "stopped" does not stand for the Stop either.
+    const worked = transcriptEntries(
+      [block("u1", "user", { durationMs: 5 }), block("a1", "assistant"), stop],
+      undefined,
+      { view: "messages", running: false },
+    );
+    expect(worked.map((entry) => entry.id)).toEqual(["u1", "a1", "stop"]);
+    // The running last turn has no receipt yet.
+    const live = transcriptEntries(
+      [block("u1", "user", { durationMs: 5, turnOutcome: "stopped" }), block("a1", "assistant"), stop],
+      undefined,
+      { view: "messages", running: true },
+    );
+    expect(live.map((entry) => entry.id)).toEqual(["u1", "a1", "stop"]);
+    // An earlier stopped turn closed by the next prompt keeps its receipt, so its Stop folds.
+    const earlier = transcriptEntries(
+      [block("u1", "user", { durationMs: 5, turnOutcome: "stopped" }), block("a1", "assistant"), stop, block("u2", "user")],
+      undefined,
+      { view: "messages", running: true },
+    );
+    expect(earlier.map((entry) => entry.id)).toEqual(["u1", "a1", "u2"]);
+    expect(earlier[1]?.footer?.id).toBe("u1");
+  });
+  it("names a reply's agent only when it is not the session's agent or follows another agent's reply", () => {
+    const turn = (id: string, harness: "claude" | "codex") => block(id, "user", { turnModel: { harness, id: harness, name: harness } });
+    const names = (entries: ReturnType<typeof transcriptEntries>) =>
+      entries.filter((entry) => entry.kind === "message" && entry.block.role === "assistant").map((entry) => !!entry.showAuthor);
+    const single = transcriptEntries(
+      [turn("u1", "claude"), block("a1", "assistant"), block("a2", "assistant"), turn("u2", "claude"), block("a3", "assistant")],
+      "claude",
+      { view: "messages", running: false },
+    );
+    expect(names(single)).toEqual([false, false, false]);
+    const crew = transcriptEntries(
+      [turn("u1", "claude"), block("a1", "assistant"), turn("u2", "codex"), block("a2", "assistant"), block("a3", "assistant"), turn("u3", "claude"), block("a4", "assistant")],
+      "claude",
+      { view: "messages", running: false },
+    );
+    // A helper's reply is named (not continuations of it); the lead's reply after it is named again.
+    expect(names(crew)).toEqual([false, true, false, true]);
+    // Incremental regrouping keeps the session's agent and the previous reply's author.
+    const presentation = new TranscriptPresentation();
+    const base = [turn("u1", "codex"), block("a1", "assistant"), turn("u2", "claude"), block("a2", "assistant")];
+    const before = presentation.update(base, "claude", { view: "messages", running: false });
+    const next = presentation.update([...base, turn("u3", "claude"), block("a3", "assistant")], "claude", { view: "messages", running: false });
+    expect(next[0]).toBe(before[0]);
+    expect(names(next)).toEqual([true, true, false]);
+  });
+  it("bridges a delivered outbox row custody removed until the Host block arrives or the grace ends", () => {
+    const now = 5_000_000;
+    const remembered = new Map<string, { id: string; status: string; createdAt: number; mode?: string; deliveredAt?: number }>();
+    const waiting = { id: "w", status: "waiting", createdAt: now - 100, mode: "send" };
+    const sent = { id: "S", status: "delivered", createdAt: now - 400_000, mode: "send" };
+    const queued = { id: "q", status: "delivered", createdAt: now - 300_000, mode: "queue" };
+    // Seen delivered once: the grace counts from that sighting, not from createdAt.
+    const first = bridgeDeliveredOutboxRows(remembered, [waiting, sent, queued], now);
+    expect(pendingOutboxRows(first, [], now).map((row) => row.id)).toEqual(["w", "S"]);
+    // Custody removed it; the bubble stays, in sending order, while no Host block has the id.
+    const later = now + 1000;
+    const removed = bridgeDeliveredOutboxRows(remembered, [waiting], later);
+    expect(pendingOutboxRows(removed, [], later).map((row) => row.id)).toEqual(["S", "w"]);
+    expect(pendingOutboxRows(removed, [block("s", "user")], later).map((row) => row.id)).toEqual(["w"]);
+    // The grace ends the bridge and forgets the row.
+    const expired = now + DELIVERED_GRACE_MS;
+    expect(pendingOutboxRows(bridgeDeliveredOutboxRows(remembered, [waiting], expired), [], expired).map((row) => row.id)).toEqual(["w"]);
+    expect(remembered.size).toBe(0);
   });
 });

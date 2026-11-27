@@ -51,7 +51,7 @@ export function quickActionItems(
   recents: readonly QuickActionSession[] = [],
 ): QuickActionItem[] {
   const items: QuickActionItem[] = [
-    // `new=1` makes the sessions screen open its new-session sheet.
+    // `new=1` makes the sessions screen open the empty new session (Back returns to Sessions).
     {
       id: "new-session",
       title: copy("Yeni oturum", "New session"),

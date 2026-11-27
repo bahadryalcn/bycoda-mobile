@@ -114,3 +114,48 @@ it("fences a late consumer's pending write when its stream is retired", async ()
   release();
   releaseLate();
 });
+
+it("skips consumers that already applied an identical snapshot and retries the ones that failed", async () => {
+  const c = client();
+  const ok = listener();
+  const failing = listener();
+  failing.apply.mockRejectedValueOnce(new Error("boom"));
+  const releases = [retainProjectStream(c, "p1", ok), retainProjectStream(c, "p1", failing)];
+  await Promise.resolve();
+  const first = { etag: "e", sessions: [{ id: "s1", updatedAt: 1 }] } as unknown as ProjectStreamValue;
+  await state.opened[0]!.apply(first, () => undefined);
+  await state.opened[0]!.apply(structuredClone(first), () => undefined);
+  expect(ok.apply).toHaveBeenCalledTimes(1);
+  expect(failing.apply).toHaveBeenCalledTimes(2);
+  expect(failing.apply.mock.calls[1]![0]).toBe(first);
+  releases.forEach((release) => release());
+});
+
+it("keeps unchanged session rows' identity when another row changes", async () => {
+  const c = client();
+  const consumer = listener();
+  const release = retainProjectStream(c, "p1", consumer);
+  await Promise.resolve();
+  const first = { etag: "e1", sessions: [{ id: "s1", updatedAt: 1 }, { id: "s2", updatedAt: 1 }] } as unknown as ProjectStreamValue;
+  await state.opened[0]!.apply(first, () => undefined);
+  await state.opened[0]!.apply(
+    { etag: "e2", sessions: [{ id: "s1", updatedAt: 1 }, { id: "s2", updatedAt: 2 }] } as unknown as ProjectStreamValue,
+    () => undefined,
+  );
+  const second = consumer.apply.mock.calls[1]![0];
+  expect(second.sessions[0]).toBe(first.sessions[0]);
+  expect(second.sessions[1]).toEqual({ id: "s2", updatedAt: 2 });
+  release();
+});
+
+it("re-delivers an identical snapshot to every consumer after a stream error", async () => {
+  const c = client();
+  const consumer = listener();
+  const release = retainProjectStream(c, "p1", consumer);
+  await Promise.resolve();
+  await state.opened[0]!.apply(value, () => undefined);
+  state.opened[0]!.onError(new Error("dropped"));
+  await state.opened[0]!.apply({ ...value }, () => undefined);
+  expect(consumer.apply).toHaveBeenCalledTimes(2);
+  release();
+});

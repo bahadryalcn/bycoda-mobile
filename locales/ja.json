@@ -1,7 +1,8 @@
 {
   "ios": {
     "NSLocalNetworkUsageDescription": "プライベートネットワーク上の Bycoda コンピュータに接続します。",
-    "NSMicrophoneUsageDescription": "Bycoda アシスタントに話しかけます。音声は接続先のコンピュータで処理されます。",
+    "NSMicrophoneUsageDescription": "Bycoda アシスタントに話しかけたり、メッセージを音声入力したりできます。音声は接続中のコンピュータで処理されます。スマートフォンでの音声入力を選んだ場合は、このスマートフォンで処理されます。",
+    "NSSpeechRecognitionUsageDescription": "スマートフォンでの音声入力を選ぶと、Bycoda は音声認識を使って話した内容をテキストに変換します。対応している場合、認識はこのスマートフォン上で行われます。",
     "NSCameraUsageDescription": "ペアリング用の QR コードをコンピュータでスキャンするために Bycoda がカメラを使用します。",
     "NSFaceIDUsageDescription": "Face ID で Bycoda コンピュータに安全にアクセスするために使用します。",
     "NSPhotoLibraryUsageDescription": "Bycoda のメッセージに添付する写真にアクセスするために使用します。",

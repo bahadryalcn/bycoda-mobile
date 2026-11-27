@@ -2,18 +2,15 @@ import { useEffect } from "react";
 import { Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import Animated, {
-  Easing,
-  cancelAnimation,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
-  withRepeat,
   withSpring,
-  withTiming,
   type SharedValue,
 } from "react-native-reanimated";
 import { Body } from "./typography";
 import { useMobileTheme } from "./theme";
+import { useOwnerVisible } from "./use-owner-visible";
+import { useReducedMotionPreference } from "./use-reduced-motion";
 import { radii, space } from "./tokens";
 
 const mark = require("../../../public/brand/bycoda/mark-white.png");
@@ -43,17 +40,19 @@ function Bead({ index, count, color }: { index: number; count: SharedValue<numbe
  */
 export function BeadButton({ label, onPress, busy = false }: { label: string; onPress: () => void; busy?: boolean }) {
   const { colors } = useMobileTheme();
-  const reduced = useReducedMotion();
+  const reduced = useReducedMotionPreference();
+  const counting = useOwnerVisible() && !reduced;
   const count = useSharedValue(0);
   const press = useSharedValue(1);
   useEffect(() => {
-    // Counting is the button's idle life; busy speeds it up so the wait reads as work.
-    if (reduced) { cancelAnimation(count); count.value = 0; return; }
+    // Counting is the button's idle life; busy speeds it up so the wait reads as work. The beads move one
+    // whole step at a time, so a step timer replaces a per-frame animation, and it rests while nobody can see it.
+    if (reduced) { count.value = 0; return; }
+    if (!counting) return;
     const lap = busy ? 1200 : 6000;
-    count.value = count.value % BEADS;
-    count.value = withRepeat(withTiming(count.value + BEADS, { duration: lap, easing: Easing.linear }), -1);
-    return () => cancelAnimation(count);
-  }, [busy, reduced, count]);
+    const timer = setInterval(() => { count.value = (Math.floor(count.value) + 1) % BEADS; }, lap / BEADS);
+    return () => clearInterval(timer);
+  }, [busy, counting, reduced, count]);
   const scale = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ busy, disabled: busy }}

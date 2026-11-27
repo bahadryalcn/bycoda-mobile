@@ -5,6 +5,7 @@ import { create } from "zustand";
 import { isAccountAccessAllowed } from "../features/account/model/account-access";
 import type { SecurityState } from "./security-types";
 import { inactiveFromSystemPrompt } from "./system-prompt";
+import { contentRetained } from "./app-resume";
 import {
   encodeSecurityPreferences,
   isAutoLockTimeout,
@@ -326,8 +327,15 @@ export function isAppContentVisible() {
   return isAccountAccessAllowed() && state.status === "unlocked" &&
     (!native || (AppState.currentState === "active" && state.appState === "active"));
 }
+/**
+ * Proven private content stays mounted through system surfaces and stays away while the lock is off
+ * (see app-resume.ts). Use for concealment only; reads and actions keep their foreground fences.
+ */
+export function isAppContentRetained() {
+  return isAccountAccessAllowed() && contentRetained(useSecurity.getState(), native);
+}
 export function assertAppAccess() {
-  if (!isAccountAccessAllowed()) throw new Error("Sign in to Bycoda to access your computer.");
+  if (!isAccountAccessAllowed()) throw new Error("Sign in to bycoda to access your computer.");
   if (!isAppAccessAllowed())
-    throw new Error("Unlock Bycoda to access your computer.");
+    throw new Error("Unlock bycoda to access your computer.");
 }

@@ -23,13 +23,16 @@ Keep one primary action per active task and disclose secondary options.
 Desktop and mobile share compact chrome, progressive disclosure, preserved
 drafts and explicit operation state. Adapt density to touch: mobile controls
 keep 48dp hit areas even when the visible control is compact (32 icon buttons, 28 chips, 40
-buttons, grown with `hitSlop` or padding). Editable inputs and search fields reserve
+buttons, grown with `hitSlop` or padding). Slop areas must not overlap: icon actions placed side by side
+(reorder/remove, browser back/forward) use `reserveTouchTarget`, never `density="compact"`. Editable inputs and search fields reserve
 48dp in layout so their native focus target does not depend on overlapping hit areas. Do not copy desktop
 pixel sizes, CSS, Arc runtime or overlay infrastructure.
 
 Avoid nested decorative cards, repeated introductions, permanent help paragraphs
 and competing primary buttons. Keep labels, validation, approval requirements,
-connection state and recovery visible. Optional inline help uses `Disclosure`.
+connection state and recovery visible. Optional help sentences use the shared
+info icon (`Field info`, `HintLabel`, `useInfoHint`); `Disclosure` is reserved for
+long, rarely needed content (see the Disclosure rule below).
 Collection toolbars group secondary help with commands in `ActionMenu` and open
 the shared compact `Sheet`, keeping a separate help row out of the record viewport.
 
@@ -59,6 +62,12 @@ control family, overlay lifecycle and accessibility model. Use the existing
 tokens and adapters as owners; refine a shared owner when needed and migrate its
 affected consumers together. Repeated user actions use the same localized names,
 icon meanings, action ordering and confirmation rules throughout the product.
+
+Owner-decided terminology: an agent's unit of work is a **session** (TR
+"oturum") everywhere: lists, headers, empty states, menus, confirmations,
+errors, the project organization editor and history import. **Conversation**
+(TR "konuşma") is reserved for the voice/chat assistant. Never call a session a
+chat (TR "sohbet"); route names such as `chats` may stay.
 
 A different pattern needs a concrete task, platform or accessibility reason.
 Document that reason and extend the shared layer if the requirement recurs.
@@ -115,11 +124,13 @@ Do not invent feature-local hex colors, tints or gradients.
 | `info`, `success`, `warning`, `danger` | Actual semantic feedback |
 | `semanticColors[tone]` | Matching status text, surface and border |
 | `userMessage`, `scrim` | Conversation bubble and modal backdrop |
+| `terminalAnsiPalettes[mode]` | The 16 ANSI base colours for captured terminal output only, never UI or status |
 
 Surfaces use three layered steps: `background` < `panel` < `raised` (dark `#0B0B0C`/`#131316`/`#1A1A1E`,
 light `#FCFCFD`/`#FFFFFF`/`#F4F4F6`); `fill` is the input/quiet control fill and `elevated` the
 menu/floating fill. Use `pressedFill()` for pressed rows. Text is `#F5F5F7` (dark) and `#17171A`
-(light). Borders are hairline, never 1.5px outlines; focus may raise a field to 1px accent. Tabs communicate selection
+(light). Borders are hairline, never 1.5px outlines. An input or composer frame is a constant 1dp in every
+state; focus and error change only its color, so the field never resizes. Tabs communicate selection
 with text contrast and weight, without colored strips on any edge. Focus, selection and
 status feedback retain their semantic colors; neutral
 large resting fills stay within the three steps. Keep
@@ -156,11 +167,11 @@ system scaling.
 | Family | Current values |
 | --- | --- |
 | Spacing | `xxs` 2; `xs` 4; `sm` 6; `row` 10; `md` 12; `lg`/`screen` 16; `xl` 20; `xxl` 28; `gapIcon` 8 |
-| Type (size/line) | `micro` 11/14; `caption`/`badge` 12/16; `small` 13/17; `control` 14/19; `body` 15/21 (chat `lineHeight.message` 22); `input` 16/21; `title` 16/21; `heading` 18/24; `hero` 24/30; `display` 28/34. Use the paired `lineHeight` map |
+| Type (size/line) | `micro` 11/14; `caption`/`badge` 12/16; `small` 13/17; `control` 14/19; `body` 15/21 (chat `lineHeight.message` 22); `input` 16/21; `title` 16/21; `heading` 18/24; `pageTitle` 22/28; `hero` 24/30; `display` 28/34; monospace code 12/`lineHeight.code` 18. Use the paired `lineHeight` map |
 | Radius | `badge` 6; `control` 10; `card` 12; `preview` 14; `bubble` 18; `composer` 24; `sheet` 24; `pill` 999 |
-| Visible sizes | `controlHeight`/`buttonHeight` 40; `inputHeight`/`composerFieldMin` 48; `visualControl` 32 (icon buttons, send); `chipHeight` 28; `toolRowHeight` 28; `sectionHeaderHeight` 32; `rowLeading` 32; `rowHeightSession` 56; `rowHeightProject` 52; `headerHeight` 48; `tabBarHeight` 52 |
+| Visible sizes | `controlHeight`/`buttonHeight` 40; `inputHeight`/`composerFieldMin` 48; `visualControl` 32 (icon buttons, send); `chipHeight` 28; `toolRowHeight` 28; `sectionHeaderHeight` 32; `rowLeading` 32; `rowHeightSession` 56; `rowHeightProject` 52; `headerHeight` 48. The docked tab bar has no height token: it is a 48 target plus padding and the bottom safe area, and reports its measured height (`onInsetChange`) |
 | Hit areas | `touchTarget`/`iconTarget` 48. Header Back, Sheet Close and composer toolbar controls reserve 48 dp in layout. Compact visible controls can expand into space their parent leaves available. |
-| Icons (`iconSize`) | `inline` 14 (in a text line); `status` 16 (status/notice glyph); `row` 20 (list row leading glyph); `action` 20 (header/toolbar icon button); `back` 24 (navigation chevron) |
+| Icons (`iconSize`) | `inline` 14 (in a text line); `status` 16 (status/notice glyph); `row` 20 (list row leading glyph); `action` 20 (header/toolbar icon button); `back` 24 (navigation chevron); `check` 16 (the selected mark of a choice row, chip or menu item) |
 | Rhythm (`rhythm`) | `group` 28 from the previous group to the next section label; `headerLeadIn` 4; `headerGap` 4 |
 | Other | Multiline input minimum 96 |
 | Width | Content 760; entry surfaces 520 |
@@ -171,16 +182,18 @@ and shared monospace role. Avoid fixed text heights and truncation hiding
 essential values. Wrap long localized labels or move secondary metadata to a
 second row. Compact density shrinks the visible control and padding; the hit area stays 48.
 
-Shared buttons use the control radius; search is a 40 high pill. Presentation belongs in the shared owner.
+Shared buttons use the control radius; search is a pill (`radii.pill`) that reserves 48 in layout. Presentation belongs in the shared owner.
 NavigationGroup is an unboxed collection with aligned rows; RecordCard separates record
 identity, visible status and optional retained details through spacing. Reserve Card
 for a meaningful task group, and avoid nesting cards for ordinary metadata.
-Screen titles are 24/30 left-aligned (`uiStyles.pageTitle`), without large-title collapse.
+Screen titles are 22/28 left-aligned (`uiStyles.pageTitle`, `fontSize.pageTitle`), without large-title collapse.
+A title hoisted into the native top row beside Back uses the native title size 16/21 (`uiStyles.title`); it
+measures itself and gives the row back rather than ending in an ellipsis.
 `ScreenHeading` owns the compact 48 identity/action row, and the tab navigator's `headerIdentity` combines the title
 and computer selector in one 48dp-or-larger target. Counts belong to its secondary
 context. Native-title screens suppress only the duplicate content title, preserving
-context and actions. Reserve explicit `LargeTitle`/hero treatment for intentional
-entry or overview content; body and form controls keep their readable scale.
+context and actions. Reserve hero treatment (`uiStyles.largeTitle`) for intentional
+entry or overview content such as the welcome screen; body and form controls keep their readable scale.
 The bottom navigation is a centered, content-width icon dock above the bottom safe
 area. Its panel surface has a 1dp border, 24dp corners, 6dp padding and soft shadow.
 Each destination has a 48dp icon-only target with an accessible label; selection
@@ -218,7 +231,7 @@ keep local focus cues and the caret.
 | Suggested text or remote options | `AutocompleteField` | Type in the picker search. Commit a suggestion or explicitly choose the typed text when allowed |
 | Settings navigation | `NavigationGroup`, `NavigationRow` | Group related destinations and values |
 | Collection | `ScreenList`, `SearchField` | Stable rows, query state and refresh |
-| Editor/confirmation | `Sheet`, `FormActions`, `ConfirmationCard` | Guard dismissal and show async feedback |
+| Editor/confirmation | `Sheet`, `FormActions`, `confirmAction` | Guard dismissal and show async feedback; no inline confirmation cards |
 | Feedback | `QueryState`, `MutationState`, `StatusLine`, `Notice`, `ErrorNotice`, `showToast`, `Badge` | Actual state and useful recovery |
 
 Two or three segmented choices share the available width and allow their labels to wrap
@@ -243,12 +256,26 @@ content widths on tablets and wide previews.
 Keep one heading, a compact action area and a clear content flow. Collection
 search and scope belong near the collection. Disclose secondary filters/options
 without obscuring applied state. Prefer separators/grouping before another card.
-Use `SearchToolbar` when search shares a region with filters/overflow: a
-`SearchField` collapses to a search icon beside the actions (an optional quiet
-`leading` summary, such as an applied filter, starts the row) and opens inline
-with Clear and Cancel; an active query keeps it open. `collapsible={false}` keeps
-a field that is the screen's primary task always open. Other fields keep a useful
-intrinsic width and secondary actions wrap together. Ordinary
+**One search and filter convention.** A collection's search and filters live in
+one sheet, never in rows of the page. The page's heading row (scope pills on the
+left) ends with the search icon (accent while a query is active), the filter icon
+(sliders with a dot for applied filters, only when the list has filters) and the
+create action, in that order. Both icons open the same `Sheet size="compact"`: it
+sizes to its content up to the available height and scrolls beyond it, with
+PanelUI's `SearchBar` (clear x, no Cancel word) on top and the filters below
+(status chips wrap, toggles, selects). Choices apply live so the list behind
+narrows while the person types; the action area offers Reset (only while
+something is applied; clears search and filters) and Done. The search icon opens
+it with the keyboard focused on the field. No inline chip row, no "Status: …"
+summary row and no row for one or two icons. Owner: `useCollapsibleSearch(field,
+{ filters, activeFilters, onResetFilters })` in `src/ui/search-field.tsx`;
+management lists use `useManagementToolbar`. `SearchToolbar` keeps the same icon
+and sheet for panels that already have a toolbar row of other actions;
+`collapsible={false}` keeps a field that is a screen's primary task inline.
+Provider records (the Inbox and the Pull requests list) share one filter body,
+`InboxFilterFields`: the desktop Inbox filter menu's set, applied at once. The Sheet facade owns privacy, Back and keyboard; it does not yet
+drag to expand. Other fields keep a useful intrinsic width and secondary actions
+wrap together. Ordinary
 `NavigationRow` instances are flat; use `variant="card"` only for a distinct task.
 Navigation rows disclose destinations, selection rows show the selected choice,
 and commands omit the navigation chevron through their explicit `intent`.
@@ -293,7 +320,9 @@ decision about one known thing in a sentence or two (sign out, delete account,
 discard changes). `Sheet` + `FormActions tone="danger"` is for a review that must
 stay valid while the data behind it can change (saved computers, local drafts,
 data-sharing consent): it shows what will be affected and retires itself when
-that changes. Destructive rows that open either use `intent="command"`, never a
+that changes; non-destructive reviews (merge, commit, push) keep the default
+primary tone. There is no third, inline confirmation card: the retired
+`ConfirmationCard` must not return. Destructive rows that open either use `intent="command"`, never a
 navigation chevron. Settings pages are pushed routes, so these sheets never stack
 on a settings sheet.
 
@@ -321,8 +350,8 @@ Errors are quiet and small. Pick the presentation by severity, one reporter per 
 | Level | When | Presentation | Height |
 |---|---|---|---|
 | Silent | Transient read failure inside its retry budget, failed background refresh under shown data, link drop, timeout or unknown Host reply within the 6 s grace (`READ_RETRY_GRACE_MS`, one automatic retry) | Nothing; the skeleton or data stays | 0 |
-| Ambient | Link down, reconnecting, offline | Computer pill only | 0 extra |
-| Status line | Slow read after the grace, data stale after 2 failed refreshes or 60 s, a later section whose failure the first section already reports, a waiting send | `StatusLine`: icon, one line, optional text action, no fill | 24 pt |
+| Ambient | Link down, reconnecting, offline that outlasts the grace (a proven connection reads "connected" through a shorter blip) | Computer pill only | 0 extra |
+| Status line | Slow read after the grace, data stale after 2 failed refreshes spanning 15 s or after 60 s, a later section whose failure the first section already reports, a waiting send | `StatusLine`: icon, one line, optional text action, no fill | 24 pt |
 | Toast | Result of a quick action with no form on screen (copy, pin, refresh) with Retry or Undo; never an uncertain write | `showToast({ action })`: 4 s, 6 s with an action | about 48 pt, no push |
 | Actionable toast | App-level notice whose review or cancel actions must stay available, such as diagnostic sharing | `ActionableToast` uses the shared toast card and measured bottom clearance. The feature owns timing and dismissal. | Wraps to fit text and actions |
 | Inline notice | Failed submit in a form, sheet or review; uncertain write; a caution to read before acting | `Notice`/`ErrorNotice` beside the action, one per action area, clamped to 2 lines with Details | 61 pt collapsed |
@@ -339,11 +368,11 @@ and its loading shape (list/content/centered: region; inline/none: compact); pas
 
 | State | Presentation (owner) |
 |---|---|
-| Empty, first run, not connected, unreachable, locked, no permission | `StateView`: `size="region"` centers its title, optional illustration (first run, unpaired, empty only) and recovery action. `size="compact"` (or `compact`) for subsections: one inline icon, title, at most two lines and a compact action. `size="line"` is one `StatusLine`. `Empty` defaults to the compact form. |
-| Initial load | `QueryState` `loading`: `"list"`/`"content"` skeleton of the content shape (rows with tile, title and meta; or heading and lines), `"centered"` spinner plus label only when the shape is unknown. Never both, and no visible "Loading…" text above a skeleton: `loadingLabel` is announced only. Placeholders appear after 250 ms (`useDelayedVisible`), so fast or cached loads never flash. A quiet reconnect without data keeps the same skeleton; the computer pill shows the link. A scope control (project pill) never renders a `StateView`: it would stretch its toolbar row and slide the row's actions. Spinners stay for in-place actions (button, row, connecting). |
-| Refresh | Pull-to-refresh or progress line; no blocking UI. |
+| Empty, first run, not connected, unreachable, locked, no permission | A region-sized `QueryState` empty state defaults to the `inbox-empty` mascot unless the caller passes its own art; search/filter misses use `NoResults`. `StateView`: `size="region"` centers its title, optional illustration (first run, unpaired, empty only) and recovery action. `size="compact"` (or `compact`) for subsections: one inline icon, title, at most two lines and a compact action. `size="line"` is one `StatusLine`. `Empty` defaults to the compact form. |
+| Initial load | `QueryState` `loading`: `"list"`/`"content"` skeleton of the content shape (rows with tile, title and meta; or heading and lines), `"centered"` spinner plus label only when the shape is unknown. Never both, and no visible "Loading…" text above a skeleton: `loadingLabel` is announced only. Placeholders appear after 250 ms (`useDelayedVisible`), so fast or cached loads never flash: `Skeleton` reserves its region at once but draws its shapes only after the delay, and a read's inline spinner (`Loading delayed`, used by `QueryState`) waits the same way. A quiet reconnect without data keeps the same skeleton; the computer pill shows the link. A scope control (project pill) never renders a `StateView`: it would stretch its toolbar row and slide the row's actions. Spinners stay for in-place actions (button, row, connecting). |
+| Refresh | Pull-to-refresh (shared `usePullRefresh`, held at least 400 ms so it dismisses cleanly) or progress line; no blocking UI. |
 | Failed load, no data | After the grace, `QueryState` renders a `StateView` without art: a tone icon, a title from the error kind, the message (clamped) and Retry or the repair action. |
-| Failed or paused refresh, data shown | Keep the data and stay silent. The computer pill carries link outages. After 2 consecutive failed refreshes or 60 s, a warning `StatusLine` offers Refresh; a Refresh that fails again raises a toast. |
+| Failed or paused refresh, data shown | Keep the data and stay silent. The computer pill carries link outages. After 2 consecutive failed refreshes spanning at least 15 s, or 60 s, a warning `StatusLine` offers Refresh; a Refresh that fails again raises a toast. |
 | Waiting for a connection, no data | `QueryState` renders a `StateView` "Waiting for a connection" with Manage connections; reconnecting without data keeps the skeleton (a `StatusLine` lead only for a slow read on a connected computer). |
 | Feedback tied to a user action (form, sheet, dialog) or a contextual explanation to read before acting | `Notice`/`ErrorNotice` with tone, never for connection, loading, availability or "not available yet" (use `StateView`), and never stacked with a `StateView` in one region: tinted surface, hairline border, 16px icon, message clamped to 2 lines with a Details toggle, quiet recovery action. |
 | Field validation | `Field`/`ErrorText` use `FieldError`: 13/17 danger text with a 14px icon; the input border turns danger. |
@@ -361,8 +390,21 @@ Illustrations are decorative and hidden from screen readers; the title carries t
 Use the shared message renderer and chat facades for transcripts and appearance
 previews. Keep prose, bold emphasis and headings neutral; use hierarchy and
 spacing for reading order. Inline code uses the existing accent on a code fill
-with monospace type, while links retain their link affordance. Quote rails may
+with monospace type, while links retain their link affordance: accent text led
+by a one-em icon of what they open (`linkIconKind`: web, local server,
+conversation); file references are tinted chips. Quote rails may
 use the informational tone. Do not recolor arbitrary words or infer sentiment.
+Transcript prose reads at 16/24 in the standard chat size (`chat-styles.ts`),
+one step above app body text.
+
+The conversation's live status floats in one capsule above the composer
+(`FloatingStatusCapsule`, `src/ui/floating-status.tsx`: system glass on iOS 26,
+the `popover` surface elsewhere): run state, provider goal, subagents and queue,
+hairline-separated, each segment opening what it summarises, with the circular
+back-to-latest button above it while scrolled up. The transcript's live row owns
+the clock while on screen; the capsule shows it only once that row is out of
+sight. The list reserves the cluster's and the floating header's measured
+heights; the content scrolls under short background fades at both edges.
 
 Activity color must accompany a truthful localized status. Terminal canonical
 states take precedence over stale streaming flags; a settled record must not
@@ -398,7 +440,10 @@ only when a genuinely independent task region needs a raised surface; inputs,
 code and media viewports retain their own boundaries. This avoids treating every
 metadata block as another large card. Buttons, icon actions, selection rows and
 list rows retain 48dp+ hit areas (rows are at least 52/56 high); pressed rows fill with
-`pressedFill()` instead of scaling. Ordinary rows are flat: no card, inset hairline separators
+`pressedFill()` instead of scaling or fading (`useRowPress`/`rowPressMotion` in `src/ui/row-press.ts`, used by
+`NavigationRow`, `PressableCard` and `SelectField` options; `ToggleField` paints the same fill). A choice row (`NavigationRow
+intent="select"`, `SelectRow`, `SelectField` option) is a radio/checkbox with its checked state and one
+`SelectionMark` (16 check, or a 20 box for multiple choice). Ordinary rows are flat: no card, inset hairline separators
 (`NavigationRow` draws one inside `NavigationGroup`), 15/21 medium title and 13/17 muted meta.
 Group rows under `SectionHeader` (see the rule table below). Primary option labels may grow instead of being clipped.
 
@@ -411,16 +456,26 @@ Every screen applies these through the shared owner; feature code passes data, n
 | Section header | 12/16 semibold muted label, no rule; count as a quiet regular number after the label, hidden at 0 (never "(0)"); trailing info/action at the end, centred in a 32 row; 4 lead-in. `flush` only for the first header of a container with nothing above it | `SectionHeader`, `Section` in `src/ui/layout.tsx`; `uiStyles.sectionHeader`/`sectionCount`/`sectionTrailing` |
 | Group rhythm | 28 from the previous group to the next section label (Screen gap 16 + lead-in 4 + half the 32 header row); header to first row 4 + row padding | `rhythm` in `src/ui/tokens.ts`; `Screen`, `ScreenList` |
 | Back / header | One bare chevron (24, 2.2 stroke iOS; arrow on Android) in a 48 target. Native stack headers render it as an item without the iOS shared glass capsule, so pushed pages match the conversation header; native title stays centred | `HeaderBackButton`; `stackBackItem`/`stackBackOptions` in `src/ui/stack-back.ts`; root `app/_layout.tsx` |
-| Page top | One order on every page: title row (back + native title, or a tab's large title with the computer pill … page actions … the voice assistant at the far right) → one scope row (computer pill, project pill, then `context`; the page's icon actions trail it in the order search, filter, refresh, more/service, add) → optional segmented control → a `SearchToolbar` row only when filters accompany search → content. A page whose only collection control is search puts the `useCollapsibleSearch` trigger in its actions and the open field below the scope row. `ManagementList` actions trail the scope row; only a page with no scope row under a native title moves them to the navigation bar. No row exists for a single icon, no duplicate refresh/more, no full-width dropdown for scope. Computer: every page that reads the active computer leads its scope row with the switchable `MachinePill` (status, saved computers, Manage computers), provided once as `ScreenComputerControl` and turned on by `computerSwitch` (default with an own `scopeControl`; `ManagementList` and computer `SettingsPage`s set it). A page bound to one computer (a session, a project, a project tool, a link for another computer) shows a read-only computer pill. Data reads the active computer only, so no page offers All computers; Machines and Account list every computer and carry no computer pill | `ScreenHeading` in `src/ui/layout.tsx`, `ScreenList`, `SearchToolbar`/`useCollapsibleSearch` in `src/ui/search-field.tsx`, `ManagementList` |
+| Page top | One order on every page: title row (back + native title, or a tab's large title with the computer pill … page actions … the voice assistant at the far right) → one scope row (computer pill, project pill, then `context`; the page's icon actions trail it in the order search, filter, refresh, more/service, add) → optional segmented control → a `SearchToolbar` row only when filters accompany search → content. A page whose only collection control is search puts the `useCollapsibleSearch` trigger in its actions and the open field below the scope row. `ManagementList` actions trail the scope row; only a page with no scope row under a native title moves them to the navigation bar. Owner-approved exception: Usage & limits pins its refresh, quiet "Updated HH:MM" time and error warning glyph in the native header's right side so they never scroll away. No row exists for a single icon, no duplicate refresh/more, no full-width dropdown for scope. Computer: every page that reads the active computer leads its scope row with the switchable `MachinePill` (status, saved computers, Manage computers), provided once as `ScreenComputerControl` and turned on by `computerSwitch` (default with an own `scopeControl`; `ManagementList` and computer `SettingsPage`s set it). A page bound to one computer (a session, a project, a project tool, a link for another computer) shows a read-only computer pill. Data reads the active computer only, so no page offers All computers; Machines and Account list every computer and carry no computer pill | `ScreenHeading` in `src/ui/layout.tsx`, `ScreenList`, `SearchToolbar`/`useCollapsibleSearch` in `src/ui/search-field.tsx`, `ManagementList` |
+| Pushed page top row | When they fit, a pushed page shows Back, its title and its scope pills (computer, project) on the left of the native top row and its icon actions on the right: `ScreenHeading` hands them to the root stack through `ScreenHeaderRow`, and the native centred title is cleared. They fit when the screen width minus gutters, Back and one 48 slot per action leaves room for the whole title (about 9 pt a character) and about 92 pt per pill, with text at most 1.3×. Otherwise (long title, narrow phone, many actions, large text) the stack keeps title and Back and the pills with the actions take one compact row below; a page that stops fitting hands the row back. Lists with filters use one combined search-and-filter control to save a slot. Never inside a sheet | `ScreenHeading`, `fitsHeaderRow`, `ScreenHeaderRow` in `src/ui/screen-chrome.ts`, `HeaderRow` in `app/_layout.tsx` |
+| Projects view options | The sort icon opens "Sort and view": sort order, grouping, paths and the Hidden groups entry (count once known), which closes the sheet and opens the hidden-groups password/list sheets. Hidden groups are never a row in the project list | `HiddenGroupsRow`, `HiddenGroupsFlow` in `src/features/group-lock/group-lock-section.tsx` |
 | Project scope ("which project") | One shared selection for every page: `ProjectScopePill` passed as `scopeControl`, a 28 chip-height pill (folder glyph, name or All projects, chevron) beside the computer pill; it opens the shared project picker. One line, ellipsized within `SCOPE_PILL_MAX_WIDTH` (240). Only Tasks, Notes, Automations and the session overview keep the default `allowAll`; other pages pass `allowAll={false}` with `useRequiredProjectScope`, which shows a fallback project while the selection is All. Never a per-page project field, toolbar slot, filter-sheet row or route-private project; links adopt their project into the selection. The computer pill uses the same `ScopePill` | `ProjectScopePill`, `ScopePill` in `src/ui/scope-pill.tsx`, `useLocalProjectScope`, `useRequiredProjectScope`, `useAdoptProjectScope` |
+| Model selection ("which model runs this") | One selection everywhere, mirroring desktop `ModelChoiceField`. The model list is always the shared grouped picker: provider (product order Claude, Codex, OpenCode, Antigravity, then the rest) → account section with the provider mark (the Host's "Host default" reads as the localized default account) → model name, effort variants under their model, search across groups, the current model first with its effort control. Work items whose Host contract stores `modelChoice` (tasks, goals, stewards, automations, crew members) add the segmented Use settings / Any model / Fixed control when the computer offers `models.routing.v1`; "Any model" picks the whole model order or a model group, previews the models it walks with the Host's "Next run uses …", says the model order and groups are edited on desktop (mobile never edits these computer defaults), and keeps the fixed model as a collapsed "Fallback model". Without the capability or a routing role, only the picker shows. A stored value round-trips: no `modelChoice` reads as Fixed and stays absent until another mode is picked; a crew member maps `selection`/`modelChoice` and keeps its first candidate as the fixed model. Sessions and new sessions are fixed-only (no `modelChoice`); subagent/advisor lists use the same grouping as multi-select. Never a screen-local model dropdown, flat model list or provider select | `ModelPicker`/`ModelPickerField`, `model-groups.ts` in `src/features/workspace/`; `ModelSelectionField`, `FixedModelField`, `ModelChoiceField` in `src/features/workspace/model-selection/` |
 | Page context ("which computer") | `scope={{ computer, project }}` on `Screen`/`ScreenList`: read-only 28 scope pills (laptop/folder glyph, one ellipsized name, no chevron) at the start of the scope row, spoken as "Computer: …". A `scopeControl` (or the route's `ScreenScopeControl`, set by project tool routes) replaces the static project pill with the shared project pill. Do not hand-build "a · b" subtitles or caption lines; `ScopeLine` remains only for sheets | `ScopePills`/`ScopeLine` in `src/ui/scope-line.tsx`, `ScreenHeading`, `ScreenScopeControl` in `src/ui/screen-chrome.ts` |
-| List rows | 52 min (56 with a detail line), 10 vertical padding, 15/21 medium label, 13/17 muted detail, inset hairline separator in a group. Leading content sits in a 32 slot so labels align across glyphs, provider marks and avatars | `NavigationRow`, `ValueRow`, `SegmentedRow`, `ToggleField`, `SelectField` row; `uiStyles.rowLeading` |
-| Leading icons | 20 muted Lucide glyph, 1.8 stroke, no tile or fill; danger rows tint it. Provider marks 20 | `RowIcon` (`SettingIcon` is an alias) in `src/ui/navigation-row.tsx` |
+| List rows | 52 min (56 with a detail line), 10 vertical padding, 15/21 medium label, 13/17 muted detail, inset hairline separator in a group. Leading content sits in a 32 slot so labels align across glyphs, provider marks and avatars. Picker options and record titles use the same measure | `NavigationRow`, `ValueRow`, `SegmentedRow`, `ToggleField`, `SelectField` row and options, `RecordCard`; `uiStyles.rowLeading` |
+| Leading icons | 20 muted Lucide glyph, 1.8 stroke, no tile or fill; danger rows tint it. Provider marks 20. Menu rows (`ActionMenu`/`ActionList`) and the computer menu use the same measure | `RowIcon` (`SettingIcon` is an alias) in `src/ui/navigation-row.tsx` |
 | Status | The normal/healthy state is quiet muted text (`StatusText` default tone, no dot) or nothing. Running/info/warning/danger use `StatusText` with its tone colour and 6 dot. A tinted `Badge` is only for an exception the user must act on or notice in a list (failed, unavailable, needs you, draft) | `StatusText`, `Badge` in `src/ui/feedback.tsx` |
-| Section empty state | `StateView size="compact"`: neutral is the row's body text, muted and regular, no glyph or art, aligned with the rows; a toned one leads with its 16 status glyph and a 15/21 medium title. Optional compact action below. Region art stays for a whole empty screen | `StateView` in `src/ui/state-view.tsx`, `Empty` |
+| Section empty state | `StateView size="compact"`: neutral is the row's body text, muted and regular, no glyph or art, aligned with the rows; a toned one leads with its 16 status glyph and a 15/21 medium title. It is not announced as a heading (only region states are). Optional compact action below. Region art stays for a whole empty screen | `StateView` in `src/ui/state-view.tsx`, `Empty` |
+| No results | A search or filter that empties a collection: the search mascot, the list's own "No … match your search." wording (else "No matching results" / "No items match these filters") and the recovery as the primary action: Clear search while a search is active, else Clear filters (Clear filters becomes the quiet second action when both apply). Pickers and small sheets use `compact` (same words and action, no mascot). Auxiliary rows (locked groups) step aside while a search is active | `NoResults` in `src/ui/no-results.tsx`; `QueryState noResults` |
 | Card vs flat | Lists are flat rows in `NavigationGroup`; `Card variant="surface"` only for an independent task region (meters, a review) | `NavigationGroup`, `Card` |
 | Readings / metrics | One row per reading: label left, muted tabular value right; a share of a capacity adds a small bar under the same row (accent, amber from 80%, red from 90%); sizes and counts get no bar; unknown readings are omitted, not "–" | `ValueRow` (`children` slot) in `src/ui/setting-rows.tsx`; PanelUI `Meter` |
+| Disclosure (accordion) | Collapse only content that is both long (several rows, a list, a log, a diff, a long description or raw error output) and rarely needed: advanced editor fields, technical lists, full files. Never wrap one or two rows, an address, one or two identifiers, a single sentence or a single action in a disclosure: show identifiers as a muted mono selectable line, put a help sentence behind the info icon (or one muted caption), and keep actions as rows. A lone help link is one `NavigationRow` to the help page, not an accordion with one sentence and a button. Raw error text of unknown length may stay behind Details under a visible summary. Paths that are deliberately hidden for privacy (desktop preference context) keep their disclosure | `Disclosure` in `src/ui/disclosure.tsx`; `HintLabel`, `Field info`, `useInfoHint` in `src/ui/info-hint.tsx` |
+| Saved computers | Each row: laptop glyph, name, one toned status (selected computer only, from `ActiveComputerStatus`) with the quiet connection type after it, an accent check on the selected computer and the same "…" options control on every row. The computer sheet shows status and the selectable address inline, then icon rows: Use computer (only when not selected), Retry/Scan QR code, Edit connection, Remove (danger, opens the removal review). The edit form is titled "Edit connection" by the screen header | `MachinesScreen`, `ActiveComputerStatus` in `src/features/connections/` |
 | Menus | Never a one-item menu: `ActionMenu` renders a lone action directly (icon button if it has an icon, else a quiet text button); a lone destructive action keeps the menu unless flagged `reviewed` (it opens its own confirmation). A boolean is a `ToggleField` row, not a menu item | `ActionMenu` in `src/ui/overflow-menu.tsx`, `singleMenuAction` |
+| Row actions | Rows never swipe. A record's actions open from its options control: the visible "…" where the row already shows one (notes, management records) or a long press with the named "… options" accessibility action (projects, sessions, changed files). A tap on a row always opens it. Horizontal rails (chip rows, breadcrumbs) scroll only when they overflow and never bounce or glow; code, diffs and tables keep their horizontal scroll | `SwipeActions` (pass-through) in `src/ui/swipe-actions.tsx`, `ActionMenu`, `RowOptionsSheet`, `PressableCard onLongPress` |
+| Session rows | Provider glyph (unread dot on it) → title, led by a filled accent pin when pinned → trailing column: time (one unbreakable label such as "44 min") or one status. Type marks (assistant-managed) sit at the start of the meta line. The meta line omits the project while a project is selected in the pill and omits `main`/`master` on a primary checkout; worktrees and other branches show. Repeated provider prefixes ("codex · codex · …") are stripped from titles. With a project selected, pinned sessions lead under Pinned, then Recent (desktop project sidebar); all-projects keeps the desktop Last sessions order | `SessionListRow`, `sessionDisplayTitle`, `withPinnedGroup` |
+| Session actions | One owner for a session record's actions (settle, pin, rename, read state, snooze, move to folder, copy/share, details, archive, stop, delete) in desktop order with the same reviewed-authority checks, confirmations and Undo toasts. The list row opens them as its options sheet; the open session lists the same rows in its options menu after the session tools, and deleting the open session confirms and then returns to where it was opened from (or the sessions list) | `useSessionActions` in `src/features/workspace/session-actions.tsx`, `SessionRowActions`, `SessionToolbar` |
+| Send while the agent runs | Tap uses the Settings default (Steer or Queue), whose glyph the Send button shows (steer arrow or queue list). Long press, also exposed as the named "Choose how to send" accessibility action, opens a small Steer now / Queue popover anchored above the button (keyboard stays open) with the default checked; the pick applies to that message only. It appears only when both can be delivered and closes when the run ends. With an empty draft the same slot is a single Stop | `ComposerSendButton`, `AnchoredMenu`, `busyPrimaryMode`, Settings → Messages |
 
 Collapsed task records lead with title, status and a directly named session icon.
 Stop, pending operations and actionable failures stay visible. Completion and

@@ -1,5 +1,5 @@
 import type { MobileMachine, MobileRoute } from "../remote/types";
-import { sameRoute } from "./machine-model";
+import { activeRoute, sameRoute } from "./machine-model";
 import { routeRank } from "./route-kind";
 
 /** True when the route answers at all; authentication happens on the real connection. */
@@ -52,11 +52,23 @@ export async function chooseReachableRoute(
   }
 }
 
+/**
+ * Routes ranked above the one in use. A connected computer is only re-probed for an upgrade;
+ * failures, network changes and returning to the app still probe every route.
+ */
+export function betterRoutes(routes: readonly MobileRoute[], current: MobileRoute): MobileRoute[] {
+  const ordered = orderRoutes(routes);
+  const index = ordered.findIndex((route) => sameRoute(route, current));
+  return index < 0 ? ordered : ordered.slice(0, index);
+}
+
 export function createRouteSelector(deps: {
   getMachine: () => MobileMachine | null;
   switchRoute: (id: string, route: MobileRoute) => Promise<boolean>;
   probe: RouteProbe;
   canRun: () => boolean;
+  /** The active computer's connection is up on its current route. */
+  isConnected?: (machineId: string) => boolean;
   now?: () => number;
 }) {
   const now = deps.now ?? Date.now;
@@ -69,8 +81,12 @@ export function createRouteSelector(deps: {
       if (running) return running;
       const urgent = reason === "foreground" || reason === "machine" || reason === "network";
       if (!urgent && now() - lastRun < ROUTE_CHECK_MIN_GAP_MS) return Promise.resolve();
+      const routes = reason === "interval" && deps.isConnected?.(machine.id)
+        ? betterRoutes(machine.routes, activeRoute(machine))
+        : machine.routes;
+      // A working connection on the most preferred route has nothing to gain from a probe burst.
+      if (!routes.length) return Promise.resolve();
       lastRun = now();
-      const routes = machine.routes;
       running = chooseReachableRoute(routes, deps.probe)
         .then(async (chosen) => {
           const latest = deps.getMachine();

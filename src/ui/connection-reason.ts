@@ -15,7 +15,7 @@ export function connectionReason(
   proofRefusal?: "required" | "invalid",
 ): string | undefined {
   if (phase === "startup-failed")
-    return copy("Bycoda’yı kapatıp yeniden aç.", "Close and reopen Bycoda.");
+    return copy("bycoda’yı kapatıp yeniden aç.", "Close and reopen bycoda.");
   if (phase !== "disconnected" && phase !== "access") return undefined;
   const values = { p0: name };
   if (kind === "auth" && proofRefusal === "required")
@@ -31,7 +31,12 @@ export function connectionReason(
       values,
     );
   if (phase === "access" || kind === "auth")
-    return copy("Eşleşme süresi doldu. {p0} bilgisayarını yeniden eşleştir.", "Pairing expired. Pair {p0} again.", values);
+    // A refused key is removed or invalid, never "expired"; the one recovery is pairing again.
+    return copy(
+      "Bu telefonun erişimi kaldırılmış veya geçersiz. {p0} bilgisayarını yeniden eşleştir.",
+      "This phone’s access was removed or is invalid. Pair {p0} again.",
+      values,
+    );
   switch (kind) {
     case undefined:
     case "network":

@@ -29,12 +29,13 @@ improves the product. Generic redesign examples do not override these decisions.
   look actionable. A long row of identical pills cannot express every relationship.
 - Show the essential summary first. Put detailed history, configuration and logs
   behind navigation/disclosure while keeping state and recovery visible.
-- Search growing collections. Collection search starts as a search icon in the
-  shared `SearchToolbar` row beside the filter trigger; it opens an inline field
-  with Clear and Cancel and stays open while a query is active. Put secondary filters in an accessible selection
-  surface, show applied state on the trigger and provide reset. One quick filter
-  may stay a single `FilterChipRow`; hide filter triggers when there is nothing
-  to narrow and no filter is applied. Preserve drafts
+- Search growing collections. The search and filter icons sit in the page's
+  heading row and open one content-height sheet with the search field and every
+  filter, applied live, with Reset and Done; applied filters show as the dot on
+  the filter icon. No inline chip, summary or icon-only row. Hide the filter
+  trigger when there is nothing to narrow and no filter is applied. A search or
+  filter that empties a list shows the shared `NoResults` state (search mascot,
+  the list's own wording, Clear search or Clear filters; compact in pickers). Preserve drafts
   until apply succeeds when the interaction uses explicit application.
 - Do not reduce noise by removing meaningful data or actions. Reorganize them.
 
@@ -100,10 +101,10 @@ Creating a task or epic from an all-projects list chooses the project in the
 editor without changing the shared scope. Tool directories explain known support and project requirements
 before asking for a project; destination screens retain their access checks.
 
-Terminal command drafts belong to their captured computer, project and terminal.
-Navigation does not submit or silently discard them. Keep compact command entry
-reachable beside the output and use expansion for longer commands. Restored
-drafts and uncertain writes never replay automatically.
+Project terminals are PTYs: keystrokes go to the captured computer, project and
+terminal in typing order, and the shell owns prompt, echo and line editing.
+Uncertain writes are never replayed; they pause typing until the user has checked
+the output.
 
 Bottom navigation contains destinations, with creation actions in the page
 header. Large text uses a named overflow destination sheet rather than a second
@@ -133,6 +134,21 @@ Selection and status use semantics and text as well as color. Touch targets are
 48dp or larger. Essential actions remain operable with large text and assistive
 technology. Horizontal scroll is limited to genuinely wide content such as code,
 diffs or tables, not an entire page or an ordinary form.
+
+## Self-healing failures stay silent
+
+A failure that resolves itself is never shown. Reconnects, a timeout while the
+app resumes, a poll or background refresh that fails once, a briefly unreachable
+computer and socket backoff keep the cached content or skeleton on screen and
+retry quietly with backoff. A failure is surfaced only when it lasts (the 6 s
+read grace without data; a minute, or 2 failures over 15 s, under shown data),
+when it cannot heal (access, identity, unsupported), when there is nothing to
+show, or when the person's own action failed. When the condition recovers the
+error, warning or status disappears by itself; nothing needs dismissing. The
+computer pill holds "connected" through a blip shorter than the grace. Reads use
+`QueryState`; any other read failure goes through `usePersistentError`
+(`src/ui/use-persistent-error.ts`). Background failures never raise a toast, and
+technical detail stays behind the shared Details disclosure.
 
 ## Acceptance matrix
 

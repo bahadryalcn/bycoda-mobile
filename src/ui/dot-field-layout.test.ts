@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { DOT_SIZE, DOT_SPAN, dotLayout } from "./dot-field-layout";
+import { DOT_PHASES, DOT_SIZE, DOT_SPAN, dotLayout, dotPhase } from "./dot-field-layout";
 
 it("lays out the same sparse field on every call", () => {
   const dots = dotLayout(402, 874);
@@ -16,4 +16,14 @@ it("keeps every dot inside the field and faint enough to stay behind the figure"
     expect(dot.level).toBeGreaterThanOrEqual(0.08);
     expect(dot.level).toBeLessThanOrEqual(0.68);
   }
+});
+
+it("scatters the dots across every breathing phase", () => {
+  const phases = dotLayout(402, 874).map((dot) => dotPhase(dot.seed));
+  for (const phase of phases) {
+    expect(Number.isInteger(phase)).toBe(true);
+    expect(phase).toBeGreaterThanOrEqual(0);
+    expect(phase).toBeLessThan(DOT_PHASES);
+  }
+  expect(new Set(phases).size).toBe(DOT_PHASES);
 });

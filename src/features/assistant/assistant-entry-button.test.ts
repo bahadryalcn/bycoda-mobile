@@ -27,10 +27,11 @@ it("opens the assistant on tap, ignores a hold and names a running call", async 
   try {
     await act(async () => root.render(h(AssistantEntryButton)));
     const button = container.querySelector("button")!;
-    expect(button.getAttribute("aria-label")).toBe("Voice assistant");
+    expect(button.getAttribute("aria-label")).toBe("Assistant");
     expect(container.querySelector("[data-dot]")).toBeNull();
     await act(async () => button.click());
-    expect(f.navigate).toHaveBeenLastCalledWith("/assistant");
+    // Each tap asks for the assistant home, so a conversation left open does not swallow the button.
+    expect(f.navigate).toHaveBeenLastCalledWith({ pathname: "/assistant", params: { home: expect.any(String) } });
     await act(async () => { button.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })); });
     expect(f.navigate).toHaveBeenCalledTimes(1);
     await act(async () => useAssistantCall.setState({ phase: "listening" }));

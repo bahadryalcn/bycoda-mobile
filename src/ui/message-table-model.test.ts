@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { parseMessage, type MessageNode } from "./message-model";
-import { messageTableColumnWidths, tableColumnWidths } from "./message-table-model";
+import { messageNodeText, parseMessage, type MessageNode } from "./message-model";
+import {
+  messageTableColumnWidths,
+  messageTableData,
+  messageTableMarkdown,
+  tableColumnWidths,
+  tableDataColumnWidths,
+  tableMarkdown,
+  tablePreview,
+  TABLE_PREVIEW_ROWS,
+} from "./message-table-model";
 
 const flatten = (nodes: MessageNode[]): MessageNode[] => nodes.flatMap((node) => [node, ...flatten(node.children)]);
 
 it("uses the ARIA table role instead of the legacy native role that crashes on Android", () => {
-  const renderer = readFileSync(new URL("./message-content.tsx", import.meta.url), "utf8");
+  const renderer = readFileSync(new URL("./message-table.tsx", import.meta.url), "utf8");
   expect(renderer).not.toContain('accessibilityRole="table"');
   expect(renderer).toContain('role="table"');
 });
@@ -53,3 +62,29 @@ describe("markdown table column sizing", () => {
   });
 });
 import { readFileSync } from "node:fs";
+
+describe("markdown table data", () => {
+  const parse = (text: string) => flatten(parseMessage(text, true)).find((node) => node.type === "table")!;
+
+  it("splits header, rows and alignment from the parsed table", () => {
+    const data = messageTableData(parse("| A | B | C |\n| :-- | :-: | --: |\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |"));
+    expect(data.columns).toBe(3);
+    expect(data.header.map(messageNodeText)).toEqual(["A", "B", "C"]);
+    expect(data.rows).toHaveLength(2);
+    expect(data.align).toEqual(["left", "center", "right"]);
+    expect(tableDataColumnWidths(data, 13, 1)).toHaveLength(3);
+  });
+
+  it("copies the table as Markdown with escaped pipes and preserved alignment", () => {
+    const data = messageTableData(parse("| Name | Notes |\n| --- | ---: |\n| **a** | `x` |"));
+    expect(messageTableMarkdown(data)).toBe("| Name | Notes |\n| --- | ---: |\n| **a** | `x` |");
+    expect(tableMarkdown(["a|b"], [["c \\| d"]])).toBe("| a\\|b |\n| --- |\n| c \\| d |");
+    expect(tableMarkdown(["a"], [["1", "2"]])).toBe("| a |  |\n| --- | --- |\n| 1 | 2 |");
+  });
+
+  it("previews the first rows and does not hide a single extra row", () => {
+    const rows = Array.from({ length: 20 }, (_, index) => index);
+    expect(tablePreview(rows)).toEqual({ rows: rows.slice(0, TABLE_PREVIEW_ROWS), hidden: 20 - TABLE_PREVIEW_ROWS });
+    expect(tablePreview(rows.slice(0, TABLE_PREVIEW_ROWS + 1)).hidden).toBe(0);
+  });
+});

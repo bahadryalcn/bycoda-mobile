@@ -15,7 +15,7 @@ vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress }: { label: string; onPress(): void }) =>
     createElement("button", { onClick: onPress }, label);
-  return { Stack: Group, Heading: Group, NavigationGroup: Group, NavigationRow: Button, Button };
+  return { Stack: Group, SectionHeader: () => null, NavigationGroup: Group, NavigationRow: Button, Button };
 });
 
 it("reads a page while collapsed and lets the owner open a member beyond that page", async () => {
@@ -24,15 +24,19 @@ it("reads a page while collapsed and lets the owner open a member beyond that pa
     memberId: String(id), memberName: `Member ${id}`, projectId: "project",
     sessionId: `session-${id}`, runId: "run", status: "running",
   }));
+  // Another project's member is never listed on this project's page.
+  items.splice(1, 0, { memberId: "other", memberName: "Other project member", projectId: "other",
+    sessionId: "session-other", runId: "run", status: "running" });
   read.mockImplementation((_key, _method, { limit }) => ({
     data: { items: items.slice(0, limit), truncated: limit < items.length },
   }));
   const container = document.createElement("div");
   const root = createRoot(container);
   try {
-    await act(async () => root.render(createElement(ActiveCrews)));
+    await act(async () => root.render(createElement(ActiveCrews, { projectId: "project" })));
     expect(read.mock.lastCall?.[2]).toEqual({ limit: 8 });
     expect(container.textContent).not.toContain("Member 8");
+    expect(container.textContent).not.toContain("Other project member");
     await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Show more")!.click());
     expect(read.mock.lastCall?.[2]).toEqual({ limit: 200 });
     await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Member 8")!.click());

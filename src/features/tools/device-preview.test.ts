@@ -14,6 +14,8 @@ const state = vi.hoisted(() => ({
   failRead: 0,
 }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "request" }));
+// The status failure has outlasted the shared grace (covered by use-persistent-error.test.ts).
+vi.mock("@/ui/use-persistent-error", () => ({ usePersistentError: (error: unknown) => error ?? null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("@/ui/theme", () => ({
   useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }),
@@ -59,7 +61,7 @@ vi.mock("@/state/queries", () => ({
     options: { enabled: boolean },
   ) => {
     state.reads.push({ method, params, enabled: options.enabled });
-    return { data: undefined, isError: state.readError, isFetching: false, refetch: vi.fn() };
+    return { data: undefined, isError: state.readError, error: state.readError ? new Error("status unavailable") : null, isFetching: false, refetch: vi.fn() };
   },
   useHostMutation: (method: string) => ({
     isPending: false,
@@ -92,7 +94,7 @@ vi.mock("@/ui/primitives", () => {
     disabled?: boolean;
     onPress: () => void;
   }) => createElement("button", { disabled, onClick: onPress }, label);
-  return {
+  return { ChoiceChip: () => null, StatusLine: () => null,
     Disclosure: Wrapper,
     Stack: Wrapper,
     Row: Wrapper,
@@ -125,7 +127,7 @@ vi.mock("@/ui/primitives", () => {
         createElement(
           "button",
           { disabled: disabled || busy, onClick: onSubmit },
-          submitLabel === "Review changes" ? submitLabel : "Confirm",
+          submitLabel === "Review preview" ? submitLabel : "Confirm",
         ),
       ),
     Body: Wrapper,
@@ -154,8 +156,6 @@ vi.mock("@/ui/primitives", () => {
       value: boolean;
       onChange(value: boolean): void;
     }) => createElement(Button, { label, onPress: () => onChange(!value) }),
-    ConfirmationCard: ({ disabled, onConfirm }: { disabled?: boolean; onConfirm: () => void }) =>
-      createElement(Button, { label: "Confirm", disabled, onPress: onConfirm }),
   };
 });
 let root: ReturnType<typeof createRoot> | undefined;
@@ -215,7 +215,7 @@ it("never starts on read; explicit review and confirmation persist exact request
   await render();
   expect(state.writes).toEqual([]);
   await click("Development server URL");
-  await click("Review changes");
+  await click("Review preview");
   expect(state.values.size).toBe(0);
   await click("Confirm");
   expect(state.values.size).toBe(1);
@@ -236,7 +236,7 @@ it("restores an unknown request through status reads only, and local tracking re
   state.uncertain = true;
   await render();
   await click("Development server URL");
-  await click("Review changes");
+  await click("Review preview");
   await click("Confirm");
   expect(state.writes).toHaveLength(1);
   await act(async () => root?.unmount());
@@ -252,7 +252,7 @@ it("restores an unknown request through status reads only, and local tracking re
     ),
   ).toBe(true);
   expect(state.writes).toHaveLength(1);
-  await click("Remove unavailable tracking");
+  await click("Forget this preview");
   expect(container.textContent).toContain("job is not cancelled");
   await click("Confirm");
   expect(state.values.size).toBe(0);
@@ -261,7 +261,7 @@ it("restores an unknown request through status reads only, and local tracking re
 it("machine switch or storage failure prevents a new preview dispatch", async () => {
   await render();
   await click("Development server URL");
-  await click("Review changes");
+  await click("Review preview");
   state.id = "other";
   await click("Confirm");
   expect(state.writes).toEqual([]);
@@ -284,13 +284,13 @@ it("a rejected retained-intent read exposes in-place Retry, starts nothing, and 
   state.failRead = 1;
   await render();
   expect(container.textContent).toContain("Could not read the saved preview request");
-  expect(buttons()).not.toContain("Review changes");
+  expect(buttons()).not.toContain("Review preview");
   expect(buttons()).not.toContain("Development server URL");
-  expect(buttons()).not.toContain("Discard saved preview request");
+  expect(buttons()).not.toContain("Forget saved preview");
   expect(state.reads.some((row) => row.enabled)).toBe(false);
   await click("Retry");
   expect(container.textContent).toContain(savedIntent.url);
-  expect(buttons()).not.toContain("Review changes");
+  expect(buttons()).not.toContain("Review preview");
   expect(state.reads.some((row) => row.enabled && row.params.requestId === "saved-request")).toBe(
     true,
   );
@@ -300,26 +300,26 @@ it("a rejected retained-intent read exposes in-place Retry, starts nothing, and 
 it("a failed read with nothing saved recovers to the empty form only after a successful retry", async () => {
   state.failRead = 1;
   await render();
-  expect(buttons()).not.toContain("Review changes");
+  expect(buttons()).not.toContain("Review preview");
   await click("Retry");
-  expect(buttons()).toContain("Review changes");
+  expect(buttons()).toContain("Review preview");
   expect(state.writes).toEqual([]);
 });
 it("a malformed retained intent is never cleared or relaunched until an explicit reviewed discard", async () => {
   state.values.set(savedKey, "corrupt");
   await render();
   expect(container.textContent).toContain("damaged");
-  expect(buttons()).not.toContain("Review changes");
+  expect(buttons()).not.toContain("Review preview");
   expect(state.writes).toEqual([]);
   expect(state.values.get(savedKey)).toBe("corrupt");
   await click("Retry");
   expect(state.values.get(savedKey)).toBe("corrupt");
-  expect(buttons()).not.toContain("Review changes");
-  await click("Discard saved preview request");
+  expect(buttons()).not.toContain("Review preview");
+  await click("Forget saved preview");
   expect(container.textContent).toContain("job is not cancelled");
   expect(state.values.get(savedKey)).toBe("corrupt");
   await click("Confirm");
   expect(state.values.has(savedKey)).toBe(false);
-  expect(buttons()).toContain("Review changes");
+  expect(buttons()).toContain("Review preview");
   expect(state.writes).toEqual([]);
 });

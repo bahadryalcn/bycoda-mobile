@@ -1,17 +1,22 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { HostModelCatalog } from "@/domain/types";
 import { useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
-import { useLocale } from "@/i18n";
-import { Button, Loading, Notice, QueryState, SelectField, StateView } from "@/ui/primitives";
-import { ProviderIcon } from "@/ui/provider-identity";
+import { FormActions, Loading, NavigationGroup, Notice, QueryState, StateView } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import type { AssistantProfile } from "../../../../src/shared/model/host-contracts/assistant";
-import { catalogProviders, sessionModel, sessionModelName } from "../workspace/catalog";
-import { providerName } from "../workspace/provider-choices";
+import { catalogProviders } from "../workspace/catalog";
+import { ModelPickerField } from "../workspace/model-picker-field";
+import { chooseFixedModel, chooseFixedProvider, fixedModelChoices, type FixedModel } from "../workspace/model-selection/fixed-model";
 import type { AssistantMobileClient } from "./assistant-client";
 
-export function AssistantReplyModel({ client, profile, projectId, disabled, current, reviewRequired, onReviewRequired, onRefresh, onSaved }: {
+/**
+ * The reply model as a draft with an explicit Save, like every agent configuration: picking a provider or
+ * model changes nothing on the computer until Save. `children` are optional rows that share its group;
+ * loading, empty and recovery states sit below the group, never as rows in it.
+ */
+export function AssistantReplyModel({ client, profile, projectId, disabled, current, reviewRequired, onReviewRequired, onRefresh, onSaved, children }: {
+  children?: ReactNode;
   client: AssistantMobileClient;
   profile: AssistantProfile;
   projectId: string;
@@ -23,41 +28,65 @@ export function AssistantReplyModel({ client, profile, projectId, disabled, curr
   onSaved(profile: AssistantProfile): void;
 }) {
   const copy = useCopy();
-  const locale = useLocale();
   const catalog = useHostQuery<HostModelCatalog>(["models", "assistant", projectId], "models.list", {
     ...(projectId ? { projectId } : {}), progressive: true,
   }, { interval: (data) => data?.pending?.length ? 1000 : false });
   const [confirmed, setConfirmed] = useState<AssistantProfile>();
   const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState<FixedModel>();
   const pending = useRef(false);
-  useSheetGuard({ pending: busy });
+  // A draft belongs to the scope it was made in.
+  useEffect(() => { setDraft(undefined); }, [projectId]);
   const currentProfile = confirmed && confirmed.version > profile.version ? confirmed : profile;
   const execution = currentProfile.replyExecution ?? currentProfile.execution;
   const latest = useRef({ disabled, projectId, reviewRequired, version: currentProfile.version });
   latest.current = { disabled, projectId, reviewRequired, version: currentProfile.version };
-  const currentModel = execution ? sessionModel(catalog.data, execution.harness, execution.model) : undefined;
-  const selectedValue = execution ? JSON.stringify([execution.harness, currentModel?.id ?? execution.model]) : undefined;
   const providers = catalogProviders(undefined, catalog.data);
   if (execution && !providers.includes(execution.harness)) providers.push(execution.harness);
-  const options = providers.flatMap(harness => {
-    const group = harness === "codex" ? "OpenAI · Codex" : providerName(harness);
-    const icon = <ProviderIcon provider={harness} size={20} />;
-    const models = catalog.data?.models[harness] ?? [];
-    const rows = models.map(model => ({
-      value: JSON.stringify([harness, model.id]), label: model.name, group, icon,
-      searchKeywords: harness === "codex" ? "OpenAI Open AI" : undefined,
-      harness, model: model.id, savedOnly: false,
-    }));
-    if (execution && selectedValue && harness === execution.harness && !currentModel) {
-      rows.push({
-        value: selectedValue, label: sessionModelName(execution), group, icon,
-        searchKeywords: harness === "codex" ? "OpenAI Open AI" : undefined,
-        harness, model: execution.model, savedOnly: true,
-      });
+  // The assistant stores a provider and model, not a provider account: the shared picker lists
+  // providers without their accounts so a chosen account is never silently dropped.
+  const providerCatalog = catalog.data ? { ...catalog.data, accounts: undefined } : undefined;
+  const saved: FixedModel = execution
+    ? { harness: execution.harness, model: execution.model, modelSettings: execution.modelSettings }
+    : { harness: providers[0] ?? "claude", model: "" };
+  const value = draft ?? saved;
+  const unchanged = (next: FixedModel) => !!execution && next.harness === execution.harness && next.model === execution.model &&
+    JSON.stringify(next.modelSettings ?? {}) === JSON.stringify(execution.modelSettings ?? {});
+  const dirty = !!draft && !!draft.model && !unchanged(draft);
+  useSheetGuard({ pending: busy, dirty });
+  const { choices, choice, models } = fixedModelChoices(value, providers, providerCatalog,
+    copy("Varsayılan hesap", "Default account"), copy("Hesap kullanılamıyor", "Account unavailable"));
+  const hasChoices = providers.some(harness => (catalog.data?.models[harness] ?? []).length > 0);
+  // Save writes the draft against the version it was made on; an unconfirmed save asks for a refresh.
+  const save = async (next: FixedModel) => {
+    if (!current() || latest.current.disabled || latest.current.reviewRequired || pending.current ||
+      latest.current.projectId !== projectId || latest.current.version !== currentProfile.version || !next.model ||
+      unchanged(next)) return;
+    pending.current = true;
+    setBusy(true);
+    try {
+      const saved = await client.updateProfile(currentProfile.version, { replyExecution: {
+        harness: next.harness,
+        model: next.model,
+        modelSettings: next.modelSettings ?? {},
+        runtimeMode: execution?.runtimeMode ?? "supervised",
+        maxRunMinutes: execution?.maxRunMinutes ?? 60,
+      } });
+      if (!current()) return;
+      latest.current.version = saved.version;
+      setConfirmed(saved);
+      setDraft(undefined);
+      onSaved(saved);
+    } catch {
+      if (current()) {
+        latest.current.reviewRequired = true;
+        onReviewRequired(true);
+      }
+    } finally {
+      pending.current = false;
+      setBusy(false);
     }
-    return rows.sort((first, second) => first.label.localeCompare(second.label, locale, { numeric: true }));
-  });
-  const hasChoices = options.some(option => !option.savedOnly);
+  };
   const refresh = async () => {
     if (latest.current.disabled || pending.current || !current()) return;
     pending.current = true;
@@ -67,6 +96,7 @@ export function AssistantReplyModel({ client, profile, projectId, disabled, curr
       if (!current() || !refreshed || refreshed.version < latest.current.version) return;
       latest.current.version = refreshed.version;
       setConfirmed(refreshed);
+      setDraft(undefined);
       onReviewRequired(false);
     } catch {
       // The current choice is still unconfirmed. Keep the read-only recovery available.
@@ -76,6 +106,15 @@ export function AssistantReplyModel({ client, profile, projectId, disabled, curr
     }
   };
   return <>
+    <NavigationGroup>
+      {children}
+      <ModelPickerField variant="row" label={copy("Yanıt modeli", "Reply model")} choices={choices} choice={choice} unavailableAccount={false}
+        models={models} model={value.model} settings={value.modelSettings ?? {}} catalog={providerCatalog} ownAgents={false}
+        disabled={disabled || busy || reviewRequired || !hasChoices}
+        onChooseProvider={(next) => setDraft(chooseFixedProvider(value, next, providerCatalog))}
+        onChooseModel={(next, model, settings) => setDraft(chooseFixedModel(value, next, model, settings))}
+        onChange={(model, settings) => setDraft({ ...value, model, modelSettings: settings })} />
+    </NavigationGroup>
     <QueryState query={catalog} loading="inline" />
     {catalog.isSuccess && !hasChoices ? (
       catalog.data.pending?.length ? (
@@ -84,43 +123,12 @@ export function AssistantReplyModel({ client, profile, projectId, disabled, curr
         <StateView size="compact" title={copy("Kullanılabilir model yok.", "No models available.")} />
       )
     ) : null}
-    <SelectField label={copy("Yanıt modeli", "Reply model")} value={selectedValue}
-      options={options} searchable disabled={disabled || busy || reviewRequired || !hasChoices}
-      onChange={async (value) => {
-        const selected = options.find(option => option.value === value);
-        if (!current() || latest.current.disabled || latest.current.reviewRequired || pending.current ||
-          latest.current.projectId !== projectId || latest.current.version !== currentProfile.version || !selected || selected.savedOnly ||
-          selected.value === selectedValue) return;
-        pending.current = true;
-        setBusy(true);
-        try {
-          const saved = await client.updateProfile(currentProfile.version, { replyExecution: {
-            harness: selected.harness,
-            model: selected.model,
-            modelSettings: {},
-            runtimeMode: execution?.runtimeMode ?? "supervised",
-            maxRunMinutes: execution?.maxRunMinutes ?? 60,
-          } });
-          if (!current()) return;
-          latest.current.version = saved.version;
-          setConfirmed(saved);
-          onSaved(saved);
-        } catch {
-          if (current()) {
-            latest.current.reviewRequired = true;
-            onReviewRequired(true);
-          }
-        } finally {
-          pending.current = false;
-          setBusy(false);
-        }
-      }} />
     {reviewRequired ? <Notice tone="warning" message={copy(
       "Model değişikliği doğrulanamadı. Geçerli seçimi görmek için yenile.",
       "Could not confirm the model change. Refresh to see the current choice.",
-    )}>
-      <Button label={copy("Yenile", "Refresh")} tone="secondary" reserveTouchTarget
-        disabled={disabled} busy={busy} onPress={() => { void refresh(); }} />
-    </Notice> : null}
+    )} action={{ label: copy("Yenile", "Refresh"), onPress: () => { void refresh(); } }} /> : null}
+    {dirty || busy ? <FormActions submitLabel={copy("Kaydet", "Save")} cancelLabel={copy("Vazgeç", "Cancel")} dirty={dirty} busy={busy}
+      disabled={disabled || reviewRequired || !dirty} cancelDisabled={busy}
+      onCancel={() => setDraft(undefined)} onSubmit={() => { if (draft) void save(draft); }} /> : null}
   </>;
 }

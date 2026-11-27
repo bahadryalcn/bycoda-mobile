@@ -47,13 +47,27 @@ vi.mock("@/state/chat-appearance", () => ({ useChatAppearance: () => "standard" 
 vi.mock("@/ui/tokens", () => ({ radii: {}, space: {} }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, semanticColors: {}, uiStyles: {} }) }));
-vi.mock("@/ui/error-message", () => ({ friendlyProviderFailure: (text: string) => text }));
-vi.mock("./user-turn-notice", () => ({ UserTurnNotice: () => null }));
+vi.mock("@/ui/error-message", () => ({ friendlyProviderFailure: (text: string) => text, errorMessage: String }));
+vi.mock("@/ui/toast", () => ({ showToast: () => undefined }));
+vi.mock("./user-turn-notice", () => ({ PENDING_SWEEP_MS: 10_000, UserTurnNotice: () => null, PendingUserMessage: ({ text }: { text: string }) => h("p", null, text) }));
+vi.mock("lucide-react-native/icons/copy", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/check", () => ({ default: () => null }));
+vi.mock("@/ui/feedback", () => ({ TextAction: ({ label, onPress }: { label: string; onPress: () => void }) => h("button", { onClick: onPress }, label) }));
+vi.mock("@/ui/use-clipboard-feedback", () => ({ useClipboardFeedback: () => ({ copy: () => {}, busy: false, copied: false }) }));
+vi.mock("./system-failure-card", () => ({ isCompactSystemNotice: () => false, SystemNoticeRow: () => null }));
 vi.mock("./session-queries", () => ({ useSessionBlock: ({ enabled }: { enabled: boolean }) => {
   detail.enabled = enabled;
   return detail.query;
 } }));
-vi.mock("./transcript-attachments", () => ({ TranscriptAttachments: ({ block }: { block: Block }) => h("div", { "data-attachments": true }, block.image?.name, ...block.attachments?.map(file => file.name) ?? []) }));
+vi.mock("./transcript-attachments", () => {
+  const list = ({ block }: { block: Block }) => h("div", { "data-attachments": block.role === "user" ? "above" : "inside" }, block.image?.name, ...block.attachments?.map(file => file.name) ?? []);
+  return {
+    TranscriptAttachments: ({ block }: { block: Block }) => block.role === "user" ? null : list({ block }),
+    UserMessageAttachments: list,
+    UserMediaColumn: ({ children }: PropsWithChildren) => children,
+    hasUserMessageAttachments: (block: Block) => block.role === "user" && (!!block.image || !!block.attachments?.length),
+  };
+});
 vi.mock("./transcript-structured", () => ({ TranscriptStructured: () => null }));
 vi.mock("./transcript-actions", () => ({ TranscriptActions: () => null }));
 vi.mock("./selected-text", () => ({ MessageSelection: ({ children }: PropsWithChildren) => children }));
@@ -61,7 +75,7 @@ vi.mock("@/ui/message-selection", () => ({ SelectableProse: ({ children }: Props
 vi.mock("./session-artifacts", () => ({ SessionArtifacts: () => null }));
 vi.mock("@/ui/agent-avatar", () => ({ AgentAvatar: () => null }));
 vi.mock("@/features/management/plans/plan-review", () => ({ PlanReview: () => null }));
-vi.mock("./subagent-card", () => ({ SubagentCard: () => null }));
+vi.mock("./transcript-subagents", () => ({ TranscriptSubagents: () => null }));
 vi.mock("./orchestration-details", () => ({
   OrchestrationDetails: ({ block }: { block: Block }) => h("p", null, block.orchestration?.title ?? "Proposal unavailable"),
 }));
@@ -77,6 +91,10 @@ for (const role of ["user", "assistant", "image", "tool"] as const) {
     act(() => root!.render(h(TranscriptBlock, { block, scope: { machineId: "m", sessionId: "s" }, getRevision: () => undefined, disabled: false, onCommand: vi.fn() } as TranscriptBlockProps)));
     expect(container.querySelector("[data-attachments]")?.textContent).toContain("diagram.png");
     expect(container.querySelector("section")).toBeNull();
+    // A user's files sit above the bubble, never inside it.
+    if (role === "user") expect(container.querySelector("[data-attachments]")?.getAttribute("data-attachments")).toBe("above");
+    // An attachment-only message has no empty bubble.
+    if (role === "user") expect(container.querySelector("article")).toBeNull();
   });
 }
 

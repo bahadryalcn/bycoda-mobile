@@ -34,6 +34,19 @@ import type {
   GitOperationPanelProps,
 } from "./git-types";
 import { latestGitAction } from "./git-action-feedback-model";
+import { gitDetachedLabel } from "./git-changes";
+import { InfoHint } from "@/ui/info-hint";
+import type { GitOperation } from "./git-types";
+
+function gitOperationTitle(operation: GitOperation, copy: ReturnType<typeof useCopy>) {
+  switch (operation) {
+    case "merge": return copy("Merge sürüyor", "Merge in progress");
+    case "rebase": return copy("Rebase sürüyor", "Rebase in progress");
+    case "cherry-pick": return copy("Cherry-pick sürüyor", "Cherry-pick in progress");
+    case "revert": return copy("Revert sürüyor", "Revert in progress");
+    default: return copy("Git işlemi sürüyor", "Git operation in progress");
+  }
+}
 
 /** One compact branch row; tapping it opens the git actions sheet. */
 export function GitHeader({
@@ -44,7 +57,7 @@ export function GitHeader({
 }: GitHeaderProps & { onOpenActions: () => void }) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
-  const name = index.branch || copy("Git", "Git");
+  const name = index.branch || gitDetachedLabel(copy);
   const numbers = new Intl.NumberFormat(useLocale());
   const summary = [name, index.remote,
     gitFileCount(index.files.length, copy, numbers),
@@ -129,22 +142,23 @@ export function GitOperationPanel({
   const copy = useCopy();
   return (
     <Card>
-      <Heading>{`${copy("Devam eden Git işlemi:", "Git operation in progress:")} ${operation}`}</Heading>
-      <Body muted>
-        {copy(
+      <Row style={{ alignItems: "center", gap: space.sm }}>
+        <Heading style={{ flexShrink: 1 }}>{gitOperationTitle(operation, copy)}</Heading>
+        <InfoHint text={copy(
           "Çakışmaları düzenle, çözülmüş dosyaları stage’e al ve işlemi devam ettir. İptal etmek işlem başlamadan önceki duruma döner.",
           "Edit conflicts, stage resolved files, then continue. Aborting returns to the state before this operation.",
-        )}
-      </Body>
+        )} />
+      </Row>
       <Row style={{ flexWrap: "wrap" }}>
         <Button
           label={copy("İşlemi devam ettir", "Continue operation")}
+          tone="primary"
           disabled={hasConflicts || busy}
           onPress={() => onChoose({ kind: "operation", choice: "continue" })}
         />
         <Button
           label={copy("İşlemi iptal et", "Abort operation")}
-          tone="danger"
+          tone="quiet"
           disabled={busy}
           onPress={() => onChoose({ kind: "operation", choice: "abort" })}
         />
@@ -174,13 +188,11 @@ export function GitConflictsPanel({
   const shown = expanded ? files : files.slice(0, CONFLICT_PREVIEW);
   return (
     <Card>
-      <SectionHeader flush title={copy("Çakışmalar", "Conflicts")} count={files.length} />
-      <Body muted>
-        {copy(
+      <SectionHeader flush title={copy("Çakışmalar", "Conflicts")} count={files.length}
+        trailing={<InfoHint text={copy(
           "Commit öncesinde bu dosyalardaki çakışmaları çöz. Bir tarafı seçmek diğer tarafın değişikliklerini bırakır.",
           "Resolve these conflicts before committing. Choosing one side discards the other side’s changes.",
-        )}
-      </Body>
+        )} />} />
       {shown.map((file) => {
         const normalized = file.relative.replaceAll("\\", "/");
         const cut = normalized.lastIndexOf("/");
@@ -197,7 +209,7 @@ export function GitConflictsPanel({
               ) : null}
             </View>
             <ActionMenu
-              label={file.relative}
+              label={copy("{p0} seçenekleri", "{p0} options", { p0: file.relative })}
               busy={busy}
               actions={[
                 onReview && {

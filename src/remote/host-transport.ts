@@ -63,6 +63,8 @@ async function decodeHostJson(parts: readonly string[], options: JsonDecodeOptio
 /** Longest wait for a safe read to ride out a socket reconnect backoff (the backoff itself can reach 30 s). */
 // shortcut: fixed brief window, upgrade to the runtime's actual backoff delay when it is exposed.
 const RECONNECT_WAIT_MS = 5_000;
+/** How long an unsent write waits for a reconnecting socket before failing as unreachable. */
+const WRITE_CONNECT_WAIT_MS = 3_000;
 /** Request deadlines and durations use the monotonic clock: Date.now() jumps when the
  * phone resyncs its clock after the network returns, which would fail or hang requests. */
 const monotonicNow = (): number => globalThis.performance.now();
@@ -698,10 +700,11 @@ export class HostTransport {
     if (!this.wsPreparing) {
       const provider = getHostWsRuntimeProvider();
       if (!provider)
+        // The socket runtime is still starting: a transient state that a quiet retry outlives, not an update to install.
         throw new RemoteHostError(
           this.machine.id,
-          "unsupported",
-          "The native Host connection is not available yet.",
+          "network",
+          "The connection to this computer is not ready yet.",
         );
       const promise = provider
         .acquire(
@@ -795,7 +798,14 @@ export class HostTransport {
     const controller = new AbortController();
     this.wsActive.add(controller);
     const operationTimeout = method === "projects.clone" ? 630_000 : method === "sessions.sideQuestion" ? 150_000 : DEFAULT_TIMEOUT_MS;
-    const requested = options.timeoutMs ?? operationTimeout;
+    // A long-poll must outlive its own wait, as on HTTP; cutting it at the default
+    // deadline turns each idle wait into a cancel plus an immediate re-poll.
+    const waiting =
+      [method, legacyMethod].some((name) => name === "sessions.sync" || name === "machine.changes") &&
+      typeof params.waitMs === "number"
+        ? Math.max(0, params.waitMs) + 5_000
+        : 0;
+    const requested = options.timeoutMs ?? Math.max(operationTimeout, waiting);
     const timeout = Number.isFinite(requested)
       ? Math.max(1_000, Math.min(method === "projects.clone" ? 630_000 : 180_000, requested))
       : DEFAULT_TIMEOUT_MS;
@@ -836,6 +846,16 @@ export class HostTransport {
         await this.waitReady(consumer, {
           timeoutMs: Math.max(1, deadline - monotonicNow()),
           signal: controller.signal,
+        });
+      // A write that was never sent may wait briefly for a handshake already under way (the reconnect
+      // after returning to the app). It is still sent at most once (no outbox, no resend); a socket in
+      // backoff, or one not ready in time, fails unsent at once.
+      else if (consumer.state() === "connecting")
+        await this.waitReady(consumer, {
+          timeoutMs: Math.max(1, Math.min(WRITE_CONNECT_WAIT_MS, deadline - monotonicNow())),
+          signal: controller.signal,
+        }).catch((error: unknown) => {
+          if (error instanceof HostWsError && error.category === "cancelled") throw error;
         });
       if (controller.signal.aborted) throw new HostWsError(timedOut ? "deadline" : "cancelled");
       // A capability is only a preflight hint; hello.methods is the routed

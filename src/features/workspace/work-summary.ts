@@ -125,10 +125,10 @@ export function workSummaryLine(steps: readonly Block[], copy: Copy, live = fals
           ? copy("{p0} komut çalıştırılıyor", "Running {p0} commands", { p0: runs })
           : copy("{p0} komut çalıştırıldı", "Ran {p0} commands", { p0: runs });
       case "agent":
-        if (agents === 1) return now ? copy("Bir alt agent çalışıyor", "Running a subagent") : copy("Bir alt agent çalıştı", "Ran a subagent");
+        if (agents === 1) return now ? copy("Bir alt ajan çalışıyor", "Running a subagent") : copy("Bir alt ajan çalıştı", "Ran a subagent");
         return now
-          ? copy("{p0} alt agent çalışıyor", "Running {p0} subagents", { p0: agents })
-          : copy("{p0} alt agent çalıştı", "Ran {p0} subagents", { p0: agents });
+          ? copy("{p0} alt ajan çalışıyor", "Running {p0} subagents", { p0: agents })
+          : copy("{p0} alt ajan çalıştı", "Ran {p0} subagents", { p0: agents });
       default:
         if (others === 1) return now ? copy("Bir araç çalışıyor", "Running a tool") : copy("Bir araç çalıştı", "Ran a tool");
         return now
@@ -231,7 +231,7 @@ export function workSteps(steps: readonly Block[], copy: Copy, live = false): Wo
         return [
           {
             id: block.id,
-            label: now ? copy("Alt agent çalışıyor", "Subagent running") : copy("Alt agent", "Subagent"),
+            label: now ? copy("Alt ajan çalışıyor", "Subagent running") : copy("Alt ajan", "Subagent"),
             text: title,
             state,
           },

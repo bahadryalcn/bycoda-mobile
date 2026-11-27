@@ -56,7 +56,7 @@ export function ComposerAccessField({
         : mode === "auto"
           ? copy("Bir AI inceleyici işlemleri onaylayabilir veya reddedebilir.", "An AI reviewer can approve or deny actions.")
           : copy(
-              "Agent komutları ve düzenlemeleri onay beklemeden uygulayabilir.",
+              "Ajan komutları ve düzenlemeleri onay beklemeden uygulayabilir.",
               "The agent may run commands and edits without waiting for approval.",
             );
   return (

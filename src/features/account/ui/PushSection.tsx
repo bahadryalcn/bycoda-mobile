@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppState, Linking } from "react-native";
-import { NavigationGroup, NavigationRow, SettingIcon } from "@/ui/primitives";
+import { NavigationGroup, NavigationRow, SettingIcon, StatusText } from "@/ui/primitives";
 import BellRing from "lucide-react-native/icons/bell-ring";
 import { useCopy } from "@/ui/copy";
 import { allowDevicePermission, readDevicePermission } from "../../permissions/device-permissions";
@@ -8,6 +8,7 @@ import { accountPushAvailable, enableAccountPush, syncAccountPush } from "../mod
 import { useAccount } from "./account-context";
 import { pushTokenMessage } from "../../push/push-error-copy";
 import { accountPushMessage, needsReregistration } from "./account-error-copy";
+import { notificationStateLabel } from "../../settings/settings-summaries";
 
 type State = "checking" | "off" | "on" | "blocked" | "read-error" | "error";
 
@@ -24,13 +25,14 @@ export function PushSection() {
   // Why the last attempt failed, so the row names the cause instead of a generic failure.
   const [lastError, setLastError] = useState<unknown>(null);
   const accountPush = accountPushAvailable() && !!runtime && !!device;
-  const owner = useMemo(() => ({ active: false, busy: false, refresh: false }), [accountPush, runtime, device]);
+  const owner = useMemo(() => ({ active: false, busy: false, refresh: false, settled: false }), [accountPush, runtime, device]);
 
   async function update(request: boolean) {
     if (!owner.active) return;
     if (owner.busy) { if (!request) owner.refresh = true; return; }
     owner.busy = true;
-    setState("checking");
+    // A foreground re-read keeps the known state on screen; only the first read and a tap show "Checking…".
+    if (request || !owner.settled) setState("checking");
     let failure: "read-error" | "error" = "error";
     try {
       if (request) {
@@ -57,6 +59,7 @@ export function PushSection() {
         setState(failure);
       }
     } finally {
+      owner.settled = true;
       owner.busy = false;
       if (owner.active && owner.refresh) { owner.refresh = false; void update(false); }
     }
@@ -75,31 +78,25 @@ export function PushSection() {
   }, [owner]); // eslint-disable-line react-hooks/exhaustive-deps -- `owner` changes exactly when the account scope does
 
   if (process.env.EXPO_OS === "web") return null;
+  // Label names the subject, the trailing value the state, and the detail what a tap does.
+  const status = state === "on" || state === "off" || state === "blocked" ? notificationStateLabel(state, copy) : undefined;
   const detail = {
     checking: copy("Kontrol ediliyor…", "Checking…"),
-    on: accountPush
-      ? copy("Açık. Kapatmak için telefon ayarlarını kullan.", "On. Use phone settings to turn them off.")
-      : copy("Açık", "On"),
-    off: copy("Kapalı. Bildirim almak için izin ver.", "Off. Allow notifications to receive them."),
-    blocked: copy("Telefon ayarlarında kapalı.", "Turned off in phone settings."),
-    "read-error": copy("Bildirim izni okunamadı.", "Notification permission could not be read."),
+    on: copy("Değiştirmek için telefon ayarlarını aç.", "Open phone settings to change this."),
+    off: copy("Bildirimlere izin vermek için dokun.", "Tap to allow notifications."),
+    blocked: copy("Açmak için telefon ayarlarını aç.", "Open phone settings to turn them on."),
+    "read-error": copy("Bildirim izni okunamadı. Yenilemek için dokun.", "Notification permission could not be read. Tap to refresh."),
     error: accountPush
       ? accountPushMessage(lastError, copy)
       : pushTokenMessage(lastError, copy) ?? copy("Bildirimler açılamadı.", "Notifications could not be turned on."),
   }[state];
-  const label = state === "read-error"
-    ? copy("Yenile", "Refresh")
-    : state === "error"
-      ? copy("Yeniden dene", "Try again")
-      : state === "blocked" || state === "on"
-        ? copy("Telefon ayarlarını aç", "Open phone settings")
-        : copy("Bu telefonda bildirimleri aç", "Turn on notifications on this phone");
   return (
     <NavigationGroup>
       <NavigationRow
         intent="command"
         icon={<SettingIcon glyph={BellRing} />}
-        label={label}
+        label={copy("Bildirimler", "Notifications")}
+        trailing={status ? <StatusText label={status} tone={state === "blocked" ? "warning" : "default"} /> : undefined}
         detail={detail}
         detailLines={2}
         busy={state === "checking"}

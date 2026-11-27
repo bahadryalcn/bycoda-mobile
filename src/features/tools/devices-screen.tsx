@@ -10,15 +10,15 @@ import { useActiveMachine } from "@/state/machines";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/state/reviewed-machine";
 import type { HostProject } from "@/domain/types";
-import { Body, Disclosure, Row, IconButton, NavigationRow, QueryState, RowIcon, ScreenList, SearchField, StatusText, useCollapsibleSearch } from "@/ui/primitives";
+import { Body, Row, StatusLine, IconButton, NavigationRow, QueryState, RowIcon, ScreenList, SearchField, StatusText, useCollapsibleSearch } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { iconSize } from "@/ui/tokens";
 import { IssueSummary } from "@/ui/issue-summary";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
-import { deviceAvailabilityIssues } from "./device-availability";
+import { deviceAvailabilityIssues, devicePlatformName } from "./device-availability";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
-import { DeviceViewer } from "./device-viewer";
+import { DeviceViewer, type DeviceBootChange } from "./device-viewer";
 import { deviceSystemLabel } from "./device-system";
 import { DeviceRuntime } from "./device-runtime";
 import type { DeviceHostStatus, DeviceSummary } from "./types";
@@ -60,12 +60,12 @@ export function DevicesScreen({ project }: { project: HostProject }) {
       timers.clear();
     };
   }, [connection.token, machine?.id, machine?.endpoint, machine?.environmentId, machine?.lanKey, project.id]);
-  const onBootChange = (deviceId: string, state: "pending" | "done" | "failed") => {
+  const onBootChange = (deviceId: string, state: DeviceBootChange) => {
     if (!connection.isCurrent()) return;
     const timers = startTimers.current;
     clearTimeout(timers.get(deviceId));
     timers.delete(deviceId);
-    if (state === "done") setStarting((previous) => { const next = new Set(previous); next.delete(deviceId); return next; });
+    if (state === "done" || state === "rejected") setStarting((previous) => { const next = new Set(previous); next.delete(deviceId); return next; });
     else setStarting((previous) => new Set(previous).add(deviceId));
     // A start that never answered is reconciled by the refreshed list; stop waiting after a while.
     if (state === "failed") timers.set(deviceId, setTimeout(() => {
@@ -96,7 +96,7 @@ export function DevicesScreen({ project }: { project: HostProject }) {
   const unavailablePlatforms = platforms.filter((platform) => !platform.available);
   const noPlatformAvailable = platforms.length > 0 && unavailablePlatforms.length === platforms.length;
   const filtering = !!search.trim() && (list.data?.devices.length ?? 0) > 0;
-  const availabilityIssues = deviceAvailabilityIssues(partialErrors, unavailablePlatforms, copy("Kullanılamıyor", "Unavailable"));
+  const availabilityIssues = deviceAvailabilityIssues(partialErrors, unavailablePlatforms, copy("Kullanılamıyor", "Unavailable"), devicePlatformName);
   const availabilityDetails = availabilityIssues.map((issue) => <Body key={issue} muted selectable>{issue}</Body>);
   return (
     <>
@@ -126,15 +126,14 @@ export function DevicesScreen({ project }: { project: HostProject }) {
             details={availabilityIssues.length > 1 ? availabilityDetails : undefined}
             retrying={list.isFetching} onRetry={() => {
             if (!list.isFetching) void list.refetch();
-          }} /> : unavailablePlatforms.length ? <Disclosure label={copy("Kullanılamayan platformlar", "Unavailable platforms")}>
-            {availabilityDetails}
-          </Disclosure> : null}
+          }} /> : unavailablePlatforms.length ? availabilityIssues.map((issue) => <StatusLine key={issue} label={issue} />) : null}
         </>
       }
       ListEmptyComponent={
         <QueryState size="region" emptyIllustration="inbox-empty"
           query={list}
         empty={!visible.length && !partialErrors.length}
+        noResults={{ searching: filtering, onClearSearch: clearSearch }}
         emptyTitle={
           filtering
             ? copy("Eşleşen sonuç yok", "No matching results")
@@ -142,8 +141,10 @@ export function DevicesScreen({ project }: { project: HostProject }) {
               ? copy("Bu bilgisayarda cihazlar listelenemiyor.", "Devices can't be listed on this computer.")
               : copy("Cihaz bulunamadı.", "No devices found.")
         }
-        emptyDetail={filtering || noPlatformAvailable ? undefined
-          : copy("Bilgisayarda bir simülatör başlatın veya cihaz bağlayın, sonra yenileyin.", "Start a simulator or connect a device on this computer, then refresh.")}
+        emptyDetail={filtering ? undefined
+          : noPlatformAvailable
+            ? copy("Bu bilgisayara Android Studio (Android SDK) veya Mac’te Xcode kur, sonra yenile.", "Install Android Studio (Android SDK), or Xcode on a Mac, on this computer, then refresh.")
+            : copy("Bilgisayarda bir simülatör başlatın veya cihaz bağlayın, sonra yenileyin.", "Start a simulator or connect a device on this computer, then refresh.")}
         emptyAction={filtering ? {
           label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch,
         } : { label: copy("Cihaz servisi", "Device service"), onPress: () => setRuntime(currentScope) }}

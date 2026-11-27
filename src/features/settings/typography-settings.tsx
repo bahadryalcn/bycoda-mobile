@@ -27,7 +27,7 @@ export function TypographySettings() {
     <Section title={copy("Yazı tipi", "Typography")}>
       <Stack style={{ gap: space.lg }}>
         <SliderField
-          label={copy("Yazı boyutu", "Text size")}
+          label={copy("Uygulama yazı boyutu", "App text size")}
           {...TEXT_SCALE_RANGE}
           value={typography.scale}
           disabled={!hydrated}

@@ -1,9 +1,27 @@
 import { useAsyncAction } from "@/state/actions";
-import { useMachines } from "@/state/machines";
+import { useMachines, whenConnectionsSettled } from "@/state/machines";
 import { assertAppAccess } from "@/state/security";
 import { useCopy } from "@/ui/copy";
 import { flushWorkspaceDrafts } from "../workspace/draft-guard";
-import { ConnectionRecoveryError, selectSavedComputer } from "./recovery";
+import { ConnectionBusyError, ConnectionRecoveryError, selectSavedComputer } from "./recovery";
+
+type Copy = ReturnType<typeof useCopy>;
+
+/** Selection failures: reloading is only suggested when saved connections really failed to load. */
+export function selectionError(error: unknown, copy: Copy): unknown {
+  if (error instanceof ConnectionBusyError)
+    return new Error(copy(
+      "Başka bir bağlantı değişikliği sürüyor. Biraz sonra yeniden dene.",
+      "Another connection change is still running. Try again in a moment.",
+    ));
+  if (!(error instanceof ConnectionRecoveryError)) return error;
+  return new Error(useMachines.getState().storageError
+    ? copy(
+        "Bilgisayar seçilemedi. Kaydedilmiş bağlantıları yeniden yükleyip tekrar dene.",
+        "Computer selection is unavailable. Reload saved connections and try again.",
+      )
+    : copy("Bilgisayar seçilemedi. Yeniden dene.", "The computer couldn’t be selected. Try again."));
+}
 
 /** Switches the active computer from any surface through the same guarded path as the Computers screen. */
 export function useSwitchComputer() {
@@ -21,14 +39,10 @@ export function useSwitchComputer() {
           getState: () => useMachines.getState(),
           selectMachine: (next) => useMachines.getState().selectMachine(next),
           onSelected: onDone,
+          settled: whenConnectionsSettled,
         });
       } catch (error) {
-        throw error instanceof ConnectionRecoveryError
-          ? new Error(copy(
-              "Bilgisayar seçilemedi. Kaydedilmiş bağlantıları yeniden yükleyip tekrar dene.",
-              "Computer selection is unavailable. Reload saved connections and try again.",
-            ))
-          : error;
+        throw selectionError(error, copy);
       }
       return { message: copy("Bilgisayar seçildi.", "Computer selected.") };
     });

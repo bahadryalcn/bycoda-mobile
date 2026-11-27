@@ -37,3 +37,10 @@ export const ScreenScopeControl = createContext<ReactNode>(undefined);
  * computer (a route opened for that computer) show a read-only computer pill instead.
  */
 export const ScreenComputerControl = createContext<(() => ReactNode) | undefined>(undefined);
+
+/**
+ * Puts a page's identity (title and scope pills) and its icon actions into the native header's
+ * top row, beside the back button. Provided once by the root stack (`app/_layout.tsx`), which owns
+ * the native header options; `ScreenHeading` uses it when everything fits on one row.
+ */
+export const ScreenHeaderRow = createContext<((props: { identity: ReactNode; actions?: ReactNode }) => ReactNode) | undefined>(undefined);

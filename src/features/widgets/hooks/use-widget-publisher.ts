@@ -10,6 +10,7 @@ import { widgetPalette } from "../model/palette";
 import {
   buildWidgetSnapshot,
   liveActivityProps,
+  nextLiveActivity,
   snapshotIdentity,
   type LiveActivityProps,
   type WidgetLabels,
@@ -23,8 +24,13 @@ import { widgetLabels } from "../model/widget-labels";
 import { nextPublishStep } from "../model/publish-gate";
 
 const DEBOUNCE_MS = 1_000;
-/** Republish unchanged data before the 10 minute snapshot TTL marks it stale. */
+/** How often the publisher re-checks unchanged data. */
 const HEARTBEAT_MS = 4 * 60_000;
+/**
+ * Unchanged data is republished only once this old. With 4 minute checks, a republish still
+ * lands at most 9 minutes after the last one, before the 10 minute snapshot TTL marks it stale.
+ */
+const REPUBLISH_AFTER_MS = 5 * 60_000;
 
 /**
  * Builds widget snapshots from existing app state and publishes them, debounced and only
@@ -47,6 +53,8 @@ export function useWidgetPublisher() {
   const [beat, setBeat] = useState(0);
   const [activity, setActivity] = useState<LiveActivityProps | null>(null);
   const published = useRef({ identity: "", at: 0 });
+  /** Session activity times last written to the background cache. */
+  const cachedTimes = useRef("");
   const labels = widgetLabels(copy);
   const labelsKey = JSON.stringify(labels);
   const machineId = machine?.id ?? null;
@@ -84,7 +92,13 @@ export function useWidgetPublisher() {
     const identity = snapshot
       ? `${snapshotIdentity(snapshot)}:${JSON.stringify(feed.projects)}`
       : null;
-    const step = nextPublishStep(published.current, identity, now, HEARTBEAT_MS);
+    // Activity times are not visible, so they never trigger a widget reload in the foreground.
+    // The background push merge compares them, so the cache is refreshed once the app leaves.
+    const times = JSON.stringify(feed.sessions.map((session) => session.updatedAt));
+    let step = nextPublishStep(published.current, identity, now, REPUBLISH_AFTER_MS);
+    const flushTimes =
+      step === "skip" && identity !== null && appState !== "active" && times !== cachedTimes.current;
+    if (flushTimes) step = "publish";
     if (step === "skip") return;
     if (step === "retire") {
       // Only a visible change retires in-flight writes; the claim goes with them.
@@ -95,18 +109,19 @@ export function useWidgetPublisher() {
     const timer = setTimeout(
       () => {
         published.current = { identity: identity ?? "", at: Date.now() };
+        cachedTimes.current = times;
         void publishAndCacheWidget(input, snapshot, environmentId, !lockEnabled && signedIn).catch(
           () => {
             // A failed write is retried by the next change or heartbeat.
             published.current = { identity: "", at: 0 };
+            cachedTimes.current = "";
           },
         );
         const next = liveActivityProps(snapshot);
-        setActivity((previous) =>
-          JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
-        );
+        // Publish time alone does not re-render the Live Activity on every publish.
+        setActivity((previous) => nextLiveActivity(previous, next));
       },
-      snapshot.state === "ready" ? DEBOUNCE_MS : 0,
+      snapshot.state === "ready" && !flushTimes ? DEBOUNCE_MS : 0,
     );
     return () => clearTimeout(timer);
   }, [
@@ -122,6 +137,7 @@ export function useWidgetPublisher() {
     locale,
     labelsKey,
     beat,
+    appState,
   ]);
 
   // Unmount retires writes still queued for the old screen; cleanup must not run on dep changes.

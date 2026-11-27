@@ -1,17 +1,17 @@
-import { Body, CodePanel, CodeText, ConfirmationCard } from "@/ui/primitives";
+import { Body, CodePanel, CodeText, FormActions } from "@/ui/primitives";
 import { useLocale } from "@/i18n";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { gitAheadCount } from "./git-commit-model";
-import type { GitConfirmationCardProps } from "./git-types";
+import type { GitConfirmationReviewProps } from "./git-types";
 
-export function GitConfirmationCard({
+export function GitConfirmationReview({
   confirmation,
   busy,
   stageAll = false,
   onCancel,
   onConfirm,
-}: GitConfirmationCardProps & {
+}: GitConfirmationReviewProps & {
   /** The commit stages every changed file first; the review says so instead of "the staged files". */
   stageAll?: boolean;
 }) {
@@ -91,6 +91,7 @@ export function GitConfirmationCard({
 
   return (
     <>
+      <Body>{message}</Body>
       {confirmation.context ? (
         <>
           <Body muted>
@@ -114,14 +115,14 @@ export function GitConfirmationCard({
           ) : null}
         </>
       ) : null}
-      <ConfirmationCard
-        message={message}
-        cancelLabel={copy("Vazgeç", "Cancel")}
-        onCancel={onCancel}
-        confirmLabel={label}
-        onConfirm={onConfirm}
+      {/* The confirmation sheet's actions render in its shared footer. */}
+      <FormActions
+        submitLabel={label}
+        onSubmit={onConfirm}
         tone={tone}
         busy={busy}
+        cancelLabel={copy("Vazgeç", "Cancel")}
+        onCancel={onCancel}
       />
     </>
   );

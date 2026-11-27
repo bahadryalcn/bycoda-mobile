@@ -87,6 +87,7 @@ export function StewardEditor({
         value={normalized}
         projectId={draft.projectId}
         disabled={save.isPending}
+        routingRole="steward"
         onChange={({ maxRunMinutes: _minutes, ...agent }) => update(agent)}
       />
       <ScheduleFields

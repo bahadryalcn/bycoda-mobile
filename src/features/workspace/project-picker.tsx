@@ -1,11 +1,11 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { View } from "react-native";
-import { router } from "expo-router";
 import type { HostProject } from "@/domain/types";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import { isReviewedMachine, reviewedMachine } from "@/state/reviewed-machine";
-import { Body, NavigationRow, ScreenList, SearchField, Sheet } from "@/ui/primitives";
+import { NavigationRow, ScreenList, SearchField, Sheet } from "@/ui/primitives";
+import { ScopeLine } from "@/ui/scope-line";
 import { usePrivateContentAccess } from "@/ui/private-access";
 import { ScreenChromeProvider } from "@/ui/layout";
 import { useFilteredListScrollMemory } from "@/ui/use-list-scroll-memory";
@@ -20,6 +20,7 @@ import { projectPathLabel, sortDirectoryProjects } from "./project-directory";
 import { space } from "@/ui/tokens";
 import { ProjectIcon } from "@/ui/project-icon";
 import { useMobileTheme } from "@/ui/theme";
+import { pushOnce } from "@/ui/navigation";
 
 type Props = {
   visible: boolean; onClose(): void; onSelect(project: HostProject): void;
@@ -27,6 +28,12 @@ type Props = {
   selectedId?: string | null;
   /** Offers an All projects row before the list (shared scope only). */
   onSelectAll?(): void;
+  /** A picker for another kind of scope (the assistant's General conversation) names its own title and first row. */
+  title?: string; allLabel?: string; allIcon?: ReactNode;
+  /** Newest session activity per project: the list then shows the most recently used first. */
+  recentActivity?: Readonly<Record<string, number>>;
+  /** Offers "Add project" before the list; the caller closes the picker and opens the folder browser. */
+  onAddProject?(): void; addProjectIcon?: ReactNode;
 };
 
 /** Search and queued events belong to one explicit opening, not a hidden picker. */
@@ -34,8 +41,8 @@ export function ProjectPicker({ visible, ...props }: Props) {
   return visible ? <ProjectPickerOpening {...props} /> : null;
 }
 
-function ProjectPickerOpening({ onClose, onSelect, selectedId, onSelectAll }: Omit<Props, "visible">) {
-  const { uiStyles } = useMobileTheme();
+function ProjectPickerOpening({ onClose, onSelect, selectedId, onSelectAll, title, allLabel, allIcon, recentActivity, onAddProject, addProjectIcon }: Omit<Props, "visible">) {
+  useMobileTheme();
   const copy = useCopy(), locale = useLocale(), machine = useActiveMachine();
   const connection = useConnectionScope(), parent = usePrivateContentAccess();
   const [opening] = useState(() => ({ connection, review: reviewedMachine(machine), name: machine?.name }));
@@ -51,7 +58,8 @@ function ProjectPickerOpening({ onClose, onSelect, selectedId, onSelectAll }: Om
   const [search, setSearch] = useState("");
   const normalized = normalizeSearch(search, locale);
   const rows = useMemo(() => !readable ? [] : sortDirectoryProjects((projects.data ?? []).filter(project =>
-    matchesSearch(`${project.name} ${project.cwd}`, search, locale)), preferences), [readable, projects.data, preferences, search, locale]);
+    matchesSearch(`${project.name} ${project.cwd}`, search, locale)), recentActivity ? { ...preferences, sort: "recent" } : preferences, recentActivity),
+  [readable, projects.data, preferences, search, locale, recentActivity]);
   const view = useMemo(() => ({}), [port, rows, normalized, locale]);
   const feedback = useMemo(() => ({}), [port, projects.error, projects.readiness, projects.privacyUnavailable, projects.refetch]);
   const live = useRef({ port, view, feedback, parent, projects, rows, onClose, onSelect, onSelectAll });
@@ -70,9 +78,13 @@ function ProjectPickerOpening({ onClose, onSelect, selectedId, onSelectAll }: Om
     if (!current() || live.current.view !== view || !live.current.projects.directoryReady || !opening.review || !live.current.onSelectAll) return;
     retired.current = true; live.current.onSelectAll();
   };
+  const addProject = () => {
+    if (!current() || !live.current.projects.directoryReady || !onAddProject) return;
+    retired.current = true; onAddProject();
+  };
   const manageConnections = () => {
     if (!current() || live.current.feedback !== feedback) return;
-    close(); router.push("/machines");
+    close(); pushOnce("/machines");
   };
   const pending = useRef<Promise<unknown> | null>(null);
   const retry = () => {
@@ -92,10 +104,12 @@ function ProjectPickerOpening({ onClose, onSelect, selectedId, onSelectAll }: Om
     empty: !rows.length && projects.directoryReady, loadingLabel: copy("Projeler yükleniyor…", "Loading projects…"),
     emptyTitle: normalized ? copy("Aramana uyan proje yok.", "No projects match your search.") : copy("Bu bilgisayarda henüz proje yok.", "No projects on this computer yet."),
     emptyIllustration: normalized ? ("search-empty" as const) : ("no-projects" as const),
-    emptyAction: normalized ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined,
+    emptyAction: normalized ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
+      : onAddProject ? { label: copy("Proje ekle", "Add project"), onPress: addProject } : undefined,
+    noResults: { compact: true, searching: !!normalized, title: copy("Aramana uyan proje yok.", "No projects match your search."), onClearSearch: clearSearch },
     onManageConnections: manageConnections,
   };
-  return <Sheet visible title={copy("Proje seçin", "Choose a project")} size="full" scroll={false} onClose={close}>
+  return <Sheet visible title={title ?? copy("Proje seç", "Choose a project")} size="full" scroll={false} onClose={close}>
     {!available ? <RecordAccessUnavailable /> : <>
       <View style={{ paddingHorizontal: space.screen, paddingVertical: space.sm }}>
         <SearchField label={copy("Projelerinde ara", "Search projects")} value={readable ? search : ""} editable={readable} onChangeText={changeSearch} />
@@ -103,9 +117,11 @@ function ProjectPickerOpening({ onClose, onSelect, selectedId, onSelectAll }: Om
       <ScreenChromeProvider nativeTitle bottomSafeArea={false}><ScreenList {...position.listProps} grouped data={rows} keyExtractor={project => project.id} query={query}
         ListEmptyComponent={<ProjectDirectorySlot {...feedbackProps} />}
         header={<>
-          {opening.name ? <Body muted style={uiStyles.caption}>{opening.name}</Body> : null}
-          {onSelectAll && readable && !normalized ? <NavigationRow variant="plain" label={copy("Tüm projeler", "All projects")}
-            icon={<ProjectIcon group />} selected={selectedId === null} onPress={selectAll} /> : null}
+          {opening.name ? <ScopeLine scope={{ computer: opening.name }} /> : null}
+          {onSelectAll && readable && !normalized ? <NavigationRow variant="plain" label={allLabel ?? copy("Tüm projeler", "All projects")}
+            icon={allIcon ?? <ProjectIcon group />} selected={selectedId === null} onPress={selectAll} /> : null}
+          {onAddProject && readable && !normalized && rows.length ? <NavigationRow variant="plain" intent="command" label={copy("Proje ekle", "Add project")}
+            icon={addProjectIcon} onPress={addProject} /> : null}
         </>}
         renderItem={({ item }) => <NavigationRow variant="plain" label={item.name} detail={projectPathLabel(item.cwd, preferences.fullPaths)} detailEllipsizeMode="middle" detailLines={preferences.fullPaths ? 0 : 1}
           icon={<ProjectIcon appearance={item.appearance} />} selected={selectedId === undefined ? undefined : item.id === selectedId} onPress={() => select(item)} />}

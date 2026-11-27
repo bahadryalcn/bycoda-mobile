@@ -47,7 +47,8 @@ internal class PcmPlayback(val sampleRate: Int, attributes: AudioAttributes) {
           written += it
         }
       }
-      if (accepted == 0) delay(10)
+      // A full 3 s buffer frees ~640 bytes per 20 ms at 16 kHz; polling faster only adds wakeups.
+      if (accepted == 0) delay(20)
       offset += accepted
     }
   }
@@ -56,13 +57,22 @@ internal class PcmPlayback(val sampleRate: Int, attributes: AudioAttributes) {
     synchronized(lock) {
       if (Build.VERSION.SDK_INT >= 31) track?.setStartThresholdInFrames(1)
     }
-    while (synchronized(lock) { track?.let { it.playbackHeadPosition < written / 2 } == true }) delay(15)
+    // A 40 ms poll ends a reply imperceptibly later than a 15 ms one, with about a third of the wakeups.
+    while (synchronized(lock) { track?.let { it.playbackHeadPosition < written / 2 } == true }) delay(40)
+  }
+
+  /** Frames the speaker has actually played (an underrun does not advance it); kept after close. */
+  private var played = 0L
+  fun playedMs(): Long = synchronized(lock) {
+    track?.let { played = maxOf(played, it.playbackHeadPosition.toLong() and 0xffffffffL) }
+    VoiceDuplexPolicy.playedMs(played, sampleRate)
   }
 
   fun pause() = synchronized(lock) { track?.pause() }
   fun resume() = synchronized(lock) { track?.play() }
   fun close() = synchronized(lock) {
     val player = track ?: return@synchronized
+    played = maxOf(played, player.playbackHeadPosition.toLong() and 0xffffffffL)
     track = null
     try { player.pause(); player.flush() } finally { player.release() }
   }

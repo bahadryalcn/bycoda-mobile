@@ -13,12 +13,13 @@ vi.mock("./use-reduced-motion", () => {
   return { useReducedMotionPreference: () => preference((state) => state.reduced), preference };
 });
 vi.mock("react-native", () => ({
-  View: ({ children, accessibilityRole, accessibilityLabel, accessibilityState, onLayout }: PropsWithChildren<{
+  View: ({ children, accessibilityRole, accessibilityLabel, accessibilityState, onLayout, style }: PropsWithChildren<{
     accessibilityRole?: string; accessibilityLabel?: string; accessibilityState?: { busy?: boolean };
-    onLayout?: (event: any) => void;
+    onLayout?: (event: any) => void; style?: { opacity?: number };
   }>) => {
     if (accessibilityRole === "progressbar") layout.onLayout = onLayout;
-    return createElement("div", { role: accessibilityRole, "aria-label": accessibilityLabel, "aria-busy": accessibilityState?.busy }, children);
+    return createElement("div", { role: accessibilityRole, "aria-label": accessibilityLabel, "aria-busy": accessibilityState?.busy,
+      "data-opacity": style && !Array.isArray(style) ? style.opacity : undefined }, children);
   },
   Text: ({ children }: PropsWithChildren) => createElement("span", null, children),
   StyleSheet: { flatten: (style: unknown) => style },
@@ -148,4 +149,18 @@ it("fills a measured list region and keeps explicit row counts for inline placeh
   expect(container.querySelectorAll('[data-loop="skeleton"]')).toHaveLength(30);
   await act(async () => root.render(createElement(Skeleton, { rows: 2 })));
   expect(container.querySelectorAll('[data-loop="skeleton"]')).toHaveLength(6);
+});
+
+it("reserves the region at once but reveals skeleton shapes and spinners only after the shared delay", async () => {
+  await act(async () => root.render(createElement("div", null,
+    createElement(Skeleton, { rows: 2 }), createElement(Loading, { label: "Reading", delayed: true }))));
+  expect(container.querySelector('[data-opacity="0"]')).not.toBeNull();
+  expect(container.querySelectorAll("[data-loop]")).toHaveLength(0);
+  expect(container.querySelectorAll('[role="progressbar"]')).toHaveLength(2);
+  await act(async () => vi.advanceTimersByTime(249));
+  expect(container.querySelector('[data-opacity="0"]')).not.toBeNull();
+  await act(async () => vi.advanceTimersByTime(1));
+  expect(container.querySelector('[data-opacity="1"]')).not.toBeNull();
+  expect(container.querySelectorAll('[data-loop="skeleton"]')).toHaveLength(6);
+  expect(container.textContent).toContain("Reading");
 });

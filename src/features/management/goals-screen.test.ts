@@ -29,11 +29,22 @@ vi.mock("./goals/goal-card", () => ({ GoalCard: (props: { goal: { id: string }; 
   fixture.cards.push(props);
   return createElement("button", { onClick: () => props.onReplan(props.goal.id) }, "Revise plan");
 } }));
-vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null, FilterButton: () => null, FilterSheet: () => null }));
+vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null, FilterButton: () => null, FilterSheet: () => null, FilterChipRow: () => null }));
 vi.mock("@/ui/screen-list", () => ({ ScreenList: ({ header, actions, data, renderItem, ListEmptyComponent }: { header: React.ReactNode; actions: React.ReactNode; ListEmptyComponent?: React.ReactNode; data: { id: string }[]; renderItem: (info: { item: { id: string } }) => React.ReactNode }) => createElement("main", null, createElement("nav", null, actions), header, data.length ? null : ListEmptyComponent, ...data.map(item => createElement("section", { key: item.id }, renderItem({ item })))) }));
-vi.mock("@/ui/primitives", () => {
+vi.mock("@/ui/primitives", async () => {
+  const reactForMock = await import("react");
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Body: Group, Heading: Group, Button: () => null, Sheet: Group, MutationState: () => null, SelectField: () => null, SearchField: () => null, SearchToolbar: () => null,
+  return { SectionHeader: ({ title }: { title: string }) => createElement("h3", null, title), SegmentedControl: () => null,
+    // The collection sheet renders inline here: the search field always, the filters after the filter icon.
+    useCollapsibleSearch: function useCollapsibleSearchMock(field: unknown, options: { filters?: unknown; filtersLabel?: string } = {}) {
+      const [open, setOpen] = reactForMock.useState(false);
+      return {
+        open, trigger: null, field: null,
+        filterTrigger: options.filters ? createElement("button", { onClick: () => setOpen(true) }, options.filtersLabel ?? "Filters") : null,
+        sheet: createElement(reactForMock.Fragment, null, field as never, open ? options.filters as never : null),
+      };
+    },
+     Body: Group, Heading: Group, Button: () => null, Sheet: Group, MutationState: () => null, SelectField: () => null, SearchField: () => null, SearchToolbar: () => null,
     QueryState: ({ query, empty, emptyAction }: { query: QueryLike; empty?: boolean; emptyAction?: { label: string; onPress(): void } }) => {
       const state = getQueryPresentation(query, empty);
       if (state === "empty" && emptyAction)

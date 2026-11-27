@@ -174,7 +174,14 @@ export function wholePercent(value: number): number {
   return rounded === 100 && value < 100 ? 99 : rounded;
 }
 
-export function compactMoney(value: number): string {
-  if (value >= 1000) return `$${(value / 1000).toFixed(1)}k`;
-  return `$${value.toFixed(value >= 100 ? 0 : 2)}`;
+/** US dollars in the app language: "$12.34", "$1.2K"; Turkish "$12,34", "$1,2 B". */
+export function compactMoney(value: number, locale = "en"): string {
+  const digits = value >= 100 ? 0 : 2;
+  if (value < 1000)
+    return numberFormat(locale, { style: "currency", currency: "USD", minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
+  const text = numberFormat(locale, { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(value);
+  // A runtime without compact notation prints the full amount; keep the reading short anyway.
+  return text === numberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 1 }).format(value)
+    ? `$${(value / 1000).toFixed(1)}k`
+    : text;
 }

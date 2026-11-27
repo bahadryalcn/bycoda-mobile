@@ -53,8 +53,8 @@ export function ScopePills({ scope }: { scope: PageScope }) {
   if (!scope.computer && !scope.project) return null;
   const label = scopeAccessibilityLabel(scope, { computer: copy("Bilgisayar", "Computer"), project: copy("Proje", "Project") });
   const pill = (Glyph: typeof Laptop, value: string) => (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs + 2, height: metrics.chipHeight,
-      paddingHorizontal: space.row, borderRadius: radii.pill, backgroundColor: colors.fill,
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs + 2, minHeight: metrics.chipHeight,
+      paddingHorizontal: space.row, paddingVertical: space.xxs, borderRadius: radii.pill, backgroundColor: colors.fill,
       maxWidth: SCOPE_PILL_MAX_WIDTH, minWidth: 0, flexShrink: 1 }}>
       <Glyph {...decorativeSvgProps} size={iconSize.inline} strokeWidth={2} color={colors.muted} style={{ flexShrink: 0 }} />
       <Text numberOfLines={1} ellipsizeMode="tail" style={[uiStyles.caption, { color: colors.text, flexShrink: 1, minWidth: 0 }]}>{value}</Text>

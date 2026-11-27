@@ -18,6 +18,9 @@ vi.mock("./primitives",()=>{
  Sheet:({visible,children,footer,title}:PropsWithChildren<{visible:boolean;title:string;footer?:import("react").ReactNode}>)=>visible?createElement("section",{"data-title":title},children,createElement("footer",null,footer)):null};
 });
 vi.mock("panelui-native/components/code-block",()=>({CodeBlock:({code,textStyle}:{code:string;textStyle?:unknown})=>createElement("pre",{"data-code-source":true,"data-code-style":JSON.stringify(textStyle)},code)}));
+vi.mock("lucide-react-native/icons/file-code",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/square-terminal",()=>({default:()=>null}));
+vi.mock("lucide-react-native/icons/wrap-text",()=>({default:()=>null}));vi.mock("lucide-react-native/icons/maximize-2",()=>({default:()=>null}));
+vi.mock("lucide-react-native/icons/chevron-down",()=>({default:()=>null}));vi.mock("./accessibility",()=>({decorativeSvgProps:{}}));
 import { MessageCode } from "./message-code";
 let root:ReturnType<typeof createRoot>|undefined,container:HTMLDivElement;
 let props:{code:string;language:string;complete?:boolean;textSize?:"compact"|"standard"|"large";readerTitle?:string;copyLabel?:string;allowPreview?:boolean;output?:boolean;error?:boolean};
@@ -51,13 +54,24 @@ it("lets a document owner provide its single preview action while retaining full
  await open();expect(container.querySelector("section footer")?.textContent).not.toContain("Preview");expect(source()).toHaveLength(12000);
 });
 
-it("bounds default chat code to eight lines while copying the entire source", async () => {
+const press=(label:string)=>act(async()=>[...container.querySelectorAll("button")].find(button=>button.textContent===label)!.click());
+it("bounds default chat code to eight lines, expands it in place and copies the entire source", async () => {
  props={code:Array.from({length:20},(_,i)=>`const recoveryStep${i} = "保存";`).join("\n"),language:"typescript"};
  await render();
  expect(container.textContent).not.toContain("recoveryStep8");
- await act(async()=>[...container.querySelectorAll("button")].find(button=>button.textContent==="Copy code")!.click());
+ await press("Copy code");
  expect(f.copied).toEqual([props.code]);
- await open();expect(source()).toBe(props.code);
+ await press("Show {p0} more lines");expect(container.textContent).toContain("recoveryStep19");
+ await press("Collapse");expect(container.textContent).not.toContain("recoveryStep19");
+ await press("Full screen");expect(source()).toBe(props.code);
+});
+
+it("shows a short block whole and lets the block toggle its own line wrap", async () => {
+ props={code:"one\ntwo",language:"ts"};
+ await render();
+ expect([...container.querySelectorAll("button")].some(button=>/more lines|Show all/.test(button.textContent??""))).toBe(false);
+ await press("Wrap lines");
+ expect([...container.querySelectorAll("button")].some(button=>button.textContent==="Turn off line wrap")).toBe(true);
 });
 
 it("keeps failed streaming output visible, bounded and fully copyable without executable preview", async () => {
@@ -67,7 +81,8 @@ it("keeps failed streaming output visible, bounded and fully copyable without ex
  expect(container.textContent).toContain("Output is still arriving");
  expect(container.textContent).not.toContain("FAIL: owning computer changed");
  expect([...container.querySelectorAll("button")].some(button=>button.textContent==="Preview")).toBe(false);
- await act(async()=>[...container.querySelectorAll("button")].find(button=>button.textContent?.startsWith("Show all output"))!.click());
+ await press("Show {p0} more lines");expect(container.textContent).toContain("FAIL: owning computer changed");
+ await press("Full screen");
  expect(source()).toBe(props.code);
  expect(container.querySelector("section footer")?.textContent).toContain("Failed");
  await click("Copy output");expect(f.copied).toEqual([props.code]);

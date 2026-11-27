@@ -15,3 +15,9 @@ it("keeps page omissions and undated scope explicit", () => {
   expect(readUsageReport(partial, expected).coverage).toMatchObject({ truncated: true, undatedTurns: 2 });
   expect(readUsageReport(partial, expected).totals.inputTokens).toBe(null);
 });
+it("formats counts and durations in the app language with readable units", () => {
+  expect(usageNumber(12345, "tr")).toBe("12.345");
+  expect(usageDuration(42_000)).toBe("42 s");
+  expect(usageDuration(720_000)).toBe("12 min");
+  expect(usageDuration(11_100_000, "tr", { hour: "sa", minute: "dk", second: "sn" })).toBe("3 sa 5 dk");
+});

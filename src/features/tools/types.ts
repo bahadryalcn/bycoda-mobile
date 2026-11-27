@@ -20,6 +20,8 @@ export type BrowserState = {
   controlling: boolean;
   leaseId?: string;
   leaseExpiresAt?: number;
+  /** A live lease's holder without its identity; with `controlling` false another client has the browser. */
+  heldBy?: { kind: "session"; sessionId: string } | { kind: "controller" };
   data?: string;
   mimeType?: string;
   width?: number;

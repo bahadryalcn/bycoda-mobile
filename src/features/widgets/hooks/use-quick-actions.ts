@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import * as QuickActions from "expo-quick-actions";
-import { router, useRootNavigationState, type Href } from "expo-router";
+import { useRootNavigationState, type Href } from "expo-router";
 
 import { useMachines } from "@/state/machines";
 import { isAppAccessAllowed, useSecurity } from "@/state/security";
 import { useCopy } from "@/ui/copy";
 import { showToast } from "@/ui/toast";
+import { openExternalEntry } from "@/ui/navigation";
 
 import { useAccountAccess } from "../../account/model/account-access";
 import { useShareIntentReceiver } from "../../sharing/hooks/use-share-intent-receiver";
@@ -32,7 +33,7 @@ export function useQuickActions() {
   // Same app-lifecycle mount point: the system share sheet is another inbound entry point.
   useShareIntentReceiver();
   const copy = useCopy();
-  const routerReady = !!useRootNavigationState()?.key;
+  const routerReady = !!useRootNavigationState()?.key;
   const queued = useRef<string | null>(null);
   const [arrivals, setArrivals] = useState(0);
 
@@ -85,7 +86,9 @@ export function useQuickActions() {
         return;
       }
     }
-    router.push(href as Href);
+    // Navigate (not push): a repeated shortcut returns to the open screen instead of stacking a copy.
+    // From Home the destination's parent tab goes beneath it, so Back lands there.
+    openExternalEntry(href as Href);
     // `copy` only words the toasts; re-running on a language change would not re-route a consumed tap.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
   }, [routerReady, arrivals, machinesReady, securityStatus, appState, accountStatus]);

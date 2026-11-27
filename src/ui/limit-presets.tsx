@@ -23,9 +23,11 @@ export function IntegerTextStepper({ value, onChangeText, error, ...props }: Omi
 
 /** Presets keep the keyboard closed. An explicit custom choice retains the full Host range. */
 export function LimitPresets({
-  label, customLabel, hint, unit, error, invalid, value, values, format, disabled, onChange,
+  label, customLabel, hint, unit, error, invalid, value, values, format, disabled, onChange, variant,
 }: {
   label: string;
+  /** "row" is a settings row inside NavigationGroup, like `SelectField variant="row"`. */
+  variant?: "field" | "row";
   customLabel: string;
   hint?: string;
   unit?: string;
@@ -54,6 +56,7 @@ export function LimitPresets({
       <SelectField
         label={label}
         hint={hint}
+        variant={variant}
         value={showCustom ? CUSTOM : known ? value : undefined}
         placeholder={value && !known && !unreadable ? format(value) : undefined}
         options={options}
@@ -72,8 +75,9 @@ export function LimitPresets({
 }
 
 /** A duration limit in minutes. Zero means unlimited unless `min` excludes it. */
-export function MinuteLimitField({ label, value, min = 0, hint, error, invalid, disabled, onChange }: {
+export function MinuteLimitField({ label, value, min = 0, hint, error, invalid, disabled, onChange, variant }: {
   label: string;
+  variant?: "field" | "row";
   value: string;
   min?: number;
   hint?: string;
@@ -87,6 +91,7 @@ export function MinuteLimitField({ label, value, min = 0, hint, error, invalid, 
   return (
     <LimitPresets
       label={label}
+      variant={variant}
       customLabel={copy("Özel", "Custom")}
       unit={copy("dk", "min")}
       hint={hint}

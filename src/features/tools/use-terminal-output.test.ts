@@ -105,3 +105,59 @@ it("auth failures stop background polling, while an explicit retry still reads",
   await act(async () => { await refetch(); });
   expect(request).toHaveBeenCalledTimes(2);
 });
+it("a screenshot, shade or share sheet keeps the shown buffer and resumes from its cursor", async () => {
+  const shown = { terminal: { id: "t", projectId: "p" }, output: "hello", cursor: 5, truncated: false, hasMore: false };
+  request.mockImplementation(async () => shown);
+  let latest: ReturnType<typeof useTerminalOutput> | undefined;
+  function Viewer() { latest = useTerminalOutput(client, "p", "t", true, true); return null; }
+  await act(async () => root.render(createElement(Viewer)));
+  expect(latest?.data?.output).toBe("hello");
+  await act(async () => { useSecurity.setState({ windowFocused: false }); });
+  expect(latest?.data?.output).toBe("hello");
+  request.mockClear();
+  await act(async () => { useSecurity.setState({ windowFocused: true }); });
+  expect(latest?.data?.output).toBe("hello");
+  expect(latest?.isPending).toBe(false);
+  expect(latest?.isFetching).toBe(false);
+  expect(request).toHaveBeenCalledOnce();
+  expect(request.mock.calls[0]![1]).toMatchObject({ after: 5 });
+});
+it("reads a quiet terminal less often and stops polling an exited shell", async () => {
+  request.mockImplementation(async () => snapshot);
+  await act(async () => root.render(createElement(Recorder)));
+  // First read plus three unchanged polls at the base rate, then the poll slows to 3 s.
+  await act(async () => { await vi.advanceTimersByTimeAsync(1500 * 4); });
+  expect(request).toHaveBeenCalledTimes(5);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2999); });
+  expect(request).toHaveBeenCalledTimes(5);
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+  expect(request).toHaveBeenCalledTimes(6);
+  request.mockImplementation(async () => ({ ...snapshot, terminal: { ...snapshot.terminal, state: "exited" } }));
+  await act(async () => { await refetch(); });
+  const calls = request.mock.calls.length;
+  await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
+  expect(request).toHaveBeenCalledTimes(calls);
+  await act(async () => { await refetch(); });
+  expect(request).toHaveBeenCalledTimes(calls + 1);
+});
+
+it("poke reads the echo at once, and once more right after a read already in flight", async () => {
+  let poke!: () => void;
+  function Poker() {
+    poke = useTerminalOutput(client, "p", "t", true, true).poke;
+    return null;
+  }
+  let finish!: () => void;
+  request.mockImplementation(() => new Promise((resolve) => { finish = () => resolve(snapshot); }));
+  await act(async () => root.render(createElement(Poker)));
+  expect(request).toHaveBeenCalledOnce();
+  // A keystroke while the first read is in flight: the next read follows it without the poll delay.
+  await act(async () => poke());
+  expect(request).toHaveBeenCalledOnce();
+  await act(async () => { finish(); await vi.advanceTimersByTimeAsync(0); });
+  expect(request).toHaveBeenCalledTimes(2);
+  await act(async () => { finish(); await vi.advanceTimersByTimeAsync(0); });
+  // Idle: a poke reads immediately instead of waiting 1.5 s.
+  await act(async () => { poke(); await vi.advanceTimersByTimeAsync(0); });
+  expect(request).toHaveBeenCalledTimes(3);
+});

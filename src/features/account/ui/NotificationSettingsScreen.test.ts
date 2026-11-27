@@ -22,12 +22,13 @@ vi.mock("@/ui/time-field", () => ({ TimeField: ({ label, onChange }: { label: st
   h("button", { onClick: () => onChange(label.startsWith("Start") ? "07:00" : "08:00") }, label)
 ) }));
 vi.mock("@/ui/week-hours", () => ({ HoursOverview: () => h("p", null, "Schedule preview") }));
+vi.mock("@/ui/info-hint", () => ({ HintSection: ({ children }: PropsWithChildren) => h("section", null, children) }));
 vi.mock("./account-context", () => ({ useAccount: () => fixture.account }));
 vi.mock("./use-notification-saves", () => ({ useNotificationSaves: () => ({ pending: {}, failures: {}, save: fixture.save }) }));
 vi.mock("@/ui/primitives", () => {
   const wrap = ({ children }: PropsWithChildren) => h("section", null, children);
   return {
-    Body: wrap, Screen: wrap, Section: wrap, Stack: wrap, NavigationGroup: wrap, ToggleField: () => null,
+    Body: wrap, Screen: wrap, ValueRow: () => null, Section: wrap, Stack: wrap, NavigationGroup: wrap, ToggleField: () => null,
     Notice: ({ message }: { message: string }) => h("p", { role: "alert" }, message),
     Loading: () => h("p", { role: "status" }, "Loading"),
     Skeleton: () => h("p", { role: "status" }, "Loading preferences"),
@@ -50,11 +51,11 @@ it("keeps an equal quiet-hours range local and saves the corrected schedule", as
   try {
     await act(async () => root.render(h(AccountNotificationSettings)));
     expect(container.textContent).toContain("Schedule preview");
-    await act(async () => button("Start (HH:MM)").click());
+    await act(async () => button("Start").click());
     expect(container.querySelector('[role="alert"]')?.textContent).toBe("Start and end times must differ.");
     expect(container.textContent).not.toContain("Schedule preview");
     expect(fixture.save).not.toHaveBeenCalled();
-    await act(async () => button("End (HH:MM)").click());
+    await act(async () => button("End").click());
     expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(container.textContent).toContain("Schedule preview");
     expect(fixture.save).toHaveBeenCalledExactlyOnceWith(

@@ -6,7 +6,7 @@ import { useHostMutation, useHostQuery } from "@/state/queries";
 import { RemoteHostError } from "@/remote/host-error";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
-import { Body, ConfirmationCard, Disclosure, ErrorNotice, MutationState, Notice, QueryState, Sheet, Button } from "@/ui/primitives";
+import { Body, Disclosure, ErrorNotice, FormActions, MutationState, Notice, QueryState, Sheet, Button } from "@/ui/primitives";
 import type { GitScope } from "./git-types";
 import { useProjectRefresh } from "./shared";
 import {
@@ -186,24 +186,15 @@ export function GitDeliverySheet({
       ) : null}
       <ErrorNotice error={readError} />
       {plan ? (
-        <ConfirmationCard
-          tone="default"
-          message={uncertainKey ? copy(
+        <>
+          <Body>{uncertainKey ? copy(
             "İşlem uygulanmış olabilir. Yeniden denemeden önce sonucu kontrol et.",
             "The action may have been applied. Check the result before trying again.",
           ) : copy(
             "{p0} commit, {p1} dosya {p2} dalına birleştirilecek.",
             "{p0} commits and {p1} files will be merged into {p2}.",
             { p0: plan.commits.length, p1: plan.changedPaths.length, p2: shortBranch(plan.targetBranchRef) },
-          )}
-          cancelLabel={uncertainKey ? copy("Yeniden dene", "Retry") : copy("Yeniden incele", "Review again")}
-          onCancel={() => { void (uncertainKey ? confirmMerge() : startReview()); }}
-          confirmLabel={uncertainKey ? copy("Durumu kontrol et", "Check status")
-            : task ? copy("Teslimatı onayla", "Approve delivery") : copy("Birleştir", "Merge")}
-          onConfirm={() => { void (uncertainKey ? startReview() : confirmMerge()); }}
-          busy={busy || workspaces.isFetching}
-          disabled={!uncertainKey && (!!blocker || workspace?.id !== plan.workspaceId || workspace.revision !== plan.expectedRevision)}
-        >
+          )}</Body>
           <Body mono selectable style={uiStyles.caption}>{shortBranch(plan.sourceBranchRef)} · {plan.sourceHead.slice(0, 12)}</Body>
           <Body mono selectable style={uiStyles.caption}>{shortBranch(plan.targetBranchRef)} · {plan.targetHead.slice(0, 12)}</Body>
           {plan.changedPaths.length ? <Disclosure label={copy("Değişen dosyalar", "Changed files")}>
@@ -227,7 +218,17 @@ export function GitDeliverySheet({
             </Body>
           ))}
           {blocker && !uncertainKey ? <Body style={uiStyles.caption}>{blockerText[blocker]}</Body> : null}
-        </ConfirmationCard>
+          {/* The reviewed delivery confirms from the sheet's shared action area. */}
+          <FormActions
+            submitLabel={uncertainKey ? copy("Durumu kontrol et", "Check status")
+              : task ? copy("Teslimatı onayla", "Approve delivery") : copy("Birleştir", "Merge")}
+            onSubmit={() => { void (uncertainKey ? startReview() : confirmMerge()); }}
+            cancelLabel={uncertainKey ? copy("Yeniden dene", "Retry") : copy("Yeniden incele", "Review again")}
+            onCancel={() => { void (uncertainKey ? confirmMerge() : startReview()); }}
+            busy={busy || workspaces.isFetching}
+            disabled={!uncertainKey && (!!blocker || workspace?.id !== plan.workspaceId || workspace.revision !== plan.expectedRevision)}
+          />
+        </>
       ) : null}
       {!uncertainKey ? <MutationState mutation={merge} /> : null}
       </>}

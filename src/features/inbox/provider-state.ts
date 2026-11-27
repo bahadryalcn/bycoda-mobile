@@ -4,6 +4,7 @@ import type {
   RemoteInboxProvider,
 } from "../../../../src/features/inbox/model/remoteInbox";
 import { inboxReplyTarget } from "../../../../src/features/inbox/model/remoteInbox";
+import { defaultInboxView, type InboxView } from "./provider-view-model";
 
 export type InboxBrowseState = {
   assigned: boolean;
@@ -13,6 +14,8 @@ export type InboxBrowseState = {
   selected: RemoteInboxItem | null;
   limit: number;
   notice: string | null;
+  /** Provider, type, status, label, time and sort: narrowed on the phone without a new read. */
+  view: InboxView;
 };
 export const initialInboxBrowseState: InboxBrowseState = {
   assigned: false,
@@ -22,11 +25,13 @@ export const initialInboxBrowseState: InboxBrowseState = {
   selected: null,
   limit: 40,
   notice: null,
+  view: defaultInboxView,
 };
 export type InboxBrowseAction =
   | { type: "clear-filters" }
   | { type: "clear-search" }
   | { type: "filter"; key: "assigned" | "all"; value: boolean }
+  | { type: "view"; view: Partial<InboxView> }
   | { type: "search"; value: string }
   | { type: "commit-search"; value: string }
   | { type: "select"; item: RemoteInboxItem }
@@ -38,11 +43,13 @@ export function inboxBrowseReducer(
 ): InboxBrowseState {
   switch (action.type) {
     case "clear-filters":
-      return { ...state, assigned: false, all: false, search: "", committedSearch: "", selected: null, limit: 40, notice: null };
+      return { ...state, assigned: false, all: false, search: "", committedSearch: "", selected: null, limit: 40, notice: null, view: defaultInboxView };
     case "clear-search":
       return { ...state, search: "", committedSearch: "", selected: null, limit: 40, notice: null };
     case "filter":
       return { ...state, [action.key]: action.value, selected: null, limit: 40, notice: null };
+    case "view":
+      return { ...state, view: { ...state.view, ...action.view }, selected: null, limit: 40, notice: null };
     case "search":
       return { ...state, search: action.value };
     case "commit-search":

@@ -1,28 +1,29 @@
 import { ConnectionFeedback } from "./connection-feedback";
 import { View } from "react-native";
 import Animated from "react-native-reanimated";
-import { Body, ErrorNotice, FormActions, Disclosure, Field, Heading, IdentifierField, Stack } from "@/ui/primitives";
+import { Body, ErrorNotice, FormActions, Field, Heading, IdentifierField, Stack } from "@/ui/primitives";
 import { remoteErrorKind } from "@/ui/error-message";
 import { enterItem } from "@/ui/motion";
 import { space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
+import { useMobileTheme } from "@/ui/theme";
 import type { ManualConnectionFormProps } from "./connection-types";
 
 export function ManualConnectionForm({ controller, disabled }: ManualConnectionFormProps) {
   const copy = useCopy();
+  const { uiStyles } = useMobileTheme();
   const { form, busy } = controller;
   const { name, endpoint, token, target } = form.values;
   const editing = target?.kind === "existing";
   const error = controller.operation.error;
   const timedOut = remoteErrorKind(error) === "timeout";
+  // A local-network computer keeps its key behind the pairing; other routes may replace it, optionally when editing.
+  const showToken = !(controller.connectionMode === "lan" && editing);
   return (
     <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
       <View style={{ gap: space.sm }}>
-        <Heading>
-          {editing
-            ? copy("Bağlantıyı yenile", "Update connection")
-            : copy("Manuel bağlan", "Connect manually")}
-        </Heading>
+        {/* Editing is titled "Edit connection" by the screen header, matching the row that opens it. */}
+        {editing ? null : <Heading>{copy("Manuel bağlan", "Connect manually")}</Heading>}
         <Body muted>
           {controller.connectionMode === "lan"
             ? copy(
@@ -48,16 +49,36 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
               : "https://computer.example.ts.net"
           }
         />
-        {!(controller.connectionMode === "lan" && editing) ? (
-          <IdentifierField
-            label={copy("Cihaz anahtarı", "Device key")}
-            value={token}
-            onChangeText={(value) => form.setField("token", value)}
-            autoComplete="off"
-            secureTextEntry
-            textContentType="password"
-            editable={!busy && !disabled}
-          />
+        {showToken ? (
+          <View style={{ gap: space.xs }}>
+            <IdentifierField
+              label={editing
+                ? copy("Yeni cihaz anahtarı (isteğe bağlı)", "New device key (optional)")
+                : copy("Cihaz anahtarı", "Device key")}
+              value={token}
+              onChangeText={(value) => form.setField("token", value)}
+              autoComplete="off"
+              secureTextEntry
+              textContentType="password"
+              editable={!busy && !disabled}
+              placeholder={editing ? copy("Kayıtlı anahtarı korumak için boş bırak", "Leave empty to keep the saved key") : undefined}
+              info={controller.connectionMode === "tailscale" ? copy(
+                "HTTPS erişimi için özel ağındaki Tailscale Serve adresini kullan.",
+                "Use your private Tailscale Serve address for HTTPS access.",
+              ) : undefined}
+            />
+            {controller.tokenCleared && !token ? (
+              <Body muted style={uiStyles.caption}>{copy(
+                "Güvenlik için cihaz anahtarı silindi. Yeniden yapıştır.",
+                "The device key was cleared for safety. Paste it again.",
+              )}</Body>
+            ) : editing ? null : (
+              <Body muted style={uiStyles.caption}>{copy(
+                'Anahtarı bilgisayarda oluştur: bycoda-host pair --name "My phone"',
+                'Create the key on the computer: bycoda-host pair --name "My phone"',
+              )}</Body>
+            )}
+          </View>
         ) : null}
         <Field
             label={copy("Bilgisayar adı (isteğe bağlı)", "Computer name (optional)")}
@@ -67,16 +88,6 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
             placeholder={copy("Çalışma bilgisayarım", "My work computer")}
         />
       </Stack>
-      {controller.connectionMode === "tailscale" ? (
-        <Disclosure label={copy("Cihaz anahtarını nereden alırım?", "Where do I get a device key?")}>
-          <Body muted>
-            {copy(
-              'Bilgisayarda: bycoda-host pair --name "My phone". HTTPS erişimi için özel ağındaki Tailscale Serve adresini kullan.',
-              'On the computer: bycoda-host pair --name "My phone". Use your private Tailscale Serve address for HTTPS access.',
-            )}
-          </Body>
-        </Disclosure>
-      ) : null}
       <FormActions
         feedback={error && !busy
           ? <ErrorNotice error={error} message={timedOut ? copy(
@@ -92,7 +103,7 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
         disabled={
           disabled ||
           !endpoint.trim() ||
-          (!(controller.connectionMode === "lan" && editing) && !token.trim())
+          (!editing && !token.trim())
         }
         cancelLabel={copy("Vazgeç", "Cancel")}
         cancelDisabled={busy}
@@ -101,7 +112,7 @@ export function ManualConnectionForm({ controller, disabled }: ManualConnectionF
       {process.env.EXPO_OS === "web" ? (
         <Body muted style={{ textAlign: "center" }}>
           {copy(
-            "Tarayıcı önizlemesi bağlantı anahtarını kaydetmez. Gerçek host bağlantısı native uygulamadan yapılır.",
+            "Tarayıcı önizlemesi cihaz anahtarını kaydetmez. Gerçek bilgisayarına mobil uygulamadan bağlan.",
             "The browser preview does not store your device key. Connect to your real host from the native app.",
           )}
         </Body>

@@ -18,6 +18,7 @@ vi.mock("./assistant-send", () => ({
   checkRoomMessage: mocks.check,
 }));
 vi.mock("./assistant-companion-state", () => ({ consumeAssistantSpeech: vi.fn(), useAssistantCompanion: (selector: (state: unknown) => unknown) => selector({ transcript: undefined }) }));
+vi.mock("./assistant-call-session", () => ({ sendAssistantCallText: vi.fn() }));
 vi.mock("./assistant-voice-controls", () => ({ AssistantMicrophone: () => null, AssistantVoiceFeedback: () => null }));
 vi.mock("@/ui/primitives", () => ({
   Button: ({ label, onPress }: { label: string; onPress(): void }) => createElement("button", { "aria-label": label, onClick: onPress }, label),

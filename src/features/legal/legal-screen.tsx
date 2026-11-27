@@ -1,8 +1,9 @@
-import { Stack, router, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams } from "expo-router";
 import { Empty, Screen } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { LegalReader } from "./legal-reader";
 import { isLegalDocument, legalDocumentTitle, LegalDocument } from "./legal-document";
+import { goBack } from "@/ui/navigation";
 
 export function LegalScreen() {
   const copy = useCopy();
@@ -18,10 +19,7 @@ export function LegalScreen() {
           title={copy("Bu belge mevcut değil.", "This document is unavailable.")}
           action={{
             label: copy("Geri dön", "Go back"),
-            onPress: () => {
-              if (router.canGoBack()) router.back();
-              else router.replace("/");
-            },
+            onPress: () => goBack("/settings"),
           }}
         />
       </Screen>

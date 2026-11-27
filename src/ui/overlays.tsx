@@ -34,9 +34,11 @@ import { motion } from "./tokens";
 import { asWebElement, createOverlayWebFocus } from "./overlay-web-focus";
 import { OverlayWebMenuContext } from "./overlay-web-menu-context";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "./private-content";
+import { OverlayLayerDepth, setOverlayBackOwner } from "./overlay-back";
 
 const Context = createContext<OverlayRegistry | null>(null);
-const LayerPriority = createContext(0);
+// Shared with page Back handlers, which yield to a sheet only when they are not inside one.
+const LayerPriority = OverlayLayerDepth;
 const LayerProgress = createContext<SharedValue<number> | null>(null);
 
 /** UIKit sheet curve: fast departure, long gentle settle. */
@@ -178,14 +180,26 @@ export function OverlayProvider({ children }: PropsWithChildren) {
       }),
     });
   });
-  useBackHandler(!!backOwner, () => {
+  const overlayBack = () => {
     if (useSecurity.getState().status !== "unlocked") return;
     if (backOwner && KeyboardController.isVisible()) {
       void KeyboardController.dismiss();
       return;
     }
     backOwner?.value.onClose();
+  };
+  useBackHandler(!!backOwner, overlayBack);
+  // Page-level handlers subscribed after the sheet opened run first; they hand Back to it here.
+  const overlayBackRef = useRef(overlayBack);
+  useLayoutEffect(() => {
+    overlayBackRef.current = overlayBack;
   });
+  const hasBackOwner = !!backOwner;
+  useLayoutEffect(() => {
+    if (!hasBackOwner) return;
+    setOverlayBackOwner(() => overlayBackRef.current());
+    return () => setOverlayBackOwner(null);
+  }, [hasBackOwner]);
   return (
     <Context.Provider value={registry}><OverlayWebMenuContext.Provider value={menuFocus}>
       <View style={uiStyles.screen}>

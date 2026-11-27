@@ -63,7 +63,27 @@ it("honors persisted opt-outs and never switches or re-adds an unpaired computer
 it("lock/account revocation clears persisted sessions and cannot be undone by a later push", async () => {
   await revokeWidgetCache(); f.publish.mockClear();
   await receiveWidgetPush(push);
-  expect(f.publish.mock.calls[0][0]).toMatchObject({ state: "locked", sessions: [], counts: { running: 0, needsInput: 0, failed: 0 } });
+  // The locked timeline revocation published is still current, so the push need not republish it.
+  for (const [snapshot] of f.publish.mock.calls) expect(snapshot).toMatchObject({ state: "locked", sessions: [] });
+  expect(JSON.parse(f.values.get(WIDGET_CACHE_KEY)!).snapshot).toMatchObject({ state: "locked", sessions: [], counts: { running: 0, needsInput: 0, failed: 0 } });
+});
+it("a heartbeat that changes nothing visible keeps the fresh timeline and reports no data", async () => {
+  expect(await receiveWidgetPush(push)).toBe(true); f.publish.mockClear(); f.activity.mockClear();
+  const before = JSON.parse(f.values.get(WIDGET_CACHE_KEY)!);
+  const update = JSON.parse(push.widget);
+  const heartbeat = { ...push, widget: JSON.stringify({ ...update, at: update.at + 60_000 }) };
+  expect(await receiveWidgetPush(heartbeat)).toBe(false);
+  expect(f.publish).not.toHaveBeenCalled(); expect(f.activity).not.toHaveBeenCalled();
+  const after = JSON.parse(f.values.get(WIDGET_CACHE_KEY)!);
+  expect(after.lastPushAt).toBe(update.at + 60_000); expect(after.snapshot).toEqual(before.snapshot);
+});
+it("republishes an unchanged heartbeat once the published timeline is past half its lifetime", async () => {
+  const cache = JSON.parse(f.values.get(WIDGET_CACHE_KEY)!);
+  const update = JSON.parse(push.widget);
+  cache.snapshot.expiresAt = Date.now() + 4 * 60_000;
+  f.values.set(WIDGET_CACHE_KEY, JSON.stringify(cache));
+  expect(await receiveWidgetPush({ ...push, widget: JSON.stringify({ ...update, sessions: [{ ...update.sessions[0], kind: "running" }] }) })).toBe(true);
+  expect(f.publish).toHaveBeenCalledTimes(1);
 });
 it("disabled pushes prevent publication", async () => {
   f.values.set("bycoda.mobile.push.v1", JSON.stringify({ enabled: false }));

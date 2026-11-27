@@ -1,10 +1,11 @@
+import { numberFormat } from "../../../../src/shared/i18n/numberFormat";
 const BYTES_PER_GIBIBYTE = 1024 ** 3;
 const SECONDS_PER_MINUTE = 60;
 const MINUTES_PER_HOUR = 60;
 
-/** Memory in GB (binary, matching `memoryLabel`), one decimal place. */
-export function gibibyteLabel(bytes: number): string {
-  return `${(bytes / BYTES_PER_GIBIBYTE).toFixed(1)} GB`;
+/** Memory in GB (binary, matching `memoryLabel`), one decimal place, in the app language. */
+export function gibibyteLabel(bytes: number, locale = "en"): string {
+  return `${numberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(bytes / BYTES_PER_GIBIBYTE)} GB`;
 }
 
 /** Share of `whole` that `part` makes up, or null when there is nothing to measure against. */

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
 import {
@@ -78,10 +78,15 @@ export function SubagentDetails({
   context,
   parentProvider,
   interrupted = false,
+  requestStop = false,
 }: Pick<
   TranscriptBlockProps,
   "block" | "scope" | "runId" | "disabled" | "onCommand" | "context" | "parentProvider"
-> & { interrupted?: boolean }) {
+> & {
+  interrupted?: boolean;
+  /** Opened from a list's Stop: start at the stop review, which still applies every check below. */
+  requestStop?: boolean;
+}) {
   const copy = useCopy(),
     connection = useConnectionScope(),
     access = usePrivateContentAccess();
@@ -177,6 +182,15 @@ export function SubagentDetails({
     issued.current = value;
     setApproval(value);
   };
+  const requestedStop = useRef(requestStop);
+  // A list's Stop opens these details straight at the review; it never sends without confirmation.
+  useEffect(() => {
+    if (!requestedStop.current) return;
+    requestedStop.current = false;
+    openStop();
+    // Only the opening request triggers it; openStop reads the current state when it runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const cancelStop = () => {
     if (approval && issued.current === approval) {
       issued.current = undefined;

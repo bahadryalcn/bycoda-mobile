@@ -22,6 +22,7 @@ vi.mock("@/state/connection-scope", () => { const epochs = new Map<number, any>(
   const epoch = fixture.epoch; if (!epochs.has(epoch)) epochs.set(epoch, { token: String(epoch), isCurrent: () => fixture.epoch === epoch }); return epochs.get(epoch);
 } }; });
 vi.mock("@/ui/project-icon", () => ({ ProjectIcon: () => null }));
+vi.mock("@/ui/scope-line", () => ({ ScopeLine: ({ scope }: { scope: { computer?: string } }) => createElement("span", null, scope.computer) }));
 vi.mock("./shared", () => ({ GroupedListRow: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => fixture.machine, useMachines: { getState: () => ({ activeId: fixture.activeId, machines: [fixture.machine] }) } }));
 vi.mock("@/state/project-directory-preferences", () => ({ useProjectDirectoryPreferences: () => ({ preferences: { sort: "name", recent: {}, fullPaths: false } }) }));
@@ -139,4 +140,13 @@ it("coalesces explicit refresh and retires its callback after close", async () =
   let resolve!: () => void; fixture.refetch.mockImplementationOnce(() => new Promise<void>(done => { resolve = done; }));
   await render(); const refresh = fixture.actions.get("Refresh")!; await act(async () => { refresh(); refresh(); }); expect(fixture.refetch).toHaveBeenCalledOnce();
   await act(async () => fixture.actions.get("Close")!()); await act(async () => { resolve(); refresh(); }); expect(fixture.refetch).toHaveBeenCalledOnce();
+});
+it("orders by recent activity and offers Add project once, retiring the picker before the folder browser", async () => {
+  const onAddProject = vi.fn();
+  await act(async () => root.render(createElement(ProjectPicker, { visible: true, onClose: () => fixture.events.push("close"), onSelect: fixture.select,
+    recentActivity: { beta: 20 }, onAddProject })));
+  expect([...container.querySelectorAll("main section button")].map((button) => button.textContent)).toEqual(["Beta", "Alpha"]);
+  await act(async () => { const add = [...container.querySelectorAll("button")].find((button) => button.textContent === "Add project")!; add.click(); add.click(); });
+  expect(onAddProject).toHaveBeenCalledOnce();
+  await click("Alpha"); expect(fixture.select).not.toHaveBeenCalled();
 });

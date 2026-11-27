@@ -12,6 +12,7 @@ import {
   logLocation,
   logPollInterval,
   logSearch,
+  logTail,
   visibleLogEntries,
 } from "./runtime-log-presentation";
 import { tunnelPresentation } from "./tunnel-presentation";
@@ -92,5 +93,13 @@ describe("tunnel state presentation", () => {
       { label: ["Kesildi", "Interrupted"], tone: "warning" },
     ]);
     expect(tunnelPresentation("ready").label[1]).not.toMatch(/reachable|connected/i);
+  });
+});
+
+describe("logTail", () => {
+  it("returns short logs whole and cuts long ones without splitting a surrogate pair", () => {
+    expect(logTail("abc", 5)).toEqual({ text: "abc", truncated: false });
+    expect(logTail("abcdef", 3)).toEqual({ text: "def", truncated: true });
+    expect(logTail("a\u{1F600}bc", 3)).toEqual({ text: "bc", truncated: true });
   });
 });

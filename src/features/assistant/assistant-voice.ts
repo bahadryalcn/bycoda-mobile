@@ -1,5 +1,5 @@
 import { AssistantUtteranceVad, type AssistantTurnOptions } from "./assistant-call-loop";
-import { pcmBase64, resamplePcm } from "../../../../src/features/voice/model/voiceVad";
+import { pcmBase64, resamplePcm } from "../../../../src/shared/model/voice-realtime/voiceVad";
 import { graphemes } from "../../../../src/shared/lib/text/truncate";
 import { assistantMicrophoneLevel, type AssistantVoiceStage } from "./assistant-voice-presentation";
 import type { TranscriptionEngine } from "../voice-settings/voice-preferences";
@@ -49,7 +49,24 @@ const CLOUD_LEASE = "cloud";
  * 1,000,000 characters): 22 seconds. The call loop listens again right after it is sent.
  */
 export const MAX_UTTERANCE_SAMPLES = 352_000;
+/** The Host's 1,000,000 base64 characters hold 375,000 samples; the tail after Finish stays below that. */
+const HOST_AUDIO_SAMPLES = 372_000;
+/**
+ * The recognition language sent to the computer as a two-letter code ("tr-TR" gives "tr"); anything
+ * else sends none. Local Whisper uses it when its own guess is unsure, which short or mixed
+ * Turkish and English phrases often are.
+ */
+export function recognitionLanguage(tag: string | undefined): string | undefined {
+  const base = tag?.replace(/_/g, "-").split("-")[0]?.toLowerCase();
+  return base && /^[a-z]{2}$/.test(base) ? base : undefined;
+}
 const MAX_UTTERANCE_MS = 22_000;
+/**
+ * A call's silent turn keeps its recognition lease for the next turn instead of releasing it and starting
+ * another one: two Host round trips every ~8.5 s of silence. The Host expires an unused lease after 90 s;
+ * a spare is reused only while young enough that its next turn (at most 30 s) still finishes well inside that.
+ */
+const SPARE_LEASE_MS = 45_000;
 export type VoiceCapture = { start(): Promise<void>; stop(): void };
 export type AssistantVoiceDependencies = {
   capture(onBuffer: (data: Int16Array, sampleRate: number) => void, onEnded?: (reason: string, error?: string) => void): Promise<VoiceCapture>;
@@ -63,6 +80,23 @@ export type AssistantVoiceDependencies = {
   /** Transcription engine chosen in Settings → Voice; absent means this computer. */
   engine?(): TranscriptionEngine;
   cloudModel?(): string | undefined;
+  /** The owner's language as a two-letter code, sent with local recognition; absent sends none. */
+  language?(): string | undefined;
+  /**
+   * Dictation only: the language sent with cloud transcription, which the provider treats as the output
+   * language. Absent or undefined sends none, so the provider detects it.
+   */
+  cloudLanguage?(): string | undefined;
+  /**
+   * Dictation only: recognizer settings added to a recognition-only start (forced language, silence
+   * filter, model). A call's natural start never reads it.
+   */
+  recognition?(): Record<string, unknown>;
+  /**
+   * How long a manually finished recording keeps listening, in ms. The microphone delivers audio in
+   * batches, so stopping at once drops the last spoken syllables. Absent or 0 stops at once.
+   */
+  tailMs?: number;
   /** The assistant's voice chosen in Settings → Voice; absent means the Host default. */
   speech?(): Record<string, unknown>;
   /** Reports the chain step about to run, before its first await, so a failure is attributed to it. */
@@ -73,7 +107,8 @@ export type AssistantVoiceDependencies = {
 export class AssistantVoice {
   private epoch = 0;
   private capture?: VoiceCapture;
-  private lease?: { port: VoicePort; id: string; cloud?: { provider: CloudDictationProvider; model?: string } };
+  private lease?: { port: VoicePort; id: string; cloud?: { provider: CloudDictationProvider; model?: string }; key?: string; at?: number };
+  private spare?: { port: VoicePort; id: string; key: string; at: number };
   private timer?: ReturnType<typeof setTimeout>;
   private keepAlive?: ReturnType<typeof setInterval>;
   private frames: Int16Array[] = [];
@@ -82,8 +117,18 @@ export class AssistantVoice {
   private port?: VoicePort;
   private phase: AssistantVoiceState = "idle";
   private utterance?: AssistantUtteranceVad;
+  /** True while a finished recording still collects its last audio batches. */
+  private draining = false;
+  /** Host lease requests (start, release) still in flight; `cancelAndSettle` waits for them. */
+  private settling = new Set<Promise<void>>();
   constructor(private readonly dependencies: AssistantVoiceDependencies) {}
   private update(phase: AssistantVoiceState) { this.phase = phase; if (phase !== "recording") this.dependencies.level?.(0); this.dependencies.state(phase, this.target); }
+  private track<T>(work: Promise<T>): Promise<T> {
+    const done = work.then(() => {}, () => {});
+    this.settling.add(done);
+    void done.then(() => { this.settling.delete(done); });
+    return work;
+  }
   private current(epoch: number) { return epoch === this.epoch && this.port?.current() === true; }
   private async release() {
     clearInterval(this.keepAlive); this.keepAlive = undefined;
@@ -91,14 +136,36 @@ export class AssistantVoice {
     this.lease = undefined;
     if (lease && lease.id !== CLOUD_LEASE) await lease.port.request("voice.local.release", { lease: lease.id }, { retry: false, timeoutMs: 5000 }).catch(() => {});
   }
+  private dropSpare() {
+    const spare = this.spare;
+    this.spare = undefined;
+    if (spare) void this.track(spare.port.request("voice.local.release", { lease: spare.id }, { retry: false, timeoutMs: 5000 }).catch(() => {}));
+  }
+  /** The silent turn's lease, when the next turn asks for the same voice and the Host still holds it. */
+  private takeSpare(key: string) {
+    const spare = this.spare;
+    if (spare && spare.key === key && Date.now() - spare.at < SPARE_LEASE_MS) { this.spare = undefined; return spare; }
+    this.dropSpare();
+    return undefined;
+  }
   cancel() {
     this.epoch++;
     clearTimeout(this.timer);
     this.capture?.stop(); this.capture = undefined;
     this.dependencies.stopPlayback();
-    this.frames = []; this.samples = 0; this.utterance = undefined;
-    void this.release();
+    this.frames = []; this.samples = 0; this.utterance = undefined; this.draining = false;
+    this.dropSpare();
+    void this.track(this.release());
     this.update("idle");
+  }
+  /**
+   * Cancels like `cancel`, then resolves once the Host released every lease this engine held or was
+   * still starting. A call waits for it: the Host shares one recognizer, and dictation's lease
+   * (recognition only, no reply voice) must be gone before the call asks for spoken replies.
+   */
+  async cancelAndSettle() {
+    this.cancel();
+    while (this.settling.size) await Promise.all([...this.settling]);
   }
   /** The chosen voice; every natural start sends the same one, so a call's leases share one Host runtime. */
   private speechConfig(): Record<string, unknown> {
@@ -114,13 +181,14 @@ export class AssistantVoice {
     try {
       this.dependencies.stage?.("microphone");
       const capture = await this.dependencies.capture((data, rate) => {
-        if (!this.current(epoch) || this.phase !== "recording") { if (!port.current()) this.cancel(); return; }
+        if (!this.current(epoch) || (this.phase !== "recording" && !this.draining)) { if (!port.current()) this.cancel(); return; }
         const pcm = resamplePcm(data, rate);
-        this.dependencies.level?.(assistantMicrophoneLevel(pcm));
-        const remaining = 480_000 - this.samples;
+        if (!this.draining) this.dependencies.level?.(assistantMicrophoneLevel(pcm));
+        const remaining = (this.draining ? HOST_AUDIO_SAMPLES : 480_000) - this.samples;
         if (remaining <= 0) return;
         const frame = pcm.slice(0, remaining);
         this.frames.push(frame); this.samples += frame.length;
+        if (this.draining) return;
         const ended = this.utterance?.push(frame) ?? false;
         if (ended || this.samples >= MAX_UTTERANCE_SAMPLES) void this.finish();
       }, (reason, error) => {
@@ -139,15 +207,19 @@ export class AssistantVoice {
         provider: engine === "cloud" ? "openrouter" as const : engine,
         ...(model ? { model } : {}),
       };
-      const result = cloud ? { lease: CLOUD_LEASE } : await port.request<{ lease: string }>("voice.local.start", { config: options?.natural ? this.speechConfig() : { natural: false }, recognitionOnly: true }, { retry: false, timeoutMs: 60000 });
+      const config = options?.natural ? this.speechConfig() : { ...(this.dependencies.recognition?.() ?? {}), natural: false };
+      const key = JSON.stringify(config);
+      const spare = cloud || !options?.endOnSilence ? undefined : this.takeSpare(key);
+      const at = spare?.at ?? Date.now();
+      const result = cloud ? { lease: CLOUD_LEASE } : spare ? { lease: spare.id } : await this.track(port.request<{ lease: string }>("voice.local.start", { config, recognitionOnly: true }, { retry: false, timeoutMs: 60000 }));
       if (typeof result?.lease !== "string" || !result.lease) throw new Error("Invalid voice connection.");
       if (!this.current(epoch)) {
         capture.stop();
         if (epoch === this.epoch) this.cancel();
-        if (result.lease !== CLOUD_LEASE) await port.request("voice.local.release", { lease: result.lease }, { retry: false, timeoutMs: 5000 }).catch(() => {});
+        if (result.lease !== CLOUD_LEASE) await this.track(port.request("voice.local.release", { lease: result.lease }, { retry: false, timeoutMs: 5000 }).catch(() => {}));
         return;
       }
-      this.lease = { port, id: result.lease, cloud };
+      this.lease = { port, id: result.lease, cloud, ...(options?.endOnSilence ? { key, at } : {}) };
       this.dependencies.stage?.("microphone");
       await capture.start();
       if (!this.current(epoch)) { capture.stop(); if (epoch === this.epoch) this.cancel(); return; }
@@ -168,10 +240,25 @@ export class AssistantVoice {
       this.dependencies.stage?.("transcription");
       this.update("transcribing");
     } else this.phase = "transcribing";
+    // A manual Finish keeps the microphone for a moment: its last batches hold the final words.
+    const tail = this.utterance ? 0 : this.dependencies.tailMs ?? 0;
+    if (tail > 0 && this.samples < MAX_UTTERANCE_SAMPLES) {
+      this.draining = true;
+      await new Promise<void>(resolve => { setTimeout(resolve, tail); });
+      if (epoch !== this.epoch) return;
+      this.draining = false;
+      if (!this.current(epoch)) { this.cancel(); return; }
+    }
     this.capture?.stop(); this.capture = undefined;
     try {
       if (!hasSpeech) {
         this.frames = []; this.samples = 0;
+        // Nothing was said: the next listening turn reuses this lease instead of releasing and starting one.
+        if (lease.key !== undefined && lease.at !== undefined && lease.id !== CLOUD_LEASE && this.lease === lease && Date.now() - lease.at < SPARE_LEASE_MS) {
+          this.dropSpare();
+          this.spare = { port: lease.port, id: lease.id, key: lease.key, at: lease.at };
+          this.lease = undefined;
+        }
         await this.dependencies.transcript(target, "");
         return;
       }
@@ -181,9 +268,10 @@ export class AssistantVoice {
       for (const frame of this.frames) { pcm.set(frame, offset); offset += frame.length; }
       this.frames = []; this.samples = 0;
       const audio = pcmBase64(pcm);
+      const language = recognitionLanguage(lease.cloud ? this.dependencies.cloudLanguage?.() : this.dependencies.language?.());
       const result = lease.cloud
-        ? await lease.port.request<{ text: string }>("voice.cloud.transcribe", { ...lease.cloud, audio }, { retry: false, timeoutMs: 40000 })
-        : await lease.port.request<{ text: string }>("voice.local.transcribe", { lease: lease.id, audio }, { retry: false, timeoutMs: 40000 });
+        ? await lease.port.request<{ text: string }>("voice.cloud.transcribe", { ...lease.cloud, audio, ...(language ? { language } : {}) }, { retry: false, timeoutMs: 40000 })
+        : await lease.port.request<{ text: string }>("voice.local.transcribe", { lease: lease.id, audio, ...(language ? { language } : {}) }, { retry: false, timeoutMs: 40000 });
       if (!this.current(epoch)) return;
       if (typeof result?.text !== "string" || result.text.length > 16000) throw new Error("Speech could not be recognized. Try again.");
       // Noise that passed the phone's speech detector transcribes to nothing: like silence, keep listening.
@@ -199,9 +287,9 @@ export class AssistantVoice {
     this.update("preparing");
     try {
       this.dependencies.stage?.("synthesis");
-      const result = await port.request<{ lease: string }>("voice.local.start", { config: this.speechConfig() }, { retry: false, timeoutMs: 60000 });
+      const result = await this.track(port.request<{ lease: string }>("voice.local.start", { config: this.speechConfig() }, { retry: false, timeoutMs: 60000 }));
       if (typeof result?.lease !== "string" || !result.lease) throw new Error("Invalid voice connection.");
-      if (!this.current(epoch)) { if (epoch === this.epoch) this.cancel(); await port.request("voice.local.release", { lease: result.lease }, { retry: false, timeoutMs: 5000 }).catch(() => {}); return; }
+      if (!this.current(epoch)) { if (epoch === this.epoch) this.cancel(); await this.track(port.request("voice.local.release", { lease: result.lease }, { retry: false, timeoutMs: 5000 }).catch(() => {})); return; }
       this.lease = { port, id: result.lease };
       this.update("speaking");
       this.keepAlive = setInterval(() => {

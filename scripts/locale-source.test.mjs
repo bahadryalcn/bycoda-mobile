@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { localeMessagesFromSources } from "./locale-source.mjs";
+import { localeMessagesFromSources, thrownErrorMessagesFromSources } from "./locale-source.mjs";
 
 const extract = (text) => localeMessagesFromSources([{ fileName: "fixture.tsx", text }]);
 
@@ -76,4 +76,19 @@ test("uses lexical map bindings instead of matching common tr/en variable names"
     const other = [["Yanlış sıra", "Wrong order"]];
     other.map(([tr]) => { const en = external; return copy(tr, en); });
   `), {});
+});
+
+test("extracts thrown English sentences as catalog keys with template placeholders", () => {
+  const thrown = thrownErrorMessagesFromSources([{ fileName: "fixture.ts", text: `
+    throw new Error("Choose a computer first.");
+    throw new RemoteHostError(id, "auth", \`Each attachment must be at most \${limit} MiB.\`);
+    throw new MockHttpError(500, "Mock failure only.");
+    throw new Error("internal_code");
+    throw "Plain thrown sentence.";
+  ` }]);
+  assert.deepEqual(thrown, {
+    "Choose a computer first.": "Choose a computer first.",
+    "Each attachment must be at most {p0} MiB.": "Each attachment must be at most {p0} MiB.",
+    "Plain thrown sentence.": "Plain thrown sentence.",
+  });
 });

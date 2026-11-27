@@ -77,20 +77,29 @@ In **Coordination details**, **Request** and **Summary** remain available when
 there are no tasks to show. If the reviewed proposal disappears, the panel shows
 that it is unavailable and closes any open reader.
 
-Terminal output has its own scrolling reader, literal line search, full-output copy
-and a follow-latest control. Scrolling back pauses following. Commands stay in the
-compact input dock; expand the editor for multiline commands. Leaving a tool keeps
-its terminal and unsent command draft. Stop and Close still require confirmation.
+**Tools → Terminals** shows the selected terminal as a full terminal screen. Each
+terminal is a real terminal (PTY) on the computer: every key goes straight to the
+shell, which draws its own prompt, echo and line editing, and full-screen programs
+such as vim or top work. Enter runs the line. The key bar above the keyboard is
+one scrolling row: the arrow keys, esc, CTRL and ALT, tab (the shell's own
+completion), CLEAR (Ctrl-L: clears the screen in bash, zsh and PowerShell) and
+the ~ | / - characters. CTRL and ALT are one-shot: tap one (it stays highlighted)
+and the next key or typed character is sent with it, for example CTRL then C, or
+CTRL then an arrow (word by word in most shells). Paste and the keyboard toggle stay pinned at
+the end of the row; paste is always sent as plain text. The terminal follows the screen size, including rotation and the
+keyboard. Swipe the terminal to scroll back. **Search output** and **Select text**
+open the output as selectable text; **Copy all output** copies it. **Send Ctrl+C**
+stops only the running program; the shell stays open. Leaving a tool keeps its
+terminals running. Close still requires confirmation.
 If the computer cannot confirm that a terminal closed, its viewport remains and
 input is paused. Use **Check status** to read the original close receipt; this
 does not send another Close command. The view is released only after closure is
 confirmed. This receipt is retained for the current terminal view's lifetime.
 
 In a conversation, **Session options → Computer → Interactive terminal** opens the terminal
-full screen. **Terminal actions** holds its secondary controls. On narrow
-screens, swipe across the extra terminal keys above the keyboard to reach the
-arrow keys. Use the keyboard button in the terminal header to show or hide the
-keyboard. System Back also hides the keyboard before leaving the terminal.
+full screen. **Terminal actions** holds its secondary controls. Its key bar is
+the same as in **Tools → Terminals**: arrows, esc, one-shot CTRL and ALT, tab,
+CLEAR, shell characters, paste and the keyboard toggle. System Back also hides the keyboard before leaving the terminal.
 To add recent terminal output to your conversation draft, choose **Attach output**
 from **Terminal actions**.
 When the terminal list is waiting for a connection, the screen explains the wait
@@ -343,10 +352,11 @@ pairing code if the camera is unavailable. Swiping back from the scanner returns
 to the pairing choices, like its back button. Photo and document
 attachments use system pickers with access limited to the selected items.
 
-**Settings → Notifications** is the one place for notifications: this phone's
-permission with its single enable action, what your computer sends (disabled
-until a computer is connected), what your account sends with push detail text and
-quiet hours, and **Test on this phone** / **Test from computer**. Android creates its notification
+**Settings → Notifications** keeps the choices that matter on this phone: its
+permission with a single enable action, which computer events notify this phone
+(disabled until a computer is connected), which account events reach your phones
+with push detail text and quiet hours, and **Test on this phone** / **Test from
+computer**. Other notification settings are in bycoda on the computer. Android creates its notification
 channel before requesting permission. Camera, microphone and storage access are
 not requested together on startup; microphone recording is not used by the QR
 scanner.
@@ -476,8 +486,13 @@ on the host to remove its authorization.
   When the desktop is unavailable, the provider view reports that state while
   host attention remains accessible.
   Clear an unsuccessful search with **Clear search** to keep the selected
-  filters. The provider list's **More actions** menu contains Jira boards for
-  the selected project.
+  filters. The Inbox and **Pull requests** use the desktop Inbox's filter set
+  in one search and filter sheet. A record, a pull request review and a file
+  diff open as their own pages, so Back returns to the list. The provider
+  list's **More actions** menu contains Jira boards for the selected project,
+  Pull requests and Connected services. Like the desktop, merging and closing a
+  pull request ask first; comments, draft/ready, reopen, labels and reviewers
+  run at once, and Jira status changes are approved on the computer.
 - **Manage:** tasks, goals, automations and notes. Social media management stays a
   desktop feature; the phone only follows the computer. Notes use the
   existing desktop note database and reject saves after concurrent edits. A
@@ -485,11 +500,10 @@ on the host to remove its authorization.
   The Notes library and session Notes show plain-text excerpts. Opening a note
   shows its original Markdown. In the library, swipe a row or open its **More
   actions** menu to review deletion. The library menu contains **Recover unsaved draft**.
-- **Settings:** an index of pages, each row showing its current value. In
-  **Settings → Agents and tasks** (it explains what to do when no computer is
-  connected), adjust concurrent tasks with
-  the plus and minus buttons. Hold either button to keep changing the limit.
-  Daily agent time offers presets and accepts a custom value.
+- **Settings:** an index of pages, each row showing its current value. Mobile
+  settings cover this phone and your account. Task limits, work caps, provider
+  accounts, agent and model defaults and the command shell are set in bycoda on
+  the computer; Usage and limits stays available to read.
 
 Approval replies retain the identity of the request you saw, including delegated
 Crew approvals. A reused request number cannot redirect an old reply. Unsupported
@@ -512,7 +526,7 @@ components and retain only their specific layouts and behavior. The older
 to the same implementation, so their existing callers share the same design.
 
 Use the shared fields, selection chips, toggles, cards, code views, error notices,
-form actions, confirmation cards and sheets when adding screens. Run `check:ui`
+form actions, confirmation sheets and native confirm dialogs when adding screens. Run `check:ui`
 to catch independent colors, native control copies and typography/radius values
 outside the shared UI layer.
 
@@ -589,7 +603,7 @@ Feature identity glyphs at 20dp and larger use a shared duotone vector style: on
 The bottom navigation keeps Projects, Sessions, Inbox, Tools and Settings within
 reach. Tools groups destinations by Project, Work, Communication, Development and
 Computer; search also finds a group name. Settings opens with your account, then
-four groups of pages: Computer (Computers, Agents and tasks), App (General,
+four groups of pages: Computer (Computers, Assistant), App (General,
 Appearance, Chat, Voice assistant, Notifications), Privacy and security (App
 lock, Phone permissions, Data and privacy) and Support (Help and support, Send
 feedback, About). Each page has a link such as `bycoda://settings/notifications`.
@@ -642,28 +656,57 @@ Drag its handle to reposition it, or expand it to return to the full conversatio
 Closing the floating window ends its phone audio and active voice call. Work
 already accepted by the computer may continue.
 
-The gear opens **Assistant settings**: this conversation (scope, reply model), voice
-choices that can change during a call, and the assistant's Work and Access
-preferences, saved with one Save. In **Reply model**, if a change cannot be confirmed,
+The gear opens **Assistant settings**: this conversation only (scope, reply model),
+a **Voice and microphone** row to Settings → Voice assistant and an **Assistant
+settings** row to **Settings → Assistant**. That page belongs to the selected
+computer and holds **Status** (your presence and what the assistant sees right now),
+**Notifications** (urgent repeats, interval, Telegram) and **Computer** (keep awake),
+which save on their own, and **Access**, which applies only on **Save** because saving
+interrupts the assistant's running work. In **Reply model**, if a change cannot be confirmed,
 tap **Refresh** to read the current selection from the computer. Choose a
 different model only after that check finishes.
 
-**Settings → Voice assistant** uses the desktop's groups: Microphone (input device
-and microphone access), Voice engine (reply voice and speaker), Dictation (dictation
-recognition and transcription models on the computer) and Conversation style
-(**Wait before replying**, 1.2 s by default, and **I decide when my turn ends**).
+**Settings → Voice assistant** has four groups. **Assistant's voice** holds one
+**Reply voice** list as on the desktop: Natural (Supertonic), High quality (VoxCPM2)
+and ElevenLabs. Each option says what the computer still needs (a bycoda update,
+the VoxCPM2 setup or an ElevenLabs key there); **Speaker** appears for Supertonic and
+the ElevenLabs voice ID for ElevenLabs. The phone never synthesizes speech itself.
+**Microphone** shows **Microphone in use** (Phone microphone, Wired headset,
+Bluetooth with the accessory's name, or CarPlay) and microphone access. **Speech to
+text** holds **Transcribed by** and the computer's transcription models.
+**Conversation style** holds **Wait before replying** (1.2 s by default) and **I
+decide when my turn ends**.
 The ElevenLabs voice ID is saved when you leave the field and stays with the
 computer where you entered it. A connection change closes any open model removal
 confirmation. If the phone cannot save a voice preference, use **Retry** on the page.
 
-When more than one input type is connected, **Input device** chooses which one is
-used first.
-OpenAI Realtime and Grok Voice are desktop conversation modes. On mobile,
-OpenAI and Grok can be selected for speech recognition when the computer
-reports them as available.
+When more than one input type is connected, **Microphone in use** chooses which
+one is used first.
+
+**Transcribed by** turns your speech into text; it never changes the assistant's
+voice. The computer's options (Whisper on the computer, or OpenAI, Grok and
+OpenRouter through the computer's sign-in or key) serve both **Dictate message** and
+voice calls. **This phone (on-device)** recognizes dictation with the phone's own
+speech recognizer, on the device whenever the phone supports it, in the app's
+language, and shows the words while you speak. It applies to dictation only:
+calls keep a computer engine, chosen in the **In voice calls** row that appears
+with it. Phone dictation needs a native build that includes
+`expo-speech-recognition` and asks for speech-recognition permission on iOS.
+
+When the computer has an OpenAI or Grok sign-in, **Conversation mode** lists
+OpenAI Realtime and Grok Voice beside **Through the computer**. A computer with
+an updated bycoda runs the chosen live voice itself, with its own Grok Build or
+Codex sign-in: the phone is only microphone and speaker, and no voice model or
+credential reaches the phone. The choice and its **Live speaker** are saved on
+the computer. Requests about work go to the call's own assistant conversation,
+as a typed message would. With an up-to-date computer, speaking over a reply
+interrupts it when the phone has echo cancellation; otherwise the call shows
+**Tap to interrupt**. A tap always
+interrupts. An older computer shows the modes as coming
+soon and every call goes through the computer.
 
 **Dictate message** records up to 30 seconds through the phone microphone and
-uses the connected computer's local speech setup. Finish recording, review the
+uses the engine chosen in **Transcribed by**. Finish recording, review the
 recognized text and send it explicitly. **Read reply aloud** uses local speech
 synthesis separately. These controls require a native build containing expo-audio
 and an available local voice setup on the Host; they do not bypass cloud voice's
@@ -896,11 +939,6 @@ Room's **What I did** reads actual operation journal entries from the Host
 snapshot, showing tool, target, outcome and time. It includes only records whose
 project contributors are visible on this phone; message history remains separate.
 Unknown outcomes remain marked and do not imply success.
-
-Settings > Work edits the Host's canonical total and per-provider daily/monthly
-token and USD caps. Blank or zero means unlimited. Saving preserves model order,
-pools, role bindings and delegation, using the opening routing version to reject
-concurrent edits. Unconfirmed saves require loading current settings before retry.
 
 Crew member model source can follow the Host's crew-member role, Host model
 order, a named pool, or an explicit fixed model. Saved fallback candidates are

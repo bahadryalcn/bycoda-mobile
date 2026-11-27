@@ -63,15 +63,27 @@ function citations(text: string, scope: Scope): MessageNode[] {
   return result;
 }
 
-/** Translate complete output markers only in prose; cached AST nodes stay immutable and scope-free. */
+const OPAQUE = new Set(["link", "code_inline", "code_block", "fence", "image"]);
+
+/**
+ * Translate complete output markers only in prose; cached AST nodes stay immutable and scope-free.
+ * A subtree without markers keeps its identity (structural sharing), so settled blocks of a
+ * streaming message stay the same objects and per-node caches (tables, images) keep working.
+ */
 export function scopedMessageReferences(nodes: MessageNode[], scope?: Scope): MessageNode[] {
   if (!scope) return nodes;
-  return nodes.flatMap((node): MessageNode[] => {
-    if (["link", "code_inline", "code_block", "fence", "image"].includes(node.type)) return [node];
-    if (node.type === "text" && /codex-file-citation|\uE200visualize/.test(node.text))
+  let changed = false;
+  const next = nodes.flatMap((node): MessageNode[] => {
+    if (OPAQUE.has(node.type)) return [node];
+    if (node.type === "text" && /codex-file-citation|\uE200visualize/.test(node.text)) {
+      changed = true;
       return citations(node.text, scope);
-    return node.children.length
-      ? [{ ...node, children: scopedMessageReferences(node.children, scope) }]
-      : [node];
+    }
+    if (!node.children.length) return [node];
+    const children = scopedMessageReferences(node.children, scope);
+    if (children === node.children) return [node];
+    changed = true;
+    return [{ ...node, children }];
   });
+  return changed ? next : nodes;
 }

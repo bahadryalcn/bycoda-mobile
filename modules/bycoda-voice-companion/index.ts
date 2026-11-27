@@ -12,7 +12,8 @@ export type NativeVoiceCompanion = {
   listInputs?(): { name: string; type: string; uid: string }[];
   /** The next capture prefers this input (a uid from listInputs); null keeps the system default. */
   setPreferredInput?(uid: string | null): void;
-  startCapture(sessionId: string, captureId: string): Promise<void>;
+  /** `batchBytes` 3200 asks for 100 ms PCM events (realtime calls); omitted keeps 300 ms. */
+  startCapture(sessionId: string, captureId: string, batchBytes?: number): Promise<void>;
   stopCapture(sessionId: string, captureId: string): void;
   setMuted(sessionId: string, muted: boolean): void;
   /** Only an app-owned cached WAV is accepted. Completion arrives as a playback event. */
@@ -20,6 +21,14 @@ export type NativeVoiceCompanion = {
   startPcm?(sessionId: string, playbackId: string, sampleRate: number): Promise<void>;
   appendPcm?(sessionId: string, playbackId: string, audio: string): Promise<void>;
   finishPcm?(sessionId: string, playbackId: string): Promise<void>;
+  /** Milliseconds of a streamed reply the speaker has played (underruns excluded); 0 when it is not live. */
+  pcmPlayedMs?(sessionId: string, playbackId: string): number;
+  /**
+   * Realtime calls only, before the first capture: full duplex with echo cancellation (Android voice
+   * communication + AcousticEchoCanceler, iOS voice-chat voice processing). Resolves whether it is active;
+   * false (or a rejection) keeps the half-duplex path, where capture and playback stop each other.
+   */
+  setEchoCancellation?(sessionId: string, enabled: boolean): Promise<boolean>;
   stopPlayback(sessionId: string, playbackId: string): void;
   endSession(sessionId: string): void;
   enterPip(sessionId: string): Promise<boolean>;

@@ -32,13 +32,13 @@ export function AccessDevice({ target, device, canManageOtherDevices = true, onC
     void (async () => {
       assertAppAccess();
       if (opening.device.isCurrent) await flushWorkspaceDrafts();
-      if (!current()) throw new Error("The selected computer changed. Reopen the device.");
+      if (!current()) throw new Error(copy("Seçili bilgisayar değişti. Cihazı yeniden açın.", "The selected computer changed. Reopen the device."));
       const result = await revoke.mutateAsync(intent.params);
       if (opening.device.isCurrent) {
-        if (!result.revoked) throw new Error("The host did not confirm credential revocation.");
+        if (!result.revoked) throw new Error(copy("Bilgisayar erişimin kaldırıldığını doğrulamadı. Durumu yenileyip yeniden deneyin.", "The computer did not confirm that access was removed. Refresh and try again."));
         setCleanup(true); await localCleanup();
       } else {
-        if (!result.revoked) throw new Error("The host did not confirm credential revocation.");
+        if (!result.revoked) throw new Error(copy("Bilgisayar erişimin kaldırıldığını doğrulamadı. Durumu yenileyip yeniden deneyin.", "The computer did not confirm that access was removed. Refresh and try again."));
         if (current()) { onUpdated(); onClose(); }
       }
     })().catch((cause: unknown) => {

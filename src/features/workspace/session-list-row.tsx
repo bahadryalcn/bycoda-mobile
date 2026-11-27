@@ -31,7 +31,9 @@ import { observeSessionRuns, openSessionSeen, useUnseenDone } from "./session-do
 import { sessionRowKind } from "./session-row-state";
 
 
-/** One compact conversation identity; secondary actions live in swipe and long-press. */
+const DEFAULT_BRANCHES: ReadonlySet<string> = new Set(["main", "master"]);
+
+/** One compact conversation identity; secondary actions open with a long press. */
 export const SessionListRow = memo(function SessionListRow({
   machineId,
   projectId,
@@ -76,7 +78,8 @@ export const SessionListRow = memo(function SessionListRow({
   );
   const draftLabel = copy("Taslak", "Draft");
   const { fontScale } = useWindowDimensions();
-  const large = fontScale > 1;
+  // Same threshold as the session header: slight enlargement keeps the one-line layout.
+  const large = fontScale >= 1.35;
   const title = sessionDisplayTitle(session.title, copy("Yeni oturum", "New session"));
   const running = session.status === "running";
   // Run transitions are observed where the row sees them; a finish while away turns Done.
@@ -89,7 +92,8 @@ export const SessionListRow = memo(function SessionListRow({
   const badge = sessionRowBadge(kind, hasDraft);
   const activityAt = sessionActivityAt(session);
   // Only this row re-renders when its own label changes; the shared beat never touches siblings.
-  const age = useClockLabel((now) => relativeTime(activityAt, copy, now));
+  // One unbreakable label: Android measured "44 dk" narrower than drawn and dropped the unit.
+  const age = useClockLabel((now) => relativeTime(activityAt, copy, now)).replace(/ /g, String.fromCharCode(0xa0));
   const stamp = badge ? (
     <SessionRowStatus
       label={kind === "idle" ? draftLabel : status.label}
@@ -97,14 +101,17 @@ export const SessionListRow = memo(function SessionListRow({
       icon={badge.icon}
     />
   ) : (
-    <Body selectable={false} muted style={uiStyles.caption}>
+    <Body selectable={false} muted numberOfLines={1} style={uiStyles.caption}>
       {age}
     </Body>
   );
   const optionsLabel = copy("Oturum seçenekleri", "Session options");
   const folder = compressed ? ancestors?.at(-1) : undefined;
-  const meta = [showProject ? undefined : folder, session.branch].filter(Boolean).join(" · ");
   const worktree = !!session.branch && !!session.worktreeCwd;
+  // The usual default branch of a primary checkout repeats on every row; a worktree or any other
+  // branch is worth showing.
+  const branch = session.branch && (worktree || !DEFAULT_BRANCHES.has(session.branch)) ? session.branch : undefined;
+  const meta = [showProject ? undefined : folder, branch].filter(Boolean).join(" · ");
   const BranchIcon = worktree ? FolderTree : GitBranch;
   const workItem = session.linkedWorkItem;
   const workItemLabel = workItem
@@ -178,6 +185,12 @@ export const SessionListRow = memo(function SessionListRow({
                 {/* The stamp shares only the title line; meta lines below use the full width. */}
                 <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.xs }}>
                   <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "flex-start", gap: space.xs }}>
+                    {/* A pinned session leads its title with a filled pin; the trailing column is time only. */}
+                    {session.pinned ? (
+                      <View style={{ paddingTop: space.xxs + 1 }}>
+                        <Pin {...decorativeSvgProps} size={13 * Math.min(fontScale, 1.6)} color={colors.accent} fill={colors.accent} />
+                      </View>
+                    ) : null}
                     <Body
                       selectable={false}
                       numberOfLines={large ? undefined : 2}
@@ -185,23 +198,15 @@ export const SessionListRow = memo(function SessionListRow({
                     >
                       {title}
                     </Body>
-                    {session.pinned ? (
-                      <View style={{ paddingTop: space.xxs }}>
-                        <Pin {...decorativeSvgProps} size={13 * Math.min(fontScale, 1.6)} color={colors.muted} />
-                      </View>
-                    ) : null}
-                    {managedLabel ? (
-                      <View style={{ paddingTop: space.xxs }}>
-                        <Bot {...decorativeSvgProps} size={14 * Math.min(fontScale, 1.6)} color={colors.info} />
-                      </View>
-                    ) : null}
                   </View>
                   {large ? null : <View style={{ flexShrink: 0, paddingTop: space.xxs }}>{stamp}</View>}
                 </View>
                 {large ? <View style={{ flexDirection: "row" }}>{stamp}</View> : null}
                 {snoozed ? <Body muted style={uiStyles.caption}>{copy("Uyanma zamanı", "Wakes at")} · {dateStamp(session.snoozedUntil ?? undefined)}</Body> : null}
-                {showProject || meta || workItem ? (
+                {showProject || meta || workItem || managedLabel ? (
                   <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space.xs + 2, rowGap: space.xxs }}>
+                    {/* The managed (assistant) mark is a type, so it sits with the meta, not by the time. */}
+                    {managedLabel ? <Bot {...decorativeSvgProps} size={12 * Math.min(fontScale, 1.6)} color={colors.info} /> : null}
                     {showProject ? (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 1, minWidth: 0, maxWidth: "100%" }}>
                         <ProjectIcon appearance={projectAppearance} size={14} box={16} />
@@ -212,7 +217,7 @@ export const SessionListRow = memo(function SessionListRow({
                     ) : null}
                     {meta ? (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 1, minWidth: 0, maxWidth: "100%" }}>
-                        {session.branch ? (
+                        {branch ? (
                           <BranchIcon {...decorativeSvgProps} size={12 * Math.min(fontScale, 1.6)} color={colors.muted} />
                         ) : null}
                         <Body selectable={false} muted numberOfLines={large ? undefined : 1} style={[uiStyles.caption, { flexShrink: 1 }]}>

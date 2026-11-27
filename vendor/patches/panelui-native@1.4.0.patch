@@ -438,3 +438,75 @@ index 1e18f97..76de243 100644
  
    return {
      /** The active theme family. */
+diff --git a/lib/module/components/thinking-orb/index.js b/lib/module/components/thinking-orb/index.js
+index a107aca..8f5d4bf 100644
+--- a/lib/module/components/thinking-orb/index.js
++++ b/lib/module/components/thinking-orb/index.js
+@@ -668,6 +668,9 @@ function Bucket({
+     fillOpacity: (index + 0.5) / BUCKETS
+   });
+ }
++/** Minimum gap between path rebuilds; 4 vsyncs at 120Hz, 2 at 60Hz. */
++const DRAW_INTERVAL_MS = 32;
++
+ export function ThinkingOrb({
+   className,
+   state = 'working',
+@@ -685,6 +688,8 @@ export function ThinkingOrb({
+   const profile = PROFILES[state][size <= 32 ? 'sm' : 'md'];
+   const clock = useSharedValue(0);
+   const paths = useSharedValue([]);
++  // Milliseconds since the paths were last rebuilt; starts full so the first frame draws.
++  const sinceDraw = useSharedValue(DRAW_INTERVAL_MS);
+   const still = !paused && !reducedMotion;
+   const frame = useFrameCallback(info => {
+     'worklet';
+@@ -695,6 +700,12 @@ export function ThinkingOrb({
+     // honoured — a 300ms hitch played back at full rate is a lurch.
+     const delta = Math.min(info.timeSincePreviousFrame ?? 16, 48) / 1000;
+     clock.value += delta * profile.speed * speed;
++    // The clock keeps full precision, but the eight SVG paths are rebuilt and
++    // redrawn at about 30fps: a dotted lattice reads the same, and a 120Hz
++    // panel no longer re-rasterises the whole drawing every vsync.
++    sinceDraw.value += info.timeSincePreviousFrame ?? 16;
++    if (sinceDraw.value < DRAW_INTERVAL_MS) return;
++    sinceDraw.value = 0;
+     paths.value = renderFrame(state, size, clock.value, profile);
+   }, false);
+   const {
+diff --git a/src/components/thinking-orb/index.tsx b/src/components/thinking-orb/index.tsx
+index 82e9f84..386b565 100644
+--- a/src/components/thinking-orb/index.tsx
++++ b/src/components/thinking-orb/index.tsx
+@@ -716,6 +716,9 @@ export interface ThinkingOrbProps extends Omit<ViewProps, 'children'> {
+   accessibilityLabel?: string;
+ }
+ 
++/** Minimum gap between path rebuilds; 4 vsyncs at 120Hz, 2 at 60Hz. */
++const DRAW_INTERVAL_MS = 32;
++
+ export function ThinkingOrb({
+   className,
+   state = 'working',
+@@ -734,6 +737,8 @@ export function ThinkingOrb({
+   const profile = PROFILES[state][size <= 32 ? 'sm' : 'md'];
+   const clock = useSharedValue(0);
+   const paths = useSharedValue<string[]>([]);
++  // Milliseconds since the paths were last rebuilt; starts full so the first frame draws.
++  const sinceDraw = useSharedValue(DRAW_INTERVAL_MS);
+ 
+   const still = !paused && !reducedMotion;
+ 
+@@ -745,6 +750,12 @@ export function ThinkingOrb({
+     // honoured — a 300ms hitch played back at full rate is a lurch.
+     const delta = Math.min(info.timeSincePreviousFrame ?? 16, 48) / 1000;
+     clock.value += delta * profile.speed * speed;
++    // The clock keeps full precision, but the eight SVG paths are rebuilt and
++    // redrawn at about 30fps: a dotted lattice reads the same, and a 120Hz
++    // panel no longer re-rasterises the whole drawing every vsync.
++    sinceDraw.value += info.timeSincePreviousFrame ?? 16;
++    if (sinceDraw.value < DRAW_INTERVAL_MS) return;
++    sinceDraw.value = 0;
+     paths.value = renderFrame(state, size, clock.value, profile);
+   }, false);
+ 

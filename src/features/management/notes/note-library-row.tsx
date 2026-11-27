@@ -5,11 +5,11 @@ import type { Note } from "@/domain/types";
 import { useCopy } from "@/ui/copy";
 import { usePrivateContentAccess } from "@/ui/private-access";
 import { ActionMenu } from "@/ui/primitives";
-import { SwipeActions } from "@/ui/swipe-actions";
 import { showToast } from "@/ui/toast";
 import { useClipboardFeedback } from "@/ui/use-clipboard-feedback";
 import { RecordConfirmationSheet, useRecordConfirmation } from "../shared/use-record-confirmation";
 import { NoteSummaryRow } from "./note-summary-row";
+import { iconSize } from "@/ui/tokens";
 
 export function NoteLibraryRow({
   note,
@@ -54,7 +54,7 @@ export function NoteLibraryRow({
   const copyAction = {
     key: "copy",
     label: copy("Notu kopyala", "Copy note"),
-    icon: <CopyIcon size={18} />,
+    icon: <CopyIcon size={iconSize.action} />,
     disabled: busy || clipboard.inFlight || !note.body.trim(),
     onPress: clipboard.copy,
   };
@@ -62,7 +62,7 @@ export function NoteLibraryRow({
   const deleteAction = {
     key: "delete",
     label: deleteLabel,
-    icon: <Trash2 size={18} />,
+    icon: <Trash2 size={iconSize.action} />,
     destructive: true,
     opens: true,
     disabled: busy || !available,
@@ -76,12 +76,11 @@ export function NoteLibraryRow({
       );
     },
   };
-  // Swipe and menu expose the same actions; a read-only computer still allows copying.
+  // A read-only computer still allows copying.
   const actions = canDelete ? [copyAction, deleteAction] : [copyAction];
   return (
     <>
-      <SwipeActions actions={actions} disabled={busy || !readable}>
-        <NoteSummaryRow
+      <NoteSummaryRow
           note={note}
           projectName={projectName}
           disabled={busy}
@@ -93,7 +92,6 @@ export function NoteLibraryRow({
             reserveTouchTarget
           /> : undefined}
         />
-      </SwipeActions>
       <RecordConfirmationSheet review={review} />
     </>
   );

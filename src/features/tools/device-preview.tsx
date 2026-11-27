@@ -7,7 +7,7 @@ import { useHostMutation, useHostQuery } from "@/state/queries";
 import {
   Body,
   Button,
-  Disclosure,
+  ChoiceChip,
   FormActions,
   ErrorText,
   Field,
@@ -23,10 +23,12 @@ import {
   ToggleField,
 } from "@/ui/primitives";
 import { iconSize, space } from "@/ui/tokens";
+import { previewServerUrls } from "./device-viewer-model";
+import type { DevServerScan } from "./types";
 import { RemoteFrame } from "@/ui/remote-frame";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
+import { usePersistentError } from "@/ui/use-persistent-error";
 import { useCopy } from "@/ui/copy";
-import { useInfoHint } from "@/ui/info-hint";
 import { useMobileTheme } from "@/ui/theme";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import {
@@ -62,11 +64,7 @@ export function DevicePreviewSheet({
   onClose: () => void;
 }) {
   const copy = useCopy();
-  const info = useInfoHint(copy(
-    "Önizleme cihazı başlatabilir ve uygulamayı açabilir. İşletim sistemi izinleri ayrıca onaylanmalıdır.",
-    "Preview may boot the device and open the app. Operating system permissions require separate approval.",
-  ), "visible");
-  const { colors } = useMobileTheme();
+  const { colors, uiStyles } = useMobileTheme();
   const machine = useActiveMachine();
   const connection = useConnectionScope();
   const [openingConnection] = useState(connection);
@@ -160,7 +158,23 @@ export function DevicePreviewSheet({
     },
   );
   const refresh = usePullRefresh(() => status.refetch());
+  // The project's running dev servers, Expo first: the usual answer to "which address?".
+  const servers = useHostQuery<DevServerScan>(
+    ["dev-servers", opening.projectId], "devServers.list", { projectId: opening.projectId },
+    { enabled: !!supported && !intent && read.status === "ready" },
+  );
+  const suggestions = previewServerUrls(servers.data?.servers ?? [], opening.projectId);
+  const suggested = suggestions[0]?.url;
+  const prefilled = useRef(false);
+  useEffect(() => {
+    // Fill the address once, never over what the person typed.
+    if (prefilled.current || !suggested) return;
+    prefilled.current = true;
+    setUrl((value) => value || suggested);
+  }, [suggested]);
   const job = supported ? (status.data ?? acknowledged) : undefined;
+  // A status read that heals itself (reconnect, one failed poll) never offers to forget the preview.
+  const statusFailed = !!usePersistentError(!job && status.isError ? status.error : null);
   const busy = localBusy || start.isPending;
   const run = () => {
     if (!supported || !current() || !review || intent || !loaded || busy || occupied.current)
@@ -257,11 +271,12 @@ export function DevicePreviewSheet({
       dismissible={!busy}
       onClose={onClose}
     >
-      <Row>
-        <Body style={{ flexShrink: 1 }}>{device.name}</Body>
-        {info.button}
-      </Row>
-      {info.panel}
+      <Body muted style={uiStyles.caption}>
+        {copy(
+          "Projenin geliştirme sunucusunu bu cihazda Expo Go ile açar. Gerekirse cihazı başlatır; işletim sistemi izinleri ayrıca onaylanır.",
+          "Opens your project's development server in Expo Go on this device. It starts the device if needed; operating system permissions are approved separately.",
+        )}
+      </Body>
       {!supported ? (
         <StateView
           illustration="permission"
@@ -301,12 +316,10 @@ export function DevicePreviewSheet({
                     </Body>
                     {stage.message ? <Body>{stage.message}</Body> : null}
                     {stage.code || !stages[stage.name] ? (
-                      <Disclosure label={copy("Teknik ayrıntılar", "Technical details")}>
-                        <Body mono selectable>
-                          {stage.name}
-                          {stage.code ? ` · ${stage.code}` : ""}
-                        </Body>
-                      </Disclosure>
+                      <Body mono muted selectable>
+                        {stage.name}
+                        {stage.code ? ` · ${stage.code}` : ""}
+                      </Body>
                     ) : null}
                   </Stack>
                 ))}
@@ -325,7 +338,7 @@ export function DevicePreviewSheet({
               <RefreshCw size={iconSize.action} strokeWidth={2} color={colors.accent} />
             </IconButton>
           </Row>
-          {!job && status.isError ? (
+          {!job && statusFailed ? (
             <>
               {forget ? (
                 <>
@@ -381,7 +394,7 @@ export function DevicePreviewSheet({
               ) : (
                 <Button
                   tone="quiet"
-                  label={copy("Kullanılamayan takibi kaldır", "Remove unavailable tracking")}
+                  label={copy("Bu önizlemeyi unut", "Forget this preview")}
                   disabled={!supported || busy}
                   onPress={() => setForget(true)}
                 />
@@ -487,7 +500,7 @@ export function DevicePreviewSheet({
                 ) : (
                   <Button
                     tone="quiet"
-                    label={copy("Kayıtlı önizleme isteğini sil", "Discard saved preview request")}
+                    label={copy("Kayıtlı önizlemeyi unut", "Forget saved preview")}
                     disabled={!supported || busy}
                     onPress={() => setDiscard(true)}
                   />
@@ -502,12 +515,29 @@ export function DevicePreviewSheet({
           <Field
             label={copy("Geliştirme sunucusu adresi", "Development server URL")}
             value={url}
+            placeholder="http://127.0.0.1:8081"
             onChangeText={setUrl}
             maxLength={2048}
             autoCapitalize="none"
             autoCorrect={false}
+            keyboardType="url"
             editable={!busy && !review}
           />
+          {suggestions.length ? (
+            <Row style={{ flexWrap: "wrap", gap: space.sm }}>
+              {suggestions.map((item) => (
+                <ChoiceChip key={item.url} label={`${item.name} · ${item.url}`} selected={url.trim() === item.url}
+                  disabled={busy || !!review} onPress={() => setUrl(item.url)} />
+              ))}
+            </Row>
+          ) : servers.isSuccess ? (
+            <Body muted style={uiStyles.caption}>
+              {copy(
+                "Bu projede çalışan geliştirme sunucusu yok. Bilgisayarda “npx expo start” çalıştır veya adresi yaz.",
+                "No dev server is running for this project. Run “npx expo start” on the computer or type the address.",
+              )}
+            </Body>
+          ) : null}
           <Field
             label={copy("Beklenen metin (isteğe bağlı)", "Expected text (optional)")}
             value={expectedText}
@@ -515,6 +545,12 @@ export function DevicePreviewSheet({
             maxLength={4096}
             editable={!busy && !review}
           />
+          <Body muted style={uiStyles.caption}>
+            {copy(
+              "Uygulama açılınca ekranda görünmesi gereken bir metin. Görünmezse önizleme başarısız sayılır.",
+              "Text that should appear once the app opens. If it doesn't, the preview is marked as failed.",
+            )}
+          </Body>
           <ToggleField
             label={copy(
               "Gerekirse resmi Expo Go uygulamasını kur veya güncelle",
@@ -551,7 +587,7 @@ export function DevicePreviewSheet({
             </>
           ) : (
             <FormActions
-              submitLabel={copy("Değişiklikleri incele", "Review changes")}
+              submitLabel={copy("Önizlemeyi incele", "Review preview")}
               disabled={!supported || !loaded || busy || !url.trim()}
               onSubmit={() => {
                 try {
@@ -571,6 +607,11 @@ export function DevicePreviewSheet({
               }}
               feedback={
                 <>
+                  {!url.trim() ? (
+                    <Body muted style={uiStyles.caption}>
+                      {copy("Geliştirme sunucusu adresini gir.", "Enter the development server URL.")}
+                    </Body>
+                  ) : null}
                   <ErrorText error={error} />
                   <MutationState mutation={start} />
                 </>

@@ -25,6 +25,7 @@ import {
   NavigationGroup,
   NavigationRow,
   SelectField,
+  SegmentedControl,
   Sheet,
   Stack,
   ToggleField,
@@ -158,10 +159,20 @@ export function CrewEditor({
           ? error
           : crewValidationMessage(error, copy)));
   const labels: Record<NumericPolicy, string> = {
-    maxParallel: copy("Eşzamanlı görevler (1–4)", "Parallel tasks (1–4)"),
-    maxAssignments: copy("Görev sayısı sınırı (1–20)", "Assignment limit (1–20)"),
-    maxRunMinutes: copy("Süre sınırı (dakika, 1–240)", "Run limit (minutes, 1–240)"),
+    maxParallel: copy("Eşzamanlı görevler", "Parallel tasks"),
+    maxAssignments: copy("Görev sayısı sınırı", "Assignment limit"),
+    maxRunMinutes: copy("Süre sınırı (dakika)", "Run limit (minutes)"),
   };
+  // Each limit explains its own range and reports its own error; the action area keeps one summary.
+  const numberError = (key: NumericPolicy, max: number) => {
+    const text = numbers[key];
+    if (!(submitted || changedNumbers) || text === "") return undefined;
+    const value = Number(text);
+    return /^\d+(\.\d+)?$/.test(text) && value >= 1 && value <= max
+      ? undefined
+      : copy("{p0} ile {p1} arasında bir sayı girin.", "Enter a number from {p0} to {p1}.", { p0: 1, p1: max });
+  };
+  const rangeHelp = (max: number) => copy("{p0}–{p1} arası", "From {p0} to {p1}", { p0: 1, p1: max });
   return (
     <Stack>
       <Field
@@ -183,16 +194,13 @@ export function CrewEditor({
               )}
         </Body>
       ) : (
-        <SelectField
+        <SegmentedControl
           label={copy("Kapsam", "Scope")}
           value={draft.projectId ? "project" : "host"}
           disabled={busy || !supported}
           options={[
             { value: "project", label: copy("Bu proje", "This project") },
-            {
-              value: "host",
-              label: copy("Bu bilgisayardaki tüm projeler", "All projects on this computer"),
-            },
+            { value: "host", label: copy("Tüm projeler", "All projects") },
           ]}
           onChange={(scope) =>
             form.patch({ projectId: scope === "project" ? projectId : undefined })
@@ -279,7 +287,7 @@ export function CrewEditor({
             label: profile.name,
             detail: profile.projectId
               ? copy("Bu proje", "This project")
-              : copy("Bilgisayar geneli", "Host-wide"),
+              : copy("Bilgisayar geneli", "Computer-wide"),
           }))}
           onChange={(profileId) => {
             const profile = directory.agents.find((item) => item.id === profileId);
@@ -303,6 +311,7 @@ export function CrewEditor({
             <NumberField
               key={key}
               label={labels[key]}
+              error={numberError(key, max)}
               value={value}
               decimal
               editable={!busy && supported}
@@ -312,6 +321,8 @@ export function CrewEditor({
             <IntegerTextStepper
               key={key}
               label={labels[key]}
+              help={rangeHelp(max)}
+              error={numberError(key, max)}
               value={value}
               min={1}
               max={max}
@@ -350,7 +361,8 @@ export function CrewEditor({
           />
         </NavigationGroup>
       </Disclosure>
-      <ErrorText error={visibleError} />
+      {/* Limit errors sit on their fields; the summary stays in the action area. */}
+      <ErrorText error={invalidNumbers ? undefined : visibleError} />
       <FormActions
         feedback={
           <>

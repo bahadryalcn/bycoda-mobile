@@ -1,84 +1,74 @@
-import { useState, type ReactNode } from "react";
 import Eye from "lucide-react-native/icons/eye";
 import FileText from "lucide-react-native/icons/file-text";
 import Minus from "lucide-react-native/icons/minus";
 import Plus from "lucide-react-native/icons/plus";
 import Trash2 from "lucide-react-native/icons/trash-2";
-import { NavigationGroup, NavigationRow, Sheet } from "@/ui/primitives";
-import { SwipeActions, type SwipeRowAction } from "@/ui/swipe-actions";
+import { RowOptionsSheet, type MenuAction } from "@/ui/overflow-menu";
 import { useCopy } from "@/ui/copy";
-import { useMobileTheme } from "@/ui/theme";
 import { GitFileRow } from "./git-file-row";
-import { gitFileRowActions, gitSwipeActions, type GitFileRowAction } from "./git-file-actions-model";
+import { gitFileRowActions, type GitFileRowAction } from "./git-file-actions-model";
 import type { GitChangedFile } from "./wire";
 
-/** Changed-file row with swipe (stage/discard) and long-press (full action sheet). */
+/** Changed-file row: stage in the row, every other action (discard, …) in the list's one options sheet. Rows do not swipe. */
 export function GitFileSwipeRow({
   file,
   staged,
   busy,
   onPreview,
   onStage,
-  onOpen,
-  onDiscard,
+  onOptions,
 }: {
   file: GitChangedFile;
   staged: boolean;
   busy: boolean;
   onPreview: () => void;
   onStage: () => void;
-  onOpen: () => void;
-  onDiscard: () => void;
+  /** Opens the list-level options sheet for this file (long press, named accessibility action). */
+  onOptions: () => void;
 }) {
-  const { colors } = useMobileTheme();
+  return <GitFileRow file={file} staged={staged} busy={busy} onPreview={onPreview} onStage={onStage} onLongPress={onOptions} />;
+}
+
+/**
+ * The one options sheet for the changed-file list: the panel keeps the selected file, so a long
+ * list renders a single sheet instead of one per row. Rows use the shared `RowOptionsSheet`, which
+ * tints glyphs for both themes and colours the destructive Discard row.
+ */
+export function GitFileOptionsSheet({
+  target,
+  busy,
+  onClose,
+  onPreview,
+  onStage,
+  onOpen,
+  onDiscard,
+}: {
+  target: { file: GitChangedFile; staged: boolean } | null;
+  busy: boolean;
+  onClose: () => void;
+  onPreview: (file: GitChangedFile, staged: boolean) => void;
+  onStage: (file: GitChangedFile, staged: boolean) => void;
+  onOpen: (file: GitChangedFile) => void;
+  onDiscard: (file: GitChangedFile) => void;
+}) {
   const copy = useCopy();
-  const [sheet, setSheet] = useState(false);
-  const all = gitFileRowActions(file, staged);
-  const icons: Record<GitFileRowAction, ReactNode> = {
-    stage: <Plus size={18} />,
-    unstage: <Minus size={18} />,
-    preview: <Eye size={18} color={colors.muted} />,
-    open: <FileText size={18} color={colors.muted} />,
-    discard: <Trash2 size={18} />,
-  };
-  const spec: Record<GitFileRowAction, { label: string; run: () => void }> = {
-    stage: { label: copy("Stage’e al", "Stage"), run: onStage },
-    unstage: { label: copy("Stage’den çıkar", "Unstage"), run: onStage },
-    preview: { label: copy("Değişiklikleri göster", "View changes"), run: onPreview },
-    open: { label: copy("Dosyayı aç", "Open file"), run: onOpen },
-    discard: { label: copy("Değişiklikleri at", "Discard changes"), run: onDiscard },
-  };
-  const swipe: SwipeRowAction[] = gitSwipeActions(all).map((action) => ({
-    key: action,
-    label: spec[action].label,
-    icon: icons[action],
-    destructive: action === "discard",
-    disabled: busy,
-    onPress: spec[action].run,
-  }));
-  return (
-    <>
-      <SwipeActions actions={swipe} disabled={busy}>
-        <GitFileRow file={file} staged={staged} busy={busy} onPreview={onPreview} onStage={onStage} onLongPress={() => setSheet(true)} />
-      </SwipeActions>
-      <Sheet visible={sheet} size="compact" title={file.relative.split("/").pop() ?? file.relative} onClose={() => setSheet(false)}>
-        <NavigationGroup>
-          {all.map((action) => (
-            <NavigationRow
-              key={action}
-              label={spec[action].label}
-              icon={icons[action]}
-              tone={action === "discard" ? "danger" : undefined}
-              intent="command"
-              disabled={busy}
-              onPress={() => {
-                setSheet(false);
-                spec[action].run();
-              }}
-            />
-          ))}
-        </NavigationGroup>
-      </Sheet>
-    </>
-  );
+  const actions: MenuAction[] = target
+    ? gitFileRowActions(target.file, target.staged).map((action: GitFileRowAction): MenuAction => {
+        const { file, staged } = target;
+        switch (action) {
+          case "stage":
+            return { key: action, label: copy("Stage’e al", "Stage"), icon: <Plus />, disabled: busy, onPress: () => onStage(file, staged) };
+          case "unstage":
+            return { key: action, label: copy("Stage’den çıkar", "Unstage"), icon: <Minus />, disabled: busy, onPress: () => onStage(file, staged) };
+          case "preview":
+            return { key: action, label: copy("Değişiklikleri göster", "View changes"), icon: <Eye />, opens: true, disabled: busy, onPress: () => onPreview(file, staged) };
+          case "open":
+            return { key: action, label: copy("Dosyayı aç", "Open file"), icon: <FileText />, opens: true, disabled: busy, onPress: () => onOpen(file) };
+          case "discard":
+            return { key: action, label: copy("Değişiklikleri at", "Discard changes"), icon: <Trash2 />, destructive: true, reviewed: true, disabled: busy, onPress: () => onDiscard(file) };
+        }
+      })
+    : [];
+  const name = target ? target.file.relative.replaceAll("\\", "/").split("/").pop() || target.file.relative : "";
+  return <RowOptionsSheet visible={!!target} title={name} subtitle={target?.file.relative !== name ? target?.file.relative : undefined} actions={actions} onClose={onClose} />;
 }

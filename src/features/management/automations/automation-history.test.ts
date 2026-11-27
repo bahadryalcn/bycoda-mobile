@@ -14,6 +14,7 @@ vi.mock("@/ui/layout", () => ({ ScreenChromeProvider: ({ children }: { children:
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("../shared/format", () => ({ stamp: () => "" }));
+vi.mock("../shared/record-bits", () => ({ useRelativeTime: () => () => "soon" }));
 vi.mock("../shared/status", () => ({ Status: () => null }));
 vi.mock("@/ui/primitives", () => {
   const Button = ({ label, onPress }: { label: string; onPress: () => void }) =>

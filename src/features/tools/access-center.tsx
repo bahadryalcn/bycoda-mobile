@@ -15,6 +15,7 @@ import {
   Body,
   IconButton,
   NavigationRow,
+  NoResults,
   StateView,
   NavigationGroup,
   QueryState,
@@ -25,6 +26,7 @@ import {
   SearchField,
   StatusText,
   ValueRow,
+  useCollapsibleSearch,
 } from "@/ui/primitives";
 import { NoComputerGate } from "@/ui/no-computer";
 import { useCopy } from "@/ui/copy";
@@ -74,6 +76,8 @@ export function AccessCenter() {
   const copy = useCopy();
   const locale = useLocale();
   const [search, setSearch] = useState("");
+  // The one search convention: an icon in the page actions opening the search sheet.
+  const deviceSearch = useCollapsibleSearch(<SearchField label={copy("Cihaz ara", "Search devices")} value={search} onChangeText={setSearch} />);
   const intro = useInfoHint(copy(
     "Eşleştirilmiş cihazlar bu bilgisayara yerel ağdan (aynı Wi-Fi) ya da evin dışından özel ağ (ör. Tailscale) üzerinden ulaşır.",
     "Paired devices reach this computer on the local network (same Wi-Fi) or, away from home, over a private network such as Tailscale.",
@@ -144,7 +148,7 @@ export function AccessCenter() {
   const deviceKind = (device: PairedDevice) => device.isCurrent ? copy("Bu telefon", "This phone")
     : device.isLocalDesktop ? copy("Bu bilgisayar", "This computer") : copy("Eşleştirilmiş cihaz", "Paired device");
   const targetLabel = (tunnel: AccessTunnel) => tunnel.target === "host"
-    ? copy("Bilgisayar erişimi", "Host access") : copy("Geliştirme sunucusu", "Dev server");
+    ? copy("Bilgisayar erişimi", "Computer access") : copy("Geliştirme sunucusu", "Dev server");
   const providerLabel = (tunnel: AccessTunnel) => tunnel.provider === "cloudflare" ? "Cloudflare" : "ngrok";
   const changed =
     selected &&
@@ -154,27 +158,32 @@ export function AccessCenter() {
     : undefined;
   useEffect(() => { if (changed) setSelected(undefined); }, [changed]);
   if (!machine) return (
-    <Screen title={copy("Bilgisayar erişimi", "Host access")} scroll={false}>
+    <Screen title={copy("Bilgisayar erişimi", "Computer access")} scroll={false}>
       <NoComputerGate />
     </Screen>
   );
   return (
     <>
       <ScreenList<AccessRow>
-        title={copy("Bilgisayar erişimi", "Host access")}
+        title={copy("Bilgisayar erişimi", "Computer access")}
         computerSwitch
         scope={{ computer: machine?.name }}
         query={supported ? query : undefined}
         refreshState={supported ? refresh : undefined}
-        actions={<IconButton label={copy("Yenile", "Refresh")} busy={refresh.refreshing}
-          disabled={!supported || query.isFetching} onPress={() => { void refresh.onRefresh(); }}>
-          <RefreshCw size={iconSize.action} strokeWidth={2} color={colors.accent} />
-        </IconButton>}
+        actions={<>
+          {/* Search earns its icon on a long device list; an active query keeps it. */}
+          {report && (report.devices.length > 6 || search) ? deviceSearch.trigger : null}
+          <IconButton label={copy("Yenile", "Refresh")} busy={refresh.refreshing}
+            disabled={!supported || query.isFetching} onPress={() => { void refresh.onRefresh(); }}>
+            <RefreshCw size={iconSize.action} strokeWidth={2} color={colors.accent} />
+          </IconButton>
+        </>}
         data={rows}
         keyExtractor={(row) => row.id}
         header={
           <View style={{ gap: space.sm }}>
-            <Stack.Screen options={{ title: copy("Bilgisayar erişimi", "Host access") }} />
+            <Stack.Screen options={{ title: copy("Bilgisayar erişimi", "Computer access") }} />
+            {deviceSearch.field}
             {!supported ? (
               <StateView
                 illustration="permission"
@@ -210,12 +219,8 @@ export function AccessCenter() {
                   : copy("Dış erişim", "External access")}
                 count={item.id === "devices" ? report?.devices.length : undefined}
               />
-              {item.id === "devices" && report && (report.devices.length > 6 || search) ? (
-                <>
-                  <SearchField label={copy("Cihaz ara", "Search devices")} value={search} onChangeText={setSearch} />
-                  {!visibleAccessDevices(report.devices, search, locale).length ? <StateView size="compact" title={copy("Eşleşen sonuç yok", "No matching results")} /> : null}
-                </>
-              ) : null}
+              {item.id === "devices" && report && search.trim() && !visibleAccessDevices(report.devices, search, locale).length
+                ? <NoResults compact searching onClearSearch={() => setSearch("")} /> : null}
               {item.id === "tunnels" && report?.tunnels && !activeAccessTunnels(report.tunnels.tunnels).length ? (
                 <StateView size="compact" title={copy("Dış erişim kapalı", "External access is off")} description={startHint} />
               ) : null}
@@ -226,7 +231,7 @@ export function AccessCenter() {
             <NavigationRow
               label={item.device.name}
               icon={<RowIcon glyph={Smartphone} />}
-              detail={`${deviceKind(item.device)} · ${item.device.id.slice(-4)}`}
+              detail={deviceKind(item.device)}
               separator
               onPress={() => {
                 if (target) setSelected({ target, reviewed: reviewedMachine(machine), device: item.device });

@@ -1,6 +1,8 @@
 import type { Block } from "@/domain/types";
 import { listAgents, type AgentEntry } from "./agents-model";
+import { turnStartedAt } from "./transcript-model";
 import { isRunTurnStart } from "./run-status-model";
+import { userTurn } from "./user-turn";
 import type { ChildSessionEntry } from "./subagent-sessions-model";
 
 type Copy = (tr: string, en: string, values?: Record<string, string | number>) => string;
@@ -43,7 +45,8 @@ export type SessionActivity = {
 };
 
 const DELEGATED = "delegated:";
-const delegatedChildId = (blockId: string) => (blockId.startsWith(DELEGATED) ? blockId.slice(DELEGATED.length) : undefined);
+/** The child session a `delegated:<id>` transcript block stands for; undefined for any other block. */
+export const delegatedChildId = (blockId: string) => (blockId.startsWith(DELEGATED) ? blockId.slice(DELEGATED.length) || undefined : undefined);
 
 /**
  * The one counting rule for this session's subagents: every delegated run in the transcript plus every
@@ -52,9 +55,17 @@ const delegatedChildId = (blockId: string) => (blockId.startsWith(DELEGATED) ? b
  */
 export function sessionAgentEntries(blocks: readonly Block[] | undefined, children: readonly ChildSessionEntry[], live: boolean): AgentEntry[] {
   const childIds = new Set(children.map((child) => child.sessionId));
+  // Only the latest owner turn's runs follow `live`; an older turn's unfinished run was interrupted.
+  const list = blocks ?? [];
+  const start = live ? list.findLastIndex((block) => isRunTurnStart(block) && userTurn(block).kind === "message") : -1;
+  const earlier = new Set(start > 0 ? list.slice(0, start).flatMap((block) => (block.agentRun ? [block.id] : [])) : []);
   return listAgents(blocks)
     .filter((entry) => !childIds.has(delegatedChildId(entry.id) ?? ""))
-    .map((entry) => !live && (entry.state === "running" || entry.state === "queued") ? { ...entry, state: "interrupted" } : entry);
+    .map((entry) =>
+      (!live || earlier.has(entry.id)) && (entry.state === "running" || entry.state === "queued")
+        ? { ...entry, state: "interrupted" }
+        : entry,
+    );
 }
 
 export function countAgents(blocks: readonly Block[] | undefined, children: readonly ChildSessionEntry[] = [], live: boolean): AgentCounts {
@@ -78,7 +89,8 @@ const validStart = (value: number | undefined) => value !== undefined && Number.
 export function deriveSessionActivity(input: SessionActivityInput): SessionActivity {
   const { blocks = [], live, backgroundTasks = [], backgroundAgents } = input;
   const counts = countAgents(blocks, input.children, live);
-  const startedAt = blocks.findLast(isRunTurnStart)?.startedAt;
+  // A steer carries no start; the turn it steered keeps counting.
+  const startedAt = turnStartedAt(blocks);
   const background = backgroundTasks.length;
   const backgroundOnly = live && background > 0 && backgroundAgents === 0;
   const agents = Math.min(background, backgroundAgents ?? counts.running);
@@ -100,11 +112,19 @@ export function activityStateLabel(activity: SessionActivity, copy: Copy): strin
     case "waiting":
       if (agents > 0) return agents === 1 ? copy("1 ajan bekleniyor", "Waiting for 1 agent") : copy("{p0} ajan bekleniyor", "Waiting for {p0} agents", { p0: agents });
       return tasks === 1 ? copy("1 arka plan görevi bekleniyor", "Waiting for 1 background task") : copy("{p0} arka plan görevi bekleniyor", "Waiting for {p0} background tasks", { p0: tasks });
-    case "needs-input": return copy("Yanıtını bekliyor", "Needs your answer");
+    case "needs-input": return copy("Seni bekliyor", "Needs you");
     case "background": return copy("Arka planda çalışıyor", "Running in background");
     case "done": return copy("Bitti", "Done");
     case "idle": return "";
   }
+}
+
+/**
+ * The activity bar's words: everything but plain `working`, which the transcript's live row already
+ * shows with its clock. Empty when the bar has no state to add.
+ */
+export function activityBarLabel(activity: SessionActivity, copy: Copy): string {
+  return activity.state === "working" ? "" : activityStateLabel(activity, copy);
 }
 
 /** "2 running · 3 done" (short) or "2 agents running, 3 finished" (accessibility); zero counts are left out. */

@@ -1,21 +1,29 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useActiveMachine } from "@/state/machines";
 import { sameReviewedMachine, useConnectionScope } from "@/state/connection-scope";
 import type { ReviewedMachine } from "@/state/reviewed-machine";
-import { useHostQuery } from "@/state/queries";
+import { useHostMutation, useHostQuery } from "@/state/queries";
 import { useActiveHostLinkDown } from "@/state/host-runtime-state";
 import { useCopy } from "@/ui/copy";
-import { useMobileTheme } from "@/ui/theme";
-import { Body, Input, NavigationGroup, Notice, QueryState, Section, SelectField, Stack, StateView, ToggleField } from "@/ui/primitives";
-import { PreferenceStorageNotice } from "@/ui/preference-storage-notice";
+import { useLocale } from "@/i18n";
+import { Input, NavigationGroup, Notice, QueryState, Section, SelectField, StateView, ToggleField } from "@/ui/primitives";
 import { parseLocalModels, type LocalVoiceModel } from "./voice-models-model";
+import { normalizeDictationPreferences } from "./dictation-preferences";
+import { DictationRows } from "./dictation-rows";
 import { DICTATION_MODELS } from "../../../../src/features/voice/model/dictationModels";
+import { SPEAKER_IDS } from "../../../../src/shared/model/voice-realtime/voiceSpeakers";
+import {
+  VOICE_REALTIME_RELAY_CAPABILITY, type VoiceCallMode, type VoiceCallSettingsPatch, type VoiceCallSettingsResult,
+} from "../../../../src/shared/model/host-contracts/voice";
 import {
   SUPERTONIC_SPEAKERS, TURN_PAUSES, useVoicePreferences, voicePreferences,
   type SpeechEngine, type SupertonicSpeaker, type TranscriptionEngine, type TurnPause, type VoicePreferences,
 } from "./voice-preferences";
 
 type Copy = ReturnType<typeof useCopy>;
+type SignInState = "ready" | "missing" | "expired";
+/** `signIn` says why a sign-in is unusable; a Host without it reports only the yes/no flags. */
+type CloudStatus = { openrouter?: boolean; elevenlabs?: boolean; openai?: boolean; xai?: boolean; signIn?: { openai?: SignInState; xai?: SignInState } };
 /** "Erkek 1" for M1, "Kadın 3" for F3. */
 export const speakerName = (speaker: SupertonicSpeaker, copy: Copy) =>
   speaker.startsWith("F") ? copy("Kadın {p0}", "Female {p0}", { p0: speaker.slice(1) }) : copy("Erkek {p0}", "Male {p0}", { p0: speaker.slice(1) });
@@ -41,7 +49,7 @@ function useVoiceAvailability() {
   const localSupported = machine?.capabilities?.includes("voice.local.v1") === true;
   const cloudSupported = machine?.capabilities?.includes("voice.cloud.v1") === true;
   const selectableModels = machine?.capabilities?.includes("voice.transcription-models.v1") === true;
-  const keys = useHostQuery<{ openrouter?: boolean; elevenlabs?: boolean; openai?: boolean; xai?: boolean }>(["voice", "cloud"], "voice.cloud.status", {}, { enabled: cloudSupported });
+  const keys = useHostQuery<CloudStatus>(["voice", "cloud"], "voice.cloud.status", {}, { enabled: cloudSupported });
   const models = useHostQuery<LocalVoiceModel[]>(["voice", "models"], "voice.local.models", {}, { enabled: localSupported,
     queryFn: async (client, signal) => parseLocalModels(await client.request("voice.local.models", {}, { signal })) });
   const vox = useHostQuery<{ ready?: boolean }>(["voice", "voxcpm2"], "voice.local.inspect",
@@ -52,18 +60,34 @@ function useVoiceAvailability() {
   const elevenlabs = cloudSupported && keys.data?.elevenlabs === true;
   const needsCloudSetup = copy("Bilgisayarda kurulum gerekiyor", "Needs setup on the computer");
   const needsHostUpdate = copy("Ses modelleri için bu bilgisayarda bycoda’yı güncelle", "Update bycoda on this computer for voice models.");
+  const needsElevenKey = copy("Bilgisayarda ElevenLabs anahtarı gerekli", "Needs an ElevenLabs key on the computer");
+  /**
+   * Why OpenAI or Grok cannot be chosen, as the one step to take on the computer. An older Host reports
+   * no flag at all (an update, not a missing sign-in), and an unanswered status is never called a missing one.
+   */
+  const signInNeeded = (provider: "openai" | "xai") => {
+    if (!cloudSupported) return needsHostUpdate;
+    if (keys.isError) return copy("Bilgisayardan okunamadı; bağlantıyı kontrol et", "Could not read from the computer; check the connection");
+    if (!keys.isSuccess) return copy("Bilgisayar kontrol ediliyor…", "Checking the computer…");
+    if (keys.data?.[provider] === undefined) return needsHostUpdate;
+    if (provider === "openai") return copy("Bilgisayarda Codex’e giriş yap (codex login)", "Sign in to Codex on the computer (codex login)");
+    return keys.data.signIn?.xai === "expired"
+      ? copy("Grok oturumu doldu; bilgisayarda Grok Build’i bir kez aç", "Grok sign-in expired; open Grok Build once on the computer")
+      : copy("Bilgisayarda Grok Build’i aç ve giriş yap (grok login)", "Open Grok Build on the computer and sign in (grok login)");
+  };
   const engines: { value: SpeechEngine; label: string; detail?: string; disabled?: boolean }[] = [
-    { value: "supertonic", label: copy("Doğal (Supertonic)", "Natural (Supertonic)"),
-      detail: localSupported ? copy("Hızlı ve gizli: bu bilgisayarın işlemcisinde çalışır.", "Fast and private: runs on this computer's processor.") : needsHostUpdate,
+    { value: "supertonic", label: copy("Doğal", "Natural"),
+      detail: localSupported ? `Supertonic · ${copy("Hızlı ve gizli: {p0} işlemcisinde çalışır.", "Fast and private: runs on the processor of {p0}.", { p0: machine?.name ?? "" })}` : needsHostUpdate,
       disabled: !localSupported },
-    { value: "voxcpm2", label: copy("Yüksek kalite (VoxCPM2)", "High quality (VoxCPM2)"),
-      detail: vox.data?.ready === false ? needsCloudSetup : copy("Yüksek kalite daha zengin duyulur ama NVIDIA GPU gerektirir.", "High quality sounds richer but needs an NVIDIA GPU."),
+    { value: "voxcpm2", label: copy("Yüksek kalite", "High quality"),
+      detail: !localSupported ? needsHostUpdate : vox.data?.ready === false ? needsCloudSetup : `VoxCPM2 · ${copy("Daha zengin duyulur; NVIDIA ekran kartı gerekir.", "Sounds richer; needs an NVIDIA graphics card.")}`,
       disabled: !localSupported || vox.data?.ready === false },
     { value: "elevenlabs", label: "ElevenLabs",
-      detail: elevenlabs ? copy("Doğal bulut sesi. Bilgisayardan yalnızca yanıt metni çıkar.", "Natural cloud voice. Only the reply text leaves this computer.") : needsCloudSetup,
+      detail: elevenlabs ? copy("Doğal bulut sesi. Bilgisayardan yalnızca yanıt metni çıkar.", "Natural cloud voice. Only the reply text leaves this computer.")
+        : !cloudSupported ? needsHostUpdate : needsElevenKey,
       disabled: !elevenlabs },
   ];
-  return { machine, preferences, localSupported, cloudSupported, selectableModels, keys, models, openrouter, openai, xai, elevenlabs, needsCloudSetup, needsHostUpdate, engines };
+  return { machine, preferences, localSupported, cloudSupported, selectableModels, keys, models, openrouter, openai, xai, elevenlabs, needsCloudSetup, needsHostUpdate, signInNeeded, engines };
 }
 
 /** Saves one choice to this phone, only while the computer it was made for is still the connected one. */
@@ -79,57 +103,86 @@ function useVoiceUpdate() {
 }
 
 /**
- * "Ses": one choice for how the assistant sounds, used on the page and in the call's settings. Supertonic
- * lists its speakers with the engine as the secondary line; VoxCPM2 and ElevenLabs are single entries.
- * It saves the same speech and speaker values as the two rows it replaces.
+ * How a voice conversation runs. "Through the computer" recognizes speech and voices the reply on the
+ * computer. Grok Voice and OpenAI Realtime are live speech-to-speech modes that also run on the computer,
+ * with its own sign-in, while the phone is only microphone and speaker. The choice and the live speaker
+ * are saved on the computer. A mode that cannot be chosen stays listed with the one step that enables it:
+ * the sign-in to make on the computer, or the bycoda update that lets the computer relay it. A computer
+ * with neither a sign-in nor the relay shows no row.
  */
-function VoiceRow() {
+function ConversationModeRows() {
+  const copy = useCopy();
+  const { machine, keys, openai, xai, needsHostUpdate, signInNeeded } = useVoiceAvailability();
+  const relay = machine?.capabilities?.includes(VOICE_REALTIME_RELAY_CAPABILITY) === true;
+  const call = useHostQuery<VoiceCallSettingsResult>(["voice", "call-settings"], "voice.call.settings.get", {}, { enabled: relay && (openai || xai) });
+  const save = useHostMutation<VoiceCallSettingsResult>("voice.call.settings.set", ["voice", "call-settings"]);
+  // Nothing is listed before the computer has answered, or when it has neither a sign-in nor the relay.
+  if (!keys.isSuccess || (relay ? keys.data?.openai === undefined && keys.data?.xai === undefined : !openai && !xai)) return null;
+  const settings = relay ? call.data?.settings : undefined;
+  const signedIn = { grok: xai && (call.data?.signedIn.grok ?? true), openai: openai && (call.data?.signedIn.openai ?? true) };
+  const live = copy("{p0} üzerinde çalışır; telefon mikrofon ve hoparlördür", "Runs on {p0}; the phone is microphone and speaker", { p0: machine?.name ?? "" });
+  const unavailable = !relay || !settings || save.isPending;
+  const liveMode = (value: "grok" | "openai", label: string, provider: "xai" | "openai") => ({
+    value, label, detail: !signedIn[value] ? signInNeeded(provider) : relay ? live : needsHostUpdate, disabled: unavailable || !signedIn[value] });
+  const options: { value: VoiceCallMode; label: string; detail?: string; disabled?: boolean }[] = [
+    { value: "local", label: copy("Bilgisayar üzerinden", "Through the computer"),
+      detail: copy("{p0} konuşmanı tanır ve yanıtı seslendirir", "{p0} recognizes your speech and voices the reply", { p0: machine?.name ?? "" }) },
+    // A computer that cannot relay yet lists only the modes it is signed in to, as an update away.
+    ...(relay || xai ? [liveMode("grok", "Grok Voice", "xai")] : []),
+    ...(relay || openai ? [liveMode("openai", "OpenAI Realtime", "openai")] : []),
+  ];
+  const mode = settings?.mode ?? "local";
+  const change = (patch: VoiceCallSettingsPatch) => { if (relay && settings && !save.isPending) save.mutate(patch); };
+  const speakers = mode === "grok" || mode === "openai" ? SPEAKER_IDS[mode] : undefined;
+  return <>
+    <SelectField variant="row" label={copy("Görüşme şekli", "Call mode")} value={mode} options={options}
+      error={save.isError ? copy("Seçim bilgisayara kaydedilemedi. Tekrar dene.", "The choice could not be saved on the computer. Try again.") : undefined}
+      onChange={(value) => {
+        const option = options.find(item => item.value === value);
+        if (option && !option.disabled && option.value !== mode) change({ mode: option.value });
+      }} />
+    {speakers && settings ? (
+      <SelectField variant="row" label={copy("Canlı konuşmacı", "Live speaker")} disabled={save.isPending}
+        value={mode === "grok" ? settings.grokVoice : settings.openaiVoice}
+        options={speakers.map(id => ({ value: id, label: id.charAt(0).toUpperCase() + id.slice(1) }))}
+        onChange={(value) => {
+          if (!speakers.includes(value)) return;
+          change(mode === "grok" ? { grokVoice: value } : { openaiVoice: value });
+        }} />
+    ) : null}
+  </>;
+}
+
+/**
+ * The assistant's spoken reply, chosen as on the desktop from one list: Natural (Supertonic), High quality
+ * (VoxCPM2) or ElevenLabs. Each option says what it needs from the computer; the speaker belongs to
+ * Supertonic and is listed only while it is chosen. Nothing is synthesized on the phone.
+ */
+function ReplyVoiceRows() {
   const copy = useCopy();
   const { preferences, hydrated } = useVoicePreferences();
   const { engines } = useVoiceAvailability();
   const update = useVoiceUpdate();
-  const [natural, highQuality, eleven] = engines;
-  const options = [
-    ...SUPERTONIC_SPEAKERS.map((speaker) => ({ value: `supertonic:${speaker}`, label: speakerName(speaker, copy),
-      detail: natural.disabled ? natural.detail : natural.label, disabled: natural.disabled })),
-    { value: "voxcpm2", label: highQuality.label, detail: highQuality.disabled ? highQuality.detail : undefined, disabled: highQuality.disabled },
-    { value: "elevenlabs", label: eleven.label, detail: eleven.disabled ? eleven.detail : undefined, disabled: eleven.disabled },
-  ];
-  const current = preferences.speech === "supertonic" ? `supertonic:${preferences.speaker}` : preferences.speech;
-  return <SelectField variant="row" label={copy("Ses", "Voice")} value={current} disabled={!hydrated} options={options}
-    onChange={(value) => {
-      const [speech, speaker] = value.split(":");
-      const engine = engines.find((item) => item.value === speech);
-      if (!engine || engine.disabled) return;
-      if (speech === "supertonic") {
-        const chosen = SUPERTONIC_SPEAKERS.find((item) => item === speaker);
-        if (chosen) update({ speech: "supertonic", speaker: chosen });
-      } else update({ speech: engine.value });
-    }} />;
-}
-
-/** Wait before replying and the owner's own turn end, as select row and switch. */
-function TurnRows() {
-  const copy = useCopy();
-  const { preferences, hydrated } = useVoicePreferences();
-  const update = useVoiceUpdate();
+  const natural = engines[0]!;
   return <>
-    <SelectField variant="row" label={copy("Yanıtlamadan önce bekle", "Wait before replying")}
-      value={String(preferences.turnPause)} disabled={!hydrated || preferences.manualTurnEnd}
-      hint={preferences.manualTurnEnd
-        ? copy("Otomatik duraklama algılama kapalı. Hazır olduğunda Şimdi gönder’e dokun.", "Automatic pause detection is off. Tap Send now when you are ready.")
-        : undefined}
-      options={TURN_PAUSES.map(pause => ({ value: String(pause), label: turnPauseLabel(pause, copy),
-        detail: copy("{p0} saniye", "{p0} seconds", { p0: pause.toLocaleString() }) }))}
-      onChange={value => { const pause = TURN_PAUSES.find(item => String(item) === value); if (pause) update({ turnPause: pause }); }} />
-    <ToggleField label={copy("Konuşmamın ne zaman biteceğine ben karar veririm", "I decide when my turn ends")}
-      help={copy("Uzun duraklamalarda dinleme sürer; göndermek için Şimdi gönder’e dokun.", "Long pauses keep listening. Tap Send now to send your speech.")}
-      value={preferences.manualTurnEnd} disabled={!hydrated}
-      onChange={manualTurnEnd => update({ manualTurnEnd })} />
+    <SelectField variant="row" label={copy("Yanıt sesi", "Reply voice")} value={preferences.speech} disabled={!hydrated}
+      options={engines.map(engine => ({ value: engine.value, label: engine.label, detail: engine.detail, disabled: engine.disabled }))}
+      onChange={(value) => {
+        const engine = engines.find(item => item.value === value);
+        if (engine && !engine.disabled && engine.value !== preferences.speech) update({ speech: engine.value });
+      }} />
+    {preferences.speech === "supertonic" ? (
+      <SelectField variant="row" label={copy("Konuşmacı", "Speaker")} value={preferences.speaker} disabled={!hydrated || natural.disabled}
+        options={SUPERTONIC_SPEAKERS.map(speaker => ({ value: speaker, label: speakerName(speaker, copy) }))}
+        onChange={(value) => {
+          const chosen = SUPERTONIC_SPEAKERS.find(item => item === value);
+          if (chosen) update({ speech: "supertonic", speaker: chosen });
+        }} />
+    ) : null}
   </>;
 }
 
-/** Settings → Voice assistant → Voice: how the assistant sounds on calls from this phone. */
+/** Settings → Voice assistant → Assistant's voice: how the assistant answers on calls from this phone. */
 export function VoiceGroup() {
   const copy = useCopy();
   const { machine, elevenlabs } = useVoiceAvailability();
@@ -155,9 +208,10 @@ export function VoiceGroup() {
     });
   };
   return (
-    <Stack>
+    <Section title={copy("Asistanın sesi", "Assistant's voice")}>
       <NavigationGroup>
-        <VoiceRow />
+        <ConversationModeRows />
+        <ReplyVoiceRows />
       </NavigationGroup>
       {preferences.speech === "elevenlabs" && elevenlabs ? (
         <Input label={copy("ElevenLabs ses kimliği", "ElevenLabs voice ID")} value={elevenValue}
@@ -169,15 +223,23 @@ export function VoiceGroup() {
           onBlur={commitEleven} onSubmitEditing={commitEleven}
           autoCapitalize="none" autoCorrect={false} />
       ) : null}
-    </Stack>
+    </Section>
   );
 }
 
-/** Settings → Voice assistant → Dictation: who turns the owner's speech into text, as on the desktop. */
-export function DictationGroup() {
+type Transcriber = TranscriptionEngine | "phone";
+
+/**
+ * Settings → Voice assistant → Speech to text: who turns the owner's speech into text. The computer's
+ * engines (Whisper on the computer, or OpenAI, Grok and OpenRouter through the computer's sign-in) serve
+ * both dictation and calls. "This phone" recognizes dictation on the phone itself; calls keep a
+ * computer engine, chosen in the extra "In voice calls" row. `localModels` (the computer's model manager)
+ * appears only while Whisper on the computer is in use, folded away.
+ */
+export function DictationGroup({ localModels }: { localModels?: ReactNode }) {
   const copy = useCopy();
   const linkDown = useActiveHostLinkDown();
-  const { machine, preferences, localSupported, selectableModels, keys, models, openrouter, openai, xai, needsCloudSetup, needsHostUpdate } = useVoiceAvailability();
+  const { machine, preferences, localSupported, selectableModels, keys, models, openrouter, openai, xai, needsHostUpdate, signInNeeded } = useVoiceAvailability();
   const { hydrated } = useVoicePreferences();
   const update = useVoiceUpdate();
   const cloudModels = useHostQuery<{ id: string; label: string }[]>(["voice", "cloud-models"], "voice.cloud.models", {}, {
@@ -188,82 +250,101 @@ export function DictationGroup() {
     ? localSupported && models.isSuccess
     : preferences.engine === "cloud" && keys.isSuccess && openrouter;
   const installed = models.data?.filter(model => model.installed && (model.id === "small" || model.id === "turbo")) ?? [];
-  const recognizers: { value: TranscriptionEngine; label: string; detail?: string; disabled?: boolean }[] = [
-    { value: "local", label: copy("Bu bilgisayar", "This computer"), detail: copy("{p0} üzerinde Whisper", "Whisper on {p0}", { p0: machine.name }), disabled: !localSupported },
-    { value: "cloud", label: "OpenRouter", detail: openrouter ? copy("Bulutta", "In the cloud") : needsCloudSetup, disabled: !openrouter },
-    { value: "openai", label: "OpenAI", detail: openai ? "Codex" : keys.isSuccess && keys.data?.openai === undefined ? needsHostUpdate : needsCloudSetup, disabled: !openai },
-    { value: "xai", label: "Grok", detail: xai ? DICTATION_MODELS.xai[0]?.label : keys.isSuccess && keys.data?.xai === undefined ? needsHostUpdate : needsCloudSetup, disabled: !xai },
+  const signIn = copy("Bilgisayardaki oturumla", "With the computer's sign-in");
+  // Grok has one transcription model, so its row names it; OpenAI's models are the row below.
+  const grokModel = DICTATION_MODELS.xai[0]!.label;
+  const computerEngines: { value: TranscriptionEngine; label: string; detail?: string; disabled?: boolean }[] = [
+    { value: "local", label: copy("{p0} (Whisper)", "{p0} (Whisper)", { p0: machine.name }),
+      detail: localSupported ? copy("Bilgisayarında çalışır", "Runs on your computer") : needsHostUpdate, disabled: !localSupported },
+    { value: "openai", label: "OpenAI", detail: openai ? signIn : signInNeeded("openai"), disabled: !openai },
+    { value: "xai", label: "Grok", detail: xai ? `${grokModel} · ${signIn}` : signInNeeded("xai"), disabled: !xai },
+    { value: "cloud", label: "OpenRouter", detail: openrouter ? copy("Bilgisayardaki anahtarla", "With the computer's key")
+      : copy("Bilgisayarda OpenRouter anahtarı gerekli", "Needs an OpenRouter key on the computer"), disabled: !openrouter },
   ];
+  const transcribers: { value: Transcriber; label: string; detail?: string; disabled?: boolean }[] = [
+    { value: "phone", label: copy("Bu telefon (cihaz içi)", "This phone (on-device)"),
+      detail: copy("Yalnızca sesle yazma; görüşmeler bilgisayarda kalır", "Dictation only; calls stay on the computer") },
+    ...computerEngines,
+  ];
+  const chooseComputer = (engine: string, patch: Partial<VoicePreferences> = {}) => {
+    const choice = computerEngines.find(item => item.value === engine && !item.disabled);
+    if (choice) update({ engine: choice.value, ...patch });
+  };
   return (
-    <Section title={copy("Dikte", "Dictation")}>
+    <Section title={copy("Konuşmanı yazıya çevirme", "Speech to text")}>
       <NavigationGroup>
-        <SelectField variant="row" label={copy("Dikte tanıma", "Dictation recognition")} value={preferences.engine}
-          hint={copy("Sesli görüşmelerde de konuşmanı bu tanır.", "Also recognizes your speech in voice calls.")}
-          disabled={!hydrated} options={recognizers}
-          onChange={engine => { if (recognizers.some(item => item.value === engine && !item.disabled)) update({ engine }); }} />
+        <SelectField variant="row" label={copy("Yazıya çeviren", "Transcribed by")}
+          hint={copy("Söylediklerini metne çevirir. Asistanın sesini değiştirmez.", "Turns what you say into text. It does not change the assistant's voice.")}
+          value={preferences.phoneDictation ? "phone" : preferences.engine}
+          disabled={!hydrated} options={transcribers}
+          onChange={value => value === "phone" ? update({ phoneDictation: true }) : chooseComputer(value, { phoneDictation: false })} />
+        {preferences.phoneDictation ? (
+          <SelectField variant="row" label={copy("Sesli görüşmelerde", "In voice calls")}
+            hint={copy("Telefon yalnızca sesle yazmayı çevirir. Görüşmelerde konuşmanı bilgisayar çevirir.", "The phone transcribes dictation only. In calls, the computer transcribes your speech.")}
+            value={preferences.engine} disabled={!hydrated} options={computerEngines}
+            onChange={value => chooseComputer(value)} />
+        ) : null}
         {preferences.engine === "local" && localSupported && selectableModels ? (
-          <SelectField variant="row" label={copy("Yazıya dökme modeli", "Transcription model")}
+          <SelectField variant="row" label={copy("Yazıya çevirme modeli", "Transcription model")}
             value={installed.some(model => model.id === preferences.whisperModel) ? preferences.whisperModel ?? "" : ""}
             disabled={!hydrated || !installed.length}
             options={[{ value: "", label: copy("Otomatik", "Automatic") }, ...installed.map(model => ({ value: model.id, label: model.label }))]}
             onChange={value => update({ whisperModel: value === "small" || value === "turbo" ? value : undefined })} />
         ) : null}
         {preferences.engine === "cloud" && openrouter && selectableModels ? (
-          <SelectField variant="row" label={copy("Yazıya dökme modeli", "Transcription model")} value={preferences.cloudModel ?? ""}
+          <SelectField variant="row" label={copy("Yazıya çevirme modeli", "Transcription model")} value={preferences.cloudModel ?? ""}
             disabled={!hydrated || !cloudModels.data?.length}
             options={[{ value: "", label: copy("Otomatik", "Automatic") }, ...(cloudModels.data ?? []).map(model => ({ value: model.id, label: model.label }))]}
             onChange={value => update({ cloudModel: value || undefined })} />
         ) : null}
         {preferences.engine === "openai" && openai ? (
-          <SelectField variant="row" label={copy("Yazıya dökme modeli", "Transcription model")} value={preferences.openaiModel ?? ""}
+          <SelectField variant="row" label={copy("Yazıya çevirme modeli", "Transcription model")} value={preferences.openaiModel ?? ""}
             disabled={!hydrated}
             options={[{ value: "", label: copy("Otomatik", "Automatic") }, ...DICTATION_MODELS.openai.map(model => ({ value: model.id, label: model.label }))]}
             onChange={value => update({ openaiModel: value || undefined })} />
         ) : null}
+        {/* The desktop's dictation settings: the language here, the rest on Dictation options. */}
+        <DictationRows preferences={normalizeDictationPreferences(preferences)} disabled={!hydrated}
+          onLanguage={dictationLanguage => update({ dictationLanguage })} />
       </NavigationGroup>
       {preferences.engine === "local" && localSupported ? <QueryState query={models} loading="inline" compact /> : null}
       {preferences.engine === "cloud" && openrouter && selectableModels ? <QueryState query={cloudModels} loading="inline" compact /> : null}
       {!linkDown && recognitionReady && !selectableModels ? <StateView size="compact" title={needsHostUpdate} /> : null}
       {preferences.engine === "cloud" && keys.isSuccess && !openrouter ? (
-        <Notice tone="warning" message={copy("Bulut seçili ama bilgisayarda anahtar yok; konuşman anlaşılamaz. {p0} seç.", "Cloud is selected but the computer has no key, so your speech cannot be understood. Choose {p0}.", { p0: machine.name })} />
+        <Notice tone="warning" message={copy("OpenRouter seçili ama bilgisayarda anahtar yok; konuşman anlaşılamaz. {p0} seç.", "OpenRouter is selected but the computer has no key, so your speech cannot be understood. Choose {p0}.", { p0: machine.name })} />
       ) : null}
+      {preferences.engine === "local" ? localModels : null}
     </Section>
   );
 }
 
-/** Settings → Voice assistant → Conversation style: turn taking and sleep, with the desktop's words. */
+/** Wait before replying and the owner's own turn end, as select row and switch. */
+function TurnRows() {
+  const copy = useCopy(), locale = useLocale();
+  const { preferences, hydrated } = useVoicePreferences();
+  const update = useVoiceUpdate();
+  const seconds = new Intl.NumberFormat(locale);
+  return <>
+    <SelectField variant="row" label={copy("Yanıtlamadan önce bekle", "Wait before replying")}
+      value={String(preferences.turnPause)} disabled={!hydrated || preferences.manualTurnEnd}
+      options={TURN_PAUSES.map(pause => ({ value: String(pause), label: turnPauseLabel(pause, copy),
+        detail: copy("{p0} saniye", "{p0} seconds", { p0: seconds.format(pause) }) }))}
+      onChange={value => { const pause = TURN_PAUSES.find(item => String(item) === value); if (pause) update({ turnPause: pause }); }} />
+    <ToggleField label={copy("Sıramı elle bitir", "End my turn myself")}
+      help={copy("Sessizlik dinlemeyi bitirmez; bitirince görüşmede Gönder’e dokun.", "Silence keeps listening. Tap Send in the call when you are done.")}
+      value={preferences.manualTurnEnd} disabled={!hydrated}
+      onChange={manualTurnEnd => update({ manualTurnEnd })} />
+  </>;
+}
+
+/** Settings → Voice assistant → Conversation style: turn taking, with the desktop's words. */
 export function ConversationStyleGroup() {
   const copy = useCopy();
-  const { uiStyles } = useMobileTheme();
   return (
-    <Section title={copy("Konuşma tarzı", "Conversation style")}>
+    <Section title={copy("Görüşme tarzı", "Call style")}>
       <NavigationGroup>
         <TurnRows />
       </NavigationGroup>
-      <Body muted style={uiStyles.caption}>{copy(
-        "Telefonda yanıt çalarken mikrofon kapalıdır. Araya girmek için Konuşmayı durdur’a dokun.",
-        "On the phone the microphone is closed while a reply plays. To interrupt, tap Stop speaking.",
-      )}</Body>
     </Section>
-  );
-}
-
-/**
- * The voice choices that can change during a call, in the assistant's settings sheet: voice and turn
- * taking. Everything else lives on Settings → Voice assistant.
- */
-export function VoiceChoices({ showStorageNotice = true }: { showStorageNotice?: boolean }) {
-  const machine = useActiveMachine();
-  const { storageError, retry } = useVoicePreferences();
-  const review = useConnectionScope().review;
-  if (!machine || !review) return null;
-  return (
-    <Stack>
-      <NavigationGroup>
-        <VoiceRow />
-        <TurnRows />
-      </NavigationGroup>
-      {showStorageNotice ? <PreferenceStorageNotice error={storageError} retry={retry} /> : null}
-    </Stack>
   );
 }

@@ -17,7 +17,18 @@ import {
   type SessionView,
   type SubscriptionEvent,
 } from "../../../src/shared/model/host-contracts";
-import { applySessionSync } from "../../../src/features/connections/model/protocol";
+import {
+  applySessionSync,
+  applyStreamSync,
+} from "../../../src/features/connections/model/protocol";
+import {
+  STREAM_TAIL_CAPABILITY,
+  createStreamDeltaState,
+  expandStreamDelta,
+  rememberStreamDelta,
+  rememberStreamSnapshot,
+  type StreamDeltaState,
+} from "../../../src/features/connections/model/sessionStreamDelta";
 import type { MobileStreamSubscription } from "./host-transport";
 import { retainSessionAuthority } from "@/domain/session-authority";
 import { SessionProjectMismatch, foldSessionProject } from "./session-project";
@@ -88,6 +99,12 @@ function requireSessionFields(
   return parsed as unknown as HostSession;
 }
 
+/** What a tail stream receiver holds from its previous events, and at which revision. */
+export type TailStreamState = { state: StreamDeltaState; revision?: number };
+export function createTailStreamState(): TailStreamState {
+  return { state: createStreamDeltaState() };
+}
+
 /** Pure revision fence used by the live adapter and golden behavior tests. */
 export function sessionStreamValue(
   event: SubscriptionEvent,
@@ -95,12 +112,29 @@ export function sessionStreamValue(
   sessionId: string,
   projectId: string,
   aliasIds?: readonly string[],
+  /** Present for a tail stream: what this stream's earlier events established. */
+  tail?: TailStreamState,
 ): HostSession | "resync" {
   let next: HostSession;
-  if (event.params.kind === "snapshot")
+  if (event.params.kind === "snapshot") {
     next = requireSessionRead(event.params.data, sessionId, projectId, aliasIds);
-  else if (event.params.kind === "delta") {
-    const sync = SessionSyncSchema.parse(event.params.data);
+    if (tail) {
+      rememberStreamSnapshot(tail.state, next.session.blocks);
+      tail.revision = next.revision;
+    }
+  } else if (event.params.kind === "delta") {
+    let data = event.params.data;
+    if (tail) {
+      // A compact delta can only be rebuilt from the event this stream applied just before it.
+      const base = (data as { base?: unknown } | null)?.base;
+      if (tail.revision === undefined || base !== tail.revision) return "resync";
+      try {
+        data = expandStreamDelta(data, tail.state) as typeof data;
+      } catch {
+        return "resync";
+      }
+    }
+    const sync = SessionSyncSchema.parse(data);
     if (sync.kind !== "delta" || !known || sync.base !== known.revision) return "resync";
     if (event.params.baseRevision !== undefined && event.params.baseRevision !== sync.base)
       throw new Error("Transcript delta base changed.");
@@ -114,12 +148,16 @@ export function sessionStreamValue(
     );
     try {
       next = foldSessionProject(
-        applySessionSync(known, sync as unknown as SessionSync),
+        (tail ? applyStreamSync : applySessionSync)(known, sync as unknown as SessionSync),
         projectId,
         aliasIds,
       );
     } catch {
       return "resync";
+    }
+    if (tail) {
+      rememberStreamDelta(tail.state, sync.blockIds, sync.blocks as { id: string; text: string }[]);
+      tail.revision = sync.value.revision;
     }
   } else return "resync";
   if (event.params.revision !== undefined && event.params.revision !== next.revision)
@@ -139,8 +177,13 @@ export function watchSessionStream(
     onError?(error: Error): void;
   },
 ): Promise<MobileStreamSubscription> {
+  // Tail streams open on the newest page and send compact deltas (appended text, an
+  // unchanged block list left out); older history pages in on demand.
+  const tail = transport.machine.capabilities?.includes(STREAM_TAIL_CAPABILITY)
+    ? createTailStreamState()
+    : undefined;
   return transport.observeStream(
-    { kind: "session", sessionId: options.sessionId },
+    { kind: "session", sessionId: options.sessionId, ...(tail ? { tail: true as const } : {}) },
     async (event, assertCurrent) => {
       assertCurrent();
       const value = sessionStreamValue(
@@ -149,6 +192,7 @@ export function watchSessionStream(
         options.sessionId,
         options.projectId,
         options.aliasIds?.(),
+        tail,
       );
       if (value === "resync") return "resync";
       await options.apply(value, assertCurrent);

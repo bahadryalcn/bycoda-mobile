@@ -167,7 +167,7 @@ patchedDependencies:
   expo-secure-store@58.0.3: cb7f4a186beee5ba20d643e6ef7877cb240b84ab6a331088ee8ea7386597d418
   expo-sharing@58.0.23: e6f483ca6a1ea29654e9d7489e43c54b0c8287f6094e98d8ca46f34f90502b23
   expo-widgets@58.0.29: b143edc02b1ff5b6c38c93195b0899295e4d232dd54ea59af76aa50c5c1e2581
-  panelui-native@1.4.0: 99209ffae238339c1c7f48d3b0cb58c21f058434224cee1a26937da87a084866
+  panelui-native@1.4.0: 0927a5760aaea5751b8619fc27474b4aa43d557f119b0e8fffb68d821022c73c
 
 importers:
 
@@ -311,6 +311,9 @@ importers:
       expo-sharing:
         specifier: ~58.0.23
         version: 58.0.23(patch_hash=e6f483ca6a1ea29654e9d7489e43c54b0c8287f6094e98d8ca46f34f90502b23)(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1)(typescript@6.0.3)
+      expo-speech-recognition:
+        specifier: ~58.0.1
+        version: 58.0.1(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0)
       expo-splash-screen:
         specifier: ~58.0.14
         version: 58.0.14(expo@58.0.26)(supports-color@8.1.1)(typescript@6.0.3)
@@ -349,7 +352,7 @@ importers:
         version: 3.2.2
       panelui-native:
         specifier: 1.4.0
-        version: 1.4.0(patch_hash=99209ffae238339c1c7f48d3b0cb58c21f058434224cee1a26937da87a084866)(de82ad031aab2afc19840d7da8f15654)
+        version: 1.4.0(patch_hash=0927a5760aaea5751b8619fc27474b4aa43d557f119b0e8fffb68d821022c73c)(de82ad031aab2afc19840d7da8f15654)
       react:
         specifier: 19.3.0
         version: 19.3.0
@@ -3274,6 +3277,13 @@ packages:
 
   expo-sharing@58.0.23:
     resolution: {integrity: sha512-TRu/CM7s4caW0TcVurO49468jtHAraoRVa4et5lHWKd18/5tfFMOA3ZAxsEezBaI8ehcLXhWc9FPBSxtYY6GYQ==}
+    peerDependencies:
+      expo: '*'
+      react: '*'
+      react-native: '*'
+
+  expo-speech-recognition@58.0.1:
+    resolution: {integrity: sha512-ycDe1BxXblqFGsXxedjBKn3tVQO8Vnj/BtBIycdMjXkXueTYto1LaenkjeBGycJmnS/6mOWC8oQcyBSbZsueFg==}
     peerDependencies:
       expo: '*'
       react: '*'
@@ -8137,6 +8147,12 @@ snapshots:
       - supports-color
       - typescript
 
+  expo-speech-recognition@58.0.1(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0):
+    dependencies:
+      expo: 58.0.26(d08226eca75cf11826938cccf21a4384)
+      react: 19.3.0
+      react-native: 0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1)
+
   expo-splash-screen@58.0.14(expo@58.0.26)(supports-color@8.1.1)(typescript@6.0.3):
     dependencies:
       '@expo/config-plugins': 58.0.13(supports-color@8.1.1)(typescript@6.0.3)
@@ -9066,7 +9082,7 @@ snapshots:
 
   package-manager-detector@1.9.0: {}
 
-  panelui-native@1.4.0(patch_hash=99209ffae238339c1c7f48d3b0cb58c21f058434224cee1a26937da87a084866)(de82ad031aab2afc19840d7da8f15654):
+  panelui-native@1.4.0(patch_hash=0927a5760aaea5751b8619fc27474b4aa43d557f119b0e8fffb68d821022c73c)(de82ad031aab2afc19840d7da8f15654):
     dependencies:
       '@hugeicons/core-free-icons': 4.3.5
       '@hugeicons/react-native': 1.0.16(react-native-svg@15.16.0(react-native@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(react-native@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0)

@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { defaultInboxView } from "./provider-view-model";
 import { createInboxBrowseMemory, createInboxBrowseScope } from "./inbox-browse-memory";
 import { initialInboxBrowseState } from "./provider-state";
 const origin={machineId:"computer",projectId:"project"};
@@ -7,7 +8,7 @@ it("remembers only list presentation, never an item, notice or approval",()=>{
  const memory=createInboxBrowseMemory(origin);
  memory.remember(origin,{...initialInboxBrowseState,search:"pending text",committedSearch:"older text",assigned:false,all:true,limit:80,selected:{title:"Private item"} as any,notice:"Saved"});
  memory.scroll(origin,420);
- expect(memory.read(origin)).toEqual({preferences:{search:"pending text",committedSearch:"older text",assigned:false,all:true,limit:80},offset:420});
+ expect(memory.read(origin)).toEqual({preferences:{search:"pending text",committedSearch:"older text",assigned:false,all:true,limit:80,view:defaultInboxView},offset:420});
  expect(Object.keys(memory.read(origin)!.preferences)).not.toContain("selected");
 });
 it("rejects another origin, invalid offsets and retired callbacks",()=>{

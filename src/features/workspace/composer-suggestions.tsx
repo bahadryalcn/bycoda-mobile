@@ -103,7 +103,8 @@ export function ComposerSuggestions({
       </NavigationGroup>
       {loading || !!error || !items.length ? (
         <View style={{ paddingHorizontal: space.sm, paddingVertical: space.xs, gap: space.xs }}>
-          {loading ? <Loading /> : null}
+          {/* While retrying, the busy Retry button owns the spinner. */}
+          {loading && !error ? <Loading delayed /> : null}
           <ErrorText error={error} />
           {error ? <Button label={copy("Yeniden dene", "Retry")} busy={loading} onPress={onRetry} /> : null}
           {!loading && !error && !items.length ? <Body muted>{copy("Eşleşme yok", "No matches")}</Body> : null}

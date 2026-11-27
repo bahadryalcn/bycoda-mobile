@@ -1,11 +1,10 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import { router } from "expo-router";
 import { Sheet } from "@/ui/primitives";
 import { SessionOptionsMenu } from "./session-options-menu";
 import { useCopy } from "@/ui/copy";
-import type { SessionToolbarProps } from "./session-types";
 import type { TranscriptView } from "./transcript-model";
 import { ChatAction } from "@/ui/chat-controls";
 import { SessionFiles } from "./session-files";
@@ -20,15 +19,21 @@ import { ProjectOrganization } from "./project-organization";
 import { DesktopPreferences } from "./desktop-preferences";
 import { MobilePty } from "../tools/mobile-pty";
 import { ProviderDesktop } from "../tools/provider-desktop";
-import { useHostMutation } from "@/state/queries";
-import { captureSessionAuthority } from "@/domain/session-authority";
-import { showToast } from "@/ui/toast";
-import { errorMessage } from "@/ui/error-message";
+import { useHostQuery } from "@/state/queries";
 import { openModelSheet } from "./composer-model-sheet";
-import type { HostSession } from "./wire";
 import { activeSessionModel } from "./catalog";
+import { useSessionActions } from "./session-actions";
+import { sessionSummaryFromSnapshot } from "./session-row-action-model";
+import type { HostSession } from "./wire";
+import type { SessionToolbarProps as ToolbarBaseProps } from "./session-types";
 
-export type SessionToolbarViewProps = SessionToolbarProps & {
+export type SessionToolbarViewProps = ToolbarBaseProps & {
+  /** Project name and checkout shown in the shared session details. */
+  projectName?: string;
+  /** Proves the session's project is still visible before any session action. */
+  canRead: () => boolean;
+  /** The open session was deleted; leave it for the sessions list. */
+  onDeleted: () => void;
   onFind: () => void;
   view: TranscriptView;
   onViewChange: (view: TranscriptView) => void;
@@ -41,7 +46,9 @@ export function SessionToolbar({
   contextLabel,
   query,
   blocked,
-  onSettings,
+  projectName,
+  canRead,
+  onDeleted,
   onRefresh,
   onCommand,
   onFind,
@@ -71,24 +78,38 @@ export function SessionToolbar({
     setContextual(mode);
   };
   const closeContextual = () => setContextual(null);
-  const update = useHostMutation<HostSession>("sessions.update", ["sessions", projectId]);
-  // Pin and archive confirm with a toast; archive offers Undo instead of asking first.
-  const setFlag = (patch: { pinned: boolean } | { archived: boolean }, done: string, undo?: () => void) => {
-    if (!session || !projectId || update.isPending) return;
-    void update
-      .mutateAsync({ projectId, sessionId: scope.sessionId, ...captureSessionAuthority(session), ...patch })
-      .then(() => {
-        onRefresh();
-        showToast({ message: done, ...(undo ? { action: { label: copy("Geri al", "Undo"), onPress: undo } } : {}) });
-      })
-      .catch((cause: unknown) => showToast({ tone: "danger", message: errorMessage(cause, copy) }));
-  };
-  const toggleArchive = (archived: boolean) =>
-    setFlag(
-      { archived },
-      archived ? copy("Oturum arşivlendi", "Session archived") : copy("Oturum arşivden çıkarıldı", "Session unarchived"),
-      archived ? () => toggleArchive(false) : undefined,
-    );
+  const optionsMenu = (sessionActions: ReactNode) => (
+    <SessionOptionsMenu
+      visible={menu}
+      hasSession={!!session}
+      projectId={projectId}
+      sessionId={scope.sessionId}
+      blocked={blocked}
+      running={session?.status === "running"}
+      detailed={view === "details"}
+      sessionActions={sessionActions}
+      modelDetail={session ? activeSessionModel(session.session).name : undefined}
+      onClose={() => setMenu(false)}
+      actions={{
+        find: onFind,
+        toggleDetails: () => onViewChange(view === "details" ? "messages" : "details"),
+        model: () => openModelSheet(scope.machineId, scope.sessionId),
+        review: () => setReview(true),
+        notes: () => setNotes(true),
+        handoff: () => openContextual("handoff"),
+        secondOpinion: () => openContextual("secondOpinion"),
+        importHistory: () => setHistoryImport(true),
+        project: openProject,
+        organization: () => setOrganization(true),
+        browser: () => setBrowser(true),
+        worktreeRemoval: () => setWorktreeRemoval(true),
+        terminal: () => setMobilePty(true),
+        preferences: () => setDesktopPreferences(true),
+        providers: () => setProviderDesktop(true),
+        ssh: () => setSshWorkspace(true),
+      }}
+    />
+  );
   const openProject = () => {
     if (!projectId) return;
     router.navigate({
@@ -110,44 +131,20 @@ export function SessionToolbar({
       >
         <Ellipsis size={20} color={colors.muted} />
       </ChatAction>
-      <SessionOptionsMenu
-        visible={menu}
-        hasSession={!!session}
-        projectId={projectId}
-        sessionId={scope.sessionId}
-        blocked={blocked}
-        running={session?.status === "running"}
-        detailed={view === "details"}
-        pinned={session?.pinned}
-        archived={session?.archived}
-        modelDetail={session ? activeSessionModel(session.session).name : undefined}
-        onClose={() => setMenu(false)}
-        actions={{
-          find: onFind,
-          toggleDetails: () => onViewChange(view === "details" ? "messages" : "details"),
-          settings: onSettings,
-          model: () => openModelSheet(scope.machineId, scope.sessionId),
-          pin: () =>
-            setFlag(
-              { pinned: !session?.pinned },
-              session?.pinned ? copy("Sabitleme kaldırıldı", "Unpinned") : copy("Oturum sabitlendi", "Session pinned"),
-            ),
-          archive: () => toggleArchive(!session?.archived),
-          review: () => setReview(true),
-          notes: () => setNotes(true),
-          handoff: () => openContextual("handoff"),
-          secondOpinion: () => openContextual("secondOpinion"),
-          importHistory: () => setHistoryImport(true),
-          project: openProject,
-          organization: () => setOrganization(true),
-          browser: () => setBrowser(true),
-          worktreeRemoval: () => setWorktreeRemoval(true),
-          terminal: () => setMobilePty(true),
-          preferences: () => setDesktopPreferences(true),
-          providers: () => setProviderDesktop(true),
-          ssh: () => setSshWorkspace(true),
-        }}
-      />
+      {session && projectId ? (
+        <SessionRecordActions
+          machineId={scope.machineId}
+          projectId={projectId}
+          projectName={projectName}
+          session={session}
+          canRead={canRead}
+          onDeleted={onDeleted}
+          menuOpen={menu}
+          onCloseMenu={() => setMenu(false)}
+        >
+          {optionsMenu}
+        </SessionRecordActions>
+      ) : optionsMenu(null)}
       {review && session ? (
         <SessionCheckpoints
           scope={scope}
@@ -236,7 +233,7 @@ export function SessionToolbar({
         size={contextualCompact ? "compact" : "form"}
         title={
           contextual === "handoff"
-            ? copy("Bağlamlı agent devri", "Contextual handoff")
+            ? copy("Bağlamla devret", "Contextual handoff")
             : copy("İkinci görüş", "Second opinion")
         }
         onClose={closeContextual}
@@ -253,6 +250,59 @@ export function SessionToolbar({
           />
         ) : null}
       </Sheet>
+    </>
+  );
+}
+
+/**
+ * The open session's record actions (rename, pin, settle, read state, snooze, move, copy, details,
+ * archive, stop, delete) through the same owner as the list row menu, listed in the options menu.
+ */
+function SessionRecordActions({
+  machineId,
+  projectId,
+  projectName,
+  session,
+  canRead,
+  onDeleted,
+  menuOpen,
+  onCloseMenu,
+  children,
+}: {
+  machineId: string;
+  projectId: string;
+  projectName?: string;
+  session: HostSession;
+  canRead: () => boolean;
+  onDeleted: () => void;
+  menuOpen: boolean;
+  onCloseMenu: () => void;
+  children: (sessionActions: ReactNode) => ReactNode;
+}) {
+  const lifecycle = useHostQuery<{ records: { sessionId: string; state: string }[] }>(
+    ["sessions-lifecycle"],
+    "sessions.lifecycle.list",
+    {},
+  );
+  const settled = !!lifecycle.data?.records.some((record) => record.sessionId === session.session.id && record.state === "settled");
+  const actions = useSessionActions({
+    machineId,
+    projectId,
+    projectName,
+    session: sessionSummaryFromSnapshot(session),
+    canRead,
+    settled,
+    onDeleted,
+  });
+  // The options sheet closes before an action runs, so a confirmation never stacks on it; copy rows
+  // keep it open for their "Copied" feedback.
+  const menu = menuOpen
+    ? actions.renderMenu((action) => ({ ...action, onPress: () => { onCloseMenu(); action.onPress(); } }))
+    : null;
+  return (
+    <>
+      {children(menu)}
+      {actions.element}
     </>
   );
 }

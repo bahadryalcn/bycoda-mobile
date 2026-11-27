@@ -9,5 +9,8 @@ export function useAccountMe() {
     queryFn: () => runtime!.client.getMe(),
     // A user-scoped read: it must not wait for this phone's device registration, which can fail on its own.
     enabled: !!runtime && status === "signedIn",
+    // The profile rarely changes and the manage screen invalidates it; a notification-shade
+    // pull (Android window blur/focus) must not re-read it from every mounted tab.
+    staleTime: 5 * 60_000,
   });
 }

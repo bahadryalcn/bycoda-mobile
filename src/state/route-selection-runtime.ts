@@ -10,6 +10,7 @@ import {
   type RouteProbe,
 } from "./route-selection";
 import { isAppAccessAllowed } from "./security";
+import { LONG_AWAY_MS } from "./app-resume";
 
 /** Any HTTP answer proves reachability; a local listener must also answer its hello. */
 const probeRoute: RouteProbe = async (route: MobileRoute, signal) => {
@@ -30,6 +31,7 @@ const probeRoute: RouteProbe = async (route: MobileRoute, signal) => {
  * unlocked and in front.
  */
 export function startRouteSelection() {
+  const ready = new Set<string>();
   const selector = createRouteSelector({
     getMachine: () => {
       const state = useMachines.getState();
@@ -41,6 +43,7 @@ export function startRouteSelection() {
     switchRoute: (id, route) => useMachines.getState().switchRoute(id, route),
     probe: probeRoute,
     canRun: () => isAppAccessAllowed() && AppState.currentState === "active",
+    isConnected: (machineId) => ready.has(machineId),
   });
   let activeId = useMachines.getState().activeId;
   let hydrated = useMachines.getState().hydrated;
@@ -50,8 +53,18 @@ export function startRouteSelection() {
     hydrated = state.hydrated;
     void selector.check("machine");
   });
+  // A share sheet, picker or permission prompt is no new place: a route switch there would issue a new
+  // connection epoch and close open sheets. A real stay away rechecks; network changes check below.
+  let leftAt: number | undefined;
+  let networkChangedAway = false;
   const lifecycle = AppState.addEventListener("change", (state) => {
-    if (state === "active") void selector.check("foreground");
+    if (state === "background") leftAt ??= Date.now();
+    if (state !== "active") return;
+    const away = leftAt === undefined ? 0 : Date.now() - leftAt;
+    const changed = networkChangedAway;
+    leftAt = undefined;
+    networkChangedAway = false;
+    if (changed || away >= LONG_AWAY_MS) void selector.check("foreground");
   });
   // Wi-Fi to mobile data (or another network) invalidates the chosen route immediately.
   let networkKey: string | undefined;
@@ -59,6 +72,7 @@ export function startRouteSelection() {
     const key = `${state.type}:${state.isConnected}:${(state.details as { ssid?: string } | null)?.ssid ?? ""}`;
     const changed = networkKey !== undefined && key !== networkKey;
     networkKey = key;
+    if (changed && AppState.currentState !== "active") networkChangedAway = true;
     if (changed && state.isConnected !== false) void selector.check("network");
   });
   const timer = setInterval(() => void selector.check("interval"), ROUTE_RECHECK_INTERVAL_MS);
@@ -66,6 +80,8 @@ export function startRouteSelection() {
   return {
     /** A socket that keeps failing may mean the network changed under it. */
     runtimeState(machineId: string, state: MobileHostRuntimeState) {
+      if (state === "ready") ready.add(machineId);
+      else ready.delete(machineId);
       if (state === "backoff" && machineId === useMachines.getState().activeId)
         void selector.check("failure");
     },

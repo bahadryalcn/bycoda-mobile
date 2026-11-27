@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-const fixture = vi.hoisted(() => ({ active: true, reduced: false }));
+const fixture = vi.hoisted(() => ({ active: true, reduced: false, foreground: true }));
 vi.mock("@/state/queries", () => ({ useHostReadActive: () => fixture.active }));
 vi.mock("./use-reduced-motion", () => ({ useReducedMotionPreference: () => fixture.reduced }));
+vi.mock("./use-feedback-animation", () => ({ useFeedbackAnimation: () => fixture.foreground && !fixture.reduced }));
 vi.mock("./theme", () => ({ useMobileTheme: vi.fn(() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} })) }));
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./styles", () => ({
@@ -214,6 +215,21 @@ describe("chat continuous animation lifecycle", () => {
     expect(hidden).toContain("Working");
     fixture.active = true;
     expect(render()).toContain('data-animating="true"');
+  });
+
+  it("pauses the running orb and shimmer under the shade or on an unfocused route", () => {
+    fixture.active = true;
+    fixture.reduced = false;
+    fixture.foreground = false;
+    try {
+      const row = renderToStaticMarkup(createElement(ChatActivity, { title: "Working", status: "running" }));
+      expect(row).toContain('data-paused="true"');
+      expect(row).toContain('data-animating="false"');
+      expect(row).toContain('data-status="running"');
+      expect(renderToStaticMarkup(createElement(ChatStreaming, { label: "Writing" }))).toContain('data-animating="false"');
+    } finally {
+      fixture.foreground = true;
+    }
   });
 
   it("keeps completed activity static and honors live reduced motion", () => {

@@ -8,6 +8,7 @@ vi.mock("react-native", () => ({ AppState: { currentState: "active", addEventLis
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: fixture.data, isError: fixture.error, error: fixture.error ? new Error("failed") : null, refetch: fixture.refetch }) }));
 vi.mock("./account-context", () => ({ useAccount: () => ({ status: "signedIn", runtime: { client: {} }, device: { id: "phone" } }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, values?: Record<string, string | number>) => en.replace(/\{(p\d+)\}/g, (_, key) => String(values?.[key] ?? key)) }));
+vi.mock("@/ui/info-hint", () => ({ HintSection: ({ children }: { children?: unknown }) => children }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Body: Group, Section: Group, Stack: Group, NavigationGroup: Group, SettingIcon: () => null, ValueRow: ({ label, value }: { label: string; value: string }) => createElement("p", null, `${label}: ${value}`), Skeleton: () => null, ErrorNotice: ({ error, message, onRetry }: { error: unknown; message: string; onRetry(): void }) => error ? createElement("div", null, message, createElement("button", { onClick: onRetry }, "Retry")) : null };

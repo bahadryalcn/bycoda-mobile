@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sessionStreamValue } from "./session-sync";
+import { createTailStreamState, sessionStreamValue } from "./session-sync";
 import type { HostSession } from "./types";
 import type { SubscriptionEvent } from "../../../src/shared/model/host-contracts";
 
@@ -100,6 +100,33 @@ describe("mobile session stream revision and identity fences", () => {
     expect(sessionStreamValue(event("delta", delta), undefined, "session-a", "project-a")).toBe(
       "resync",
     );
+  });
+  it("rebuilds a compact tail delta from the previous event and resyncs when it cannot", () => {
+    const tail = createTailStreamState();
+    const long = "x".repeat(1100);
+    const first = session(1);
+    first.session.blocks = [{ id: "block-a", role: "assistant", text: long }];
+    const known = sessionStreamValue(event("snapshot", first), undefined, "session-a", "project-a", undefined, tail);
+    if (known === "resync") throw new Error("unexpected resync");
+    const { blocks: _blocks, ...metadata } = session(2).session;
+    const compact = {
+      kind: "delta",
+      base: 1,
+      value: { ...session(2), session: metadata },
+      blocks: [{ id: "block-a", role: "assistant", text: "" }],
+      textAppends: [{ id: "block-a", baseLength: long.length, text: "!" }],
+    };
+    const applied = sessionStreamValue(event("delta", compact), known, "session-a", "project-a", undefined, tail);
+    expect(applied).toMatchObject({ revision: 2, session: { blocks: [{ text: `${long}!` }] } });
+    expect(tail.revision).toBe(2);
+    // The same compact delta no longer follows what this stream holds.
+    expect(
+      sessionStreamValue(event("delta", compact), known, "session-a", "project-a", undefined, tail),
+    ).toBe("resync");
+    const fresh = createTailStreamState();
+    expect(
+      sessionStreamValue(event("delta", compact), known, "session-a", "project-a", undefined, fresh),
+    ).toBe("resync");
   });
   it("keeps identity and block-field checks on a delta validated once by its sync schema", () => {
     const { blocks: _blocks, ...metadata } = session(2).session;

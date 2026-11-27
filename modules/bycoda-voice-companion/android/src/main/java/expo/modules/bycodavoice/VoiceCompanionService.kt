@@ -5,6 +5,8 @@ import android.app.*
 import android.content.*
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
@@ -12,6 +14,9 @@ import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaPlayer
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.AudioEffect
+import android.media.audiofx.NoiseSuppressor
 import android.os.*
 import android.util.Base64
 import java.io.File
@@ -39,7 +44,14 @@ class VoiceCompanionService : Service() {
   private val captureOperations = VoiceOperationFence()
   private val playbackOperations = VoiceOperationFence()
   private var player: MediaPlayer? = null
-  private var pcm: PcmPlayback? = null
+  @Volatile private var pcm: PcmPlayback? = null
+  /** Realtime full duplex: echo-cancelled voice-communication capture stays open while a reply plays. */
+  @Volatile private var duplex = false
+  /** Echo canceller and noise suppressor of the open duplex recorder; released with it. */
+  private var effects: List<AudioEffect> = emptyList()
+  /** The audio mode before duplex switched to in-communication; restored when the session ends. */
+  private var savedMode: Int? = null
+  private var routeCallback: AudioDeviceCallback? = null
   private var playbackId: String? = null
   /** The current player finished prepareAsync; only then may it be started or paused. */
   private var playerPrepared = false
@@ -126,6 +138,7 @@ class VoiceCompanionService : Service() {
     try {
       val types = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or (if (microphone) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0)
       if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION, notification(), types) else startForeground(NOTIFICATION, notification())
+      shownNotification = notificationKey()
       VoiceCompanionRuntime.service = this
       VoiceCompanionRuntime.pending?.second?.complete(Unit)
       VoiceCompanionRuntime.pending = null
@@ -148,9 +161,92 @@ class VoiceCompanionService : Service() {
     if (open != null) builder.setContentIntent(PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
     return builder.build()
   }
-  private fun updated() { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION, notification()); publish() }
+  /** What the posted notification says; an unchanged one is not rebuilt or posted again. */
+  private var shownNotification: String? = null
+  private fun notificationKey() = "$muted|${if (phase == "recording" || phase == "speaking") phase else "idle"}"
+  private fun showNotification() {
+    if (ended) return
+    val key = notificationKey()
+    if (key == shownNotification) return
+    shownNotification = key
+    (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION, notification())
+  }
+  private val refreshNotification = Runnable { showNotification() }
+  /**
+   * State is published at once; the notification follows a short beat later, so the brief idle between two
+   * listening turns (an empty turn restarts the microphone) does not rebuild and repost it twice. Mute, which
+   * the notification's own button toggles, is shown at once.
+   */
+  private fun updated() {
+    handler.removeCallbacks(refreshNotification)
+    if (shownNotification?.startsWith("$muted|") == false) showNotification() else handler.postDelayed(refreshNotification, 750)
+    publish()
+  }
+  /**
+   * Main thread: a realtime call asks for full duplex before it first listens. Granted only with an echo
+   * canceller on the device; the answer is whether speaking can interrupt a reply. Every other session
+   * stays half duplex on the recognition path.
+   */
+  fun setEchoCancellation(supplied: String, enabled: Boolean): Boolean {
+    check(allowsSession(supplied)) { "Voice session is unavailable." }
+    val granted = VoiceDuplexPolicy.grants(enabled, microphone, AcousticEchoCanceler.isAvailable())
+    if (granted == duplex) return duplex
+    // A recorder or track already open keeps the path it was opened with; switch only between them.
+    check(!capturing.get() && captureId == null && pcm == null && player == null) { "Echo cancellation changes only while the call is quiet." }
+    if (!granted) { restoreAudioMode(); return false }
+    val manager = getSystemService(AUDIO_SERVICE) as AudioManager
+    try {
+      savedMode = manager.mode
+      manager.mode = AudioManager.MODE_IN_COMMUNICATION
+      routeCommunication(manager)
+      val callback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>?) { if (duplex && !ended) routeCommunication(manager) }
+        override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>?) { if (duplex && !ended) routeCommunication(manager) }
+      }
+      manager.registerAudioDeviceCallback(callback, handler)
+      routeCallback = callback
+    } catch (_: Exception) {
+      restoreAudioMode(); return false
+    }
+    duplex = true
+    return true
+  }
+  /** In communication mode the call goes where media would: headset, then Bluetooth, else the loudspeaker. */
+  @Suppress("DEPRECATION")
+  private fun routeCommunication(manager: AudioManager) {
+    try {
+      if (Build.VERSION.SDK_INT >= 31) {
+        val devices = manager.availableCommunicationDevices
+        val wanted = VoiceDuplexPolicy.communicationRoute(devices.map { it.type }) ?: return
+        devices.firstOrNull { it.type == wanted }?.let { manager.setCommunicationDevice(it) }
+      } else manager.isSpeakerphoneOn = !manager.isWiredHeadsetOn && !manager.isBluetoothScoOn
+    } catch (_: Exception) { }
+  }
+  /** Back to the half-duplex path and the audio mode from before the call. */
+  @Suppress("DEPRECATION")
+  private fun restoreAudioMode() {
+    duplex = false
+    val manager = getSystemService(AUDIO_SERVICE) as AudioManager
+    routeCallback?.let { runCatching { manager.unregisterAudioDeviceCallback(it) } }; routeCallback = null
+    val previous = savedMode ?: return
+    savedMode = null
+    try {
+      if (Build.VERSION.SDK_INT >= 31) manager.clearCommunicationDevice() else manager.isSpeakerphoneOn = false
+      manager.mode = previous
+    } catch (_: Exception) { }
+  }
+  /** Any thread: milliseconds of this streamed reply the speaker has played; 0 once it is gone. */
+  fun pcmPlayedMs(supplied: String, playingId: String): Long {
+    val stream = pcm
+    return if (VoiceSessionPolicy.matches(id, supplied) && playbackId == playingId && stream != null) stream.playedMs() else 0L
+  }
+  /** A streamed reply that keeps receiving audio is not stalled: the playback limit counts from its last chunk. */
+  internal fun touchPlayback(playingId: String) {
+    if (playbackId != playingId || pcm == null) return
+    handler.removeCallbacks(playbackLimit); handler.postDelayed(playbackLimit, 120000)
+  }
   /** A capture start reserved on the main thread; the microphone opens off it and must still match to go live. */
-  internal class CaptureStart(val sessionId: String, val token: String, val generation: Int)
+  internal class CaptureStart(val sessionId: String, val token: String, val generation: Int, val duplex: Boolean = false)
   /** Main thread, step 1 of 3: validate, take focus and reserve the capture so mute, stop or end can cancel it. */
   internal fun prepareCapture(supplied: String, captureToken: String): CaptureStart {
     check(allowsSession(supplied)) { "Voice session is unavailable." }
@@ -158,16 +254,16 @@ class VoiceCompanionService : Service() {
     check(captureOperations.allows(captureToken)) { "This recording operation was canceled." }
     check(checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) { "Microphone permission is required." }
     check(!muted && !capturing.get() && captureId == null) { "Microphone is muted or already recording." }
-    stopPlayback(supplied)
+    if (VoiceDuplexPolicy.exclusive(duplex)) stopPlayback(supplied)
     acquireFocus()
     captureId = captureToken
-    return CaptureStart(supplied, captureToken, captureGeneration.incrementAndGet())
+    return CaptureStart(supplied, captureToken, captureGeneration.incrementAndGet(), duplex)
   }
   /** Any thread, step 2 of 3: the blocking AudioRecord construction and start. Touches no service state. */
-  internal fun openRecorder(): AudioRecord {
+  internal fun openRecorder(duplex: Boolean = false): AudioRecord {
     val size = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
     check(size > 0) { "Microphone configuration is unavailable." }
-    val next = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(size, 6400))
+    val next = AudioRecord(VoiceDuplexPolicy.captureSource(duplex), 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(size, 6400))
     if (next.state != AudioRecord.STATE_INITIALIZED) { next.release(); error("Microphone could not start.") }
     // Preferred microphone: a missing or rejected device silently keeps the system default.
     VoiceCompanionRuntime.preferredInputId?.let { wanted ->
@@ -183,7 +279,7 @@ class VoiceCompanionService : Service() {
     releaseFocusIfIdle()
   }
   /** Main thread, step 3 of 3: go live only if the reservation is untouched; otherwise close the microphone again. */
-  internal fun commitCapture(start: CaptureStart, next: AudioRecord) {
+  internal fun commitCapture(start: CaptureStart, next: AudioRecord, batchBytes: Int = VoiceSessionPolicy.PCM_BATCH_BYTES) {
     if (!VoiceSessionPolicy.captureStillCurrent(allowsSession(start.sessionId), captureGeneration.get(), start.generation, captureId, start.token, captureOperations.allows(start.token), muted)) {
       try { next.stop() } catch (_: Exception) { }
       next.release()
@@ -192,12 +288,18 @@ class VoiceCompanionService : Service() {
     }
     val version = start.generation
     val captureToken = start.token
-    recorder = next; capturing.set(true); phase = "recording"; armIdle(); updated()
+    if (start.duplex) effects = listOfNotNull(
+      runCatching { if (AcousticEchoCanceler.isAvailable()) AcousticEchoCanceler.create(next.audioSessionId)?.apply { enabled = true } else null }.getOrNull(),
+      runCatching { if (NoiseSuppressor.isAvailable()) NoiseSuppressor.create(next.audioSessionId)?.apply { enabled = true } else null }.getOrNull(),
+    )
+    // In duplex a reply may already be playing; the session keeps showing it until it stops.
+    recorder = next; capturing.set(true); if (phase != "speaking") phase = "recording"; armIdle(); updated()
     handler.postDelayed(captureLimit, 30000)
     val capturedId = id
     Thread({
       // 300 ms batches (9600 bytes at 16 kHz PCM16): one bridge event per batch instead of one per 100 ms read.
-      val batcher = VoicePcmBatcher(VoiceSessionPolicy.PCM_BATCH_BYTES, VoiceSessionPolicy.CAPTURE_SAMPLES) { audio, size ->
+      // A realtime call asks for 100 ms batches.
+      val batcher = VoicePcmBatcher(batchBytes, VoiceSessionPolicy.CAPTURE_SAMPLES) { audio, size ->
         VoiceCompanionRuntime.emit(mapOf("type" to "pcm", "sessionId" to capturedId, "captureId" to captureToken, "audio" to Base64.encodeToString(audio, 0, size, Base64.NO_WRAP), "sampleRate" to 16000))
       }
       try {
@@ -221,6 +323,7 @@ class VoiceCompanionService : Service() {
     captureGeneration.incrementAndGet()
     val wasCapturing = capturing.getAndSet(false)
     val previous = recorder; recorder = null
+    effects.forEach { runCatching { it.release() } }; effects = emptyList()
     try { previous?.stop() } catch (_: Exception) { }
     previous?.release()
     if (phase == "recording") phase = "idle"
@@ -268,9 +371,12 @@ class VoiceCompanionService : Service() {
   }
   fun startPcm(supplied: String, playingId: String, sampleRate: Int) {
     check(allowsSession(supplied) && playbackOperations.allows(playingId)) { "Voice session is unavailable." }
-    stopCapture(supplied); stopPlayback(supplied)
+    if (VoiceDuplexPolicy.exclusive(duplex)) stopCapture(supplied)
+    stopPlayback(supplied)
     acquireFocus()
-    try { pcm = PcmPlayback(sampleRate, audioAttributes) }
+    // The echo canceller references only voice-communication playback.
+    val attributes = if (duplex) AudioAttributes.Builder().setUsage(VoiceDuplexPolicy.playbackUsage(true)).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build() else audioAttributes
+    try { pcm = PcmPlayback(sampleRate, attributes) }
     catch (error: Exception) { releaseFocus(); throw error }
     playbackId = playingId
     phase = "speaking"
@@ -296,7 +402,7 @@ class VoiceCompanionService : Service() {
     try { previous?.stop() } catch (_: Exception) { }
     previous?.release()
     try { previousPcm?.close() } catch (_: Exception) { }
-    if (phase == "speaking") phase = "idle"
+    phase = VoiceDuplexPolicy.phaseAfterPlayback(phase, capturing.get())
     if (phase == "idle") releaseFocus()
     if (previousId != null) VoiceCompanionRuntime.emit(mapOf("type" to "playback", "sessionId" to id, "playbackId" to previousId, "error" to error))
     if (!ended) updated()
@@ -308,6 +414,7 @@ class VoiceCompanionService : Service() {
     android.util.Log.w("BycodaVoice", "session ended: $reason${if (error != null) " (${error.take(160)})" else ""}")
     handler.removeCallbacksAndMessages(null)
     stopCapture(id); stopPlayback(id)
+    restoreAudioMode()
     if (VoiceCompanionRuntime.service === this) VoiceCompanionRuntime.service = null
     VoiceCompanionRuntime.emit(mapOf("type" to "ended", "sessionId" to id, "reason" to reason, "error" to error))
     publish(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()

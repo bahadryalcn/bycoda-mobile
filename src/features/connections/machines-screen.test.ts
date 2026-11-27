@@ -33,6 +33,9 @@ vi.mock("lucide-react-native/icons/chevron-left", () => ({ default: () => null }
 vi.mock("lucide-react-native/icons/laptop", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/ellipsis", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/circle-help", () => ({ default: () => null }));
 vi.mock("@/state/security", () => ({ assertAppAccess: vi.fn() }));
 vi.mock("../workspace/draft-guard", () => ({ flushWorkspaceDrafts: vi.fn() }));
 vi.mock("./recovery", async importOriginal => ({ ...await importOriginal<typeof import("./recovery")>(), reloadSavedConnections: vi.fn() }));
@@ -60,13 +63,14 @@ vi.mock("./use-computer-connection", () => ({
     busy: fixture.busy, cancel: fixture.cancel, begin: fixture.begin,
   })),
 }));
-vi.mock("@/state/machines", () => ({ useMachines: Object.assign((select?: (state: unknown) => unknown) => (select ? select(fixture.state) : fixture.state), {
+vi.mock("@/state/machines", () => ({ SAVED_COMPUTERS_LOAD_FAILED: "load", SAVED_COMPUTERS_RECOVERY_FAILED: "recovery", whenConnectionsSettled: async () => undefined, useMachines: Object.assign((select?: (state: unknown) => unknown) => (select ? select(fixture.state) : fixture.state), {
   getState: () => ({ ...fixture.state, removeMachine: fixture.remove, selectMachine: (id: string) => { fixture.state.activeId = id; } }),
 }) }));
 vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return {
     StatusText: ({ label }: { label: string }) => createElement("span", null, label),
+    SectionHeader: ({ title }: { title: string }) => createElement("h3", null, title),
     RowIcon: () => null,
     Badge: ({ label }: { label: string }) => createElement("span", null, label),
     Body: Wrapper,
@@ -86,8 +90,8 @@ vi.mock("@/ui/primitives", () => {
     HeaderBackButton: ({disabled, onPress}: {disabled?:boolean; onPress:()=>void}) => createElement("button", {disabled, onClick:onPress}, "Back"),
     Button: () => null,
     Sheet: Wrapper, FormActions: ({ submitLabel, disabled, onSubmit, cancelLabel, onCancel }: { submitLabel: string; disabled: boolean; onSubmit: () => void; cancelLabel: string; onCancel: () => void }) => createElement("div", null, createElement("button", { disabled, onClick: onSubmit }, submitLabel), createElement("button", { onClick: onCancel }, cancelLabel)), Notice: ({ message }: { message: string }) => createElement("p", null, message),
-    NavigationRow: ({ label, detail, accessibilityLabel, selected, onPress, supporting }: { label: string; detail?: string; accessibilityLabel?: string; selected?: boolean; onPress: () => void; supporting?: PropsWithChildren["children"] }) =>
-      createElement("div", null, createElement("button", { "aria-pressed": selected, "aria-label": accessibilityLabel, onClick: onPress }, label, detail), supporting),
+    NavigationRow: ({ label, detail, accessibilityLabel, selected, onPress, supporting, trailing }: { label: string; detail?: string; accessibilityLabel?: string; selected?: boolean; onPress: () => void; supporting?: PropsWithChildren["children"]; trailing?: PropsWithChildren["children"] }) =>
+      createElement("div", null, createElement("button", { "aria-pressed": selected, "aria-label": accessibilityLabel, onClick: onPress }, label, detail), supporting, trailing),
   };
 });
 import { MachinesScreen } from "./machines-screen";
@@ -105,7 +109,7 @@ it("waits for saved connections before presenting the pairing choices", () => {
     fixture.state.hydrated = true;
     fixture.state.storageError = "Unavailable";
     html = renderToStaticMarkup(createElement(MachinesScreen));
-    expect(html).toContain("Saved computers could not be loaded");
+    expect(html).toContain("Saved connections are unavailable");
     expect(html).not.toContain("Pairing methods");
     fixture.state.storageError = null;
     expect(renderToStaticMarkup(createElement(MachinesScreen))).toContain("Pairing methods");
@@ -195,7 +199,7 @@ it("owns Back from the initial Add choices, blocks busy exit and restores route 
 
 it("passes exclusive current-computer selection to the shared accessible row without claiming a live connection", () => {
   const html = renderToStaticMarkup(createElement(MachinesScreen));
-  expect(html).toContain('aria-pressed="true" aria-label="First computer. Disconnected. Computer is offline.">First computer</button><div><span>Active</span>');
+  expect(html).toContain('aria-pressed="true" aria-label="First computer. Disconnected. Computer is offline.">First computer</button><span>Active</span>');
   expect(html).toContain('aria-pressed="false">Second computer');
   expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
   expect(html).not.toContain("Connected");
@@ -216,7 +220,7 @@ it("selects an inactive computer with one tap and shows the new selection withou
     expect(button("First computer")?.getAttribute("aria-pressed")).toBe("false");
     expect(button("Second computer")?.getAttribute("aria-pressed")).toBe("true");
     expect([...container.querySelectorAll("button[aria-pressed]")].map(row => row.textContent))
-      .toEqual(["Second computer", "First computer"]);
+      .toEqual(["First computer", "Second computer"]);
     expect(button("Second computer")?.parentElement?.textContent).toContain("Active");
     expect(container.textContent).toContain("Computer selected.");
     expect(fixture.options?.headerLeft).toBeUndefined();
@@ -259,11 +263,14 @@ it("keeps removal inside the management sheet and retires review across replacem
   const render = () => act(async () => root.render(createElement(MachinesScreen)));
   const original = fixture.state.machines[0];
   try {
-    await render(); await act(async () => button("First computer").click());
+    await render(); await act(async () => button("Options for First computer").click());
     await act(async () => button("Remove").click());
     expect(container.textContent).toContain("This connection will be removed from this phone. Saved drafts remain.");
     expect(button("Remove").disabled).toBe(false);
-    fixture.state.machines = [{ ...original, endpoint: "https://replacement.invalid" }]; await render();
+    // A route change of the same computer keeps the review; a different computer under the same entry retires it.
+    fixture.state.machines = [{ ...original, endpoint: "https://tailnet.invalid" }]; await render();
+    expect(button("Remove").disabled).toBe(false);
+    fixture.state.machines = [{ ...original, environmentId: "replaced" } as typeof original]; await render();
     expect(button("Remove").disabled).toBe(true);
     fixture.state.machines = [original]; await render();
     expect(button("Remove").disabled).toBe(true);
@@ -292,7 +299,7 @@ it("keeps a removal review valid while its own credential write is pending or ro
   }));
   try {
     await render();
-    await act(async () => button("First computer").click());
+    await act(async () => button("Options for First computer").click());
     await act(async () => button("Remove").click());
     await act(async () => button("Remove").click());
     await render();

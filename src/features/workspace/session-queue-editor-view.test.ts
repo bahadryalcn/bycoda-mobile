@@ -13,6 +13,8 @@ vi.mock("@/state/machines",()=>({useMachines:Object.assign((select:any)=>select(
 vi.mock("@/state/connection-scope",()=>{const value={isCurrent:()=>f.epoch};return{useConnectionScope:()=>value};});
 vi.mock("@/ui/private-access",()=>({usePrivateContentAccess:()=>({allowed:f.allowed,check:()=>f.allowed}),PrivateContentAccessProvider:({children}:PropsWithChildren)=>children}));
 vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
+vi.mock("@/i18n",()=>({useLocale:()=>"en"}));
+vi.mock("@/ui/scope-line",()=>({ScopeLine:({scope}:any)=>createElement("span",null,scope.computer)}));
 vi.mock("@/ui/confirm",()=>({confirmAction:vi.fn()}));
 vi.mock("@/ui/search-field",()=>({CollectionToolbar:({field,actions}:any)=>createElement("header",null,field,actions)}));
 vi.mock("@/ui/chat-controls",()=>({ChatToolbarAction:({label,onPress}:any)=>createElement("button",{onClick:onPress},label)}));

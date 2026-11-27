@@ -1,8 +1,4 @@
-import { ManagementToolbar } from "./shared/collection-toolbar";
-import { useRef, useState, type ComponentRef } from "react";
-import { useLocale } from "@/i18n";
-import { matchesSearch } from "./shared/search";
-import Pencil from "lucide-react-native/icons/pencil";
+import { useState } from "react";
 import type { HostSteward, HostStewardInput } from "@/remote/types";
 import { useActiveMachine } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
@@ -10,11 +6,9 @@ import { useCopy } from "@/ui/copy";
 import { getQueryPresentation } from "@/ui/query-presentation";
 import {
   Body,
-  IconButton,
   MutationState,
   StateView,
   QueryState,
-  SearchField,
   Sheet,
 } from "@/ui/primitives";
 import { ManagementList } from "./shared/management-list";
@@ -26,29 +20,14 @@ import { identifier } from "./shared/format";
 import { StewardCard } from "./stewards/steward-card";
 import { savedStewardId } from "./stewards/steward-feedback";
 import { StewardEditor } from "./stewards/steward-editor";
-import { useMobileTheme } from "@/ui/theme";
-import { iconSize } from "@/ui/tokens";
+import { useProjectList } from "../workspace/use-project-directory";
 
 export function StewardsScreen() {
-  const { colors } = useMobileTheme();
   const copy = useCopy();
-  const locale = useLocale();
   const machine = useActiveMachine();
   const { projectId, setProjectId } = useRequiredProjectScope();
   const { providers, query: providerQuery } = useAgentProviders(projectId);
   const supported = machine?.capabilities?.includes("stewards") === true;
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all");
-  const searchInput = useRef<ComponentRef<typeof SearchField>>(null);
-  const filterOptions = [
-    { value: "all", label: copy("Tümü", "All") },
-    { value: "enabled", label: copy("Etkin", "Enabled") },
-    { value: "paused", label: copy("Duraklatılmış", "Paused") },
-  ];
-  const clearSearch = () => {
-    setSearch("");
-    searchInput.current?.focus();
-  };
   const [editor, setEditor] = useState<HostStewardInput | null>(null);
   const query = useHostQuery<HostSteward[]>(
     ["stewards"],
@@ -60,12 +39,17 @@ export function StewardsScreen() {
   const run = useHostMutation("stewards.runNow", ["stewards"]);
   const remove = useHostMutation("stewards.delete", ["stewards"]);
   const busy = save.isPending || run.isPending || remove.isPending;
-  const scoped = (query.data ?? []).filter((item) => !projectId || item.projectId === projectId);
-  const rows = scoped.filter(
-    (item) =>
-      (filter === "all" || item.enabled === (filter === "enabled")) &&
-      matchesSearch(`${item.focus} ${item.model} ${item.projectId}`, search, locale),
-  );
+  const projects = useProjectList();
+  // Until the project is known nothing is listed, so the page never shows another project's steward.
+  const scopePending = !projectId && !projects.directoryReady;
+  const listQuery = scopePending
+    ? ({ ...query, data: undefined, error: null, status: "pending", isPending: true, isLoading: true,
+        isSuccess: false, fetchStatus: "fetching" } as unknown as typeof query)
+    : query;
+  // A project has at most one steward, so the page lists it without search or filters.
+  const rows = scopePending
+    ? []
+    : (query.data ?? []).filter((item) => !projectId || item.projectId === projectId);
   const existingSteward = projectId
     ? query.data?.find((item) => item.projectId === projectId)
     : undefined;
@@ -79,8 +63,6 @@ export function StewardsScreen() {
     !busy &&
     !editor &&
     !existingSteward;
-  const showEditInHeader =
-    supported && existingSteward && (presentation === "ready" || presentation === "stale-error");
   const create = () => {
     if (!canCreate || !projectId) return;
     const { maxRunMinutes: _minutes, ...agent } = initialAgent(providers);
@@ -103,32 +85,17 @@ export function StewardsScreen() {
   const listState = (
     <QueryState
       size="region"
-      query={query}
+      query={listQuery}
       empty={!!query.data && !rows.length}
-      emptyTitle={
-        (search.trim() || filter !== "all") && scoped.length
-          ? copy("Eşleşen sonuç yok", "No matching results")
-          : copy("Henüz proje sorumlusu yok", "No project stewards yet")
-      }
-      emptyDetail={
-        scoped.length
-          ? undefined
-          : copy(
-              "Proje sorumlusu projeyi düzenli inceler ve yeni görevler önerir.",
-              "A project steward reviews the project on a schedule and proposes new tasks.",
-            )
-      }
+      emptyTitle={copy("Henüz proje sorumlusu yok", "No project stewards yet")}
+      emptyDetail={copy(
+        "Proje sorumlusu projeyi düzenli inceler ve yeni görevler önerir.",
+        "A project steward reviews the project on a schedule and proposes new tasks.",
+      )}
       emptyAction={
-        (search.trim() || filter !== "all") && scoped.length
-          ? search.trim()
-            ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
-            : {
-                label: copy("Filtreleri temizle", "Clear filters"),
-                onPress: () => setFilter("all"),
-              }
-          : !scoped.length && canCreate
-            ? { label: copy("Yeni proje sorumlusu", "New project steward"), onPress: create }
-            : undefined
+        canCreate
+          ? { label: copy("Yeni proje sorumlusu", "New project steward"), onPress: create }
+          : undefined
       }
     />
   );
@@ -136,21 +103,10 @@ export function StewardsScreen() {
     <ManagementList<HostSteward>
       title={copy("Proje sorumluları", "Project stewards")}
       scopeControl={<ProjectScopePill allowAll={false} projectId={projectId} onChange={setProjectId} />}
-      query={supported ? query : undefined}
+      query={supported ? listQuery : undefined}
       ListEmptyComponent={supported ? listState : undefined}
       data={rows}
       keyExtractor={(item) => item.id}
-      actions={
-        showEditInHeader ? (
-          <IconButton
-            label={copy("Proje sorumlusunu düzenle", "Edit project steward")}
-            onPress={() => setEditor(existingSteward)}
-            disabled={busy || !!editor}
-          >
-            <Pencil size={iconSize.action} strokeWidth={2} color={colors.accent} />
-          </IconButton>
-        ) : undefined
-      }
       header={
         <>
           {!supported ? (
@@ -164,10 +120,10 @@ export function StewardsScreen() {
             />
           ) : (
             <>
-              {!projectId ? (
+              {!projectId && projects.directoryReady ? (
                 <Body muted>
                   {copy(
-                    "Proje sorumlusu oluşturmak için bir proje seç.",
+                    "Proje sorumlusu oluşturmak için bir proje seçin.",
                     "Choose a project to create a steward.",
                   )}
                 </Body>
@@ -180,25 +136,6 @@ export function StewardsScreen() {
                   )}
                 </>
               ) : null}
-              <ManagementToolbar
-                search={
-                  <SearchField
-                    placeholder={copy("Ara", "Search")}
-                    ref={searchInput}
-                    value={search}
-                    onChangeText={setSearch}
-                    label={copy("Odak veya modelde ara", "Search steward focus and model")}
-                  />
-                }
-                status={{
-                  label: copy("Durum", "Status"),
-                  value: filter,
-                  unfilteredValue: "all",
-                  options: filterOptions,
-                  onChange: setFilter,
-                  filterable: scoped.length > 0,
-                }}
-              />
               {!rows.some((item) => item.id === savedStewardId(save.variables)) ? (
                 <MutationState
                   mutation={save}
@@ -224,7 +161,7 @@ export function StewardsScreen() {
               title={
                 !("updatedAt" in editor)
                   ? copy("Yeni proje sorumlusu", "New project steward")
-                  : copy("Proje sorumlusu", "Project steward")
+                  : copy("Proje sorumlusunu düzenle", "Edit project steward")
               }
               onClose={() => setEditor(null)}
             >

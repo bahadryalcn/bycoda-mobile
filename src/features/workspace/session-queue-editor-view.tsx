@@ -3,7 +3,7 @@ import { useWindowDimensions } from "react-native";
 import Pencil from "lucide-react-native/icons/pencil";
 import { useConnectionScope } from "@/state/connection-scope";
 import { useMachines } from "@/state/machines";
-import { ActionMenu, Button, Body, Disclosure, Empty, ErrorText, Input, Loading, FormActions, Sheet, Stack } from "@/ui/primitives";
+import { ActionMenu, Button, Body, Empty, ErrorText, Input, Loading, FormActions, Sheet, Stack } from "@/ui/primitives";
 import { ScreenList } from "@/ui/screen-list";
 import { CollectionToolbar } from "@/ui/search-field";
 import { PrivateContentAccessProvider,usePrivateContentAccess } from "@/ui/private-access";
@@ -14,15 +14,17 @@ import type { SessionScope } from "./session-types";
 import type { useQueueEditor } from "./session-queue-editor";
 import { composerDeliveryError } from "./composer-delivery-copy";
 import { RecordAccessUnavailable } from "./unavailable-state";
-import { sessionCatalog, sessionModel } from "./catalog";
-import { providerName } from "./provider-choices";
+import { sessionModelLabel } from "./catalog";
+import { useLocale } from "@/i18n";
+import { ScopeLine } from "@/ui/scope-line";
+import { formatAttachmentSize } from "./attachment-presentation";
 
 /** Presentation keeps no draft copy; the original persistent editor remains its owner. */
 export function SessionQueueEditor({editor,blocked,scope}:{editor:ReturnType<typeof useQueueEditor>;blocked:boolean;scope:SessionScope}){
   const { colors } = useMobileTheme();
-  const copy=useCopy(),{height}=useWindowDimensions(),connection=useConnectionScope(),access=usePrivateContentAccess();
+  const copy=useCopy(),locale=useLocale(),{height}=useWindowDimensions(),connection=useConnectionScope(),access=usePrivateContentAccess();
   const machine=useMachines(state=>state.machines.find(entry=>entry.id===scope.machineId));
-  const [opening]=useState(()=>({connection,scope:{...scope},name:machine?.name??machine?.id??""}));
+  const [opening]=useState(()=>({connection,scope:{...scope},name:machine?.name??copy("Bilgisayar", "Computer")}));
   const mounted=useRef(false);
   useLayoutEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
   const available=connection===opening.connection&&opening.connection.isCurrent()&&useMachines.getState().activeId===opening.scope.machineId&&scope.machineId===opening.scope.machineId&&scope.sessionId===opening.scope.sessionId&&access.allowed&&access.check();
@@ -30,8 +32,6 @@ export function SessionQueueEditor({editor,blocked,scope}:{editor:ReturnType<typ
   const origin=()=>mounted.current&&live.current.available&&opening.connection.isCurrent()&&useMachines.getState().activeId===opening.scope.machineId&&live.current.access.allowed&&live.current.access.check();
   const edit=editor.value;
   const target=edit?.original.modelTarget;
-  const model=target?sessionModel(sessionCatalog(undefined,[target.harness]),target.harness,target.model):undefined;
-  const modelName=model?.name??target?.model.replace(/^[^:]+:/, "");
   const window=useMemo(()=>({active:false}),[editor.visible,available,edit?.original]);
   useLayoutEffect(()=>{window.active=true;return()=>{window.active=false;};},[window]);
   const current=()=>origin()&&window.active&&live.current.editor.visible;
@@ -66,22 +66,19 @@ export function SessionQueueEditor({editor,blocked,scope}:{editor:ReturnType<typ
     <Sheet visible={editor.visible} title={copy("Sıradaki mesajı düzenle", "Edit queued message")} dismissible={!editor.working} dismissalRetryKey={editor.editError} onClose={close} size="form" scroll={false}>
       <ScreenList data={available&&edit?edit.original.attachments:[]} keyExtractor={file=>file.id} header={<Stack>
         {available?<>
-          <CollectionToolbar field={<Body selectable>{opening.name}</Body>} actions={edit?<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
+          <CollectionToolbar field={<ScopeLine scope={{computer:opening.name}}/>} actions={edit?<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
             {key:"reload",label:copy("Sıradaki güncel mesajı yükle", "Reload latest queued message"),disabled:disabled||!!approval,onPress:()=>openReview("reload")},
             {key:"discard",label:copy("Düzenlemeyi sil", "Discard edit"),destructive:true,disabled:disabled||!!approval,onPress:()=>openReview("discard")},
           ]}/>:undefined}/>
-          {!editor.ready&&!editor.error?<Loading/>:null}
+          {!editor.ready&&!editor.error?<Loading delayed/>:null}
           {edit?<>
-            {target?<Stack><Body selectable>{modelName}</Body><Body muted>{providerName(target.harness)}</Body></Stack>:null}
+            {target?<Body muted selectable>{sessionModelLabel(target)}</Body>:null}
             <Input label={copy("Mesaj", "Message")} value={edit.text} multiline style={{minHeight:Math.max(120,Math.min(240,height*.28))}} editable={!disabled&&!approval} onChangeText={change}/>
-            <Disclosure label={copy("Ayrıntılar", "Details")}>
-              <Body muted>{copy("Ekler ve özgün model ayarları korunur.", "Attachments and original model settings are preserved.")}</Body>
-              <Body mono selectable>{edit.original.id}</Body>
-            </Disclosure>
+            <Body muted>{copy("Ekler ve özgün model ayarları korunur.", "Attachments and original model settings are preserved.")}</Body>
           </>:editor.ready&&!editor.error?<Empty compact title={copy("Sıradaki mesaja ait taslak yok.", "No queued message draft.")}/>:null}
           {!canRetry&&!canSave?feedback:null}
         </>:<RecordAccessUnavailable />}
-      </Stack>} renderItem={({item:file})=><Body muted selectable>{file.name} · {Math.ceil(file.size/1024)} KB</Body>}/>
+      </Stack>} renderItem={({item:file})=><Body muted selectable>{file.name} · {formatAttachmentSize(file.size,locale)}</Body>}/>
       {canRetry?<FormActions submitLabel={copy("Taslağı yeniden yükle", "Retry loading draft")} onSubmit={()=>{void retry();}} busy={retrying} disabled={editor.working} feedback={feedback}/>:
         canSave?<FormActions submitLabel={needsResume?copy("Düzenlemeye devam et", "Continue editing"):copy("Değişiklikleri kaydet", "Save changes")} onSubmit={needsResume?resume:save} busy={editor.working} disabled={blocked||!!approval} dirty={!!edit && edit.text !== edit.original.text} feedback={feedback}/>:null}
     </Sheet>

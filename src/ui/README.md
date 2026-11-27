@@ -37,7 +37,25 @@ when no native header owns navigation. Entry flows that cancel their own state p
 
 `Hint` adapts PanelUI Tooltip and respects private content access. An action keeps
 its ordinary tap and explains itself on long press. A dedicated `InfoHint` icon
-shows its explanation as a tooltip on tap. Keep required state, permission and
+shows its explanation as a tooltip on tap. Its spoken name is short ("Information
+about {field}", from `subject`; `HintLabel`, `HintSection`, `ToggleField` and
+`SelectField` pass their label) and the explanation is its accessibility hint, because
+the tooltip content is hidden from the accessibility tree. `compact` (used by
+`HintSection`) draws a 32 visual with a 48 hitSlop so a section header keeps its 32 row.
+
+Text links inside a status or notice line ("Retry", "Details") use `TextAction`
+(status-line.tsx): 13/17 semibold, hitSlop to 48 and pressed dimming. `IconButton
+density="compact"` is only for a standalone button; icon actions side by side use
+`reserveTouchTarget` so their slop areas never overlap. `PressableArea` (buttons.tsx)
+is a pressable region without row defaults (section-header toggles, breadcrumbs,
+titles); list rows keep `NavigationRow`/`PressableCard`, which fill with `pressedFill`
+while pressed (`row-press.ts`). `NavigationRow intent="select"` and `SelectRow` (now a
+`NavigationRow` choice) are radios with a checked state; `SelectionMark`
+(selection-mark.tsx) is the one selected mark for choice rows, picker options and
+RecordCard selection. `FilterSheet` takes an optional `activeCount`; at 0 it hides Reset
+like the live search sheet. `DisclosureChevron` (`axis` right for tree/group rows,
+down for in-place sections) is the one expand indicator of Disclosure, RecordCard and
+the workspace rows. Keep required state, permission and
 consequence text visible. Use inline disclosure for longer reading material.
 The trigger must forward the applicable press handler. RecordCard identity
 uses one named interaction target: a short press expands details, a long press
@@ -93,17 +111,14 @@ current scope and callback identity before applying. Reset and Close remain
 available. Jira stages board scope/sprint/column choices through this contract,
 keeps committed scope in its summary and places page navigation after records.
 
-Collection filter consumers use `AppliedFilters` from filter-sheet.tsx for their
-committed selection summary. It is flat caption metadata, with full wrapping
-labels and optional result context, not another toolbar or a truncated chip row.
-The spoken label includes the filter context; visible copy omits that redundant
-prefix. Pending editor choices stay in FilterSheet and never replace this summary
-until Apply. Reset/Cancel, query/defaults, scope and selection remain in the
-feature owner. Provider inbox combines its existing count with assigned/closed
-state below SearchToolbar; task status (including the default Active), session
-project/archive/status and log source/level/paused-refresh use the same pattern.
-A missing log-source label falls back to its selected ID so the active constraint
-remains discoverable. Do not silently clear it when the source list refreshes.
+Applied filters are signalled by the filter icon's dot, never by a summary row
+(see the design system's search and filter convention). `AppliedFilters` in
+filter-sheet.tsx is deprecated: do not add consumers. Its remaining callers (Jira
+board, pull requests) migrate with their feature owners; until then it stays flat
+caption metadata, not a toolbar or chip row. Pending editor choices stay in
+FilterSheet until Apply. Reset/Cancel, query/defaults, scope and selection remain
+in the feature owner, and a constraint must never be cleared silently when its
+source list refreshes.
 
 InboxScreen owns an Inbox-local presentation memory above its mode switch.
 Provider-list preferences (assigned/closed, draft and committed search,
@@ -373,8 +388,11 @@ PanelUI components evaluated and not adopted:
 
 - message-scroller: the transcript keeps LegendList for its streaming follow machine, drag/momentum tracking, alignItemsAtEnd, scroll-memory restore, scrollToKey and KEEP_POSITION prepend.
 - select, combobox: their portal/BottomSheet presentation would replace security-aware Sheet routing; select is single-value.
-- tag-input: no free-entry mode.
-- chip: the pill cannot wrap full AppliedFilters labels.
+- tag-input: no free-entry mode. Note tags use `TagChipsField` (tag-chips-field.tsx).
+- markdown-editor: a bordered monospace source field with its own transforms and the `response` preview. Notes use
+  `MarkdownTextEditor`/`MarkdownFormatBar` (markdown-editor.tsx): source styled as typed, the desktop note toolbar's
+  `markdownEdit` transforms, and `MessageText` for reading.
+- chip: the pill cannot wrap full filter labels.
 - number-input: commits on blur.
 - steps: no linear multi-step flow.
 - code-block: fixed text-xs conflicts with chat text-size presets.
@@ -395,12 +413,10 @@ PanelUI components evaluated and not adopted:
 - useCopyToClipboard: no single-flight or access gating.
 - useKeyboard: keyboard-controller owns keyboard events.
 
-The full upstream public API is exposed as `ui/panelui` and as the `PanelUI`
-namespace in `ui/library`. `catalog.ts` indexes all **143 installed component
-modules**, their roles, core bycoda use cases and optional capabilities.
-`catalog.test.ts` checks the inventory against the installed package. Shared UI
-implementations should import individual `panelui-native/components/...` modules
-when possible. Full catalog availability does not mean every component is shown
+`catalog.ts` indexes all **143 installed component modules**, their roles, core
+bycoda use cases and optional capabilities. `catalog.test.ts` checks the inventory
+against the installed package. There is no full-barrel re-export: shared UI
+implementations import individual `panelui-native/components/...` modules. Full catalog availability does not mean every component is shown
 in every product screen.
 
 In PanelUI 1.4.0 the portal export and the Tabs `animationDisabled` context are
@@ -691,12 +707,15 @@ shapes. Secondary actions are unfilled; reserve filled emphasis for the primary
 action or an explicit selected state. Do not shrink touch targets for density.
 `Screen.footer` reserves space for a reachable page action outside the page
 scroller, with shared safe-area padding and content width. It is not an input
-composer or a second scrolling body. Terminal command entry uses the existing
-Sheet body/footer owners; closing that editor retains its per-terminal draft.
-Keep output in the page scroller instead of nesting a fixed-height output reader.
+composer or a second scrolling body. Terminals render in the shared
+`TerminalViewport` (bundled xterm.js, no network); their key bar rides the keyboard
+in `SessionKeyboardFrame`, which shrinks the terminal above it. Typing goes into
+the terminal itself; the unsent line is kept per terminal.
 
 `Screen` and `ScreenList` show pull-to-refresh feedback only for a user pull,
 not polling. Custom `refresh` callbacks must return the complete refresh promise.
+`usePullRefresh` holds the indicator for at least `PULL_REFRESH_MIN_MS` so an
+instant or cached refresh still dismisses the native control cleanly.
 An action owns its pending indicator; do not repeat it in adjacent mutation copy
 or animate unrelated actions that happen to share a mutation object.
 `Notice`/`ErrorNotice` are a semantic-tinted banner (hairline semantic border,
@@ -733,10 +752,10 @@ filter sheet or list header. Project search, current selection and directory
 loading/privacy/failure recovery stay inside the `ProjectPicker` sheet the pill
 opens, never as a page row. Pages where a project is irrelevant omit the pill. At large text, controls and context
 may grow or wrap; never shrink labels to preserve a one-line toolbar. Search and
-applied-filter summaries stay in the list header and keep their state owners.
-`ContextControls` column basis grows with system font scale so narrow large-text
-layouts become one column; normal phone text uses two columns. Selected values may
-grow vertically and retain full accessible labels. Inbox scope stays in its list heading so it can
+filter state keep their owners; applied filters show as the filter icon's dot.
+Scope pills (`ScopePill`, `ScopePills`) have a 28 minimum, not a fixed height: system text
+scaling grows them instead of clipping the name, and the value still ellipsizes within
+`SCOPE_PILL_MAX_WIDTH`. Selected values retain full accessible labels. Inbox scope stays in its list heading so it can
 scroll away; the outer mode selector must not acquire another fixed scope row.
 
 Settings presents phone preferences before computer-scoped destinations. The
@@ -860,29 +879,13 @@ inside the same mutation queue as pairing updates, before touching SecureStore.
 Local cleanup retry never repeats the remote revocation.
 
 Accounts/MCP keeps observed-cache explanations and timestamps in Details so the
-collection remains the main content. Account review consequences precede Details
-in the scrolling editor body; delivery/result recovery stays with FormActions.
-The account draft key, target, session, project, account and expected revision
-belong to the opening editor. Connection or target changes retire that owner;
-a temporary transport loss for the same identity preserves its unsent draft.
-Metadata edits and Claude quota observation have independent capability gates,
-rechecked after persistence before dispatch. Result recovery reads the saved
-operation and never resends it.
+collection remains the main content. It is read-only: provider accounts, ACP
+agents, model order and provider/model defaults are configured on desktop, so
+mobile offers no editor or write action for them.
 
-Computer task settings keep the machine identity captured when the panel opens.
-Changing the active computer does not replace an unsent form with another
-computer's settings. Retired forms remain readonly; lost authorization hides
-cached values while retaining the unsent draft for permitted recovery. Reads and
-write acknowledgements validate the host settings shape before presentation.
-An unknown save exposes one Refresh action, preserves the draft, and labels the
-readback as last received limits rather than an operation receipt. Technical
-causes stay in Details. Only an explicit later Save sends settings again.
-
-Command-shell profiles retain their exact host IDs, including Unix executable
-paths. The editor freezes its profile list and expected chosen ID, requires a
-matching acknowledgement, and retires observed connection changes. Unknown saves
-remain guarded against resending; explicit dismissal remains available through
-the shared dirty guard and refreshes the preference before another review.
+Task limits, work caps, agent defaults and command-shell profiles are desktop-only
+configuration; mobile Settings has no page for them. Usage and limits stays a
+read-only view.
 
 Local connection removal reviews a captured list of computer names/routes. Short
 reviews use the intrinsic compact Sheet body; larger reviews use one ScreenList
@@ -931,6 +934,15 @@ pending intent; returning to the same file/access does not replay it. Security
 subscription tracks transient transitions even when React batches their renders.
 An already opened OS chooser cannot be canceled by this local fence; never claim
 external delivery or cancellation from its promise alone.
+
+A user message's images render above its bubble as one `MediaGrid` collage
+(`media-grid-layout.ts`: 1 alone, 2 side by side, 3 as large + stacked, 4+ as a
+2×2 grid with "+N"); each `MediaTile` keeps its reserved frame through loading
+(skeleton), waiting-for-download, failed (retry) and loaded (`cover`) states.
+Non-image files are compact `FileChip`s below it. `MediaGallery` pages through
+the message's images from the tapped one ("3 / 7"); paging is locked while
+zoomed, and `MediaViewer` is its single-image form. Pages without a local file
+show their state and the slot's download/retry action; the slot owns the read.
 
 Sharing feedback belongs to the captured file and clears on explicit retry/new
 identity. Keep pending on the initiating Share/save control. Current-owner reset
@@ -1019,11 +1031,12 @@ feedback. Long selectable option labels wrap in the shared selection owner.
 
 
 ActionReviewSheet owns the shared form Sheet/FormActions preflight composition.
-It does not validate or send a command. JiraBoardActionReview uses it for a readable
-preflight: issue, board and the named transition/destination/anchor lead; full
-project and exact request details are available through Disclosure. The editor
-retains the captured command, selection and delivery authority. Cancel sends
-nothing. Old review/confirm/dismiss callbacks retire on replacement, dismissal,
+It does not validate or send a command. Provider Inbox writes no longer use it:
+like the desktop, comments, Jira status changes and moves are sent from their
+editor (the computer approves Jira changes), and only merge and close confirm
+through `confirmAction`. Callers that keep a preflight retain the captured
+command, selection and delivery authority. Cancel sends nothing. Old
+review/confirm/dismiss callbacks retire on replacement, dismissal,
 lock or unmount; the delivery owner still enforces machine identity, durable
 pending claims and computer approval. Do not replace this with an automatic send
 or treat a readable label as authorization.
@@ -1131,15 +1144,11 @@ Back and consequential PR actions use the common overflow, with the shared Sheet
 close retaining dismissal guards. Uncertain sends still allow local draft edits.
 
 
-Comment submission uses ActionReviewSheet as the same preflight family as Jira
-and PR review. The composer retains the original draft object and canonical
-trimmed params, while the review presents complete text, record identity and the
-actual reply recipient. Details disclose the full reply target and a marked
-reference excerpt. Cancel preserves the editor DOM and selection; an edited,
-retired, dismissed or replaced review cannot send. Confirmation consumes the
-frozen params/draft once, preserving the existing acknowledgement and uncertain
-receipt rules. Do not reconstruct the target from the label or add a native
-alert after this preflight.
+Comment submission sends from the editor without a preflight, like the desktop.
+Send freezes the canonical trimmed params and the reply target the editor shows;
+the composer retains the original draft object for acknowledgement. A running or
+uncertain send blocks another; retained handlers from a retired record send
+nothing. Do not reconstruct the target from the label or add a native alert.
 
 
 Provider collection rows, search/counts, connected-service payload and staged
@@ -1532,4 +1541,4 @@ mutation to update presentation.
 
 ## Identity icons
 
-`duotone-icon.tsx` owns the typed 24-grid identity glyph map. Use its named components at identity sites of 20dp or larger, passing the existing size and theme color. Back planes share the foreground tint at 35% opacity. Utility controls, dense metadata, inline feedback and all glyphs below 20dp stay Lucide. `ProjectIcon` owns folder/group fallbacks; `StateView` owns full-region tone glyphs. `IconTile` and `NavigationIcon` remain child containers. Custom project symbols/logos and provider brands retain their owners. Dock artwork belongs to `dock-icon.tsx`.
+`duotone-icon.tsx` owns the typed 24-grid identity glyph map. Use its named components at identity sites of 20dp or larger, passing the existing size and theme color. Back planes share the foreground tint at 35% opacity. Utility controls, dense metadata, inline feedback and all glyphs below 20dp stay Lucide. `ProjectIcon` owns folder/group fallbacks; `StateView` owns full-region tone glyphs. `IconTile` remains a child container (menu and computer rows no longer use it; they use the bare row glyph). Custom project symbols/logos and provider brands retain their owners. Dock artwork belongs to `dock-icon.tsx`.

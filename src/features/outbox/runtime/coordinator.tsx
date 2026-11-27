@@ -27,6 +27,9 @@ export function OutboxCoordinator() {
   }, [account.status, account.device?.id]);
   useEffect(() => {
     // Reconnect, foreground and explicit retry share one per-session flight owner.
+    // The safety tick reads storage only while a waiting row may exist: any outbox write re-arms it.
+    let maybeWaiting = true, writes = 0;
+    const written = sendOutbox.subscribe(() => { maybeWaiting = true; writes++; });
     const run = (sessionId?: string) => {
       const accountId = account.device?.id;
       if (!client || account.status !== "signedIn" || !accountId) return;
@@ -35,7 +38,10 @@ export function OutboxCoordinator() {
         useSecurity.getState().appState === "active" && isAppContentVisible() && useMachines.getState().activeId === client.machine.id;
       if (!current() || !onlineManager.isOnline() || !focusManager.isFocused()) return;
       void (async () => {
+        const seen = writes;
         const rows = await sendOutbox.all();
+        // A write during the read may have added a waiting row the read missed.
+        if (writes === seen) maybeWaiting = rows.some(row => row.machineId === client.machine.id && row.status === "waiting");
         const sessions = new Set(rows.filter(row => row.machineId === client.machine.id &&
           (row.status === "waiting" || (!!sessionId && row.status === "blocked")) &&
           (!sessionId || row.sessionId === sessionId)).map(row => row.sessionId));
@@ -52,9 +58,9 @@ export function OutboxCoordinator() {
     retries.add(run);
     const online = onlineManager.subscribe(() => run());
     const foreground = focusManager.subscribe(() => run());
-    const reconnect = setInterval(() => run(), 15_000);
+    const reconnect = setInterval(() => { if (maybeWaiting) run(); }, 15_000);
     run();
-    return () => { retries.delete(run); online(); foreground(); clearInterval(reconnect); };
+    return () => { retries.delete(run); online(); foreground(); written(); clearInterval(reconnect); };
   }, [client, account.status, account.device?.id, cache]);
   return null;
 }

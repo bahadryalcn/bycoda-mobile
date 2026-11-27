@@ -1,3 +1,4 @@
+import { numberFormat } from "../../../../src/shared/i18n/numberFormat";
 import type { SessionUsageReport } from "../../../../host/usage/usage-report";
 export type { SessionUsageReport };
 const tokenKeys = ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens"] as const;
@@ -14,5 +15,17 @@ export function readUsageReport(value: unknown, expected: { environmentId: strin
   if (new Set(ids).size !== ids.length) return invalid();
   return value as SessionUsageReport;
 }
-export function usageNumber(value: number | null): string { return value === null ? "—" : value.toLocaleString(); }
-export function usageDuration(value: number | null): string { return value === null ? "—" : `${Math.round(value / 1000).toLocaleString()} s`; }
+/** A count in the app language (not the device language); unknown stays "—" for callers that cannot omit it. */
+export function usageNumber(value: number | null, locale = "en"): string { return value === null ? "—" : numberFormat(locale).format(value); }
+export type DurationUnits = { hour: string; minute: string; second: string };
+/** "42 s", "12 min", "3 h 5 min" with the app's unit labels (native Intl units are unreliable). */
+export function usageDuration(value: number | null, locale = "en", units: DurationUnits = { hour: "h", minute: "min", second: "s" }): string {
+  if (value === null) return "—";
+  const format = numberFormat(locale).format;
+  const seconds = Math.max(0, Math.round(value / 1000));
+  if (seconds < 60) return `${format(seconds)} ${units.second}`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${format(minutes)} ${units.minute}`;
+  const rest = minutes % 60;
+  return `${format(Math.floor(minutes / 60))} ${units.hour}${rest ? ` ${format(rest)} ${units.minute}` : ""}`;
+}

@@ -2,6 +2,8 @@
 import { act, createElement, type PropsWithChildren, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
+// Usage limits tick only while visible; the visibility owner reads native app state.
+vi.mock("@/ui/use-owner-visible", () => ({ useOwnerVisible: () => true }));
 vi.mock("@/ui/no-computer", () => ({ NoComputerState: () => createElement("p", null, "Connect a computer first"), NoComputerGate: () => createElement("p", null, "Connect a computer first") }));
 vi.mock("../workspace/project-picker", () => ({ ProjectPicker: () => null }));
 vi.mock("@/ui/metric-value", () => ({ MetricValue: ({ children }: import("react").PropsWithChildren) => createElement("strong", null, children) }));
@@ -14,7 +16,10 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }), HintSection: ({ children }: PropsWithChildren) => createElement("div", null, children), InfoHint: () => null, InfoPanel: () => null, HintLabel: () => null, UnitHint: () => null, isUnitHint: () => false }));
 vi.mock("./usage-charts", () => ({ UsageKpis: () => null, ProviderShare: () => null }));
 vi.mock("@/ui/machine-bar", () => ({ MachinePill: ({ accessory }: { accessory?: import("react").ReactNode }) => createElement("nav", null, accessory) }));
-vi.mock("@/ui/usage-meters", () => ({ RemainingMeter: () => null, AccountMeter: () => null, CostKpi: () => null, DailyBars: () => null }));
+vi.mock("@/ui/hint", () => ({ Hint: ({ children }: { children: unknown }) => children }));
+vi.mock("lucide-react-native/icons/rotate-ccw", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/triangle-alert", () => ({ default: () => null }));
+vi.mock("@/ui/usage-meters", () => ({ RemainingMeter: () => null, AccountMeter: () => null, NamedMeter: ({ name }: { name: string }) => createElement("span", null, name), CostKpi: () => null, DailyBars: () => null }));
 vi.mock("@/ui/metric-row", () => ({ MetricRow: ({ label, value }: { label: string; value: string | number }) => createElement("div", null, label, ": ", value) }));
 
 const f = vi.hoisted(() => ({
@@ -51,9 +56,8 @@ vi.mock("lucide-react-native/icons/briefcase", () => ({ default: () => null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: vi.fn(() => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: { caption: {} } })) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/styles", () => ({ uiStyles: { caption: {} } }));
-vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, colors: {}, space: {}, fontSize: {}, radii: {} }));
+vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, colors: {}, space: {}, fontSize: {}, radii: {}, metrics: { touchTarget: 48 } }));
 vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null,  FilterButton: () => null, FilterSheet: () => null }));
-vi.mock("./runtime-monitors", () => ({ RuntimeMonitors: () => null }));
 vi.mock("@/ui/message-code", () => ({ MessageCode: ({ code }: { code: string }) => createElement("pre", null, code) }));
 vi.mock("@/ui/issue-summary", () => ({
   IssueSummary: ({ issues }: { issues: string[] }) => createElement("div", null, issues.join("\n")),
@@ -196,6 +200,7 @@ vi.mock("@/ui/primitives", () => {
     }) => createElement("button", { onClick: onPress, disabled }, label),
     IconButton: () => null,
     SearchToolbar: ({ search, actions }: any) => createElement("div", null, search, actions),
+    useCollapsibleSearch: (field: unknown) => ({ trigger: null, field, sheet: field, open: false }),
     SearchField: ({
       onChangeText,
       maxLength,
@@ -208,7 +213,6 @@ vi.mock("@/ui/primitives", () => {
     },
   };
 });
-import { RuntimeLogsScreen } from "./runtime-logs-screen";
 import { UsageScreen } from "./usage-screen";
 import { AccessCenter } from "./access-center";
 
@@ -225,35 +229,6 @@ afterEach(async () => {
   f.queries = [];
   f.search = undefined;
   vi.unstubAllGlobals();
-});
-
-it("discloses structured log truncation only in the selected detail and refuses an oversized effective filter", async () => {
-  await mount(
-    createElement(RuntimeLogsScreen, {
-      project: { id: "project", name: "Fixture", cwd: "/fixture" },
-    }),
-  );
-  expect(container.querySelector("input")?.maxLength).toBe(512);
-  expect(container.textContent).not.toContain("Log search supports up to 512 characters.");
-  await act(async () => f.search!("x".repeat(448)));
-  expect(container.textContent).not.toContain("Showing the first 16,000");
-  await act(async () =>
-    [...container.querySelectorAll("button")]
-      .find((button) => button.textContent?.startsWith("Fixture event"))!
-      .click(),
-  );
-  expect(container.textContent).toContain("Showing the first 16,000 characters of details.");
-  f.queries = [];
-  await act(async () => f.search!("x".repeat(513)));
-  expect(container.textContent).toContain("Shorten the search to 512 characters or fewer.");
-  expect(f.queries.filter((value) => value.method === "runtimeLogs.read").at(-1)).toMatchObject({
-    enabled: false,
-  });
-  expect(
-    [...container.querySelectorAll("button")].some((button) =>
-      button.textContent?.startsWith("Fixture event"),
-    ),
-  ).toBe(false);
 });
 
 it("shows the provider already present in the usage row without opening a session", async () => {

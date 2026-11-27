@@ -109,7 +109,7 @@ export function resolvedSessionRoute(
     !validId(value.projectId) ||
     value.session?.id !== expectedSessionId
   )
-    throw new Error("This conversation is unavailable or inaccessible.");
+    throw new Error("This session is unavailable or inaccessible.");
   return {
     pathname: "/session/[id]" as const,
     params: {
@@ -137,7 +137,7 @@ export async function resolveSessionReference(
       "Update Bycoda on your computer to use this feature.",
     );
   if (!referenceMachines(reference, [machine]).length)
-    throw new Error("This conversation is unavailable or inaccessible.");
+    throw new Error("This session is unavailable or inaccessible.");
   const result = await request<unknown>(
     "sessions.get",
     {

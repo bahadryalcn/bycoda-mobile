@@ -20,6 +20,9 @@ import { CollectionToolbar } from "@/ui/search-field";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
 import { useListScrollMemory } from "@/ui/use-list-scroll-memory";
 import { useCopy } from "@/ui/copy";
+import { useLocale } from "@/i18n";
+import { ScopeLine } from "@/ui/scope-line";
+import { formatAttachmentSize } from "./attachment-presentation";
 import type { SessionScope } from "./session-types";
 import { useMobileTheme } from "@/ui/theme";
 import { RecordAccessUnavailable } from "./unavailable-state";
@@ -38,9 +41,9 @@ export type QueueSheetActions={close():void;reload():void;resume():void;send():v
 export function SessionQueueSheet({scope,visible,state,actions}:{scope:SessionScope;visible:boolean;state:QueueSheetState;actions:QueueSheetActions}){
   const { uiStyles, colors } = useMobileTheme();
   const glyph=(Icon:ComponentType<{size:number;color:string}>,danger?:boolean)=>createElement(Icon,{size:18,color:danger?colors.danger:colors.muted});
-  const copy=useCopy(),connection=useConnectionScope(),access=usePrivateContentAccess();
+  const copy=useCopy(),locale=useLocale(),connection=useConnectionScope(),access=usePrivateContentAccess();
   const machine=useMachines(store=>store.machines.find(entry=>entry.id===scope.machineId));
-  const [opening]=useState(()=>({scope:{...scope},connection,name:machine?.name??machine?.id??""}));
+  const [opening]=useState(()=>({scope:{...scope},connection,name:machine?.name??copy("Bilgisayar", "Computer")}));
   const mounted=useRef(false);
   useLayoutEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
   const available=connection===opening.connection&&opening.connection.isCurrent()&&scope.machineId===opening.scope.machineId&&scope.sessionId===opening.scope.sessionId&&useMachines.getState().activeId===opening.scope.machineId&&access.allowed&&access.check();
@@ -72,7 +75,7 @@ export function SessionQueueSheet({scope,visible,state,actions}:{scope:SessionSc
   const canEditSelected=selected&&!selected.deliveryUnknown&&state.canEdit&&!state.queueError;
   return <><Sheet visible={visible} title={copy("Mesaj sırası", "Message queue")} size="form" scroll={false} onClose={close}>
     <ScreenList {...scroll.listProps} data={readable?state.rows:[]} keyExtractor={row=>row.id} header={<Stack>
-      {readable?<CollectionToolbar field={<Stack><Body selectable>{opening.name}</Body><Body muted style={uiStyles.caption}>{state.label}</Body></Stack>} actions={<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
+      {readable?<CollectionToolbar field={<Stack><ScopeLine scope={{computer:opening.name}}/><Body muted style={uiStyles.caption}>{state.label}</Body></Stack>} actions={<ActionMenu label={copy("Diğer işlemler", "More actions")} actions={[
         {key:"reload",icon:glyph(RefreshCw),label:copy("Sırayı yeniden yükle", "Reload queue"),disabled:state.reloadBusy,onPress:reload},
         !!state.rows.length&&{key:"control",icon:glyph(state.active?Pause:Play),label:state.active?copy("Sırayı duraklat", "Pause queue"):copy("Sırayı başlat", "Start queue"),disabled:state.disableControl||state.controlling,onPress:()=>{if(current()&&live.current.state.active===state.active&&!live.current.state.disableControl&&!live.current.state.controlling)live.current.actions.control();}},
         state.hasDraft&&{key:"resume",icon:glyph(Pencil),label:copy("Düzenlemeye devam et", "Continue editing"),disabled:state.disabled,onPress:()=>{if(current()&&!live.current.state.disabled&&live.current.state.hasDraft)live.current.actions.resume();}},
@@ -84,7 +87,7 @@ export function SessionQueueSheet({scope,visible,state,actions}:{scope:SessionSc
       <ActionMenu label={copy("Mesaj işlemleri", "Message actions")} actions={row.deliveryUnknown?[
         {key:"delivered",icon:glyph(CheckCheck),label:copy("Zaten iletildi", "Already delivered"),disabled:state.disabled,onPress:()=>review(row,"delivered")},
         {key:"retry",icon:glyph(RotateCw),label:copy("Yeniden gönder", "Send again"),detail:state.retryBlocked,disabled:state.disabled||!!state.retryBlocked,onPress:()=>review(row,"retry")},
-        {key:"keep",icon:glyph(Pause),label:copy("Kuyrukta tut, duraklat", "Keep queued, pause"),disabled:state.disabled,onPress:()=>review(row,"keep")},
+        {key:"keep",icon:glyph(Pause),label:copy("Sırada tut, duraklat", "Keep queued, pause"),disabled:state.disabled,onPress:()=>review(row,"keep")},
         {key:"discard",icon:glyph(Trash2,true),label:copy("Vazgeç", "Discard"),destructive:true,disabled:state.disabled,onPress:()=>review(row,"discard")},
       ]:[
         {key:"edit",icon:glyph(Pencil),label:copy("Sırayı duraklat ve düzenle", "Pause queue and edit"),disabled:state.disabled||!state.canEdit||state.queueError,onPress:()=>edit(row)},
@@ -101,7 +104,7 @@ export function SessionQueueSheet({scope,visible,state,actions}:{scope:SessionSc
       <ScreenList data={selected.attachments} keyExtractor={file=>file.id} header={<Stack><Body muted>{sessionModelLabel(selected.modelTarget)}</Body><Body selectable>{selected.text}</Body>
         {selected.deliveryUnknown&&state.warning?<Notice tone="warning" message={state.warning}/>:null}
         {selected.attachments.length?<Body muted>{copy("Dosyalar mesaj gönderildikten sonra açılabilir.", "Files can be opened after the queued message is sent.")}</Body>:null}
-      </Stack>} renderItem={({item:file})=><Body muted selectable>{file.name} · {Math.ceil(file.size/1024)} KB</Body>}/>
+      </Stack>} renderItem={({item:file})=><Body muted selectable>{file.name} · {formatAttachmentSize(file.size,locale)}</Body>}/>
       {canEditSelected?<FormActions submitLabel={copy("Sırayı duraklat ve düzenle", "Pause queue and edit")} onSubmit={()=>edit(selected)} disabled={state.disabled}/>:null}
     </Sheet>:null}
   </PrivateContentAccessProvider></>;

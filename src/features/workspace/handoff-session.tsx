@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { providerName } from "./provider-choices";
-import { router } from "expo-router";
 import { truncateGraphemes } from "../../../../src/shared/lib/text/truncate";
 import type {
   ContextualSessionInput,
@@ -34,6 +33,7 @@ import { contextualCommand, contextualReplies, sameContextualInput } from "./han
 import { useEarlierSession } from "./session-queries";
 import { captureSessionAuthority, type SessionAuthority } from "@/domain/session-authority";
 import { FeatureUnavailable } from "./unavailable-state";
+import { pushOnce } from "@/ui/navigation";
 
 export function HandoffSession({
   scope,
@@ -186,11 +186,11 @@ export function HandoffSession({
       <Body muted>
         {mode === "handoff"
           ? copy(
-              "Seçili tur özetiyle yeni bir oturum hazırlanır. Bu işlem agent çalıştırmaz.",
+              "Seçili tur özetiyle yeni bir oturum hazırlanır. Bu işlem ajan çalıştırmaz.",
               "Prepare a new session with the selected turn’s recap. This does not run an agent.",
             )
           : copy(
-              "Seçili tur için yeni bir oturumda ikinci görüş isteği başlatılır. Hedef agent dosyaları inceleyebilir ve düzeltebilir.",
+              "Seçili tur için yeni bir oturumda ikinci görüş isteği başlatılır. Hedef ajan dosyaları inceleyebilir ve düzeltebilir.",
               "Start a second-opinion request for the selected turn in a new session. The target agent may inspect and fix files.",
             )}
       </Body>
@@ -228,7 +228,7 @@ export function HandoffSession({
       <MutationState mutation={earlier} />
       <QueryState query={catalog} />
       <SelectField
-        label={copy("Hedef agent", "Target agent")}
+        label={copy("Hedef ajan", "Target agent")}
         value={form.values.harness}
         options={providers.map((value) => ({ value, label: providerName(value) }))}
         disabled={locked}
@@ -342,7 +342,7 @@ export function HandoffSession({
         onSubmit={() => {
           if (created && matches && useMachines.getState().activeId === openingScope.machineId) {
             onClose();
-            router.push({
+            pushOnce({
               pathname: "/session/[id]",
               params: {
                 id: created.sessionId,

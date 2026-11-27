@@ -1,16 +1,19 @@
 import { useMobileTheme } from "./theme";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, type Insets, type StyleProp, type ViewStyle } from "react-native";
+import type { ReactNode } from "react";
 import { AnimatedPressable } from "panelui-native/primitives/animated-pressable";
 import { Chip as PanelChip } from "panelui-native/components/chip";
 import { ProgressButton as PanelProgressButton } from "panelui-native/components/progress-button";
 import Check from "lucide-react-native/icons/check";
 import { Body } from "./typography";
-import { hitSlopFor, metrics, opacity, radii, space } from "./tokens";
+import { hitSlopFor, iconSize, metrics, opacity, radii, space } from "./tokens";
 import { LifecycleButton as PanelButton } from "./busy-indicator";
 import { useSoleSpinner } from "./spinner-claim";
 import { controlClasses } from "./design-system";
 import { haptic } from "./motion";
 import { useHover } from "./use-hover";
+import { rowPressMotion, useRowPress } from "./row-press";
+import { NavigationRow } from "./navigation-row";
 import { useCopy } from "./copy";
 import { PressableTextContext } from "./text-selection";
 import type {
@@ -80,11 +83,8 @@ export function Button({
       }
       hitSlop={reserveTouchTarget ? undefined : hitSlopFor(density === "compact" ? metrics.chipHeight : metrics.buttonHeight)}
       className={controlClasses({ tone, density, selected })}
-      labelClassName={
-        tone === "primary"
-          ? "text-primary-foreground text-sm font-semibold"
-          : "text-foreground text-sm font-semibold"
-      }
+      // Weight comes only from uiStyles.buttonLabel (500) on the label below.
+      labelClassName={tone === "primary" ? "text-primary-foreground text-sm" : "text-foreground text-sm"}
       startContent={children}
       style={[
         { alignSelf: fullWidth ? "stretch" : "flex-start", maxWidth: "100%", flexShrink: 1,
@@ -97,12 +97,17 @@ export function Button({
       ]}
     >
       {/* Keyed by the label: Android re-laid a changed label ("Voice call" → "Try again") at the old
-          label's measured width, wrapped its last word and clipped it to one line. */}
+          label's measured width, wrapped its last word and clipped it to one line. A short label is
+          also kept on one line ("Yeni görev" showed as "Yeni" after a sibling's layout changed). */}
       <Body key={label} selectable={false} style={[uiStyles.buttonLabel, { color: foreground, textAlign: "center" }]}>
-        {label}
+        {buttonLabelText(label)}
       </Body>
     </PanelButton>
   );
+}
+/** Short labels never wrap: Android can measure them narrower than it draws them and clip a word. */
+export function buttonLabelText(label: string): string {
+  return label.length <= 28 ? label.replace(/ /g, String.fromCharCode(0xa0)) : label;
 }
 const chipVariants = { danger: "destructive", success: "success", warning: "warning", info: "info" } as const;
 
@@ -134,7 +139,7 @@ export function ChoiceChip({ label, selected, accessibilityLabel, onPress, disab
       ]}
       // Lucide ignores PanelUI's icon tint context; colour the mark with the selected chip's
       // foreground token (`accent-foreground` is `colors.text`) so it follows light and dark.
-      start={selected ? <Check size={14} strokeWidth={2.4} color={colors.text} /> : undefined}
+      start={selected ? <Check size={iconSize.check} strokeWidth={2.4} color={colors.text} /> : undefined}
     >
       {label}
     </PanelChip>
@@ -153,8 +158,9 @@ export function PressableCard({
   role = "button",
   hitSlop,
 }: PressableCardProps) {
-  const { colors, uiStyles } = useMobileTheme();
+  const { colors, uiStyles, pressedFill } = useMobileTheme();
   const hover = useHover(disabled);
+  const press = useRowPress();
   return (
     <AnimatedPressable
       accessibilityRole={role}
@@ -167,9 +173,9 @@ export function PressableCard({
       disabled={disabled}
       onPress={onPress}
       {...hover.handlers}
+      {...press.handlers}
       onLongPress={onLongPress}
-      pressScale={0.985}
-      pressOpacity={0.8}
+      {...rowPressMotion}
       accessibilityActions={!disabled && onLongPress && optionsLabel ? [{ name: "longpress", label: optionsLabel }] : undefined}
       onAccessibilityAction={(event) => {
         if (!disabled && event.nativeEvent.actionName === "longpress") onLongPress?.();
@@ -179,6 +185,7 @@ export function PressableCard({
         hover.hovered && !selected && { backgroundColor: colors.raised },
         selected && uiStyles.selected,
         style,
+        press.pressed && { backgroundColor: pressedFill },
         { opacity: disabled ? opacity.disabled : 1 },
       ])}
     >
@@ -186,29 +193,55 @@ export function PressableCard({
     </AnimatedPressable>
   );
 }
-export function SelectRow({ label, detail, selected, onPress, disabled }: SelectRowProps) {
-  const { colors, uiStyles } = useMobileTheme();
+/**
+ * A plain pressable region with no row defaults (no 52 height, padding or gutter bleed): for a
+ * section header that toggles, a breadcrumb or a title that opens details. It owns the role, the
+ * spoken label, the expanded/selected state, `hitSlop` and the pressed dimming; the caller's `style`
+ * is the whole layout. Use `PressableCard`/`NavigationRow` for list rows instead.
+ */
+export function PressableArea({ label, onPress, onLongPress, disabled, expanded, selected, role = "button", hitSlop, style, children }: {
+  label: string;
+  onPress: () => void;
+  onLongPress?: () => void;
+  disabled?: boolean;
+  expanded?: boolean;
+  selected?: boolean;
+  role?: "button" | "link" | "header";
+  hitSlop?: Insets | number;
+  style?: StyleProp<ViewStyle>;
+  children: ReactNode;
+}) {
   return (
-    <PressableCard
-      label={[label, detail].filter(Boolean).join(". ")}
+    <Pressable
+      accessibilityRole={role}
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled, expanded, selected }}
+      aria-disabled={!!disabled}
+      aria-expanded={expanded}
+      aria-selected={selected}
+      disabled={disabled}
+      hitSlop={hitSlop}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      style={({ pressed }) => [style, { opacity: disabled ? opacity.disabled : pressed ? opacity.pressed : 1 }]}
+    >
+      <PressableTextContext value={true}>{children}</PressableTextContext>
+    </Pressable>
+  );
+}
+
+/** One exclusive choice in a list: the shared `NavigationRow` choice row (radio semantics, 16 check). */
+export function SelectRow({ label, detail, selected, onPress, disabled }: SelectRowProps) {
+  return (
+    <NavigationRow
+      intent="select"
+      label={label}
+      detail={detail}
+      detailLines={2}
       selected={selected}
       disabled={disabled}
       onPress={onPress}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-        <View style={[uiStyles.grow, { gap: space.xxs }]}>
-          <Body style={uiStyles.label}>
-            {label}
-          </Body>
-          {detail ? (
-            <Body muted numberOfLines={2} style={uiStyles.caption}>
-              {detail}
-            </Body>
-          ) : null}
-        </View>
-        {selected ? <Check size={18} strokeWidth={2.4} color={colors.accent} /> : null}
-      </View>
-    </PressableCard>
+    />
   );
 }
 export function IconButton({

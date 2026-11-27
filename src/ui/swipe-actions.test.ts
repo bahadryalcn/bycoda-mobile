@@ -1,24 +1,12 @@
 // @vitest-environment happy-dom
-import { act, createElement, forwardRef, type PropsWithChildren } from "react";
+import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 vi.mock("react-native", () => ({
-  Platform: { OS: "web" },
-  View: forwardRef<HTMLDivElement, PropsWithChildren>(function View({ children }, ref) {
-    return createElement("div", { ref }, children);
-  }),
+  View: ({ children }: PropsWithChildren) => createElement("div", { "data-view": "" }, children),
 }));
-vi.mock("panelui-native/components/swipe", () => {
-  const wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Swipe: Object.assign(wrapper, { End: wrapper, Action: () => null, Group: wrapper }) };
-});
-vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
-vi.mock("./private-access", () => ({
-  usePrivateContentAccess: () => ({ allowed: true, check: () => true }),
-}));
-vi.mock("./tokens", () => ({ colors: {}, metrics: {}, opacity: {}, semanticColors: {} }));
-import { SwipeActions } from "./swipe-actions";
+import { SwipeActions, SwipeActionsGroup } from "./swipe-actions";
 
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
@@ -29,59 +17,26 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderRow() {
-  const navigate = vi.fn();
+function render(onOpen: () => void, onDelete: () => void) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() =>
-    root!.render(
-      createElement(
-        SwipeActions,
-        { actions: [] },
-        createElement("button", { onClick: navigate }, "Open session"),
-      ),
-    ),
-  );
-  const button = container.querySelector("button")!;
-  const pointer = (type: string, x: number, y: number) =>
-    button.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: x, clientY: y }));
-  const click = (detail = 1) =>
-    button.dispatchEvent(
-      new MouseEvent("click", {
-        bubbles: true,
-        cancelable: true,
-        detail,
-      }),
-    );
-  return { navigate, pointer, click };
+  act(() => root!.render(createElement(SwipeActionsGroup, { fill: true },
+    createElement(SwipeActions, { actions: [{ key: "delete", label: "Delete note", destructive: true, onPress: onDelete }] },
+      createElement("button", { onClick: onOpen }, "Release checklist")))));
 }
 
-it("revealing swipe actions cannot also open the conversation; a later tap can", () => {
-  const row = renderRow();
-  row.pointer("pointerdown", 300, 40);
-  row.pointer("pointermove", 30, 40);
-  row.pointer("pointerup", 30, 40);
-  row.click();
-  expect(row.navigate).not.toHaveBeenCalled();
-  row.pointer("pointerdown", 200, 40);
-  row.pointer("pointerup", 200, 40);
-  row.click();
-  expect(row.navigate).toHaveBeenCalledTimes(1);
+it("renders a row without a swipe rail, so its actions come only from the row's options menu", () => {
+  const onDelete = vi.fn();
+  render(vi.fn(), onDelete);
+  expect(container!.textContent).toBe("Release checklist");
+  expect(container!.textContent).not.toContain("Delete note");
+  expect(onDelete).not.toHaveBeenCalled();
 });
 
-it("preserves keyboard activation after a drag without a synthesized click", () => {
-  const row = renderRow();
-  row.pointer("pointerdown", 300, 40);
-  row.pointer("pointermove", 30, 40);
-  row.click(0);
-  expect(row.navigate).toHaveBeenCalledTimes(1);
-});
-
-it("scrolling vertically does not open the conversation", () => {
-  const row = renderRow();
-  row.pointer("pointerdown", 200, 40);
-  row.pointer("pointermove", 200, 120);
-  row.click();
-  expect(row.navigate).not.toHaveBeenCalled();
+it("opens the record on a tap: there is no half-open row that a tap must close first", () => {
+  const onOpen = vi.fn();
+  render(onOpen, vi.fn());
+  act(() => container!.querySelector("button")!.click());
+  expect(onOpen).toHaveBeenCalledOnce();
 });

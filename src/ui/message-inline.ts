@@ -63,6 +63,9 @@ export function readLink(text: string, start: number) {
     if (character === "[") brackets++;
     else if (character === "]" && --brackets < 0) return;
   }
+  // An open bracket means the first "](" belongs to a nested image or link (`[![shot](a.png)](b.png)`);
+  // Markdown's own link rule reads that shape.
+  if (brackets !== 0) return;
   let depth = 1;
   let angle = false;
   const targetStart = labelEnd + 2;

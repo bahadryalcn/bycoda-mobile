@@ -12,10 +12,15 @@ import type { ChatTextSize } from "@/state/chat-appearance-model";
  * `plain` pages of a long document wrap instead, since one page can be a single minified line;
  * the owner's code word-wrap preference selects the same wrapping surface.
  */
-export function CodeSource({ code, language, textSize, plain = false }: { code: string; language: string; textSize: ChatTextSize; plain?: boolean }) {
+export function CodeSource({ code, language, textSize, plain = false, wrap: ownWrap }: {
+  code: string; language: string; textSize: ChatTextSize; plain?: boolean;
+  /** A block's own wrap toggle; absent follows the owner's code word-wrap preference. */
+  wrap?: boolean;
+}) {
   const text = useChatTextStyles(textSize);
   const scale = useChatDisplay((state) => CODE_SIZE_SCALE[state.codeSize]);
-  const wrap = useChatDisplay((state) => state.codeWrap);
+  const preference = useChatDisplay((state) => state.codeWrap);
+  const wrap = ownWrap ?? preference;
   const style = { ...text.code, fontSize: (text.code.fontSize ?? 12) * scale, lineHeight: (text.code.lineHeight ?? 18) * scale };
   // shortcut: wrapped code loses syntax highlighting because CodeBlock only scrolls sideways; upgrade when PanelUI CodeBlock gains a wrap prop.
   if (!plain && !wrap)

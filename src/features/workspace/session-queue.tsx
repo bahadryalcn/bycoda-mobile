@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, View } from "react-native";
 import ListOrdered from "lucide-react-native/icons/list-ordered";
 import { Button, ErrorText, StatusText } from "@/ui/primitives";
@@ -19,6 +19,7 @@ import type { useSessionQueue } from "./use-session-queue";
 import { composerDeliveryError } from "./composer-delivery-copy";
 import { SessionQueueSheet } from "./session-queue-sheet";
 import { SessionQueueEditor, useQueueEditor } from "./session-queue-editor";
+import { useStatusClusterPresent, useStatusClusterQueueSink } from "./session-status-cluster-context";
 
 export function SessionQueue({
   scope,
@@ -92,9 +93,9 @@ export function SessionQueue({
   }, [accepted]);
   const heldLabel =
     stage?.stage === "stopped"
-      ? copy("Yanıtı durdurduğunuz için kuyruk duraklatıldı", "Queue paused because you interrupted")
+      ? copy("Yanıtı durdurduğun için sıra duraklatıldı", "Queue paused because you interrupted")
       : stage?.stage === "rejected"
-        ? `${copy("Kuyruk duraklatıldı: son mesaj kabul edilmedi", "Queue paused: the last message was not accepted")}${stage.detail ? ` · ${stage.detail}` : ""}`
+        ? `${copy("Sıra duraklatıldı: son mesaj kabul edilmedi", "Queue paused: the last message was not accepted")}${stage.detail ? ` · ${stage.detail}` : ""}`
         : undefined;
   const act = async (action: () => Promise<unknown>) => {
     setError(null);
@@ -190,8 +191,6 @@ export function SessionQueue({
     }, AUTO_SEND_SAFETY_MS);
     return () => clearInterval(timer);
   }, [automatic, running]);
-  if (!queue.supported) return null;
-  const disabled = blocked || queue.changing || sending;
   const queueState = unconfirmed
     ? copy("Kontrol gerekiyor", "Needs review")
     : sending || queue.changing || queue.data?.claim
@@ -214,10 +213,42 @@ export function SessionQueue({
                   "Başka bir istemci sırayı sürdürebilir",
                   "Another client may continue this queue",
                 );
+  const countShown = queue.supported && !!(rows.length || queueReadError || queue.changeError || error);
+  // "Messages", so the count never reads like the subagents segment's "2 queued" beside it.
+  const queuedText = rows.length === 1
+    ? copy("1 mesaj sırada", "1 message queued")
+    : copy("{p0} mesaj sırada", "{p0} messages queued", { p0: rows.length });
+  const countText = queueReadError || error || queue.changeError
+    ? `${copy("Sıra", "Queue")} · ${copy("Hata", "Error")}`
+    : `${queuedText}${unconfirmed
+      ? ` · ${copy("Kontrol gerekiyor", "Needs review")}`
+      : stage?.stage === "sending"
+        ? ` · ${copy("Gönderiliyor…", "Sending…")}`
+      : sending || queue.changing || queue.data?.claim
+        ? ` · ${queueState}`
+      : stage?.stage === "rejected"
+        ? ` · ${copy("Kabul edilmedi", "Not accepted")}`
+      : queue.data?.status !== "active" || queue.data?.editingId
+        ? ` · ${copy("Duraklatıldı", "Paused")}` : ""}`;
+  const countLabel = queueReadError ? copy("Sıra yüklenemedi", "Queue unavailable")
+    : `${queuedText} · ${queueState}`;
+  const countDanger = !!(queueReadError || queue.changeError || error || unconfirmed || stage?.stage === "rejected");
+  // Inside a session screen the floating status cluster shows the count and opens this queue's sheet.
+  const summarySink = useStatusClusterQueueSink();
+  const openQueue = useCallback(() => setOpen(true), []);
+  useEffect(() => {
+    summarySink?.(countShown ? { text: countText, label: countLabel, danger: countDanger, open: openQueue } : null);
+  }, [summarySink, countShown, countText, countLabel, countDanger, openQueue]);
+  useEffect(() => () => summarySink?.(null), [summarySink]);
+  // Without the cluster on screen (cited-turn search, repair, a failed transcript) the count stays here.
+  const clusterShown = useStatusClusterPresent();
+  const localCount = countShown && !clusterShown;
+  if (!queue.supported) return null;
+  const disabled = blocked || queue.changing || sending;
   return (
     <>
       <View style={{ flexShrink: 1, minWidth: 0, maxWidth: "100%" }}>
-      {rows.length || accepted || queueReadError || queue.changeError || error || editor.value || editor.error || editor.visible ? (
+      {localCount || accepted || editor.value || editor.error || editor.visible ? (
         <View
           style={{
             flexDirection: "row",
@@ -230,23 +261,11 @@ export function SessionQueue({
             maxWidth: "100%",
           }}
         >
-          {rows.length || queueReadError || queue.changeError || error ? (
+          {localCount ? (
             <Button
-              label={queueReadError || error || queue.changeError
-                ? `${copy("Sıra", "Queue")} · ${copy("Hata", "Error")}`
-                : `${copy("{p0} sırada", "{p0} queued", { p0: rows.length })}${unconfirmed
-                  ? ` · ${copy("Kontrol gerekiyor", "Needs review")}`
-                  : stage?.stage === "sending"
-                    ? ` · ${copy("Gönderiliyor…", "Sending…")}`
-                  : sending || queue.changing || queue.data?.claim
-                    ? ` · ${queueState}`
-                  : stage?.stage === "rejected"
-                    ? ` · ${copy("Kabul edilmedi", "Not accepted")}`
-                  : queue.data?.status !== "active" || queue.data?.editingId
-                    ? ` · ${copy("Duraklatıldı", "Paused")}` : ""}`}
-              accessibilityLabel={queueReadError ? copy("Sıra yüklenemedi", "Queue unavailable")
-                : `${copy("{p0} sırada", "{p0} queued", { p0: rows.length })} · ${queueState}`}
-              tone={queueReadError || queue.changeError || error || unconfirmed || stage?.stage === "rejected" ? "danger" : "quiet"}
+              label={countText}
+              accessibilityLabel={countLabel}
+              tone={countDanger ? "danger" : "quiet"}
               style={{ minHeight: 48 }}
               onPress={() => setOpen(true)}
             >
@@ -254,7 +273,7 @@ export function SessionQueue({
             </Button>
           ) : null}
           {accepted ? (
-            <StatusText tone="success" label={copy("Mesaj kabul edildi. İlerlemesini konuşmadan takip edebilirsiniz.", "Message accepted. Follow its progress in the conversation.")} />
+            <StatusText tone="success" label={copy("Mesaj kabul edildi. İlerlemesini oturumdan takip edebilirsin.", "Message accepted. Follow its progress in the session.")} />
           ) : null}
           <SessionQueueEditor scope={scope} editor={editor} blocked={blocked || sending || queue.changing} />
         </View>
@@ -269,10 +288,10 @@ export function SessionQueue({
           error: queueReadError || queue.changeError || error,
           errorMessage: composerDeliveryError(queueReadError || queue.changeError || error, copy),
           warning: unconfirmed ? (running
-            ? copy("Sağlayıcı henüz yanıt vermedi ve bu mesajı yine de iletebilir. Yeniden göndermek mesajı çoğaltabilir. Bekleyin veya turu durdurun.", "The provider has not answered yet and may still deliver this message. Sending it again could duplicate it. Wait, or stop the turn.")
-            : copy("Önce konuşmayı kontrol edin. Yeniden göndermek, iletilmiş bir mesajı çoğaltır. Kuyrukta tutmak kuyruğu duraklatır ve mesajı yeniden göndermez.", "Check the conversation first. Sending again duplicates a message that was delivered. Keeping it queued pauses the queue and does not resend it.")) : undefined,
+            ? copy("Sağlayıcı henüz yanıt vermedi ve bu mesajı yine de iletebilir. Yeniden göndermek mesajı çoğaltabilir. Bekle veya turu durdur.", "The provider has not answered yet and may still deliver this message. Sending it again could duplicate it. Wait, or stop the turn.")
+            : copy("Önce oturumu kontrol et. Yeniden göndermek, iletilmiş bir mesajı çoğaltır. Sırada tutmak sırayı duraklatır ve mesajı yeniden göndermez.", "Check the session first. Sending again duplicates a message that was delivered. Keeping it queued pauses the queue and does not resend it.")) : undefined,
           sendingId: stage?.stage === "sending" ? stage.id : undefined,
-          retryBlocked: running ? copy("Agent çalışırken kullanılamaz", "Not available while the agent is running") : undefined,
+          retryBlocked: running ? copy("Ajan çalışırken kullanılamaz", "Not available while the agent is running") : undefined,
           disabled, sending, controlling, reloadBusy: queue.isFetching, queueError: !!queue.error,
           active: automatic || queue.data?.status === "active", canEdit: editor.available,
           hasDraft: !!editor.value || !!editor.error,

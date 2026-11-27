@@ -15,7 +15,6 @@ import { singleMenuAction, useMenuLifecycle } from "./use-menu-lifecycle";
 import { Sheet } from "./dialogs";
 import { NavigationGroup, NavigationRow } from "./navigation-row";
 import { Body } from "./typography";
-import { IconTile } from "./icon-tile";
 import { iconSize, radii, space } from "./tokens";
 
 export type MenuAction = {
@@ -48,7 +47,7 @@ export type MenuAction = {
 
 /**
  * Menu for secondary actions, filters and sorting. Phones open a bottom sheet titled `label`
- * (with `subtitle`, usually the record name) listing icon-tile rows, destructive actions last;
+ * (with `subtitle`, usually the record name) listing icon rows, destructive actions last;
  * web keeps a popover. The default trigger is a circular "…" button; pass `trigger` for a custom
  * IconButton (e.g. a filter glyph).
  *
@@ -248,7 +247,7 @@ export function RowOptionsSheet({
 }
 
 /**
- * The grouped icon-tile action list used by `ActionMenu`, `RowOptionsSheet` and sheets that own
+ * The grouped icon action list used by `ActionMenu`, `RowOptionsSheet` and sheets that own
  * extra panels (session actions). Each row runs its own `onPress`; destructive rows come last.
  */
 export function ActionList({ actions, compact }: {
@@ -280,15 +279,14 @@ function ActionRows({ items, onSelect, compact }: { items: readonly MenuAction[]
               separator={index < group.length - 1}
               selected={item.selected}
               tintSelected={false}
-              icon={isValidElement(item.icon) ? (
-                <IconTile>
-                  {cloneElement(item.icon as ReactElement<{ size?: number; strokeWidth?: number; color?: string }>, {
-                    size: 18,
-                    strokeWidth: 2,
+              // The list-row glyph (RowIcon measure): 20, 1.8 stroke, no tile; danger rows tint it.
+              icon={isValidElement(item.icon)
+                ? cloneElement(item.icon as ReactElement<{ size?: number; strokeWidth?: number; color?: string }>, {
+                    size: iconSize.row,
+                    strokeWidth: 1.8,
                     color: item.destructive ? semanticColors.danger.text : colors.muted,
-                  })}
-                </IconTile>
-              ) : undefined}
+                  })
+                : undefined}
               trailing={item.selected ? <Check /> : undefined}
               onPress={() => onSelect(item)}
             />
@@ -301,7 +299,7 @@ function ActionRows({ items, onSelect, compact }: { items: readonly MenuAction[]
 
 function Check() {
   const { colors } = useMobileTheme();
-  return <CheckGlyph size={17} strokeWidth={2.6} color={colors.accent} />;
+  return <CheckGlyph size={iconSize.check} strokeWidth={2.6} color={colors.accent} />;
 }
 
 /** Portal context is re-provided upstream only for Menu itself; pass our owner explicitly. */

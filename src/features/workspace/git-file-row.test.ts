@@ -7,7 +7,7 @@ vi.mock("lucide-react-native/icons/plus", () => ({ default: "Plus" }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/i18n", () => ({ useLocale: () => "de" }));
-vi.mock("@/ui/primitives", () => ({ Badge: "Badge", Body: "Body", IconButton: "IconButton", PressableCard: "PressableCard" }));
+vi.mock("@/ui/primitives", () => ({ StatusText: "StatusText", Body: "Body", IconButton: "IconButton", PressableCard: "PressableCard" }));
 import { GitFileRow } from "./git-file-row";
 
 function nodes(node: ReactNode): ReactElement<Record<string, any>>[] {

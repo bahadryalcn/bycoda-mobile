@@ -20,8 +20,12 @@ class VoiceCompanionActivity : Activity() {
   private var entered = false
   private var returning = false
   private lateinit var label: TextView
+  /** The mute state the window's actions were last built for; the actions depend on nothing else. */
+  private var actionsMuted: Boolean? = null
+  // Microphone batches (every 300 ms while talking) change neither the label nor the actions; the session's end
+  // and every phase or mute change arrive as "state"/"ended" events.
   private val listener: (Map<String, Any?>) -> Unit = { event ->
-    if (event["sessionId"] == id) runOnUiThread {
+    if (event["sessionId"] == id && event["type"] != "pcm") runOnUiThread {
       val service = VoiceCompanionRuntime.service
       if (service?.allowsSession(id) != true) finish() else update(service)
     }
@@ -58,8 +62,10 @@ class VoiceCompanionActivity : Activity() {
   }
   private fun update(service: VoiceCompanionService) {
     val state = service.snapshot()
-    label.text = getString(if (state["muted"] == true) R.string.bycoda_voice_muted else when (state["phase"]) { "recording" -> R.string.bycoda_voice_listening; "speaking" -> R.string.bycoda_voice_speaking; else -> R.string.bycoda_voice_title })
-    setPictureInPictureParams(params(service))
+    val muted = state["muted"] == true
+    label.text = getString(if (muted) R.string.bycoda_voice_muted else when (state["phase"]) { "recording" -> R.string.bycoda_voice_listening; "speaking" -> R.string.bycoda_voice_speaking; else -> R.string.bycoda_voice_title })
+    // Rebuilding the params costs two PendingIntent and one window-manager binder call; only a mute change alters them.
+    if (actionsMuted != muted) { setPictureInPictureParams(params(service)); actionsMuted = muted }
   }
   override fun onPictureInPictureModeChanged(inPip: Boolean, configuration: Configuration) {
     super.onPictureInPictureModeChanged(inPip, configuration)

@@ -22,7 +22,7 @@ describe("connection reason", () => {
     expect(connectionReason("access", "auth", "bab", copy, "invalid")).toContain("couldn't verify this phone's key");
   });
   it("asks to pair again when the pairing was refused or replaced", () => {
-    expect(connectionReason("access", "auth", "bab", copy)).toBe("Pairing expired. Pair bab again.");
+    expect(connectionReason("access", "auth", "bab", copy)).toBe("This phone’s access was removed or is invalid. Pair bab again.");
     expect(connectionReason("disconnected", "identity", "bab", copy)).toBe("A different computer answered. Pair bab again.");
     expect(connectionNeedsPairing("access", undefined)).toBe(true);
     expect(connectionNeedsPairing("disconnected", "identity")).toBe(true);

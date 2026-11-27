@@ -5,13 +5,13 @@ import { afterEach, expect, it, vi } from "vitest";
 import { PullRequestsScreen } from "./list-screen";
 import { PullRequestDetailScreen } from "./detail-screen";
 import { useInboxLocalScope } from "../../inbox/inbox-local-scope";
-const state = vi.hoisted(() => ({ params: {} as Record<string, string>, machine: "machine", visible: true, available: true, availabilityRetry: vi.fn(), itemRetry: vi.fn(), request: null as unknown, push: vi.fn(), back: vi.fn(), replace: vi.fn(), canGoBack: true, cached: [] as unknown[], readError: null as Error | null, readEnabled: undefined as boolean | undefined }));
+const state = vi.hoisted(() => ({ params: {} as Record<string, string>, machine: "machine", visible: true, available: true, availabilityRetry: vi.fn(), itemRetry: vi.fn(), request: null as unknown, push: vi.fn(), back: vi.fn(), replace: vi.fn(), dismissTo: vi.fn(), canGoBack: true, cached: [] as unknown[], readError: null as Error | null, readEnabled: undefined as boolean | undefined, readOptions: undefined as { gcTime?: number; keepPrevious?: (previous: unknown) => boolean } | undefined, fetching: false, items: null as unknown[] | null }));
 const item = { provider: "github", kind: "pr", number: 7, repo: "owner/repo", projectPath: "/repo", title: "Source PR", state: "open", draft: false, updatedAt: "2026-11-17", url: "https://github.com/owner/repo/pull/7", labels: [], assignees: [] };
 /** Cache keys mirror useInboxRead: ["machine", id, "provider-inbox", "list", input]. */
 const listEntry = (projectId: string | undefined, items: unknown[]) => [["machine", "machine", "provider-inbox", "list", projectId ? { projectId, query: {} } : { query: {} }], { items, errors: {} }];
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ getQueriesData: () => state.cached, getQueryCache: () => ({ subscribe: () => () => {} }) }) }));
 vi.mock("@/state/queries", () => ({ hostKey: (machineId: string | null, key: readonly unknown[]) => ["machine", machineId, ...key] }));
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => state.params, router: { push: state.push, back: state.back, replace: state.replace, canGoBack: () => state.canGoBack }, Stack: { Screen: () => null } }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => state.params, router: { push: state.push, back: state.back, replace: state.replace, dismissTo: state.dismissTo, canGoBack: () => state.canGoBack }, Stack: { Screen: () => null } }));
 const selection = vi.hoisted(() => ({ projectId: "unrelated-project" as string | null, listeners: new Set<() => void>() }));
 vi.mock("@/state/machines", async () => {
   const { useSyncExternalStore } = await import("react");
@@ -27,14 +27,17 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/no-computer", () => ({ NoComputerGate: () => createElement("p", null, "Connect a computer first") }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null, FilterButton: () => null, FilterSheet: () => null }));
+vi.mock("@/ui/route-guard", () => ({ RouteGuard: ({ children }: PropsWithChildren) => children }));
+vi.mock("@/ui/search-field", () => ({ SearchField: () => null, useCollapsibleSearch: () => ({ trigger: null, filterTrigger: null, sheet: null }) }));
+vi.mock("../../inbox/inbox-filter-fields", () => ({ InboxFilterFields: () => null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: { caption: {} } }) }));
 vi.mock("@/ui/tokens", () => ({ space: { sm: 8 } }));
 vi.mock("../../workspace/use-project-directory", () => ({ useProjectList: () => ({ isProjectVisible: (id: string) => state.visible && id === "project", directoryReady: true, data: [{ id: "project", name: "Project" }] }) }));
 vi.mock("../../inbox/provider-queries", () => ({
   useProviderInboxAvailability: () => ({ data: { available: state.available }, isSuccess: true, refetch: state.availabilityRetry }),
-  useInboxRead: (request: unknown, enabled?: boolean) => {
-    state.request = request; state.readEnabled = enabled;
-    return { data: { items: [item], errors: {} }, error: state.readError, refetch: state.itemRetry, isFetching: false };
+  useInboxRead: (request: unknown, enabled?: boolean, options?: typeof state.readOptions) => {
+    state.request = request; state.readEnabled = enabled; state.readOptions = options;
+    return { data: { items: state.items ?? [item], errors: {} }, error: state.readError, refetch: state.itemRetry, isFetching: state.fetching };
   },
 }));
 vi.mock("../../inbox/provider-detail", () => ({ ProviderInboxDetail: ({ origin }: { origin: { machineId: string; projectId: string | null } }) => {
@@ -43,20 +46,23 @@ vi.mock("../../inbox/provider-detail", () => ({ ProviderInboxDetail: ({ origin }
 vi.mock("../../inbox/provider-list", () => ({ ProviderInboxFeedback: () => null, ProviderInboxRow: ({ onOpen }: { onOpen: () => void }) => createElement("button", { onClick: onOpen }, "Open PR") }));
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
-  return { Screen: Wrap, Stack: Wrap, Body: Wrap, Row: Wrap, Skeleton: () => createElement("p", null, "Loading"),
+  return { showToast: vi.fn(), Screen: Wrap, Stack: Wrap, Body: Wrap, Row: Wrap, Skeleton: () => createElement("p", null, "Loading"),
     QueryState: ({ query, empty, emptyAction }: { query: { data?: unknown; error?: Error }; empty?: boolean; emptyAction?: { label: string; onPress: () => void } }) => query.error
       ? createElement("p", { role: "alert", "data-cache": query.data !== undefined }, query.error.message)
       : empty && emptyAction ? createElement("button", { onClick: emptyAction.onPress }, emptyAction.label) : null,
     SelectField: () => null, SegmentedControl: () => null, ChoiceChip: () => null, ToggleField: () => null, NavigationGroup: Wrap,
     StateView: ({ title, description, action }: { title: string; description?: string; action?: { label: string; onPress(): void } }) => createElement("div", null, title, description,
       action ? createElement("button", { onClick: action.onPress }, action.label) : null),
-    ScreenList: ({ data, header, renderItem }: { data: unknown[]; header: ReactNode; renderItem: (row: { item: unknown }) => ReactNode }) => createElement("div", null, header, ...data.map((item, index) => createElement("div", { key: index }, renderItem({ item })))),
+    StatusLine: ({ label }: { label: string }) => createElement("p", null, label),
+    // Like FlatList: the empty component stands in for rows only while there are none.
+    ScreenList: ({ data, header, renderItem, ListEmptyComponent }: { data: unknown[]; header: ReactNode; renderItem: (row: { item: unknown }) => ReactNode; ListEmptyComponent?: ReactNode }) =>
+      createElement("div", null, header, ...(data.length ? data.map((item, index) => createElement("div", { key: index }, renderItem({ item }))) : [ListEmptyComponent])),
   };
 });
 let root: ReturnType<typeof createRoot> | undefined, container: HTMLDivElement;
 async function render(Component = PullRequestDetailScreen) { await act(async () => root!.render(createElement(Component))); }
 async function mount(Component = PullRequestDetailScreen) { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); container = document.createElement("div"); document.body.append(container); root = createRoot(container); await render(Component); }
-afterEach(async () => { await act(async () => root?.unmount()); container?.remove(); root = undefined; state.params = {}; state.machine = "machine"; state.visible = true; state.request = null; state.cached = []; state.readError = null; state.canGoBack = true; selection.projectId = "unrelated-project"; vi.clearAllMocks(); vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root?.unmount()); container?.remove(); root = undefined; state.params = {}; state.machine = "machine"; state.visible = true; state.request = null; state.cached = []; state.readError = null; state.canGoBack = true; state.fetching = false; state.items = null; state.readOptions = undefined; selection.projectId = "unrelated-project"; vi.clearAllMocks(); vi.unstubAllGlobals(); });
 it("rechecks desktop availability without reading pull requests from the blocked scope", async () => {
   state.available = false;
   selection.projectId = null;
@@ -91,7 +97,8 @@ it("adopts a linked project into the shared scope, queries it and carries it int
   state.params = { projectId: "project", machineId: "machine" };
   await mount(PullRequestsScreen);
   expect(selection.projectId).toBe("project");
-  expect(state.request).toMatchObject({ action: "list", input: { projectId: "project", query: { providers: ["github"], githubKinds: ["pr"] } } });
+  // The desktop's pull-request-only Inbox: every code host's pull and merge requests.
+  expect(state.request).toMatchObject({ action: "list", input: { projectId: "project", query: { providers: ["github", "gitlab", "azuredevops"], githubKinds: ["pr"] } } });
   await act(async () => container.querySelector("button")!.click());
   expect(state.push).toHaveBeenCalledWith({ pathname: "/pull-requests/[id]", params: { id: "7", repo: "owner/repo", projectPath: "/repo", machineId: "machine", projectId: "project" } });
 });
@@ -152,7 +159,8 @@ it("returns an uncached detail to the scoped list when it has no back history", 
   expect(action?.textContent).toBe("Pull requests");
   await act(async () => action?.click());
   expect(state.back).not.toHaveBeenCalled();
-  expect(state.replace).toHaveBeenCalledExactlyOnceWith({ pathname: "/pull-requests", params: { machineId: "machine", projectId: "project" } });
+  // dismissTo: the list is reused when it is already beneath, otherwise it takes the detail's place.
+  expect(state.dismissTo).toHaveBeenCalledExactlyOnceWith({ pathname: "/pull-requests", params: { machineId: "machine", projectId: "project" } });
 });
 it("offers Back for a detail that belongs to a different computer", async () => {
   state.params = { id: "7", repo: "owner/repo", projectPath: "/repo", machineId: "other", projectId: "project" };
@@ -167,7 +175,7 @@ it("runs the list's own scoped read for a cold-start detail and explains where t
   state.params = { id: "7", repo: "owner/repo", projectPath: "/repo", machineId: "machine", projectId: "project" };
   await mount();
   expect(state.readEnabled).toBe(true);
-  expect(state.request).toMatchObject({ action: "list", input: { projectId: "project", query: { providers: ["github"], githubKinds: ["pr"] } } });
+  expect(state.request).toMatchObject({ action: "list", input: { projectId: "project", query: { githubKinds: ["pr"] } } });
   expect(container.textContent).toContain("Open it from the pull request list.");
   state.cached = [listEntry("project", [item])];
   await render();
@@ -188,4 +196,25 @@ it("says why a cold-start detail could not open when the list read failed or pro
   } finally {
     state.available = true;
   }
+});
+it("shows cached rows with a quiet refreshing line and keeps rows only across a re-sort of the same project", async () => {
+  state.params = { projectId: "project", machineId: "machine" };
+  state.fetching = true;
+  await mount(PullRequestsScreen);
+  expect(container.textContent).toContain("Open PR");
+  expect(container.textContent).toContain("Refreshing…");
+  expect(state.readOptions?.gcTime).toBeGreaterThanOrEqual(30 * 60_000);
+  const keep = state.readOptions!.keepPrevious!;
+  const open = (state.request as { input: { projectId: string; query: { search: string } } }).input;
+  // Shown rows are narrowed by the same local filters, so they stand in for any read of the same project.
+  expect(keep({ ...open, query: { ...open.query, search: "parser" } })).toBe(true);
+  expect(keep({ ...open, projectId: "other" })).toBe(false);
+});
+it("centers the empty state in place of rows instead of above them", async () => {
+  state.params = { projectId: "project", machineId: "machine" };
+  state.items = [];
+  await mount(PullRequestsScreen);
+  expect(container.textContent).not.toContain("Open PR");
+  // No status chosen reads every state, like the desktop.
+  expect(state.request).toMatchObject({ input: { query: { state: "all", search: "" } } });
 });

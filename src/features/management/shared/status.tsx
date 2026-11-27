@@ -2,7 +2,12 @@ import { Badge, StatusText } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import type { StatusProps } from "./types";
 
-export function statusLabel(value: string, copy: (tr: string, en: string) => string): string {
+/** `unknown` names an unrecognized record state neutrally instead of echoing the raw Host value. */
+export function statusLabel(
+  value: string,
+  copy: (tr: string, en: string) => string,
+  fallback: "raw" | "unknown" = "raw",
+): string {
   const translated: Record<string, readonly [string, string]> = {
     idle: ["Hazır", "Ready"],
     active: ["Etkin", "Active"],
@@ -30,7 +35,8 @@ export function statusLabel(value: string, copy: (tr: string, en: string) => str
     pending: ["Bekliyor", "Pending"],
     paused: ["Duraklatıldı", "Paused"],
   };
-  return translated[value] ? copy(...translated[value]) : value.replaceAll("-", " ");
+  if (translated[value]) return copy(...translated[value]);
+  return fallback === "unknown" ? copy("Bilinmiyor", "Unknown") : value.replaceAll("-", " ");
 }
 
 /**
@@ -51,7 +57,7 @@ export function statusTone(value: string): "danger" | "warning" | "live" | "defa
 export function Status({ value }: StatusProps) {
   const copy = useCopy();
   const tone = statusTone(value);
-  const label = statusLabel(value, copy);
+  const label = statusLabel(value, copy, "unknown");
   return tone === "danger" || tone === "warning"
     ? <Badge label={label} tone={tone} />
     : <StatusText label={label} tone={tone} />;

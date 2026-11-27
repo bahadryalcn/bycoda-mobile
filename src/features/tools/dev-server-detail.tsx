@@ -1,9 +1,8 @@
-import { graphemes } from "../../../../src/shared/lib/text/truncate";
 import { useEffect, useRef, useState } from "react";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import {
   Body, Button, FormActions, ErrorText, MutationState,
-  Disclosure, Notice, QueryState, StateView, StatusLine, Row, Sheet, ToggleField, NavigationGroup,
+  Notice, QueryState, ScopeLine, StateView, StatusLine, Row, Sheet, ToggleField, NavigationGroup, ValueRow,
 } from "@/ui/primitives";
 import { useMobileTheme } from "@/ui/theme";
 import { useCopy } from "@/ui/copy";
@@ -16,6 +15,7 @@ import type { HostProject } from "@/domain/types";
 import { BrowserScreen } from "./browser-screen";
 import { privatePreviewUrl, reviewServer, serverReviewMatches, type ServerReview } from "./dev-server-recovery";
 import { projectServers } from "./tool-model";
+import { LOG_POLL_ACTIVE_MS, LOG_POLL_IDLE_AFTER, LOG_POLL_IDLE_MS, logTail } from "./runtime-log-presentation";
 import type { DevServer, DevServerDetails, DevServerStartResult, DevServerStop } from "./types";
 
 export function DevServerDetail({ projectId, project, server, onClose }: {
@@ -50,12 +50,24 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
     { projectId, id: server.id, tree: includeChildren },
     { enabled: validScope },
   );
+  // A stopped server writes nothing new, and a quiet one is read less often; any change resets it.
+  const serverState = details.data?.server?.state ?? server.state;
+  const serverLive = serverState === "running" || serverState === "starting";
+  const [quietLogs, setQuietLogs] = useState(false);
+  const logPoll = useRef<{ output?: string; unchanged: number }>({ unchanged: 0 });
   const logs = useHostQuery<{ available: boolean; output: string }>(
     ["dev-server-output", projectId, server.id], "devServers.logs", { projectId, id: server.id },
-    { enabled: validScope && showLogs, interval: showLogs ? 5_000 : undefined },
+    { enabled: validScope && showLogs, interval: showLogs && serverLive ? (quietLogs ? LOG_POLL_IDLE_MS : LOG_POLL_ACTIVE_MS) : undefined },
   );
-  const logParts = graphemes(logs.data?.output ?? "");
-  const logTail = logParts.slice(-32_000).join("");
+  useEffect(() => {
+    const output = logs.data?.output;
+    if (output === undefined) return;
+    const poll = logPoll.current;
+    poll.unchanged = output === poll.output ? poll.unchanged + 1 : 0;
+    poll.output = output;
+    setQuietLogs(poll.unchanged >= LOG_POLL_IDLE_AFTER);
+  }, [logs.data?.output, logs.dataUpdatedAt]);
+  const { text: logText, truncated: logTruncated } = logTail(logs.data?.output ?? "", 32_000);
   const stop = useHostMutation<DevServerStop>("devServers.stop", ["dev-servers", projectId]);
   const restart = useHostMutation<DevServerStartResult>("devServers.restart", ["dev-servers", projectId]);
   const kill = useHostMutation<DevServerStop>("devServers.kill", ["dev-servers", projectId]);
@@ -92,34 +104,30 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
     finally { flight.current = false; if (mounted.current) setReconciling(false); }
   };
   const disabled = !validScope || busy || reconciling || details.isFetching || !!details.error || uncertain || !canReview;
-  const reviewScopeLabel = [opening.machineName ?? opening.reviewed?.id, opening.projectName ?? opening.projectId].filter(Boolean).join(" · ");
   if (validScope && preview && project && preview.machineId === machineId && preview.projectId === projectId && preview.serverId === server.id) return <Sheet visible title={copy("Özel önizleme", "Private preview")} size="full" scroll={false} onClose={() => setPreview(undefined)}>
     <ScreenChromeProvider nativeTitle bottomSafeArea={false}>
-    <BrowserScreen project={project} initialUrl={preview.url} />
+    <BrowserScreen project={project} initialUrl={preview.url} embedded />
     </ScreenChromeProvider>
   </Sheet>;
   return (
     <Sheet visible title={server.name} size="full" dismissible={!busy} onClose={onClose}>
-      <Body muted>{[opening.machineName, opening.projectName ?? opening.projectId].filter(Boolean).join(" · ")}</Body>
+      <ScopeLine scope={{ computer: opening.machineName, project: opening.projectName ?? opening.projectId }} />
       {!validScope ? <StateView illustration="error" tone="danger" title={copy("Bir şeyler ters gitti", "Something went wrong")} description={copy("Bağlantı veya proje değişti. Devam etmek için bu ekranı yeniden açın.", "The connection or project changed. Reopen this view to continue.")} /> : <QueryState query={{ ...details, refetch: reconcile }} />}
       {validScope && details.isSuccess && !details.error && !current ? <Notice tone="danger" message={copy("Sunucu ayrıntıları bu hedefle eşleşmiyor. Yenile ve tekrar kontrol et.", "The server details do not match this target. Refresh and check again.")} retrying={reconciling || details.isFetching} onRetry={() => { void reconcile(); }} /> : null}
       {current ? (
         <>
           <Body mono>{current.command ?? current.name}</Body>
-          <Disclosure label={copy("Teknik ayrıntılar", "Technical details")}>
-            <Body mono muted>{[opening.reviewed?.id, opening.projectId].filter(Boolean).join(" / ")}</Body>
-            {current.cwd ? <Body mono muted>{current.cwd}</Body> : null}
-            {current.process ? <Body mono muted>{`PID ${current.process.pid}`}</Body> : null}
-          </Disclosure>
+          {/* Identifiers stay as quiet selectable lines; the computer and project are in the scope line. */}
+          {current.cwd ? <Body mono muted selectable>{current.cwd}</Body> : null}
+          {current.process ? <Body mono muted selectable>{`PID ${current.process.pid}`}</Body> : null}
           {current.endpoints.map((endpoint) => <Row key={`${endpoint.address}:${endpoint.port}`}><Body mono>{endpoint.url}</Body>
             {project && machine?.capabilities?.includes("browser.shared") ? <Button tone="quiet" label={copy("Önizle", "Preview")} disabled={!validScope || busy || !!details.error || details.isFetching || reconciling || uncertain || !!intent} onPress={() => {
               try { if (machineId && currentScope()) setPreview({ url: privatePreviewUrl(endpoint.url), machineId, projectId, serverId: server.id }); } catch (error) { setLocalError(error); }
             }} /> : null}</Row>)}
           {current.error ? <ErrorText error={current.error} /> : null}
-          <Disclosure label={copy("İşlem kapsamı", "Process scope")}>
+          {/* The stop scope is two rows that change what Stop affects, so it stays visible. */}
           <NavigationGroup><ToggleField label={copy("Alt işlemleri de kapsa", "Include child processes")} value={includeChildren} disabled={busy} onChange={(value) => { setIntent(undefined); setIncludeChildren(value); }} /></NavigationGroup>
-          <Body muted>{`${copy("Etkilenen portlar", "Affected ports")}: ${details.data?.affectedPorts.join(", ") || "—"}`}</Body>
-          </Disclosure>
+          {details.data?.affectedPorts.length ? <Body muted>{`${copy("Etkilenen portlar", "Affected ports")}: ${details.data.affectedPorts.join(", ")}`}</Body> : null}
           {!canReview ? <StatusLine tone="info" label={copy("İşlem etkisini güvenle doğrulamak için bilgisayardaki bycoda'yı güncelle.", "Update bycoda on the computer to safely review process impact.")} /> : null}
           {/* One caution above the actions: unknown outcome, a process that would not stop, a busy port. */}
           {uncertain || stop.data?.requiresForce || restart.data?.conflict ? <Notice tone="warning" message={[
@@ -128,7 +136,8 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
             restart.data?.conflict ? copy("{p0} portu zaten kullanılıyor.", "Port {p0} is already in use.", { p0: restart.data.conflict.port }) : null,
           ].filter(Boolean).join(" ")} /> : null}
           {!intent ? <Row>
-            {current.state === "running" || current.state === "starting" ? <Button label={copy("Durdur", "Stop")} disabled={disabled} onPress={() => prepare("stop")} /> : null}
+            {/* One primary action: Restart when the server is managed, otherwise Stop. */}
+            {current.state === "running" || current.state === "starting" ? <Button label={copy("Durdur", "Stop")} tone={current.managed ? "secondary" : "primary"} disabled={disabled} onPress={() => prepare("stop")} /> : null}
             {current.managed ? <Button label={copy("Yeniden başlat", "Restart")} disabled={disabled || !includeChildren} onPress={() => prepare("restart")} /> : null}
             {stop.data?.requiresForce || kill.data?.requiresForce || restart.isError ? <Button tone="danger" label={copy("Zorla durdur", "Force stop")} disabled={disabled} onPress={() => prepare("kill")} /> : null}
           </Row> : null}
@@ -136,7 +145,13 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
             {!details.error ? <Button busy={reconciling} tone="quiet" label={copy("Durumu yenile", "Refresh state")} disabled={busy || details.isFetching || reconciling} onPress={() => { void reconcile(); }} /> : null}
             {current.logsAvailable ? <Button tone="quiet" label={copy("Günlükler", "Logs")} selected={showLogs} onPress={() => setShowLogs((value) => !value)} /> : null}
           </Row> : null}
-          {intent ? <><Body mono>{`${reviewScopeLabel}\n${intent.processes.map((process) => `PID ${process.pid} · ${process.name} · ${process.startedAt}`).join("\n")}\n${copy("Etkilenen portlar", "Affected ports")}: ${intent.ports.join(", ") || "—"}`}</Body><Body>{intent.action === "kill" ? copy("Listelenen işlemleri zorla durdur? Kaydedilmemiş uygulama verileri kaybolabilir.", "Force stop the listed processes? Unsaved application data may be lost.") : intent.action === "stop" ? copy("Bu sunucuyu seçili bilgisayarda durdur?", "Stop this server on the selected computer?") : copy("Bu sunucuyu seçili bilgisayarda yeniden başlat?", "Restart this server on the selected computer?")}</Body><FormActions
+          {intent ? <><Body>{intent.action === "kill" ? copy("Listelenen işlemler zorla durdurulsun mu? Kaydedilmemiş uygulama verileri kaybolabilir.", "Force stop the listed processes? Unsaved application data may be lost.") : intent.action === "stop" ? copy("Bu sunucu seçili bilgisayarda durdurulsun mu?", "Stop this server on the selected computer?") : copy("Bu sunucu seçili bilgisayarda yeniden başlatılsın mı?", "Restart this server on the selected computer?")}</Body>
+            {/* What the action affects, one reading per row. */}
+            <NavigationGroup>
+              {intent.processes.map((process) => <ValueRow key={`${process.pid}:${process.startedAt}`} label={process.name} value={`PID ${process.pid}`} />)}
+              {intent.ports.length ? <ValueRow label={copy("Etkilenen portlar", "Affected ports")} value={intent.ports.join(", ")} /> : null}
+            </NavigationGroup>
+            <FormActions
             feedback={<> {localError ? <ErrorText error={localError} /> : null} <MutationState mutation={stop} /> <MutationState mutation={restart} /> <MutationState mutation={kill} /> </>}
             cancelLabel={copy("Vazgeç", "Cancel")}
             submitLabel={intent.action === "kill" ? copy("Zorla durdur", "Force stop") : intent.action === "stop" ? copy("Durdur", "Stop") : copy("Yeniden başlat", "Restart")}
@@ -154,7 +169,7 @@ export function DevServerDetail({ projectId, project, server, onClose }: {
           </> : null}
           {showLogs ? <>
             <QueryState query={logs} />
-            {logs.data?.available ? <>{logParts.length > 32_000 ? <Body muted style={uiStyles.caption}>{copy("Çıktının yalnızca son bölümü gösteriliyor.", "Only the most recent output is shown.")}</Body> : null}<MessageCode code={logTail} output allowPreview={false} complete={current.state !== "running" && current.state !== "starting"} /></> : getQueryPresentation(logs) === "ready" ? <StateView compact title={copy("Bu sunucunun günlükleri kullanılamıyor.", "Logs are not available for this server.")} /> : null}
+            {logs.data?.available ? <>{logTruncated ? <Body muted style={uiStyles.caption}>{copy("Çıktının yalnızca son bölümü gösteriliyor.", "Only the most recent output is shown.")}</Body> : null}<MessageCode code={logText} output allowPreview={false} complete={current.state !== "running" && current.state !== "starting"} /></> : getQueryPresentation(logs) === "ready" ? <StateView compact title={copy("Bu sunucunun günlükleri kullanılamıyor.", "Logs are not available for this server.")} /> : null}
           </> : null}
         </>
       ) : null}

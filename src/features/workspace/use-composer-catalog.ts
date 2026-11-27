@@ -143,7 +143,7 @@ export function useComposerCatalog(session: HostSession | undefined, token: Comp
             unavailable: result.errors[tracker] });
       } else if (tracker && availability.data?.available === false) {
         rows.push({ id: "tracker-offline", name: trackerNames[tracker], label: "", detail: "", kind: "source", group: "sources",
-          unavailable: copy("Bilgisayardaki Bycoda’yı açın", "Open Bycoda on your computer") });
+          unavailable: copy("Bilgisayardaki bycoda’yı aç", "Open Bycoda on your computer") });
       }
     }
     if (tracker && !trackerSupported && !hints.length)

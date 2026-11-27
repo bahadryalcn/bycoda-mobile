@@ -37,7 +37,6 @@ export function ManageAccountSection() {
   return (
     <HintSection
       title={copy("Hesabı yönet veya sil", "Manage or delete account")}
-      presentation="visible"
       help={copy(
         "Silme isteği {p0} günlük bir bekleme süresi başlatır; bu sürede iptal edebilirsin. Veri dışa aktarımı hesap portalında da bulunur.",
         "A deletion request starts a {p0}-day grace period in which you can cancel it. Data export is also available in the account portal.",
@@ -63,7 +62,7 @@ export function ManageAccountSection() {
           <NavigationRow
             intent="command"
             icon={<SettingIcon glyph={ExternalLink} />}
-            label={copy("Hesap portalında yönet", "Manage in account portal")}
+            label={copy("Hesap portalında dışa aktar veya sil", "Export or delete in account portal")}
             busy={portal.isPending}
             disabled={portal.isPending}
             onPress={() => portal.mutate()}
@@ -83,6 +82,10 @@ export function ManageAccountSection() {
               tone="danger"
               icon={<SettingIcon glyph={Trash2} tone="danger" />}
               label={copy("Hesabı sil", "Delete account")}
+              // The request needs the loaded profile; a dimmed row says why it is waiting.
+              detail={me.data ? undefined : me.error
+                ? copy("Hesap bilgisi alınamadı.", "Account details could not be loaded.")
+                : copy("Hesap bilgisi yükleniyor…", "Loading account details…")}
               busy={request.isPending}
               disabled={request.isPending || !me.data}
               onPress={() =>

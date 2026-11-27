@@ -30,6 +30,12 @@ export function matchingTranscriptActivity(entries: readonly TranscriptEntry[], 
   return entry?.kind === "activity" && entry.blocks.some((block) => block.id === result.blockId) ? entry : undefined;
 }
 
+/** A hit on one subagent run: its agents entry, whose group expands and whose run's details open. */
+export function matchingTranscriptAgents(entries: readonly TranscriptEntry[], result: TranscriptFindResult) {
+  const entry = entries.find((candidate) => candidate.id === result.entryId);
+  return entry?.kind === "agents" && entry.blocks.some((block) => block.id === result.blockId) ? entry : undefined;
+}
+
 /** Only loaded display text is indexed. Never recursively scan provider/internal metadata. */
 function blockText(block: Block) {
   return [
@@ -40,6 +46,10 @@ function blockText(block: Block) {
       block.tool?.output,
       block.shell?.command,
       ...(block.attachments?.map((file) => file.name) ?? []),
+      // A subagent row shows its run's name and latest step; its details show the assignment and steps.
+      block.agentRun?.name,
+      block.agentRun?.prompt,
+      ...(block.agentRun?.steps?.map((step) => step.text) ?? []),
     ]),
   ]
     .filter((text): text is string => typeof text === "string" && !!text)

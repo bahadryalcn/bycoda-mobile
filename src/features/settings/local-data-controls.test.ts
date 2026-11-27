@@ -28,7 +28,7 @@ vi.mock("@/ui/motion", () => ({ enterItem: () => undefined }));
 vi.mock("@/ui/icon-tile", () => ({ IconTile: ({ children }: PropsWithChildren) => children }));
 vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
 vi.mock("lucide-react-native/icons/shield-off", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/user-x", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/monitor-x", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/trash", () => ({ default: () => null }));
 vi.mock("react-native-reanimated", () => ({ default: { View: ({ children }: PropsWithChildren) => createElement("div", null, children) } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));

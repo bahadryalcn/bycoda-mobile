@@ -27,11 +27,9 @@ export function SessionListSheet({ visible, onClose, machineId, selectedSessionI
   const sameComputer = connection.token === reviewedConnection.token && reviewedConnection.review?.id === machineId;
   const canRead = (projectId: string) => visible && sameComputer && reviewedConnection.isCurrent() &&
     activity.projects.isProjectVisible(projectId);
-  const rows = urgencyGlobalSessionRows(
-    sameComputer ? filterProjectSessionDirectory(activity.projects.data ?? [],
-      activity.directory.filter(({ session }) => listedSession(session) && !session.archived), "") : [],
-    Date.now(),
-  );
+  const listed = sameComputer ? filterProjectSessionDirectory(activity.projects.data ?? [],
+    activity.directory.filter(({ session }) => listedSession(session) && !session.archived), "") : [];
+  const rows = urgencyGlobalSessionRows(listed, Date.now());
   // Loading, connection and read failures fill the sheet like they fill the Sessions list.
   const query = {
     data: rows.length ? rows : undefined,
@@ -51,7 +49,11 @@ export function SessionListSheet({ visible, onClose, machineId, selectedSessionI
     ? <StateView title={copy("Bilgisayar bağlantısı değişti.", "Computer connection changed.")} />
     : directoryOwnsRegion(feedback)
       ? <ProjectDirectoryFeedback {...feedback} />
-      : <StateView illustration="no-sessions" title={copy("Son 7 günde oturum yok", "No sessions in the last 7 days")} />;
+      : listed.length
+        // Older sessions exist outside the seven-day window: the full Sessions list reaches them.
+        ? <StateView illustration="no-sessions" title={copy("Son 7 günde oturum yok", "No sessions in the last 7 days")}
+          action={{ label: copy("Tüm oturumlar", "All sessions"), onPress: () => { onClose(); router.navigate("/chats"); } }} />
+        : <StateView illustration="no-sessions" title={copy("Henüz oturum yok.", "No sessions yet.")} />;
   const open = (id: string, projectId: string) => {
     if (routed.current || !canRead(projectId)) return;
     routed.current = true;

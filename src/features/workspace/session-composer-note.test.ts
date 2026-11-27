@@ -33,7 +33,8 @@ vi.mock("lucide-react-native/icons/send", () => ({ default: () => null }));
 vi.mock("expo-image",() => ({ Image: () => null }));
 vi.mock("./composer-links", () => ({ ComposerLinks: () => null }));
 vi.mock("./use-dictation", () => ({ useDictation: () => ({ view: {}, error: null, phase: "idle", toggle: () => {}, clearError: () => {} }) }));
-vi.mock("./composer-dictation", () => ({ ComposerDictationButton: () => null, ComposerDictationFeedback: () => null }));
+vi.mock("./composer-dictation", () => ({ ComposerDictationButton: () => null }));
+vi.mock("./composer-recording", () => ({ ComposerDictationNotice: () => null, ComposerRecordingRow: () => null }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("react-native", () => ({
   Keyboard: { dismiss: state.dismissKeyboard, addListener: (name: string, listener: () => void) => { state.keyboard[name] = listener; return { remove: () => undefined }; } },
@@ -66,7 +67,7 @@ vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}
 vi.mock("@/ui/tokens", async () => ({ ...await vi.importActual<typeof import("@/ui/tokens")>("@/ui/tokens"), colors: {} }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/motion", () => ({ haptic: { success: vi.fn() } }));
+vi.mock("@/ui/motion", () => ({ haptic: { success: vi.fn(), select: vi.fn(), tap: vi.fn() } }));
 vi.mock("@/state/queries", () => ({ useHostClient: () => ({ machine: { id: "machine", capabilities: [...(state.supported ? ["sessions.noteContext.v1"] : []), ...(state.browserSupported ? ["browser.annotation", "attachments.ownership.v1"] : [])] } }) }));
 vi.mock("@/state/machines", () => ({ useMachines: { getState: () => ({ activeId: state.activeId, machines: [] }) } }));
 vi.mock("./use-local-draft", async () => {
@@ -95,6 +96,7 @@ vi.mock("./attachment-ownership", () => ({ composerDraftKey: () => "key", suppor
   attachmentReleases: { stage: vi.fn(async () => undefined), flush: vi.fn(async () => undefined) } }));
 vi.mock("./use-session-queue", () => ({ useSessionQueue: () => ({ supported: true, enqueue: state.enqueue, pause: state.pause }) }));
 vi.mock("./session-queue", () => ({ SessionQueue: () => null }));
+vi.mock("./session-parent-bar", () => ({ SessionParentBar: () => null }));
 vi.mock("./session-agents", () => ({ SessionAgents: ({ children }: { children: (controls: ReactNode) => ReactNode }) =>
   children(createElement("button", { "data-agent-controls": true }, "Agents")) }));
 vi.mock("@/features/management/templates/template-library", () => ({ TemplateLibrary: ({ onInsert }: { onInsert: (body: string) => void }) => {
@@ -104,6 +106,8 @@ vi.mock("@/features/management/templates/template-library", () => ({ TemplateLib
 vi.mock("@/features/management/templates/template-store", () => ({ useTemplateHydration: () => null, useTemplates: { getState: () => ({ hydrated: false }) } }));
 vi.mock("lucide-react-native/icons/triangle-alert", () => ({ default: () => null }));
 vi.mock("./shared", () => ({ ErrorText: () => null }));
+vi.mock("@/ui/overflow-menu", () => ({ RowOptionsSheet: () => null }));
+vi.mock("@/ui/anchored-menu", () => ({ AnchoredMenu: () => null }));
 vi.mock("@/ui/chat-controls", () => {
   const Button = ({ label, hint, disabled, onPress }: { label: string; hint?: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress, title: hint }, label);
   return { ChatCircleAction: Button, ChatToolbarAction: Button, ChatAction: Button };
@@ -241,7 +245,7 @@ it("reports refused template insertion without changing the composer draft or se
   expect(state.draft).toBe(original); expect(state.selection).toEqual({ start: 3, end: 5 });
   expect(container.textContent).toContain("Template panel");
   state.activeId = "other";
-  expect(() => state.templateInsert!("ok")).toThrow("This conversation is not available for insertion. Your draft is unchanged.");
+  expect(() => state.templateInsert!("ok")).toThrow("This session is not available for insertion. Your draft is unchanged.");
   expect(state.draft).toBe(original); expect(state.selection).toEqual({ start: 3, end: 5 });
   state.activeId = "machine";
   state.draft = { ...original, text: "ab cd" }; await act(async () => state.renderDraft!());
@@ -338,4 +342,23 @@ it("shows a direct Stop while a run is active and cancels that exact run after p
   await click("Stop");
   expect(state.pause).toHaveBeenCalledTimes(1);
   expect(state.onCommand).toHaveBeenCalledWith(expect.objectContaining({ type: "cancel", runId: "run-1", sessionId: "session" }));
+});
+
+it("keeps Stop recoverable: a cancel that never settles does not lock it, and the screen's wait holds it", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); root = createRoot(container);
+  const running = { ...props, session: { ...props.session, status: "running", runId: "run-1" } };
+  // The Host never replies to the first cancel.
+  state.onCommand.mockImplementationOnce(() => new Promise<undefined>(() => {}));
+  await act(async () => root.render(createElement(SessionComposer, running as never)));
+  await click("Stop");
+  expect(state.onCommand).toHaveBeenCalledTimes(1);
+  // The screen owns the wait: while it holds, the button reads Stopping and sends nothing.
+  await act(async () => root.render(createElement(SessionComposer, { ...running, stopping: true } as never)));
+  await click("Stopping");
+  expect(state.onCommand).toHaveBeenCalledTimes(1);
+  // Its bounded wait ended with the run still going: Stop sends the same exact-run cancel again.
+  await act(async () => root.render(createElement(SessionComposer, { ...running, stopping: false } as never)));
+  await click("Stop");
+  expect(state.onCommand).toHaveBeenCalledTimes(2);
+  expect(state.onCommand).toHaveBeenLastCalledWith(expect.objectContaining({ type: "cancel", runId: "run-1", sessionId: "session" }));
 });

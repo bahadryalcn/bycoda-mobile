@@ -22,7 +22,7 @@ it("loads the saved engine before the first capture without opening settings", a
   }
 });
 import { nativeVoiceDependencies, speechWav } from "./assistant-voice-native";
-import { pcmBase64 } from "../../../../src/features/voice/model/voiceVad";
+import { pcmBase64 } from "../../../../src/shared/model/voice-realtime/voiceVad";
 
 it("borrows an overall Android call service without ending it between utterances", async () => {
   platform.OS = "android"; bridge.active = true;
@@ -87,4 +87,9 @@ it("stops a native microphone again after a cancelled asynchronous start settles
   expect(native.stop).toHaveBeenCalledTimes(2);
   expect(native.release).toHaveBeenCalledTimes(1);
   capture.stop(); expect(native.release).toHaveBeenCalledTimes(1);
+});
+
+it("keeps the microphone briefly after Finish so the last word is recorded", () => {
+  const dependencies = nativeVoiceDependencies({ state: vi.fn(), transcript: vi.fn(), error: vi.fn() });
+  expect(dependencies.tailMs).toBe(400);
 });

@@ -4,11 +4,11 @@ import { View } from "react-native";
 import { useActiveMachine } from "@/state/machines";
 import { useHostQuery } from "@/state/queries";
 import { useLocale } from "@/i18n";
-import { Body, Card, QueryState, SectionHeader, SegmentedControl } from "@/ui/primitives";
+import { Body, Card, QueryState, SectionHeader, SegmentedControl, StatusLine } from "@/ui/primitives";
 import { MetricRow } from "@/ui/metric-row";
 import { useCopy } from "@/ui/copy";
 import { useInfoHint } from "@/ui/info-hint";
-import { space } from "@/ui/tokens";
+import { metrics, space } from "@/ui/tokens";
 import { DailyBars } from "@/ui/usage-meters";
 import { compactTokens } from "./usage-breakdown";
 import { UsageKpis } from "./usage-charts";
@@ -50,7 +50,7 @@ export function UsageCost() {
             onChange={setDays}
           />
         </View>
-        <View style={{ minHeight: 48, justifyContent: "center" }}>{info.button}</View>
+        <View style={{ minHeight: metrics.touchTarget, justifyContent: "center" }}>{info.button}</View>
       </View>
       {info.panel}
       <QueryState query={query} empty={query.isSuccess && empty} emptyTitle={copy("Bu aralıkta kullanım yok.", "No usage in this period.")} />
@@ -58,13 +58,13 @@ export function UsageCost() {
         <>
           <UsageKpis
             items={[
-              { title: copy("Tahmini maliyet · son {p0} gün", "Estimated cost · last {p0} days", { p0: days }), value: compactMoney(report.totals.costUsd) },
-              { title: copy("Token", "Tokens"), value: compactTokens(report.totals.tokens) },
+              { title: copy("Tahmini maliyet · son {p0} gün", "Estimated cost · last {p0} days", { p0: days }), value: compactMoney(report.totals.costUsd, locale) },
+              { title: copy("Token", "Tokens"), value: compactTokens(report.totals.tokens, locale) },
               { title: copy("Etkin gün", "Active days"), value: String(report.totals.activeDays) },
             ]}
           />
           {isPartialScan(report) ? (
-            <Body muted>{copy("Kısmi tarama: Host {p0} günlük dosyasında durdu; toplamlar eksik olabilir.", "Partial scan: the Host stopped after {p0} log files, so totals may be incomplete.", { p0: Number.isFinite(report.coverage.filesScanned) ? report.coverage.filesScanned.toLocaleString(locale) : "?" })}</Body>
+            <StatusLine tone="warning" label={copy("Kısmi tarama: bilgisayar {p0} günlük dosyasından sonra durdu; toplamlar eksik olabilir.", "Partial scan: the Host stopped after {p0} log files, so totals may be incomplete.", { p0: Number.isFinite(report.coverage.filesScanned) ? report.coverage.filesScanned.toLocaleString(locale) : "?" })} />
           ) : null}
           <Card variant="surface">
             <Body muted>{copy("Günlük maliyet (USD)", "Daily cost (USD)")}</Body>
@@ -72,11 +72,11 @@ export function UsageCost() {
               label={copy("Günlük maliyet", "Daily cost")}
               data={report.daily.map((day) => ({ day: shortDay(day.date, locale), value: day.costUsd }))}
             />
-            {peak ? <Body muted>{copy("En yüksek gün: {p0} · {p1}", "Peak day: {p0} · {p1}", { p0: shortDay(peak.date, locale), p1: compactMoney(peak.costUsd) })}</Body> : null}
+            {peak ? <Body muted>{copy("En yüksek gün: {p0} · {p1}", "Peak day: {p0} · {p1}", { p0: shortDay(peak.date, locale), p1: compactMoney(peak.costUsd, locale) })}</Body> : null}
           </Card>
-          <Breakdown title={copy("Sağlayıcıya göre", "By provider")} rows={report.providers.map((row) => ({ key: row.provider, label: providerName(row.provider), ...row }))} />
-          <Breakdown title={copy("Modele göre", "By model")} rows={report.models.map((row) => ({ key: `${row.provider}:${row.model}`, label: row.model, ...row }))} other={otherRow(omittedCost(report, "models"), copy("Diğer modeller", "Other models"))} />
-          <Breakdown title={copy("Projeye göre", "By project")} rows={report.projects.map((row) => ({ ...row, key: row.label, label: row.label || copy("Bilinmeyen klasör", "Unknown folder") }))} other={otherRow(omittedCost(report, "projects"), copy("Diğer projeler", "Other projects"))} />
+          <Breakdown locale={locale} title={copy("Sağlayıcıya göre", "By provider")} rows={report.providers.map((row) => ({ key: row.provider, label: providerName(row.provider), ...row }))} />
+          <Breakdown locale={locale} title={copy("Modele göre", "By model")} rows={report.models.map((row) => ({ key: `${row.provider}:${row.model}`, label: row.model, ...row }))} other={otherRow(omittedCost(report, "models"), copy("Diğer modeller", "Other models"))} />
+          <Breakdown locale={locale} title={copy("Projeye göre", "By project")} rows={report.projects.map((row, index) => ({ ...row, key: `${index}:${row.label}`, label: row.label || copy("Bilinmeyen klasör", "Unknown folder") }))} other={otherRow(omittedCost(report, "projects"), copy("Diğer projeler", "Other projects"))} />
           {report.coverage.unpricedModels.length ? (
             <Body muted>{copy("Fiyatı bilinmeyen modeller yalnızca token olarak sayılır: {p0}", "Models without a price are counted in tokens only: {p0}", { p0: report.coverage.unpricedModels.join(", ") })}</Body>
           ) : null}
@@ -98,13 +98,13 @@ type CostRow = { key: string; label: string; costUsd: number; tokens: number };
 /** The folded-away tail of a capped list as one row, so listed rows plus it add up to the headline. */
 const otherRow = (omitted: ReturnType<typeof omittedCost>, label: string): CostRow | null => (omitted ? { key: "__other", label, ...omitted } : null);
 
-function Breakdown({ title, rows, other }: { title: string; rows: CostRow[]; other?: CostRow | null }) {
+function Breakdown({ title, rows, other, locale }: { title: string; rows: CostRow[]; other?: CostRow | null; locale: string }) {
   if (!rows.length) return null;
   return (
     <View style={{ gap: space.sm }}>
       <SectionHeader title={title} count={rows.length} />
       {[...rows, ...(other ? [other] : [])].map((row) => (
-        <MetricRow key={row.key} label={row.label} value={`${compactMoney(row.costUsd)} · ${compactTokens(row.tokens)}`} />
+        <MetricRow key={row.key} label={row.label} value={`${compactMoney(row.costUsd, locale)} · ${compactTokens(row.tokens, locale)}`} />
       ))}
     </View>
   );

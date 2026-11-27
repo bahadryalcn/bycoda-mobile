@@ -1,6 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { mergeWidgetUpdate, WIDGET_CACHE_KEY, type WidgetCache } from "../widgets/model/background-snapshot";
-import { liveActivityProps } from "../widgets/model/snapshot";
+import {
+  liveActivityProps,
+  snapshotIdentity,
+  SNAPSHOT_TTL_MS,
+  type WidgetSnapshot,
+} from "../widgets/model/snapshot";
 import { withWidgetStorage, widgetWorkGeneration } from "../widgets/platform/widget-cache";
 import { publishWidgetSnapshot } from "../widgets/platform/publish";
 import { syncSessionActivity } from "../widgets/platform/live-activity";
@@ -28,6 +33,14 @@ export async function receiveWidgetPush(data: unknown): Promise<boolean> {
     const next = mergeWidgetUpdate({ ...cache, showTitles: cache.showTitles && choices.showTitles,
       showQuestionText: cache.showQuestionText && choices.showQuestionText }, data, Date.now());
     if (!next) return false;
+    const now = Date.now();
+    // A heartbeat that changes nothing visible keeps the published timeline while it still has
+    // more than half its time left; the widget and Live Activity would render the same thing.
+    // "No data" also tells iOS the wake was not needed.
+    if (unchangedAndFresh(cache.snapshot, next.snapshot, now)) {
+      await AsyncStorage.setItem(WIDGET_CACHE_KEY, JSON.stringify({ ...next, snapshot: cache.snapshot }));
+      return false;
+    }
     await AsyncStorage.setItem(WIDGET_CACHE_KEY, JSON.stringify(next));
     if (generation !== widgetWorkGeneration()) return false;
     await publishWidgetSnapshot(next.snapshot, () => generation === widgetWorkGeneration());
@@ -35,4 +48,12 @@ export async function receiveWidgetPush(data: unknown): Promise<boolean> {
     await syncSessionActivity(next.snapshot.stale ? null : liveActivityProps(next.snapshot), true);
     return true;
   });
+}
+
+/** True when `next` would show exactly what the published `current` timeline already shows. */
+export function unchangedAndFresh(current: WidgetSnapshot, next: WidgetSnapshot, now: number): boolean {
+  return (
+    current.expiresAt - now > SNAPSHOT_TTL_MS / 2 &&
+    snapshotIdentity(current) === snapshotIdentity(next)
+  );
 }

@@ -21,7 +21,7 @@ vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string, args?: any) 
 vi.mock("@/i18n", () => ({ useLocale: () => s.locale }));
 vi.mock("./tokens", async () => ({ ...await vi.importActual<typeof import("./tokens")>("./tokens"), colors: {}, semanticColors: { info: {}, danger: {} } }));
 vi.mock("./styles", () => ({ uiStyles: {} }));
-vi.mock("./info-hint", () => ({ HintLabel: ({ label, help }: any) => h("span", { "data-help": help }, label), UnitHint: () => null, isUnitHint: () => false }));
+vi.mock("./info-hint", () => ({ HintLabel: ({ label, help }: any) => h("span", { "data-help": help }, label), InfoHint: ({ text }: any) => h("i", { "data-info": text }), UnitHint: () => null, isUnitHint: () => false }));
 vi.mock("./disclosure-motion", () => ({ DisclosureChevron: () => null }));
 vi.mock("lucide-react-native/icons/chevrons-up-down", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/check", () => ({ default: () => null }));
@@ -50,12 +50,13 @@ vi.mock("./feedback", () => ({
   Empty: ({ title, action }: any) => h("div", null, title, action ? h("button", { onClick: action.onPress }, action.label) : null),
   Loading: ({ label }: { label: string }) => h("p", { role: "status" }, label),
 }));
+vi.mock("./no-results", () => ({ NoResults: ({ title, onClearSearch }: any) => h("div", null, title, h("button", { onClick: onClearSearch }, "Clear search")) }));
 vi.mock("./navigation-row", () => ({ useInNavigationGroup: () => false }));
 vi.mock("./dialogs", () => ({ Sheet: ({ visible, children, onClose, headerAction }: any) => {
   s.actions.set("Close", onClose); return visible ? h("section", null, headerAction, children) : null;
 } }));
 let root: ReturnType<typeof createRoot> | undefined, container: HTMLDivElement;
-async function render(extra: { compact?: boolean } = {}) {
+async function render(extra: { compact?: boolean; variant?: "row"; hint?: string } = {}) {
   if (!root) { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); container = document.createElement("div"); root = createRoot(container); }
   const common = { ...extra, label: "Choice", options: s.options, searchable: true, disabled: s.disabled,
     onChange: (value: string | string[]) => s.changes.push(Array.isArray(value) ? value : [value]) };
@@ -236,4 +237,10 @@ it("replaces pending remote suggestions and commits explicit free text once", as
   const choose = s.actions.get("Use “New project”")!;
   await act(async () => { choose(); choose(); });
   expect(onChange.mock.calls).toEqual([["New project"]]);
+});
+
+// A settings row with a help sentence keeps it behind the info icon instead of dropping it.
+it("shows a row's help sentence behind the info icon", async () => {
+  await render({ variant: "row", hint: "For jobs that wait for approval, stall or fail." });
+  expect(container.querySelector("[data-info]")?.getAttribute("data-info")).toBe("For jobs that wait for approval, stall or fail.");
 });

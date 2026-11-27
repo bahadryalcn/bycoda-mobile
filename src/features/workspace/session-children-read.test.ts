@@ -54,4 +54,10 @@ describe("childListInterval", () => {
     expect(childListInterval([row("c", "s"), row("top")], "s")).toBe(15_000);
     expect(childListInterval([row("c", "other")], "s")).toBe(15_000);
   });
+
+  it("only discovers slowly while the run shows no delegation and has no children", () => {
+    expect(childListInterval(undefined, "s", false)).toBe(15_000);
+    expect(childListInterval([], "s", false)).toBe(15_000);
+    expect(childListInterval([row("c", "s")], "s", false)).toBe(4_000);
+  });
 });

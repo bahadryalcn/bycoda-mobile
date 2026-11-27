@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { ErrorNotice, Loading, Notice, Skeleton, StatusLine } from "./feedback";
 import { StateView } from "./state-view";
+import { NoResults } from "./no-results";
 import { errorTitle, queryStateSize } from "./state-model";
 import { showToast, useToastAvailable } from "./toast";
 import { useCopy } from "./copy";
@@ -11,6 +12,7 @@ import type { QueryStateProps, MutationStateProps } from "./component-props";
 import { SheetGuardContext } from "./sheet-guard-context";
 import { useConnectionFeedbackOwner } from "./connection-feedback-scope";
 import { FormActionBusy } from "./form-action-context";
+import { usePersistentCondition } from "./use-persistent-error";
 import { isTransientConnectionError, READ_RETRY_GRACE_MS, reconnectRefetchDelay } from "../state/query-retry";
 import { useActiveHostLinkDown, useActiveHostRecoveryMachine, useHostForegroundGeneration, useHostRuntimeState } from "../state/host-runtime-state";
 import { useDeviceOffline } from "../state/device-network";
@@ -65,6 +67,8 @@ function useQuietReconnect(query: QueryStateProps["query"], transient: boolean, 
 const GRACE_RETRY_DELAY_MS = 1_000;
 /** Shown data that keeps failing to refresh is marked stale after this many consecutive failures... */
 const STALE_FAILURE_COUNT = 2;
+/** ...once they span at least this long, so two quick poll failures that then heal stay silent... */
+const STALE_FAILURE_MIN_MS = 15_000;
 /** ...or after it has been stale this long. */
 const STALE_NOTICE_AFTER_MS = 60_000;
 
@@ -102,7 +106,7 @@ export function useFailureGrace(failing: boolean, fetching: boolean, refetch?: (
   return { hidden: failing && (phase !== "shown" || retrying), slow: failing && phase === "shown" && retrying };
 }
 
-/** A failed background refresh under shown data stays silent until it repeats or lasts a minute. */
+/** A failed background refresh under shown data stays silent until it repeats for 15 s or lasts a minute. */
 export function useStaleFailureVisible(stale: boolean, error: unknown) {
   const [failures, setFailures] = useState<{ last: unknown; count: number }>({ last: undefined, count: 0 });
   const [aged, setAged] = useState(false);
@@ -130,7 +134,8 @@ export function useStaleFailureVisible(stale: boolean, error: unknown) {
     const timer = setTimeout(() => setAged(true), STALE_NOTICE_AFTER_MS);
     return () => clearTimeout(timer);
   }, [stale, generation]);
-  return stale && (failures.count >= STALE_FAILURE_COUNT || aged);
+  const lasted = usePersistentCondition(stale, STALE_FAILURE_MIN_MS);
+  return stale && ((failures.count >= STALE_FAILURE_COUNT && lasted) || aged);
 }
 
 export function QueryState(props: QueryStateProps) {
@@ -156,6 +161,7 @@ function useQueryStatePresentation({
   emptyAction,
   emptyIllustration,
   searching,
+  noResults,
   offline,
   onManageConnections,
   shareConnectionFeedback,
@@ -246,7 +252,7 @@ function useQueryStatePresentation({
     loading === "inline" || loading === "centered"
       ? renderLoading
         ? renderLoading(label ?? copy("Yükleniyor…", "Loading…"))
-        : <Loading label={label} centered={loading === "centered"} />
+        : <Loading label={label} centered={loading === "centered"} delayed />
       : null;
   if ((presentation === "loading" || quietLinkRecovery || graced.hidden) && !showOffline && !waitingForLink) {
     // A failed attempt that is being retried can take several request deadlines on a busy
@@ -336,10 +342,18 @@ function useQueryStatePresentation({
       />
     ) };
   }
-  const illustration = emptyIllustration ?? (searching ? "search-empty" : undefined);
+  // An empty result caused by search or filters is the shared no-results state (mascot, the list's
+  // wording, Clear search / Clear filters), compact when the caller asked for a compact state.
+  if (presentation === "empty" && noResults && (noResults.searching || noResults.filtered))
+    return { skeleton: false, node: <NoResults {...noResults} compact={noResults.compact ?? (size === "compact" || (!size && compact))} /> };
+  const requested = emptyIllustration ?? (searching ? "search-empty" : undefined);
+  const emptySize = stateSize(!!requested);
+  // Every region-sized "nothing here yet" carries the shared empty mascot unless the caller chose
+  // its own art; section rows stay icon-only.
+  const illustration = requested ?? (emptySize === "region" ? "inbox-empty" : undefined);
   return { skeleton: false, node: presentation === "empty" ? (
     <StateView
-      size={stateSize(!!illustration)}
+      size={emptySize}
       illustration={illustration}
       title={
         emptyTitle ??

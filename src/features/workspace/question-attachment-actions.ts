@@ -36,7 +36,7 @@ export class QuestionAttachmentActions {
   private editable() {
     this.check();
     if (questionSubmissionHeld({ ...this.question, delivery: this.entry().delivery ?? this.question.delivery }))
-      throw new Error("This answer is awaiting confirmation. Check the conversation before trying again.");
+      throw new Error("This answer is awaiting confirmation. Check the session before trying again.");
   }
   private item(id: string) {
     const item = this.question.questions.find(item => item.id === id);

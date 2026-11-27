@@ -52,19 +52,19 @@ export function WelcomeScreen() {
             width={codeArtWidth("guideTip", { width: Math.min(width * 0.8, metrics.entryWidth - 2 * space.screen), height: artworkHeight })}
           />
         </Animated.View>
+        {/* The page heading leads; the account's computers and the other ways to connect follow it. */}
+        <Heading style={[uiStyles.largeTitle, { textAlign: "center", fontSize: fontSize.display, lineHeight: lineHeight.display }]}>
+          {copy("Bilgisayarını bağla", "Connect your computer")}
+        </Heading>
         <View>
           <AccountComputersSection others={
             <View style={{ gap: space.lg }}>
+              <Body muted style={{ textAlign: "center" }}>
+                {copy("Bilgisayarındaki bycoda’da “Telefon bağla”yı seç ve QR kodunu tara.",
+                  "In bycoda on your computer, choose “Connect your phone” and scan the QR code.")}
+              </Body>
+              {/* Full-width actions keep a real gap so their 48dp touch areas never overlap. */}
               <View style={{ gap: space.sm }}>
-                <Heading style={[uiStyles.largeTitle, { textAlign: "center", fontSize: fontSize.display, lineHeight: lineHeight.display }]}>
-                  {copy("Bilgisayarını bağla", "Connect your computer")}
-                </Heading>
-                <Body muted style={{ textAlign: "center" }}>
-                  {copy("Bilgisayarındaki bycoda’da “Telefon bağla”yı seç ve QR kodunu tara.",
-                    "In bycoda on your computer, choose “Connect your phone” and scan the QR code.")}
-                </Body>
-              </View>
-              <View style={{ gap: space.xs }}>
                 <Button label={copy("QR kodu tara", "Scan QR code")} tone="primary" fullWidth
                   onPress={() => router.navigate({ pathname: "/machines", params: { start: "scan" } })} />
                 <Button label={copy("Kodu yapıştır", "Paste pairing code")} tone="secondary" fullWidth

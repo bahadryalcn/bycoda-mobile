@@ -76,7 +76,7 @@ export function TemplateEditor({ initial, onClose, onInsert }: {
             if (!useTemplates.getState().error) setError(null);
           }); } : undefined} />
         {reload.isPending && !(state.error ?? error) ? <Loading /> : null}
-        {conflict ? <Notice tone="warning" message={copy("Şablonlar değişti. Taslağını koru ve kaydetmeden önce güncel listeyi yeniden aç.", "Templates changed. Keep your draft and reopen the current list before saving.")} /> : null}
+        {conflict ? <Notice tone="warning" message={copy("Şablonlar değişti. Taslağınızı koruyun ve kaydetmeden önce güncel listeyi yeniden açın.", "Templates changed. Keep your draft and reopen the current list before saving.")} /> : null}
       </>} />
   </ScrollView>;
 }

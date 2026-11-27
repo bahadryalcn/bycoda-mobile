@@ -16,13 +16,22 @@ it("mirrors the rendered string and font runs of a paragraph", () => {
     node("link", "", [node("text", "docs")], { href: "https://example.com" }),
     node("s", "", [node("text", "old")]),
   ], options)!;
-  expect(source.text).toBe("Use pnpm and read this\ndocsold");
+  // The web link leads with its icon's one-em slot, like a file chip.
+  expect(source.text).toBe("Use pnpm and read this\n docsold");
   expect(source.runs).toEqual([
     { start: 4, end: 8, mono: true, weight: "500", size: 12 },
     { start: 13, end: 18, weight: "700" },
     { start: 18, end: 22, weight: "700", italic: true },
-    { start: 27, end: 30, strike: true },
+    { start: 28, end: 31, strike: true },
   ]);
+});
+
+it("reserves the icon slot only for links the renderer gives an icon", () => {
+  const link = (href: string) => selectionSource([node("link", "", [node("text", "x")], { href })], options)!.text;
+  expect(link("bycoda://session/v1/abc")).toBe(" x");
+  expect(link("http://localhost:5173")).toBe(" x");
+  expect(link("#anchor")).toBe("x");
+  expect(link("src/a.ts")).toBe("x");
 });
 
 it("merges adjacent runs with the same style", () => {
@@ -63,4 +72,25 @@ it("accepts only the four app actions from the native menu", () => {
   expect(SELECTION_ACTION_IDS).toEqual(["add", "quote", "translate", "copy"]);
   expect(isSelectionAction("quote")).toBe(true);
   expect(isSelectionAction("share")).toBe(false);
+});
+
+it("mirrors file chips: icon slot, short name in medium weight, location and closing space", () => {
+  const codeFile = (text: string) => (text.endsWith(".ts") ? text : null);
+  const source = selectionSource(
+    [
+      node("text", "See "),
+      node("link", "", [node("text", "src/a.ts:4")], { href: "src/a.ts:4" }),
+      node("text", " and "),
+      node("code_inline", "lib/b.ts"),
+      node("text", " or "),
+      node("code_inline", "pnpm"),
+    ],
+    { ...options, fileChips: true, codeFile },
+  )!;
+  expect(source.text).toBe("See \u2003a.ts · L4\u202F and \u2003b.ts\u202F or pnpm");
+  const name = source.text.indexOf("a.ts");
+  expect(source.runs).toContainEqual({ start: name, end: name + 4, weight: "500" });
+  // Without a file owner the link keeps its written label and mentions their @ form.
+  expect(selectionSource([node("link", "", [node("text", "src/a.ts")], { href: "src/a.ts" })], options)!.text).toBe("src/a.ts");
+  expect(selectionSource([node("text", "open @src/a.ts")], { ...options, mentions: true, fileChips: true })!.text).toBe("open \u2003a.ts\u202F");
 });

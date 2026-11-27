@@ -1,12 +1,10 @@
 import { useMobileTheme } from "./theme";
 import { scrollKeyboardDismissMode } from "./scroll-keyboard";
-import { createContext, use, useMemo, useCallback, useState } from "react";
+import { Children, Fragment, createContext, isValidElement, use, useMemo, useCallback, useLayoutEffect, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { KeyboardAvoidingView, KeyboardAwareScrollView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body } from "./typography";
-import Animated from "react-native-reanimated";
-import { reveal } from "./motion";
 import { metrics, space } from "./tokens";
 import { Card as PanelCard } from "panelui-native/components/card";
 import { PageHeader } from "panelui-native/components/page-header";
@@ -17,7 +15,8 @@ import { ScopePills, type PageScope } from "./scope-line";
 import { FormActionScrollOwner } from "./form-action-context";
 import { screenFooterLimits } from "./screen-footer-model";
 import { ConnectionFeedbackScope } from "./connection-feedback-scope";
-import { ScreenChrome, ScreenComputerControl, ScreenScopeControl, useScreenChrome, type HeaderIdentityProps } from "./screen-chrome";
+import { ScreenChrome, ScreenComputerControl, ScreenHeaderRow, ScreenScopeControl, useScreenChrome, type HeaderIdentityProps } from "./screen-chrome";
+import { SheetGuardContext } from "./sheet-guard-context";
 import { ScreenFrameInsets, useScreenContentInsets } from "./screen-content-insets";
 import type { PropsWithChildren, ReactNode } from "react";
 import type { ScreenProps, ContainerProps, CardProps, SectionProps, CodePanelProps } from "./component-props";
@@ -102,10 +101,55 @@ export function ScreenHeading({ title, subtitle, scope, context, scopeControl: o
   const pills: PageScope | undefined = scope && !customIdentity
     ? { computer: switchComputer ? undefined : scope.computer, project: scopeControl ? undefined : scope.project } : undefined;
   const scoped = !!(pills?.computer || pills?.project);
+  const HeaderRow = use(ScreenHeaderRow);
+  const inSheet = !!use(SheetGuardContext);
+  const { width } = useWindowDimensions();
+  const pillCount = (switchComputer ? 1 : 0) + (pills?.computer ? 1 : 0) + (pills?.project ? 1 : 0) + (scopeControl && !customIdentity ? 1 : 0);
+  // The character estimate in fitsHeaderRow can be wrong for wide letters or long translations; the
+  // hoisted title measures itself, and a title that would be ellipsized gives the row back (this key).
+  const fitKey = `${title}|${width}|${fontScale}|${pillCount}|${countActions(actions)}`;
+  const [titleWidth, setTitleWidth] = useState<{ key: string; natural?: number; shown?: number }>({ key: "" });
+  // Ellipsized: the drawn title is narrower than its own unconstrained line.
+  const clipped = titleWidth.key === fitKey && titleWidth.natural !== undefined && titleWidth.shown !== undefined &&
+    titleWidth.natural > titleWidth.shown + 0.5;
+  // A pushed page with a native title puts its title, scope pills and icon actions in the one top
+  // row beside Back when they fit; otherwise the pills (and actions) take a compact row below.
+  const hoist = !!(HeaderRow && chrome.nativeTitle && !inSheet && title && !subtitle && !back && pillCount > 0 &&
+    !clipped && fitsHeaderRow({ width, fontScale, title, pills: pillCount, actions: countActions(actions) }));
+  // Remember (after commit, never during render) that this heading once owned the native top row.
+  const [hoisted, setHoisted] = useState(false);
+  useLayoutEffect(() => { if (hoist) setHoisted(true); }, [hoist]);
+  const measureTitle = (part: "natural" | "shown", value: number) =>
+    setTitleWidth((current) => current.key === fitKey && current[part] === value
+      ? current : { ...(current.key === fitKey ? current : { key: fitKey }), [part]: value });
+  if (hoist) {
+    const room = headerRowRoom(width, countActions(actions));
+    const identity = (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, width: room, minWidth: 0 }}>
+        <Text accessibilityRole="header" numberOfLines={1} style={[uiStyles.title, { flexShrink: 1, maxWidth: "45%" }]}
+          onLayout={(event) => measureTitle("shown", event.nativeEvent.layout.width)}>{title}</Text>
+        <Text accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden
+          onLayout={(event) => measureTitle("natural", event.nativeEvent.layout.width)}
+          style={[uiStyles.title, { position: "absolute", opacity: 0, start: 0 }]}>{title}</Text>
+        <View style={{ flexDirection: "row", flexWrap: "nowrap", alignItems: "center", gap: space.sm, minWidth: 0, flexShrink: 1 }}>
+          {switchComputer && ComputerControl ? <ComputerControl /> : null}
+          {scoped ? <ScopePills scope={pills!} /> : null}
+          {customIdentity ? null : scopeControl}
+        </View>
+      </View>
+    );
+    return <>
+      <HeaderRow identity={identity} actions={actions ? <View style={{ flexDirection: "row", alignItems: "center" }}>{actions}</View> : undefined} />
+      {context ? <View style={{ paddingTop: space.xs }}>{context}</View> : null}
+    </>;
+  }
+  // Rotated, resized or larger text: hand the top row back to the stack before showing the rows below.
+  const releaseHeader = hoisted && HeaderRow ? <HeaderRow identity={null} /> : null;
   if (!showTitle && !subtitle && !scoped && !switchComputer && !context && !scopeControl && !actions && !accessory && !back && !trailing) return null;
   // A custom identity row owns the project control; otherwise the scope row leads the content.
   const ownContext = (scopeControl && !customIdentity) || scoped || switchComputer
-    ? <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm, minWidth: 0, flexShrink: 1 }}>
+    // One line: the pills shrink and ellipsize so the page's icon actions stay on the same row.
+    ? <View style={{ flexDirection: "row", flexWrap: showTitle || subtitle ? "wrap" : "nowrap", alignItems: "center", gap: space.sm, minWidth: 0, flexShrink: 1 }}>
         {switchComputer && ComputerControl ? <ComputerControl /> : null}
         {scoped ? <ScopePills scope={pills!} /> : null}{customIdentity ? null : scopeControl}{context}
       </View>
@@ -113,9 +157,12 @@ export function ScreenHeading({ title, subtitle, scope, context, scopeControl: o
   return (
     <PageHeader variant="page" align="start" className="bg-transparent"
       style={[uiStyles.pageHeading, !showTitle && !back && !actions && !accessory && !trailing && { minHeight: 0 }]}>
+      {releaseHeader}
       {back ? <HeaderBackButton onPress={onBack!} /> : null}
       {showTitle || subtitle || ownContext ? (
-        <PageHeader.Content className="p-0 gap-0" style={[uiStyles.pageIdentity, { flexBasis: 120 * Math.max(1, fontScale) }]}>
+        <PageHeader.Content className="p-0 gap-0" style={[uiStyles.pageIdentity, { flexBasis: 120 * Math.max(1, fontScale) },
+          // A scope row alone (native title) shrinks instead of pushing the actions onto a new line.
+          !showTitle && !subtitle && { minWidth: 0, flexBasis: 0, flexGrow: 1 }]}>
           {customIdentity ? customIdentity({ title: title!, subtitle, scopeControl }) : (
             <>
               {showTitle ? <PageHeader.Title selectable style={uiStyles.pageTitle}>{title}</PageHeader.Title> : null}
@@ -131,50 +178,33 @@ export function ScreenHeading({ title, subtitle, scope, context, scopeControl: o
   );
 }
 
-/** Related scope/view controls share a row only while their text has useful room. */
-export function ContextControls({ scope, view }: { scope: ReactNode; view: ReactNode }) {
-  useMobileTheme();
-  const { fontScale } = useWindowDimensions();
-  const column = { flexGrow: 1, flexShrink: 1, flexBasis: 120 * Math.max(1, fontScale), minWidth: 0,
-    maxWidth: "100%" as const };
-  return <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: space.sm }}>
-    <View style={column}>{scope}</View>
-    <View style={column}>{view}</View>
-  </View>;
+/** Icon actions a page passes as one fragment; each counts as one 48 target in the header. */
+export function countActions(actions: ReactNode): number {
+  let count = 0;
+  Children.forEach(actions, (child) => {
+    if (!isValidElement(child)) return;
+    if (child.type === Fragment) count += countActions((child.props as { children?: ReactNode }).children);
+    else count += 1;
+  });
+  return count;
 }
 
-/** Explicit large-title treatment for entry/overview content, not ordinary tools. */
-export function LargeTitle({
-  title,
-  subtitle,
-  actions,
-}: {
-  title: string;
-  subtitle?: string;
-  actions?: ReactNode;
-}) {
-  const { uiStyles } = useMobileTheme();
-  const chrome = use(ScreenChrome);
-  return (
-    <Animated.View entering={reveal} style={uiStyles.titleGroup}>
-      <PageHeader variant="page" align="start" className="bg-transparent" style={{ gap: space.xxs }}>
-      {chrome.headerAccessory ? (
-        <View style={{ alignSelf: "flex-start", maxWidth: "100%" }}>{chrome.headerAccessory}</View>
-      ) : null}
-      <View style={uiStyles.titleRow}>
-        <PageHeader.Title selectable style={[uiStyles.largeTitle, uiStyles.titleText]}>
-          {title}
-        </PageHeader.Title>
-        {actions ? <PageHeader.Actions className="p-0" style={uiStyles.titleActions}>{actions}</PageHeader.Actions> : null}
-      </View>
-      {subtitle ? (
-        <PageHeader.Description selectable style={uiStyles.caption}>
-          {subtitle}
-        </PageHeader.Description>
-      ) : null}
-      </PageHeader>
-    </Animated.View>
-  );
+/** Width the header row leaves for title and pills: screen gutters, Back and the icon actions. */
+export function headerRowRoom(width: number, actions: number): number {
+  return Math.max(0, width - space.screen * 2 - metrics.touchTarget * (1 + actions) - space.sm * 2);
+}
+
+/**
+ * Title and scope pills share the native top row only when the title keeps its words and each pill
+ * keeps a readable name; long titles, narrow phones and large text fall back to a second row.
+ */
+export function fitsHeaderRow({ width, fontScale, title, pills, actions }: {
+  width: number; fontScale: number; title: string; pills: number; actions: number;
+}): boolean {
+  if (fontScale > 1.3) return false;
+  const titleWidth = title.length * 9 * Math.max(1, fontScale) + space.sm;
+  const pillWidth = 92 * Math.max(1, fontScale);
+  return headerRowRoom(width, actions) >= titleWidth + pills * pillWidth + space.sm * pills;
 }
 
 export function Screen({
@@ -395,8 +425,9 @@ export function SectionHeader({ title, count, trailing, flush }: {
 /** A titled group of rows. Inside a Screen the parent gap plus the header lead-in make the group rhythm. */
 export function Section({ title, children }: SectionProps) {
   useMobileTheme();
+  // No gap of its own: the header's `rhythm.headerGap` is the one space above the first row.
   return (
-    <View style={{ gap: space.sm }}>
+    <View>
       <SectionHeader title={title} />
       {children}
     </View>

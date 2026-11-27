@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildWidgetSnapshot,
   liveActivityProps,
+  nextLiveActivity,
   sessionUrl,
   snapshotIdentity,
   truncateLabel,
@@ -212,6 +213,19 @@ describe("buildWidgetSnapshot", () => {
     const changed = buildWidgetSnapshot(input({ sessions: [session("a"), session("b")] }))!;
     expect(snapshotIdentity(changed)).not.toBe(snapshotIdentity(first));
   });
+
+  it("ignores a row activity bump that changes nothing visible, but not a reorder", () => {
+    const sessions = [session("a", { updatedAt: now - 2_000 }), session("b", { updatedAt: now - 3_000 })];
+    const first = buildWidgetSnapshot(input({ sessions }))!;
+    const bumped = buildWidgetSnapshot(
+      input({ sessions: [sessions[0]!, { ...sessions[1]!, updatedAt: now - 2_500 }] }),
+    )!;
+    expect(snapshotIdentity(bumped)).toBe(snapshotIdentity(first));
+    const reordered = buildWidgetSnapshot(
+      input({ sessions: [sessions[0]!, { ...sessions[1]!, updatedAt: now - 500 }] }),
+    )!;
+    expect(snapshotIdentity(reordered)).not.toBe(snapshotIdentity(first));
+  });
 });
 
 describe("widgetTimeline", () => {
@@ -242,6 +256,30 @@ describe("liveActivityProps", () => {
     expect(props.rows).toHaveLength(3);
     expect(JSON.stringify(props)).not.toContain("Secret title");
     expect(props.url).toContain("machineId=machine-1");
+  });
+});
+
+describe("nextLiveActivity", () => {
+  const props = () => liveActivityProps(buildWidgetSnapshot(input({ sessions: [session("a")] }))!)!;
+
+  it("keeps the previous activity when only the publish time moved", () => {
+    const previous = props();
+    const next = { ...props(), updatedAt: previous.updatedAt + 60_000 };
+    expect(nextLiveActivity(previous, next)).toBe(previous);
+  });
+
+  it("refreshes an unchanged activity once its stale deadline needs a push", () => {
+    const previous = props();
+    const next = { ...props(), updatedAt: previous.updatedAt + 5 * 60_000 };
+    expect(nextLiveActivity(previous, next)).toBe(next);
+  });
+
+  it("takes a visible change or an ended activity at once", () => {
+    const previous = props();
+    const next = { ...props(), running: previous.running + 1 };
+    expect(nextLiveActivity(previous, next)).toBe(next);
+    expect(nextLiveActivity(previous, null)).toBeNull();
+    expect(nextLiveActivity(null, next)).toBe(next);
   });
 });
 

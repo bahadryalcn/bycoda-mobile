@@ -36,6 +36,20 @@ class DeviceProofTest {
     Ed25519Verify(decode(x)).verify(decode(actual[2]), "${actual[0]}.${actual[1]}".toByteArray())
   }
 
+  @Test fun theCachedKeyFollowsTheSeed() {
+    val v = vector()
+    val seed = DeviceProof.decodeSeed(v.getValue("seed"))!!
+    val other = ByteArray(32) { 7 }
+    fun x(proof: String) = JSONObject(String(decode(proof.split(".")[0]))).getJSONObject("jwk").getString("x")
+    val first = DeviceProof.sign(other, "t", "GET", "/ws", "e", "j", 1)!!
+    // Switching seeds and back must never reuse the other seed's key.
+    assertEquals(v.getValue("proof"), DeviceProof.sign(seed, v.getValue("token"), "POST", v.getValue("htu"), v.getValue("eid"), v.getValue("jti"), v.getValue("iat").toLong()))
+    val again = DeviceProof.sign(other, "t", "GET", "/ws", "e", "j", 1)!!
+    assertEquals(first, again)
+    assertTrue(x(first) != x(v.getValue("proof")))
+    Ed25519Verify(decode(x(again))).verify(decode(again.split(".")[2]), again.substringBeforeLast(".").toByteArray())
+  }
+
   @Test fun rejectsMalformedSeeds() {
     assertNull(DeviceProof.decodeSeed("short"))
     assertNull(DeviceProof.decodeSeed("!".repeat(43)))

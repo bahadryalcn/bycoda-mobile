@@ -10,7 +10,7 @@ export function agentStateLabel(state: AgentEntry["state"], copy: Copy) {
     case "failed": return copy("Başarısız", "Failed");
     case "cancelled": return copy("İptal edildi", "Cancelled");
     case "stopped": return copy("Durduruldu", "Stopped");
-    case "interrupted": return copy("Durduruldu", "Interrupted");
+    case "interrupted": return copy("Kesildi", "Interrupted");
     case "neutral": return copy("Bilinmiyor", "Unknown");
     case "completed": return copy("Tamamlandı", "Done");
   }

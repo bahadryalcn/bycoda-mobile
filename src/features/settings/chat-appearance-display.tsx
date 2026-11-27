@@ -12,9 +12,9 @@ export function ChatDisplaySettings() {
   const sizes = codeSizeOptions(copy);
   return (
     <Stack style={{ gap: space.lg }}>
-      <Section title={copy("Sohbette araç çağrıları", "Tool calls in chat")}>
+      <Section title={copy("Oturumlarda araç çağrıları", "Tool calls in sessions")}>
         <SegmentedControl
-          label={copy("Sohbette araç çağrıları", "Tool calls in chat")}
+          label={copy("Oturumlarda araç çağrıları", "Tool calls in sessions")}
           hideLabel
           value={display.toolVisibility}
           disabled={disabled}

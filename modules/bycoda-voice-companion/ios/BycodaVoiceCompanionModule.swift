@@ -26,6 +26,50 @@ final class VoiceOperationFence {
 }
 
 /**
+ * One streamed spoken reply: PCM16 chunks become Float32 buffers scheduled on a player node as they arrive.
+ * The node feeds the engine's main mixer, which converts the reply rate (24 kHz) to the output format.
+ * Played position counts buffers the speaker finished, so an underrun never counts as heard. Main queue only.
+ */
+private final class PcmStream {
+  let id: String
+  let format: AVAudioFormat
+  let rate: Double
+  var engine: AVAudioEngine?
+  var node: AVAudioPlayerNode?
+  /** Bumped when the node is replaced or detached; completions of an older node are ignored. */
+  var generation = 0
+  var scheduled: AVAudioFramePosition = 0
+  var played: AVAudioFramePosition = 0
+  var started = false
+  var finishing = false
+  var drained: [Promise] = []
+  init?(id: String, sampleRate: Int) {
+    guard (8_000...96_000).contains(sampleRate),
+          let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(sampleRate), channels: 1, interleaved: false) else { return nil }
+    self.id = id; self.format = format; self.rate = Double(sampleRate)
+  }
+  var playedMs: Double { rate > 0 ? (Double(played) * 1000 / rate).rounded(.down) : 0 }
+  /** Start (or restart after an underrun) once 150 ms is queued, or at once for the reply's last audio. */
+  func playIfReady() {
+    guard !started, let node, let engine, engine.isRunning, scheduled > played,
+          finishing || Double(scheduled - played) >= rate * 0.15 else { return }
+    node.play(); started = true
+  }
+  func resolveIfDrained() {
+    guard finishing, played >= scheduled else { return }
+    let waiting = drained; drained = []
+    waiting.forEach { $0.resolve() }
+  }
+  /** Detach from the engine; buffers still queued on the old node are dropped from the accounting. */
+  func detach() {
+    generation += 1
+    if let node { node.stop(); engine?.detach(node) }
+    node = nil; engine = nil; started = false
+    scheduled = played
+  }
+}
+
+/**
  * The iOS call engine. A started call keeps one audio engine with the microphone running until it
  * ends, which (with the audio background mode) keeps the call alive with the screen locked or the app
  * in the background, like a phone call. Samples reach JS only inside an explicit capture; mute,
@@ -53,8 +97,26 @@ public final class VoiceCallEngine: NSObject, AVAudioPlayerDelegate {
   private var live: Capture?
   private var generation = 0
   private var captured = 0
+  /** 300 ms of 16 kHz PCM16 per bridge event, as the Android service batches, instead of one per ~85 ms tap. */
+  private static let pcmBatchBytes = 9600
+  /** 100 ms batches for a realtime call relayed by the computer; only these two sizes are accepted. */
+  private static let realtimePcmBatchBytes = 3200
+  private var batchBytes = 9600
+  private var pcmBatch = Data()
   private var engine: AVAudioEngine?
   private var player: AVAudioPlayer?
+  /** A streamed reply (startPcm/appendPcm/finishPcm), on the call's engine or the playback-only engine. */
+  private var stream: PcmStream?
+  /** Output-only engine of a playback session, which has no microphone engine to share. */
+  private var outputEngine: AVAudioEngine?
+  private var outputObserver: NSObjectProtocol?
+  /** Played milliseconds of the live stream, readable from the JS thread. */
+  private var reported: (id: String, ms: Double)?
+  /**
+   * Realtime full duplex: voice-chat mode with voice processing (echo cancellation) on the engine, so the
+   * microphone stays open while a reply plays through the same engine. Off for every other session.
+   */
+  private var duplex = false
   private var playbackId: String?
   private var captureFence = VoiceOperationFence()
   private var playbackFence = VoiceOperationFence()
@@ -140,7 +202,7 @@ public final class VoiceCallEngine: NSObject, AVAudioPlayerDelegate {
     }
     let next = UUID().uuidString.lowercased()
     captureFence = VoiceOperationFence(); playbackFence = VoiceOperationFence()
-    locked { id = next; ended = false; phase = "idle"; muted = false; microphone = wantsMicrophone; live = nil }
+    locked { id = next; ended = false; phase = "idle"; muted = false; microphone = wantsMicrophone; live = nil; reported = nil }
     observe(); armIdle(); publish()
     return next
   }
@@ -152,7 +214,8 @@ public final class VoiceCallEngine: NSObject, AVAudioPlayerDelegate {
     locked { ended = true; phase = "idle"; live = nil }
     for work in [idleTimer, captureLimit, playbackLimit] { work?.cancel() }
     observers.forEach { NotificationCenter.default.removeObserver($0) }; observers = []
-    stopEngine()
+    stopEngine(); stopOutputEngine()
+    duplex = false
     try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     emit(["type": "ended", "sessionId": endedId, "reason": reason, "error": error])
     publish()
@@ -173,15 +236,25 @@ public final class VoiceCallEngine: NSObject, AVAudioPlayerDelegate {
   private func startEngine() throws {
     let next = AVAudioEngine()
     let input = next.inputNode
+    // Voice processing (echo cancellation against this engine's own output) must be set before the
+    // engine is prepared and changes the input format, so it is read afterwards.
+    if duplex {
+      do { try input.setVoiceProcessingEnabled(true) } catch { throw VoiceError("Echo cancellation is unavailable.") }
+      guard input.isVoiceProcessingEnabled else { throw VoiceError("Echo cancellation is unavailable.") }
+    }
     let format = input.outputFormat(forBus: 0)
     guard format.sampleRate > 0, format.channelCount > 0, let converter = AVAudioConverter(from: format, to: target) else {
       throw VoiceError("Microphone configuration is unavailable.")
     }
+    // A voice-processed input can report several channels; mix them down instead of taking only the first.
+    if format.channelCount > 1 { converter.downmix = true }
     input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in self?.receive(buffer, converter) }
     _ = next.mainMixerNode
     next.prepare()
     do { try next.start() } catch { input.removeTap(onBus: 0); throw VoiceError("Microphone could not start.") }
     engine = next
+    // A reply streaming while the engine was replaced (route change) continues on the new one.
+    if let stream { attach(stream, to: next) }
     // A route change (headset, Bluetooth) stops the engine; reopen it on the new input or end the call.
     engineObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: next, queue: .main) { [weak self] _ in
       guard let self, self.engine === next, !self.ended else { return }
@@ -193,7 +266,37 @@ public final class VoiceCallEngine: NSObject, AVAudioPlayerDelegate {
     if let observer = engineObserver { NotificationCenter.default.removeObserver(observer); engineObserver = nil }
     guard let current = engine else { return }
     engine = nil
+    if let stream, stream.engine === current { stream.detach() }
     current.inputNode.removeTap(onBus: 0)
+    current.stop()
+  }
+  /** The engine a streamed reply plays on: the call's own (so voice processing hears it), else an output-only one. */
+  private func playbackEngine() throws -> AVAudioEngine {
+    if microphone {
+      if engine?.isRunning != true { stopEngine(); try startEngine() }
+      guard let current = engine else { throw VoiceError("Speech playback is unavailable.") }
+      return current
+    }
+    if let current = outputEngine, current.isRunning { return current }
+    stopOutputEngine()
+    let next = AVAudioEngine()
+    _ = next.mainMixerNode
+    next.prepare()
+    do { try next.start() } catch { throw VoiceError("Speech playback is unavailable.") }
+    outputEngine = next
+    outputObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: next, queue: .main) { [weak self] _ in
+      guard let self, self.outputEngine === next, !self.ended else { return }
+      self.stopOutputEngine()
+      do { if self.stream != nil { _ = try self.playbackEngine() } } catch { self.stopPlayback(self.id, error: "Speech playback failed.") }
+    }
+    if let stream { attach(stream, to: next) }
+    return next
+  }
+  private func stopOutputEngine() {
+    if let observer = outputObserver { NotificationCenter.default.removeObserver(observer); outputObserver = nil }
+    guard let current = outputEngine else { return }
+    outputEngine = nil
+    if let stream, stream.engine === current { stream.detach() }
     current.stop()
   }
   /** Audio thread: convert to 16 kHz mono PCM16 only while a capture is open. */
@@ -215,24 +318,35 @@ public final class VoiceCallEngine: NSObject, AVAudioPlayerDelegate {
   private func deliver(_ data: Data, _ capture: Capture) {
     guard !ended, let current = live, current.id == capture.id, current.generation == capture.generation else { return }
     captured += data.count / 2
-    emit(["type": "pcm", "sessionId": id, "captureId": capture.id, "audio": data.base64EncodedString(), "sampleRate": Int(Self.sampleRate)])
-    if captured >= Self.captureSamples { stopCapture(id, reason: "limit") }
+    pcmBatch.append(data)
+    let finished = captured >= Self.captureSamples
+    // A partial batch is sent only when the sample budget is spent, so the final audio is never dropped at the limit.
+    if pcmBatch.count >= batchBytes || finished { flushPcm(capture) }
+    if finished { stopCapture(id, reason: "limit") }
   }
-  func startCapture(_ supplied: String, _ token: String) throws {
+  private func flushPcm(_ capture: Capture) {
+    guard !pcmBatch.isEmpty else { return }
+    let batch = pcmBatch
+    pcmBatch.removeAll(keepingCapacity: true)
+    emit(["type": "pcm", "sessionId": id, "captureId": capture.id, "audio": batch.base64EncodedString(), "sampleRate": Int(Self.sampleRate)])
+  }
+  func startCapture(_ supplied: String, _ token: String, _ requestedBatch: Int? = nil) throws {
     guard allows(supplied) else { throw VoiceError("Voice session is unavailable.") }
     guard microphone else { throw VoiceError("This voice session is playback-only.") }
     guard captureFence.allows(token) else { throw VoiceError("This recording operation was canceled.") }
     guard Self.microphoneGranted() else { throw VoiceError("Microphone permission is required.") }
     guard !muted, live == nil else { throw VoiceError("Microphone is muted or already recording.") }
-    stopPlayback(supplied)
+    // Half duplex stops the reply; full duplex keeps it playing so speaking can interrupt it.
+    if !duplex { stopPlayback(supplied) }
     applyPreferredInput()
     if engine?.isRunning != true {
       stopEngine()
       try startEngine()
     }
-    generation += 1; captured = 0
+    generation += 1; captured = 0; pcmBatch.removeAll(keepingCapacity: true)
+    batchBytes = requestedBatch == Self.realtimePcmBatchBytes ? Self.realtimePcmBatchBytes : Self.pcmBatchBytes
     let capture = Capture(id: token, generation: generation)
-    locked { live = capture; phase = "recording" }
+    locked { live = capture; if phase != "speaking" { phase = "recording" } }
     armIdle(); publish()
     captureLimit?.cancel()
     captureLimit = later(30) { [weak self] in
@@ -249,6 +363,9 @@ public final class VoiceCallEngine: NSObject, AVAudioPlayerDelegate {
     guard let stopped = live else { return }
     captureFence.cancel(stopped.id)
     captureLimit?.cancel()
+    // The capture's time limit still delivers its last partial batch; any other stop discards it.
+    if reason == "limit" { flushPcm(stopped) }
+    pcmBatch.removeAll(keepingCapacity: true)
     locked { live = nil; if phase == "recording" { phase = "idle" } }
     if !ended { armIdle(); publish() }
     if let reason { emit(["type": "ended", "sessionId": id, "captureId": stopped.id, "reason": reason]) }
@@ -302,6 +419,126 @@ public final class VoiceCallEngine: NSObject, AVAudioPlayerDelegate {
     player = next
     armIdle()
   }
+  // MARK: Streamed playback
+
+  /** Starts a streamed reply at `sampleRate` (24 kHz for a realtime call); the engine's mixer converts it. */
+  func startPcm(_ supplied: String, _ playingId: String, _ sampleRate: Int) throws {
+    guard allows(supplied), playbackFence.allows(playingId) else { throw VoiceError("Voice session is unavailable.") }
+    guard let next = PcmStream(id: playingId, sampleRate: sampleRate) else { throw VoiceError("Invalid speech sample rate.") }
+    if !duplex { stopCapture(supplied) }
+    stopPlayback(supplied)
+    let output = try playbackEngine()
+    stream = next; playbackId = playingId
+    attach(next, to: output)
+    locked { phase = "speaking"; reported = (playingId, 0) }
+    armIdle(); publish()
+    armPlaybackLimit(playingId)
+  }
+  func appendPcm(_ supplied: String, _ playingId: String, _ audio: String) throws {
+    guard allows(supplied), playbackId == playingId, let current = stream, current.id == playingId else {
+      throw VoiceError("Voice stream is unavailable.")
+    }
+    guard (1...1_000_000).contains(audio.utf8.count), let data = Data(base64Encoded: audio, options: .ignoreUnknownCharacters),
+          !data.isEmpty, data.count % 2 == 0 else { throw VoiceError("Invalid speech audio.") }
+    let frames = data.count / 2
+    guard let buffer = AVAudioPCMBuffer(pcmFormat: current.format, frameCapacity: AVAudioFrameCount(frames)),
+          let channel = buffer.floatChannelData?[0] else { throw VoiceError("Speech playback failed.") }
+    buffer.frameLength = AVAudioFrameCount(frames)
+    data.withUnsafeBytes { raw in
+      for index in 0..<frames {
+        channel[index] = Float(Int16(littleEndian: raw.loadUnaligned(fromByteOffset: index * 2, as: Int16.self))) / 32768
+      }
+    }
+    // A route change can leave the stream between engines for a moment; reattach before scheduling.
+    if current.node == nil { let output = try playbackEngine(); attach(current, to: output) }
+    schedule(buffer, on: current)
+    armIdle()
+    armPlaybackLimit(playingId)
+  }
+  /** Resolves once every scheduled frame has played, or at once when the stream is stopped. */
+  func finishPcm(_ supplied: String, _ playingId: String, _ promise: Promise) {
+    guard allows(supplied), playbackId == playingId, let current = stream, current.id == playingId else {
+      promise.reject(VoiceError("Voice stream is unavailable.")); return
+    }
+    current.finishing = true
+    current.drained.append(promise)
+    current.playIfReady()
+    current.resolveIfDrained()
+  }
+  /** Thread-safe: milliseconds of the live stream the speaker has played; 0 for any other playback. */
+  func pcmPlayedMs(_ supplied: String, _ playingId: String) -> Double {
+    locked { !ended && id == supplied && reported?.id == playingId ? reported?.ms ?? 0 : 0 }
+  }
+  private func attach(_ current: PcmStream, to output: AVAudioEngine) {
+    if current.engine === output, current.node != nil { return }
+    current.detach()
+    let node = AVAudioPlayerNode()
+    output.attach(node)
+    output.connect(node, to: output.mainMixerNode, format: current.format)
+    if !output.isRunning { try? output.start() }
+    current.engine = output; current.node = node
+    // After a route change the lost buffers no longer count; a finishing reply may now be complete.
+    current.resolveIfDrained()
+  }
+  private func schedule(_ buffer: AVAudioPCMBuffer, on current: PcmStream) {
+    guard let node = current.node else { return }
+    let generation = current.generation, frames = AVAudioFramePosition(buffer.frameLength)
+    current.scheduled += frames
+    node.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+      DispatchQueue.main.async { self?.played(frames, of: current, generation) }
+    }
+    current.playIfReady()
+  }
+  /** Main queue: a buffer finished playing. An empty queue pauses the node until 150 ms is buffered again. */
+  private func played(_ frames: AVAudioFramePosition, of current: PcmStream, _ generation: Int) {
+    guard stream === current, current.generation == generation else { return }
+    current.played += frames
+    locked { reported = (current.id, current.playedMs) }
+    if current.played >= current.scheduled {
+      if current.finishing { current.resolveIfDrained() }
+      else if current.started { current.node?.pause(); current.started = false }
+    }
+  }
+  /** A reply that keeps receiving audio is not stalled: the limit counts from its last chunk. */
+  private func armPlaybackLimit(_ playingId: String) {
+    playbackLimit?.cancel()
+    playbackLimit = later(120) { [weak self] in
+      guard let self, self.playbackId == playingId else { return }
+      self.stopPlayback(self.id, error: "Speech playback timed out.")
+    }
+  }
+
+  // MARK: Realtime full duplex
+
+  /**
+   * A realtime call asks for full duplex before it first listens: voice-chat mode and voice processing on the
+   * call's engine, so its replies are cancelled out of the microphone. Returns whether that is active; on
+   * failure the call stays half duplex on the default path.
+   */
+  func setEchoCancellation(_ supplied: String, _ enabled: Bool) throws -> Bool {
+    guard allows(supplied), microphone else { throw VoiceError("Voice session is unavailable.") }
+    if enabled == duplex { return duplex }
+    guard live == nil, stream == nil, player == nil else { throw VoiceError("Echo cancellation changes only while the call is quiet.") }
+    let session = AVAudioSession.sharedInstance()
+    stopEngine()
+    do {
+      try session.setCategory(.playAndRecord, mode: enabled ? .voiceChat : .default, options: [.defaultToSpeaker, .allowBluetooth])
+      duplex = enabled
+      applyPreferredInput()
+      try startEngine()
+      return duplex
+    } catch {
+      stopEngine()
+      duplex = false
+      try? session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+      do { try startEngine() } catch {
+        end("audio-interrupted", (error as? VoiceError)?.param)
+        throw VoiceError("Microphone could not start.")
+      }
+      return false
+    }
+  }
+
   func stopPlayback(_ supplied: String, error: String? = nil, expected: String? = nil) {
     guard !id.isEmpty, id == supplied else { return }
     if let expected {
@@ -309,11 +546,18 @@ public final class VoiceCallEngine: NSObject, AVAudioPlayerDelegate {
       if playbackId != expected { return }
     }
     playbackLimit?.cancel()
-    let previous = player, previousId = playbackId
-    player = nil; playbackId = nil
+    let previous = player, previousId = playbackId, previousStream = stream
+    player = nil; playbackId = nil; stream = nil
     if let previousId { playbackFence.cancel(previousId) }
     previous?.delegate = nil; previous?.stop()
-    locked { if phase == "speaking" { phase = "idle" } }
+    // A stopped stream is flushed at once; a waiting finishPcm resolves, as on Android.
+    if let previousStream {
+      previousStream.detach()
+      let waiting = previousStream.drained; previousStream.drained = []
+      waiting.forEach { $0.resolve() }
+    }
+    // An open duplex capture keeps listening after the reply.
+    locked { if phase == "speaking" { phase = live != nil ? "recording" : "idle" } }
     if let previousId { emit(["type": "playback", "sessionId": id, "playbackId": previousId, "error": error]) }
     if !ended { publish() }
   }
@@ -345,8 +589,8 @@ public class BycodaVoiceCompanionModule: Module {
     }
     AsyncFunction("beginSession") { () throws -> String in try VoiceCallEngine.shared.begin(microphone: true) }.runOnQueue(.main)
     AsyncFunction("beginPlaybackSession") { () throws -> String in try VoiceCallEngine.shared.begin(microphone: false) }.runOnQueue(.main)
-    AsyncFunction("startCapture") { (id: String, captureId: String) throws in
-      try VoiceCallEngine.shared.startCapture(id, captureId)
+    AsyncFunction("startCapture") { (id: String, captureId: String, batchBytes: Int?) throws in
+      try VoiceCallEngine.shared.startCapture(id, captureId, batchBytes)
     }.runOnQueue(.main)
     Function("stopCapture") { (id: String, captureId: String) in
       DispatchQueue.main.async { VoiceCallEngine.shared.stopCapture(id, expected: captureId) }
@@ -356,6 +600,24 @@ public class BycodaVoiceCompanionModule: Module {
     }
     AsyncFunction("playWav") { (id: String, playbackId: String, uri: String) throws in
       try VoiceCallEngine.shared.playWav(id, playbackId, uri)
+    }.runOnQueue(.main)
+    /** Streamed reply, the same surface as Android: PCM16 base64 chunks at `sampleRate`, played as they arrive. */
+    AsyncFunction("startPcm") { (id: String, playbackId: String, sampleRate: Int) throws in
+      try VoiceCallEngine.shared.startPcm(id, playbackId, sampleRate)
+    }.runOnQueue(.main)
+    AsyncFunction("appendPcm") { (id: String, playbackId: String, audio: String) throws in
+      try VoiceCallEngine.shared.appendPcm(id, playbackId, audio)
+    }.runOnQueue(.main)
+    AsyncFunction("finishPcm") { (id: String, playbackId: String, promise: Promise) in
+      VoiceCallEngine.shared.finishPcm(id, playbackId, promise)
+    }.runOnQueue(.main)
+    /** Milliseconds of a streamed reply the speaker has played (an underrun does not count); 0 when it is not live. */
+    Function("pcmPlayedMs") { (id: String, playbackId: String) -> Double in
+      VoiceCallEngine.shared.pcmPlayedMs(id, playbackId)
+    }
+    /** Realtime full duplex, asked before the call first listens; resolves whether echo cancellation is active. */
+    AsyncFunction("setEchoCancellation") { (id: String, enabled: Bool) throws -> Bool in
+      try VoiceCallEngine.shared.setEchoCancellation(id, enabled)
     }.runOnQueue(.main)
     Function("stopPlayback") { (id: String, playbackId: String) in
       DispatchQueue.main.async { VoiceCallEngine.shared.stopPlayback(id, expected: playbackId) }

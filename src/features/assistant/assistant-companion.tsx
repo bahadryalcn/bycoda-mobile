@@ -1,6 +1,7 @@
 import { useEffect, type PropsWithChildren } from "react";
 import { View } from "react-native";
 import { router, usePathname } from "expo-router";
+import { useShallow } from "zustand/react/shallow";
 import Minimize2 from "lucide-react-native/icons/minimize-2";
 import { IconButton } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
@@ -18,6 +19,7 @@ import { useAssistantCall } from "./assistant-call-state";
 import { assistantCallInBackground, endAssistantCall, muteAssistantCall, pictureInPictureAssistant } from "./assistant-call-session";
 import { assistantOrbState } from "./assistant-voice-presentation";
 import { assistantPictureInPictureSupported } from "./assistant-platform";
+import { goBack } from "@/ui/navigation";
 
 /** True while something keeps running when the assistant leaves the screen: a call, a reconnect, dictation or read-aloud. */
 export function useAssistantVoiceBusy() {
@@ -33,7 +35,7 @@ export function AssistantMinimizeButton() {
   if (!busy) return null;
   return <IconButton label={copy("Asistanı küçült", "Minimize assistant")} onPress={() => {
     minimizeAssistantCompanion();
-    if (router.canGoBack()) router.back(); else router.replace("/");
+    goBack("/");
   }}><Minimize2 size={20} color={colors.text} /></IconButton>;
 }
 
@@ -41,9 +43,10 @@ export function AssistantMinimizeButton() {
 export function AssistantCompanion({ children }: PropsWithChildren) {
   const copy = useCopy();
   const state = useAssistantCompanion(), machine = useActiveMachine(), pathname = usePathname();
-  const call = useAssistantCall();
+  // The microphone level changes many times a second; only the floating orb below reads it, not this app shell.
+  const call = useAssistantCall(useShallow(({ phase, reconnecting, muted, error, asleep, thread }) => ({ phase, reconnecting, muted, error, asleep, thread })));
   const bottomClearance = useBottomChromeClearance();
-  const security = useSecurity();
+  const security = useSecurity(useShallow(({ status, appState, windowFocused }) => ({ status, appState, windowFocused })));
   const connection = useConnectionScope(), transport = useHostClient();
   const speechEpoch = useLocalDraftEpoch(pendingSpeechKey);
   // Restore recognized text before another recording can replace the pending recovery record.
@@ -85,7 +88,7 @@ export function AssistantCompanion({ children }: PropsWithChildren) {
   const callOrb = call.reconnecting && call.phase === "idle" ? "thinking" : assistantOrbState(call.phase, call.muted, call.error);
   const callStatus = call.error ? copy("Görüşme durdu", "Call stopped")
     : call.reconnecting ? copy("Yeniden bağlanıyor…", "Reconnecting…")
-    : call.asleep && call.phase === "idle" ? copy("Hazır. Mikrofon kapalı.", "Ready. Microphone is off.")
+    : call.asleep && call.phase === "idle" ? copy("Sessizlik nedeniyle duraklatıldı", "Paused after silence")
     : callOrb === "listening" ? copy("Dinleniyor", "Listening")
     : call.phase === "sending" ? copy("Yanıt bekleniyor", "Waiting for reply")
     : call.phase === "speaking" ? copy("Sesli yanıt", "Speaking")
@@ -93,11 +96,11 @@ export function AssistantCompanion({ children }: PropsWithChildren) {
     : copy("Ses hazırlanıyor", "Preparing voice");
   return <View style={{ flex: 1 }}>
     <View style={{ flex: 1 }}>{children}</View>
-    {minimized ? <AssistantFloatingWindow title={copy("Asistan", "Assistant")}
+    {minimized ? <AssistantFloatingCallWindow title={state.name || copy("Asistan", "Assistant")}
       bottomInset={bottomClearance}
       status={callActive || call.error || call.asleep ? callStatus : status} active={callActive || state.voice !== "idle"} muted={call.muted}
       orbState={callActive || call.error ? callOrb
-        : state.error ? "error" : state.voice === "recording" ? "listening" : state.voice === "speaking" ? "speaking" : state.voice === "idle" ? "idle" : "thinking"} level={call.level}
+        : state.error ? "error" : state.voice === "recording" ? "listening" : state.voice === "speaking" ? "speaking" : state.voice === "idle" ? "idle" : "thinking"}
       onExpand={() => {
         if (callActive && call.thread) useAssistantCompanion.setState({ thread: call.thread, projectId: call.thread.projectId ?? "" });
         openAssistantCompanion(state.machineId, state.environmentId); router.navigate("/assistant");
@@ -107,4 +110,10 @@ export function AssistantCompanion({ children }: PropsWithChildren) {
       onPip={callActive && call.phase !== "idle" && assistantPictureInPictureSupported() ? () => { void pictureInPictureAssistant().catch(error => useAssistantCall.setState({ error })); } : undefined}
     /> : null}
   </View>;
+}
+
+/** Reads the call's microphone level only while its orb shows listening, so other states never re-render on it. */
+function AssistantFloatingCallWindow(props: Omit<Parameters<typeof AssistantFloatingWindow>[0], "level">) {
+  const level = useAssistantCall(state => props.orbState === "listening" ? state.level : 0);
+  return <AssistantFloatingWindow {...props} level={level} />;
 }

@@ -4,9 +4,12 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { PullRequestMetadata } from "./metadata";
 const state = vi.hoisted(() => ({ error: null as Error | null, changes: new Map<string, (value: string) => void>(), confirms: [] as Array<() => void>, send: vi.fn() }));
+vi.mock("react-native", () => ({ AppState: { currentState: "active" } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: (_title: string, _description: string, _apply: string, confirm: () => void) => state.confirms.push(confirm) }));
-vi.mock("../../inbox/provider-queries", () => ({ useInboxRead: ({ action }: { action: string }) => ({
+vi.mock("./checks-section", () => ({ PrChecksSection: ({ checks }: { checks: { data?: { headOid: string; checks: { state: string }[] } } }) =>
+  createElement("div", null, checks.data ? [checks.data.headOid, ...checks.data.checks.map(check => check.state === "fail" ? "Failed" : check.state)].join(" ") : null) }));
+vi.mock("../../inbox/provider-queries", () => ({ INBOX_RECORD_CACHE_MS: 1_800_000, useInboxRead: ({ action }: { action: string }) => ({
   error: state.error, isFetching: false, refetch: vi.fn(),
   data: action === "checks" ? { headOid: "a".repeat(40), checks: [{ name: "test", workflow: "CI", state: "fail" }] } : action === "reviewers" ? { reviewRequests: [{ login: "private-reviewer" }], latestReviews: [] } : { labels: [{ name: "private-label" }], available: [{ name: "bug" }], truncated: false },
 }) }));
@@ -27,17 +30,15 @@ async function render() { await act(async () => root!.render(createElement(PullR
 async function mount() { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); container = document.createElement("div"); document.body.append(container); root = createRoot(container); await render(); }
 async function click(label: string) { await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === label)!.click()); }
 afterEach(async () => { await act(async () => root?.unmount()); container?.remove(); root = undefined; disabled = false; state.error = null; state.changes.clear(); state.confirms = []; vi.clearAllMocks(); vi.unstubAllGlobals(); });
-it("shows checks and sends exact metadata mutation only after confirmation", async () => {
+it("shows checks and sends the exact metadata change at once, like the desktop's reversible actions", async () => {
   await mount(); expect(container.textContent).toContain("Failed"); expect(container.textContent).toContain("a".repeat(40));
-  await act(async () => state.changes.get("GitHub username")!("alice")); await click("Request review"); expect(state.send).not.toHaveBeenCalled();
-  await act(async () => state.confirms[0]!());
+  await act(async () => state.changes.get("GitHub username")!("alice")); await click("Request review");
+  expect(state.confirms).toHaveLength(0);
   expect(state.send).toHaveBeenCalledWith({ action: "reviewers", input: { ...input, mode: "request", logins: ["alice"], confirm: "CHANGE_PR_REVIEWERS" } });
 });
-it("retires pending confirmations across permission loss and concealment", async () => {
-  await mount(); await click("Remove reviewer"); const old = state.confirms[0]!;
-  state.error = Object.assign(Error("Access revoked"), { kind: "auth" }); await render();
+it("sends nothing while writes are disabled or access is concealed", async () => {
+  disabled = true; await mount(); await click("Remove reviewer"); expect(state.send).not.toHaveBeenCalled();
+  disabled = false; state.error = Object.assign(Error("Access revoked"), { kind: "auth" }); await render();
   expect(container.textContent).not.toContain("private-reviewer"); expect(container.textContent).not.toContain("private-label"); expect(container.textContent).not.toContain("a".repeat(40));
-  state.error = null; await render(); await act(async () => old()); expect(state.send).not.toHaveBeenCalled();
-  await click("Remove label"); const pending = state.confirms[1]!; disabled = true; await render(); disabled = false; await render();
-  await act(async () => pending()); expect(state.send).not.toHaveBeenCalled();
+  state.error = null; await render(); await click("Remove label"); expect(state.send).toHaveBeenCalledOnce();
 });

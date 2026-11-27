@@ -75,7 +75,7 @@ describe("native secure access", () => {
     useSecurity.setState({ status: "unlocked", enabled: false });
     expect(() => assertAppAccess()).not.toThrow();
     useAccountAccess.setState({ status: "signedOut" });
-    expect(() => assertAppAccess()).toThrow("Sign in to Bycoda");
+    expect(() => assertAppAccess()).toThrow("Sign in to bycoda");
     useAccountAccess.setState({ status: "signedIn" });
     expect(() => assertAppAccess()).not.toThrow();
   });

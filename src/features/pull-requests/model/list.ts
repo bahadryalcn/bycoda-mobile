@@ -1,15 +1,36 @@
 import type { RemoteInboxItem, RemoteInboxQuery } from "../../../../../src/features/inbox/model/remoteInbox";
-export type PrFilters = { state: "open" | "closed" | "merged"; mine: boolean; reviewRequested: boolean; sort: "updated" | "created" | "oldest" };
-export const defaultPrFilters: PrFilters = { state: "open", mine: false, reviewRequested: false, sort: "updated" };
+import { applyInboxView, defaultInboxView, inboxFetchState, PULL_REQUEST_PROVIDERS, type InboxView } from "../../inbox/provider-view-model";
+/**
+ * The Pull requests list is the desktop's pull-request-only Inbox: the code hosts' pull and merge
+ * requests with the same filter set. Assigned to me, the open/all read and search go to the
+ * desktop; provider, status, repository, time and sort narrow the returned rows on the phone.
+ */
+export type PrFilters = { view: InboxView; assigned: boolean; search: string };
+export const defaultPrFilters: PrFilters = { view: { ...defaultInboxView, type: "pr" }, assigned: false, search: "" };
 export function prListQuery(filters: PrFilters): RemoteInboxQuery {
-  return { providers: ["github"], githubKinds: ["pr"], state: filters.state === "open" ? "open" : "all", assignedToMe: false,
-    search: [`is:${filters.state === "closed" ? "closed is:unmerged" : filters.state}`, filters.mine ? "author:@me" : "", filters.reviewRequested ? "review-requested:@me" : "", `sort:${filters.sort === "updated" ? "updated-desc" : filters.sort === "created" ? "created-desc" : "created-asc"}`].filter(Boolean).join(" ") };
+  return { providers: [...PULL_REQUEST_PROVIDERS], githubKinds: ["pr"], state: inboxFetchState(filters.view.statuses),
+    assignedToMe: filters.assigned, search: filters.search };
 }
-export function prListItems(items: RemoteInboxItem[], filters: PrFilters): RemoteInboxItem[] {
-  return items.filter(item => item.provider === "github" && item.kind === "pr" && item.state.toLowerCase() === filters.state).sort((a, b) => {
-    const date = (item: RemoteInboxItem) => Date.parse(filters.sort === "updated" ? item.updatedAt : item.createdAt ?? "") || 0;
-    return (date(b) - date(a)) * (filters.sort === "oldest" ? -1 : 1);
-  });
+/**
+ * A link to a GitHub pull request the default list does not hold: every state in its repository,
+ * most recently updated first. Identity is still matched exactly against the result.
+ */
+export function prRouteFallbackQuery(target: { repo: string } | null): RemoteInboxQuery {
+  return { providers: ["github"], githubKinds: ["pr"], state: "all", assignedToMe: false,
+    search: [target ? `repo:${target.repo}` : "", "sort:updated-desc"].filter(Boolean).join(" ") };
+}
+/** How long an unwatched list stays cached: reopening the page shows it at once while it refreshes. */
+export const PR_LIST_CACHE_MS = 30 * 60_000;
+/**
+ * A previous read stands in while the next one loads only for the same project: its rows are
+ * narrowed by the same local filters, so they never show a state the new choice excludes.
+ */
+export function prListKeepsPrevious(previous: { projectId?: string; query?: RemoteInboxQuery } | undefined, projectId: string): boolean {
+  return !!previous?.query && previous.projectId === projectId;
+}
+/** Pull and merge requests only, narrowed and ordered by the shared Inbox view. */
+export function prListItems(items: readonly RemoteInboxItem[], view: InboxView): RemoteInboxItem[] {
+  return applyInboxView(items.filter(item => item.kind === "pr" && PULL_REQUEST_PROVIDERS.includes(item.provider)), { ...view, type: "pr" });
 }
 export function isTestFile(path: string): boolean {
   return /(^|\/)(__tests__|tests?|specs?|fixtures)(\/|$)|[._-](test|spec)\.[^/]+$|(^|\/)(test_|spec_)[^/]+\.[^/]+$/i.test(path);

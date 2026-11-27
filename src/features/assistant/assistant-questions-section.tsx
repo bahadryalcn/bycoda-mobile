@@ -3,7 +3,8 @@ import { View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { randomUUID } from "expo-crypto";
 import { useCopy } from "@/ui/copy";
-import { Body, Button, ErrorNotice, Field, Notice, Row, Section } from "@/ui/primitives";
+import { Body, Button, ErrorNotice, Field, NavigationGroup, NavigationRow, Notice, Row, SectionHeader, Separator } from "@/ui/primitives";
+import { SelectionMark } from "@/ui/selection-mark";
 import { space } from "@/ui/tokens";
 import type { AssistantOwnerQuestion } from "../../../../src/shared/model/assistantOwnerQuestions";
 import type { AssistantMobileClient, AssistantQuestionIntent } from "./assistant-client";
@@ -11,6 +12,7 @@ import {
   buildAnswerIntent,
   buildSnoozeIntent,
   emptyQuestionSelection,
+  questionAnswerReady,
   questionIntentKey,
   readQuestionIntent,
   toggleQuestionOption,
@@ -41,10 +43,12 @@ export function AssistantQuestionsSection({
   const copy = useCopy();
   if (!questions.length) return null;
   return (
-    <Section title={copy("Seni bekleyen sorular", "Questions waiting for you")}>
-      {questions.map((question) => (
+    <View style={{ gap: space.sm }}>
+      <SectionHeader title={copy("Seni bekleyen sorular", "Questions waiting for you")} count={questions.length} />
+      {questions.map((question, index) => (
+        <View key={questionIntentKey(machineId, environmentId, question)} style={{ gap: space.md }}>
+        {index ? <Separator /> : null}
         <QuestionCard
-          key={questionIntentKey(machineId, environmentId, question)}
           client={client}
           question={question}
           storageKey={questionIntentKey(machineId, environmentId, question)}
@@ -52,8 +56,9 @@ export function AssistantQuestionsSection({
           enabled={enabled}
           onChanged={onChanged}
         />
+        </View>
       ))}
-    </Section>
+    </View>
   );
 }
 
@@ -121,6 +126,7 @@ function QuestionCard({
     }
   };
   const locked = !enabled || !loaded || busy !== null;
+  const answerable = questionAnswerReady(question, selection);
   const unconfirmed = intent !== null;
   return (
     <View style={{ gap: space.sm }}>
@@ -132,20 +138,26 @@ function QuestionCard({
         <View key={item.id} style={{ gap: space.xs }}>
           {item.header ? <Body muted>{item.header}</Body> : null}
           <Body>{item.prompt}</Body>
-          {item.options.map((option) => {
-            const chosen = (selection.answers[item.id] ?? []).includes(option.id);
-            return (
-              <View key={option.id} style={{ gap: space.xxs }}>
-                <Button
+          {/* Choice rows: a check for one answer, a box per option when several can be chosen. */}
+          <NavigationGroup>
+            {item.options.map((option) => {
+              const chosen = (selection.answers[item.id] ?? []).includes(option.id);
+              return (
+                <NavigationRow
+                  key={option.id}
+                  intent="select"
                   label={option.label}
+                  detail={option.description || undefined}
                   selected={chosen}
+                  tintSelected={false}
+                  icon={item.multiSelect ? <SelectionMark selected={chosen} multiple /> : undefined}
+                  trailing={item.multiSelect ? undefined : <SelectionMark selected={chosen} />}
                   disabled={locked || unconfirmed}
                   onPress={() => setSelection(toggleQuestionOption(selection, item, option.id))}
                 />
-                {option.description ? <Body muted>{option.description}</Body> : null}
-              </View>
-            );
-          })}
+              );
+            })}
+          </NavigationGroup>
           {item.allowCustom ? (
             <Field
               label={copy("Kendi yanıtın", "Your own answer")}
@@ -186,11 +198,11 @@ function QuestionCard({
           />
         ) : (
           <>
+            {/* One primary action per screen: each card's Send is a secondary button, enabled once every question is answered. */}
             <Button
               label={copy("Yanıtı gönder", "Send answer")}
-              tone="primary"
               busy={busy === "answer"}
-              disabled={locked}
+              disabled={locked || !answerable}
               onPress={() =>
                 void deliver("answer", () => buildAnswerIntent(question, selection, randomUUID()))
               }

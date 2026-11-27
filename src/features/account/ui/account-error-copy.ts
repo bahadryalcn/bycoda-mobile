@@ -25,8 +25,8 @@ export function registrationMessage(error: Error, copy: Copy, where: "account" |
   if (deviceLimitReached(error))
     return where === "account"
       ? copy(
-          "Hesabındaki cihaz sınırı dolu. Aşağıdan kullanmadığın bir cihazın oturumunu kapat, sonra yeniden dene.",
-          "Your account has reached its device limit. Sign out a device you no longer use below, then retry.",
+          "Hesabındaki cihaz sınırı dolu. Aşağıda kullanmadığın bir cihaza dokunup oturumunu kapat, sonra yeniden dene.",
+          "Your account has reached its device limit. Tap a device you no longer use below and sign it out, then retry.",
         )
       : copy(
           "Hesabındaki cihaz sınırı dolu. Hesap ekranında kullanmadığın bir cihazın oturumunu kapat, sonra yeniden dene.",

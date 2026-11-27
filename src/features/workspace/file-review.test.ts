@@ -21,7 +21,8 @@ vi.mock("react-native", () => ({
   FlatList: ({ data, renderItem, initialScrollIndex, onScroll }: { data: { number: number; text: string }[]; renderItem: (value: { item: { number: number; text: string } }) => unknown; initialScrollIndex?: number; onScroll?: (event: unknown) => void }) => { state.lists.push({ initialScrollIndex, onScroll }); return createElement("div", { "data-list": true }, data.map((item) => createElement("div", { key: item.number }, renderItem({ item }) as import("react").ReactNode))); },
 }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: { mono: { fontSize: 13, lineHeight: 20 } } }) }));
-vi.mock("@/ui/tokens", () => ({ colors: {}, space: { screen: 16 } }));
+vi.mock("@/ui/tokens", () => ({ colors: {}, space: { screen: 16, sm: 6, xs: 4 }, metrics: { contentWidth: 760 } }));
+vi.mock("@/ui/screen-content-insets", () => ({ useScreenContentInsets: () => ({ left: 16, right: 16, bottom: 0 }) }));
 vi.mock("@/ui/styles", () => ({ uiStyles: { mono: { fontSize: 13, lineHeight: 20 } } }));
 vi.mock("@/i18n", () => ({ useLocale: () => "de" }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, params?: Record<string, string | number>) => en.replace(/\{(\w+)\}/g, (match, key: string) => String(params?.[key] ?? match)) }));
@@ -50,8 +51,9 @@ afterEach(async () => { await act(async () => root?.unmount()); state.machine = 
 it("opens computer source read-only while preserving a separately labeled local draft", async () => {
   root = createRoot(container); await render();
   expect(container.textContent).toContain("src/example.ts");
-  expect(container.textContent).toContain("/checkout");
-  expect(container.textContent).toContain("Computer file · read only");
+  // One quiet path line: no folder path or "computer file" status above the source.
+  expect(container.textContent).not.toContain("/checkout");
+  expect(container.textContent).not.toContain("Computer file · read only");
   expect(container.textContent).toContain("const answer = 42;");
   expect(container.textContent).not.toContain("preserved local work");
   expect(container.querySelector("input,textarea")).toBeNull();
@@ -70,7 +72,8 @@ it("resets local source on computer switch and hides draft content when inactive
   await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Preserved draft")!.click());
   state.machine = { id: "machine-b" }; state.draft = null;
   await render();
-  expect(container.textContent).toContain("Computer file · read only");
+  expect(container.textContent).toContain("const answer = 42;");
+  expect(container.textContent).not.toContain("Preserved draft · read only");
   expect(container.textContent).not.toContain("preserved local work");
   state.draft = { expected: "before", content: "private draft" }; state.active = false;
   await render();

@@ -8,7 +8,7 @@ import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { useMobileTheme } from "@/ui/theme";
 import { useCopy } from "@/ui/copy";
 import { iconSize, space } from "@/ui/tokens";
-import type { DeviceHostStatus } from "./types";
+import type { DeviceHostStatus, DeviceSummary } from "./types";
 import { readPreviewImpact, type PreviewImpact } from "./device-preview-model";
 
 type Preflight = { checks: { sdk: boolean; device: boolean; tools: boolean; agentControl: boolean } };
@@ -31,6 +31,11 @@ export function DeviceRuntime({ projectId, deviceId, onClose }: { projectId: str
     enabled: !!impactSupported,
     queryFn: async (client, signal) => readPreviewImpact(await client.request("devices.preview.impact", { projectId: opening.projectId }, { signal })),
   });
+  // Running previews name their device; the list is the one the device page already reads.
+  const deviceList = useHostQuery<{ devices: DeviceSummary[] }>(["devices", "list"], "devices.list", { projectId: opening.projectId }, {
+    enabled: !!impactSupported && (impact.data?.owned.length ?? 0) > 0,
+  });
+  const deviceName = (id: string) => deviceList.data?.devices?.find((device) => device.id === id)?.name ?? id;
   const setup = useHostMutation<DeviceHostStatus>("devices.setup", ["devices"]);
   const start = useHostMutation<DeviceHostStatus>("devices.start", ["devices"]);
   const stop = useHostMutation<DeviceHostStatus>("devices.stop", ["devices"]);
@@ -64,6 +69,27 @@ export function DeviceRuntime({ projectId, deviceId, onClose }: { projectId: str
       if (error && typeof error === "object" && "uncertain" in error && error.uncertain === true) setUncertain(true);
     }).finally(() => { occupied.current = false; });
   };
+  const agentDetail = copy(
+    "Açıkken bu bilgisayardaki ajanlar (örneğin bir oturumdaki kodlama ajanı) emülatörleri açıp ekrana dokunabilir ve yazabilir. Kapalıyken cihazları yalnızca sen kullanırsın.",
+    "When on, agents on this computer (such as the coding agent in a session) can open emulators, tap and type on them. When off, only you use the devices.",
+  );
+  const activeJobs = impact.data?.activeCount ?? 0;
+  const serviceState = serviceAction === "stop"
+    ? { label: copy("Çalışıyor", "Running"), tone: "live" as const,
+      detail: copy("Emülatör başlatma ve Expo önizlemeleri kullanılabilir.", "Emulators can be started and Expo previews can run.") }
+    : serviceAction === "start"
+      ? { label: copy("Durdu", "Stopped"), tone: "default" as const,
+        detail: copy(
+          "Emülatör başlatmak ve Expo önizlemesi için gerekir. Açık bir cihazı görmek ve kullanmak çoğu bilgisayarda onsuz da çalışır.",
+          "Needed to start emulators and run Expo previews. Viewing and using a running device usually works without it.",
+        ) }
+      : serviceAction === "setup"
+        ? { label: copy("Kurulmadı", "Not set up"), tone: "warning" as const,
+          detail: copy(
+            "Cihaz araçları bu bilgisayarda henüz yok. Kurulum emülatör başlatmayı, önizlemeyi ve cihaz kontrolünü açar.",
+            "Device tools are not on this computer yet. Setting them up enables starting emulators, previews and device control.",
+          ) }
+        : undefined;
   return <Sheet visible title={copy("Cihaz servisi", "Device service")} size="form" dismissible={!busy} onClose={onClose}>
     <Row style={{ flexWrap: "nowrap", alignItems: "center", justifyContent: "space-between" }}>
       <ScopeLine scope={{ computer: machine?.name }} />
@@ -74,19 +100,19 @@ export function DeviceRuntime({ projectId, deviceId, onClose }: { projectId: str
       </IconButton>
     </Row>
     {!supported ? <StateView illustration="permission" title={copy("Güncelleme gerekiyor", "Update needed")} description={copy("Seçili bilgisayar değişti veya bu özelliği desteklemiyor.", "The selected computer changed or does not support this feature.")} /> : <><QueryState query={preflight} /><QueryState query={status} loading={preflight.data ? "inline" : "none"} /></>}
-    {checks ? <Stack style={{ gap: space.xs }}>
-      <StatusRow label={copy("Cihaz araçları", "Device tools")}><StatusText label={checks.sdk && checks.tools ? copy("Hazır", "Ready") : copy("Kurulum gerekli", "Setup required")} tone={checks.sdk && checks.tools ? "live" : "warning"} /></StatusRow>
-      <StatusRow label={copy("Cihazlar", "Devices")}><StatusText label={checks.device ? copy("Hazır", "Ready") : copy("Kullanılamıyor", "Unavailable")} tone={checks.device ? "live" : "warning"} /></StatusRow>
-      {!showAgentToggle && review !== "setup" ? <StatusRow label={copy("Ajan erişimi", "Agent access")}>
-        <StatusText label={checks.agentControl ? copy("Açık", "On") : copy("Kapalı", "Off")} tone={checks.agentControl ? "live" : "default"} />
-      </StatusRow> : null}
+    {serviceState ? <Stack style={{ gap: space.xs }}>
+      <StatusRow label={copy("Durum", "Status")}><StatusText label={serviceState.label} tone={serviceState.tone} /></StatusRow>
+      <Body muted>{serviceState.detail}</Body>
     </Stack> : null}
-    {impactSupported ? <><QueryState query={impact} loading={serviceAction === "stop" ? "inline" : "none"} />{impact.data ? <>
-      <StatusRow label={copy("Etkin önizleme işleri", "Active preview jobs")}><Body muted>{impact.data.activeCount}</Body></StatusRow>
-      {impact.data.owned.map((job) => <StatusRow key={job.id} label={job.deviceId}>
+    {/* Only problems are listed: a list of "Ready" rows next to a Start button read as a contradiction. */}
+    {checks && !checks.sdk ? <StatusLine tone="warning" label={copy("Bu bilgisayarda Android SDK veya Xcode bulunamadı.", "Android SDK or Xcode wasn't found on this computer.")} /> : null}
+    {checks && checks.sdk && !checks.device ? <StatusLine tone="warning" label={copy("Cihaz bulunamadı. Bir emülatör başlat veya cihaz bağla.", "No device found. Start an emulator or connect a device.")} /> : null}
+    {impactSupported ? <><QueryState query={impact} loading={serviceState && serviceAction === "stop" ? "inline" : "none"} />{impact.data && activeJobs > 0 ? <>
+      <StatusRow label={copy("Çalışan önizlemeler", "Running previews")}><Body muted>{activeJobs}</Body></StatusRow>
+      {impact.data.owned.map((job) => <StatusRow key={job.id} label={deviceName(job.deviceId)}>
         <StatusText label={job.state === "queued" ? copy("Sırada", "Queued") : copy("Çalışıyor", "Running")} tone="active" />
       </StatusRow>)}
-      {impact.data.otherActiveCount ? <StatusRow label={copy("Diğer bağlamlardaki etkin işler", "Active jobs in other contexts")}><Body muted>{impact.data.otherActiveCount}</Body></StatusRow> : null}
+      {serviceAction === "stop" ? <Body muted>{copy("Servis, önizlemeler bitince durdurulabilir.", "The service can be stopped once the previews finish.")}</Body> : null}
     </> : null}</> : null}
     {/* One caution above the action area: an unknown outcome and the stop impact share it. */}
     {uncertain || review === "stop" ? <Notice tone="warning" message={[
@@ -95,20 +121,26 @@ export function DeviceRuntime({ projectId, deviceId, onClose }: { projectId: str
     ].filter(Boolean).join(" ")} /> : null}
     {review ? <>
       {review === "setup" ? <><Body muted>{copy("Cihaz araçları bu bilgisayara indirilip kurulur.", "Device tools are downloaded and installed on this computer.")}</Body>
-        <ToggleField label={copy("Ajanlar cihazları kullanabilsin", "Let agents use devices")} help={copy("Açıkken bilgisayardaki ajanlar bu cihazları açıp kontrol edebilir.", "When on, agents on the computer can open and control these devices.")} value={agentAccess} onChange={setAgentAccess} disabled={busy || uncertain} /></> : null}
+        <ToggleField label={copy("Ajanlar cihazları kullanabilsin", "Let agents use devices")} detail={agentDetail} value={agentAccess} onChange={setAgentAccess} disabled={busy || uncertain} /></> : null}
+      {review === "start" ? <Body muted>{copy("Servis bu bilgisayarda başlar ve açık kalır.", "The service starts on this computer and keeps running.")}</Body> : null}
       <FormActions feedback={<><MutationState mutation={setup} /><MutationState mutation={start} /><MutationState mutation={stop} /></>}
-        submitLabel={copy("Onayla", "Confirm")} cancelLabel={copy("Vazgeç", "Cancel")} busy={busy} disabled={!canConfirm} onSubmit={() => run()} onCancel={() => setReview(undefined)} />
+        submitLabel={review === "setup" ? copy("Cihaz araçlarını kur", "Set up device tools")
+          : review === "stop" ? copy("Cihaz servisini durdur", "Stop device service")
+            : copy("Cihaz servisini başlat", "Start device service")}
+        cancelLabel={copy("Vazgeç", "Cancel")} busy={busy} disabled={!canConfirm} onSubmit={() => run()} onCancel={() => setReview(undefined)} />
     </> : !uncertain ? <>
       {serviceAction === "setup" ? <Button tone="primary" fullWidth label={copy("Cihaz araçlarını kur", "Set up device tools")} disabled={actionsDisabled} onPress={reviewSetup} /> : null}
       {serviceAction === "start" ? <Button tone="primary" fullWidth label={copy("Cihaz servisini başlat", "Start device service")} disabled={actionsDisabled} onPress={() => setReview("start")} /> : null}
       {serviceAction === "stop" && canStop ? <Button fullWidth label={copy("Cihaz servisini durdur", "Stop device service")} tone="danger" disabled={actionsDisabled} onPress={() => setReview("stop")} /> : null}
       {serviceAction === "stop" && !impactSupported ? <StatusLine tone="warning" label={copy("Durdurma etkisini görmek için güncelleme gerekiyor", "Update needed to show what stopping affects")} /> : null}
       {showAgentToggle ? <>
-        <ToggleField label={copy("Ajanlar cihazları kullanabilsin", "Let agents use devices")} help={copy("Açıkken bilgisayardaki ajanlar bu cihazları açıp kontrol edebilir.", "When on, agents on the computer can open and control these devices.")}
+        <ToggleField label={copy("Ajanlar cihazları kullanabilsin", "Let agents use devices")} detail={agentDetail}
           value={agentAccess} onChange={setAgentAccess} disabled={actionsDisabled} />
-        {accessChanged ? <FormActions submitLabel={copy("Onayla", "Confirm")} cancelLabel={copy("Vazgeç", "Cancel")} busy={busy}
+        {accessChanged ? <FormActions submitLabel={agentAccess ? copy("Ajan erişimini aç", "Turn on agent access") : copy("Ajan erişimini kapat", "Turn off agent access")} cancelLabel={copy("Vazgeç", "Cancel")} busy={busy}
           disabled={!confirmable("setup")} onSubmit={() => run("setup")} onCancel={() => setAgentAccess(currentAccess)} /> : null}
-      </> : null}
+      </> : checks && !review ? <StatusRow label={copy("Ajan erişimi", "Agent access")}>
+        <StatusText label={checks.agentControl ? copy("Açık", "On") : copy("Kapalı", "Off")} tone={checks.agentControl ? "live" : "default"} />
+      </StatusRow> : null}
     </> : null}
     {!review ? <><MutationState mutation={setup} /><MutationState mutation={start} /><MutationState mutation={stop} /></> : null}
   </Sheet>;

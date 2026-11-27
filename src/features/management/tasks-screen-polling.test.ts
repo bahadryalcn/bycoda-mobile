@@ -80,12 +80,23 @@ vi.mock("@/ui/screen-list", () => ({
   ScreenList: ({ header, actions, context, scopeControl, data, renderItem, ListEmptyComponent }: { header: unknown; actions: unknown; context: ReactNode; scopeControl?: ReactNode; ListEmptyComponent?: ReactNode; data: unknown[]; renderItem: (entry: { item: unknown }) => unknown }) =>
     createElement("div", null, createElement("nav", null, actions as never), scopeControl, context, header as never, data.length ? null : ListEmptyComponent, data.map((item, index) => createElement("div", { key: index }, renderItem({ item }) as never))),
 }));
-vi.mock("@/ui/primitives", () => {
+vi.mock("@/ui/primitives", async () => {
+  const reactForMock = await import("react");
   const Wrapper = ({ children }: { children?: unknown }) => createElement("div", null, children as never);
   const None = () => null;
   const Action = ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) =>
     createElement("button", { onClick: onPress, disabled }, label);
-  return {
+  return { SectionHeader: ({ title }: { title: string }) => createElement("h3", null, title),
+    // The collection sheet renders inline here: the search field always, the filters after the filter icon.
+    useCollapsibleSearch: function useCollapsibleSearchMock(field: unknown, options: { filters?: unknown; filtersLabel?: string } = {}) {
+      const [open, setOpen] = reactForMock.useState(false);
+      return {
+        open, trigger: null, field: null,
+        filterTrigger: options.filters ? createElement("button", { onClick: () => setOpen(true) }, options.filtersLabel ?? "Filters") : null,
+        sheet: createElement(reactForMock.Fragment, null, field as never, open ? options.filters as never : null),
+      };
+    },
+    
     ChoiceChip: Action, Body: Wrapper, Button: Action, Card: Wrapper, IconButton: Action,
     SearchField: ({ onChangeText }: { onChangeText: (text: string) => void }) =>
       createElement("input", { onInput: (event: { currentTarget: HTMLInputElement }) => onChangeText(event.currentTarget.value) }),

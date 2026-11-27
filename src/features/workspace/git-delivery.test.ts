@@ -30,10 +30,9 @@ vi.mock("@/ui/primitives", () => {
   return {
     Body: Group, Disclosure: Group, Sheet: Group, Button, ErrorNotice: Group, QueryState: Group, MutationState: Group,
     Notice: ({ message }: { message: string }) => createElement("div", null, message),
-    ConfirmationCard: ({ children, message, confirmLabel, cancelLabel, onConfirm, onCancel, disabled }: PropsWithChildren<{
-      message: string;
-      confirmLabel: string; cancelLabel: string; onConfirm: () => void; onCancel: () => void; disabled?: boolean;
-    }>) => createElement("div", null, message, children, createElement(Button, { label: confirmLabel, onPress: onConfirm, disabled }),
+    FormActions: ({ submitLabel, cancelLabel, onSubmit, onCancel, disabled }: {
+      submitLabel: string; cancelLabel: string; onSubmit: () => void; onCancel: () => void; disabled?: boolean;
+    }) => createElement("div", null, createElement(Button, { label: submitLabel, onPress: onSubmit, disabled }),
       createElement(Button, { label: cancelLabel, onPress: onCancel })),
   };
 });

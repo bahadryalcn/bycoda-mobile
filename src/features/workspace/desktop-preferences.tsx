@@ -11,7 +11,6 @@ import {
   Body,
   Button,
   ErrorText,
-  NavigationGroup,
   NavigationRow,
   Notice,
   QueryState,
@@ -26,7 +25,6 @@ import {
   readComputerTemplate,
   type DesktopPreferencesSnapshot,
   type DesktopPreferenceStatus,
-  type PreferenceDefaults,
 } from "./desktop-preferences-model";
 import { DesktopPreferenceEditorSheet, type PreferenceEditor as Editor } from "./desktop-preferences-editor";
 import { DesktopPreferenceContext } from "./desktop-preference-context";
@@ -87,15 +85,11 @@ export function DesktopPreferences({
   const [name, setName] = useState("");
   const [body, setBody] = useState("");
   const [trigger, setTrigger] = useState("");
-  const [modelId, setModelId] = useState("");
-  const [defaults, setDefaults] = useState<PreferenceDefaults>({});
-  const [providerBaseline, setProviderBaseline] = useState("");
   const dirty =
-    editor?.kind === "template"
-      ? name !== editor.template.name ||
-        body !== editor.template.body ||
-        trigger !== (editor.template.trigger ?? "")
-      : !!editor && JSON.stringify([modelId, defaults]) !== providerBaseline;
+    !!editor &&
+    (name !== editor.template.name ||
+      body !== editor.template.body ||
+      trigger !== (editor.template.trigger ?? ""));
   const closeEditor = () => { if (!busy) setEditor(null); };
   const [receipt, setReceipt] = useState<DesktopPreferenceStatus>();
   const params = { projectId: opening.projectId, sessionId: opening.sessionId };
@@ -198,35 +192,21 @@ export function DesktopPreferences({
       setEditor({ kind: "template", revision: reviewed.revision, template, creating: false });
     }, `template:${id}`);
   };
-  const openProvider = (harness: string, scope: "project" | "global") => {
-    if (disabled || !snapshot) return;
-    const provider = snapshot.providers.find((row) => row.id === harness)!;
-    const nextModel =
-      (scope === "project" ? provider.projectModel : undefined) ??
-      provider.globalModel ??
-      provider.models[0]?.id ??
-      "";
-    const nextDefaults = scope === "project" ? provider.projectDefaults : provider.globalDefaults;
-    setModelId(nextModel);
-    setDefaults(nextDefaults);
-    setProviderBaseline(JSON.stringify([nextModel, nextDefaults]));
-    setEditor({ kind: "provider", revision: snapshot.revision, harness, scope });
-  };
   const header = (
     <Stack>
       <DesktopPreferenceContext computerName={opening.machineName?.trim() || opening.machineId} snapshot={snapshot} />
       {!embedded ? (
         <Body muted>
           {copy(
-            "Bilgisayar ayarları yalnızca gelecekteki konuşmalara uygulanır. Şablon eklemek mesaj göndermez.",
-            "Computer defaults apply to future conversations. Inserting a template does not send a message.",
+            "Şablon eklemek mesaj göndermez. Model varsayılanları bilgisayardaki bycoda’da ayarlanır.",
+            "Inserting a template does not send a message. Model defaults are set in bycoda on the computer.",
           )}
         </Body>
       ) : null}
       {!supported ? (
         <FeatureUnavailable message={copy(
-          "Açık konuşması olan bağlı ve desteklenen bir bilgisayar seçin.",
-          "Choose a paired, supported computer with this conversation open.",
+          "Bu oturumun açık olduğu, bağlı ve desteklenen bir bilgisayar seçin.",
+          "Choose a paired, supported computer with this session open.",
         )} />
       ) : (
         <QueryState query={query} empty={false} />
@@ -296,29 +276,6 @@ export function DesktopPreferences({
               });
             }}
           />
-          {!embedded ? (
-            <NavigationGroup>
-              {snapshot.providers.map((row) => (
-                <NavigationRow
-                  key={row.id}
-                  label={row.id}
-                  detail={
-                    row.hidden
-                      ? copy("Bu projede gizli", "Hidden in this project")
-                      : (row.projectModel ?? row.globalModel)
-                  }
-                  disabled={disabled || !row.models.length}
-                  onPress={() => openProvider(row.id, "project")}
-                />
-              ))}
-              <NavigationRow
-                label={copy("Proje varsayılanlarını sıfırla", "Restore project inheritance")}
-                busy={busy && pendingAction === "reset"}
-                disabled={disabled}
-                onPress={() => apply({ kind: "projectReset" }, snapshot.revision, "reset")}
-              />
-            </NavigationGroup>
-          ) : null}
           <Body>{copy("Bilgisayar şablonları", "Computer templates")}</Body>
           {!snapshot.templates.length ? (
             <Body muted>{copy("Henüz şablon yok", "No templates yet")}</Body>
@@ -370,10 +327,6 @@ export function DesktopPreferences({
           setBody,
           trigger,
           setTrigger,
-          modelId,
-          setModelId,
-          defaults,
-          setDefaults,
           dirty,
         }}
         disabled={disabled}
@@ -381,7 +334,6 @@ export function DesktopPreferences({
         pendingAction={pendingAction}
         error={error}
         onApply={apply}
-        onSwitchScope={openProvider}
         onInsert={onInsert}
         isCurrent={current}
         onClose={onClose}

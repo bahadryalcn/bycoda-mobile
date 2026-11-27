@@ -4,6 +4,7 @@ import * as Clipboard from "expo-clipboard";
 import Animated from "react-native-reanimated";
 import { metrics, space } from "@/ui/tokens";
 import { useAsyncAction } from "@/state/actions";
+import { duringSystemPrompt } from "@/state/system-prompt";
 import { FormActions, IdentifierField, MutationState } from "@/ui/primitives";
 import { HintLabel } from "@/ui/info-hint";
 import { useMobileTheme } from "@/ui/theme";
@@ -35,8 +36,9 @@ export function PairingPaste({ disabled, onCode, onCancel }: PairingPasteProps) 
   // Reason: late clipboard and submit results must not change an abandoned entry.
   useLayoutEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   // Reason: a code already copied on this phone fills the empty field once, without overwriting typing.
+  // The iOS "Allow Paste" sheet reports "inactive"; as an app-initiated prompt it must not lock the app.
   useEffect(() => {
-    copiedPairingCode().then(
+    duringSystemPrompt(copiedPairingCode).then(
       (code) => { if (code && active.current) setText((current) => current || code); },
       () => undefined,
     );

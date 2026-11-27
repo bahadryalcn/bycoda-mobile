@@ -12,3 +12,9 @@ it("falls back when nothing remains", () => {
   expect(sessionDisplayTitle("", "New")).toBe("New");
   expect(sessionDisplayTitle(undefined, "New")).toBe("New");
 });
+
+it("strips repeated provider prefixes from auto-named titles", () => {
+  expect(sessionDisplayTitle("codex · codex · Bycoda agent-inspection promo video", "New")).toBe("Bycoda agent-inspection promo video");
+  expect(sessionDisplayTitle("claude: codex - Fix push", "New")).toBe("Fix push");
+  expect(sessionDisplayTitle("Codex review notes", "New")).toBe("Codex review notes");
+});

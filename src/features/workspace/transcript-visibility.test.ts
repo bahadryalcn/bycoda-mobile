@@ -51,3 +51,36 @@ describe("tool visibility", () => {
     expect(ids(visible).filter((id) => id.startsWith("t"))).toEqual(["t2"]);
   });
 });
+
+describe("tool visibility presentation", () => {
+  it("returns the previous derived entries when their source did not change", async () => {
+    const { ToolVisibilityPresentation } = await import("./transcript-visibility");
+    const presentation = new ToolVisibilityPresentation();
+    const entries = transcriptEntries(turn, undefined, { view: "details", running: false });
+    const first = presentation.update(entries, "hide-successful", false);
+    const again = presentation.update(transcriptEntries(turn, undefined, { view: "details", running: false }), "hide-successful", false);
+    expect(again).toBe(first);
+    const zen = presentation.update(entries, "zen", false);
+    expect(zen).toEqual(applyToolVisibility(entries, "zen", false));
+  });
+});
+
+describe("fold durations", () => {
+  const folded = [
+    block("u1", "user", { durationMs: 46_000 }),
+    block("t-ok", "tool", { tool: { title: "Read", status: "completed" } }),
+    block("a-final", "assistant"),
+  ];
+  const entries = () => transcriptEntries(folded, undefined, { view: "messages", running: false });
+  it("keeps the duration on the fold row while it is visible", () => {
+    expect(applyToolVisibility(entries(), "all", false).at(-1)?.footerDuration).toBeUndefined();
+  });
+  it("moves the duration to the receipt when filtering hides the fold row", () => {
+    for (const mode of ["hide-successful", "hide-all", "zen"] as const) {
+      const shown = applyToolVisibility(entries(), mode, false);
+      expect(shown.some((entry) => entry.kind === "activity")).toBe(false);
+      expect(shown.at(-1)?.footer?.id).toBe("u1");
+      expect(shown.at(-1)?.footerDuration).toBe(true);
+    }
+  });
+});

@@ -3,10 +3,10 @@ import { isReviewedMachine, reviewedMachine, type ReviewedMachine } from "@/stat
 import { initialInboxBrowseState, type InboxBrowseState } from "./provider-state";
 import type { InboxOrigin } from "./provider-protocol";
 
-type Preferences = Pick<InboxBrowseState, "assigned" | "all" | "search" | "committedSearch" | "limit">;
+type Preferences = Pick<InboxBrowseState, "assigned" | "all" | "search" | "committedSearch" | "limit" | "view">;
 export type InboxBrowseView = { readonly preferences: Readonly<Preferences>; readonly offset: number };
-const preferences = ({ assigned, all, search, committedSearch, limit }: InboxBrowseState): Readonly<Preferences> =>
-  Object.freeze({ assigned, all, search, committedSearch, limit });
+const preferences = ({ assigned, all, search, committedSearch, limit, view }: InboxBrowseState): Readonly<Preferences> =>
+  Object.freeze({ assigned, all, search, committedSearch, limit, view });
 
 /** Inbox-local presentation memory. Never retains an item, draft reply or approval. */
 export function createInboxBrowseMemory(origin: InboxOrigin | null) {

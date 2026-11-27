@@ -106,6 +106,24 @@ requireValue(
   "Image picker must not block the assistant's microphone permission.",
 );
 requireValue(plugins.has("expo-notifications"), "Configure native notification permissions and channel.");
+// Native iOS sign-in (`@clerk/expo/apple`) needs the Sign in with Apple entitlement, and widget
+// and share extension targets need the team to sign with the shared App Group.
+requireValue(
+  plugins.has("expo-apple-authentication") &&
+    pkg.dependencies?.["expo-apple-authentication"] &&
+    app.ios?.usesAppleSignIn === true,
+  "Enable Sign in with Apple for the native iOS sign-in sheet.",
+);
+requireValue(/^[A-Z0-9]{10}$/.test(app.ios?.appleTeamId ?? ""), "Set the Apple team for app and extension signing.");
+{
+  const group = plugins.get("expo-widgets")?.groupIdentifier;
+  requireValue(
+    typeof group === "string" &&
+      group === `group.${app.ios?.bundleIdentifier}` &&
+      plugins.get("expo-share-intent")?.iosAppGroupIdentifier === group,
+    "Widgets and the share extension must share the app's App Group.",
+  );
+}
 requireValue(
   plugins.has("expo-secure-store"),
   "Keep the native protected credential store enabled.",

@@ -10,6 +10,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ShieldCheck from "lucide-react-native/icons/shield-check";
 import { useActiveMachine, useMachines } from "../../state/machines";
+import { removeMachineAndQueries } from "../../state/machine-removal";
 import { reviewedMachine } from "../../state/reviewed-machine";
 import { assertAppAccess } from "../../state/security";
 import { useAsyncAction } from "../../state/actions";
@@ -18,7 +19,6 @@ import {
   Button,
   Stack,
   ErrorNotice,
-  Disclosure,
   Heading,
   Loading,
   Row,
@@ -177,14 +177,12 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
                       {machine?.providers?.join(", ") ||
                         copy("Bilgisayarın ayarlarından belirlenir.", "Set in your computer’s settings.")}
                     </Body>
-                    <Disclosure label={copy("Veri kullanımı", "Data use")}>
-                      <Body muted>
-                        {copy(
-                          "Sağlayıcının saklama ve eğitim kuralları kendi hesabına ve ayarlarına bağlıdır. bycoda geliştiricisi çalışma alanını almaz veya izlemez. Hassas bilgileri yalnız paylaşmaya yetkiliysen gönder.",
-                          "Provider retention and training depend on your account and settings. The bycoda developer does not receive or monitor your workspace. Only share sensitive information you are authorized to send.",
-                        )}
-                      </Body>
-                    </Disclosure>
+                    <Body muted>
+                      {copy(
+                        "Sağlayıcının saklama ve eğitim kuralları kendi hesabına ve ayarlarına bağlıdır. bycoda geliştiricisi çalışma alanını almaz veya izlemez. Hassas bilgileri yalnız paylaşmaya yetkiliysen gönder.",
+                        "Provider retention and training depend on your account and settings. The bycoda developer does not receive or monitor your workspace. Only share sensitive information you are authorized to send.",
+                      )}
+                    </Body>
                   </Stack>
                 </Animated.View>
                 {permission.error ? (
@@ -236,7 +234,7 @@ export function ProviderConsentGate({ children }: PropsWithChildren) {
                       setDisconnecting(true);
                       void action.run(async () => {
                         assertAppAccess();
-                        await useMachines.getState().removeMachine(expected.id, expected);
+                        await removeMachineAndQueries(cache, expected.id, expected);
                       });
                     }}
                     style={{ alignSelf: "center" }}

@@ -1,5 +1,4 @@
 import type { ManagementScreenProps } from "./shared/types";
-import { router } from "expo-router";
 import { useState, type ComponentType } from "react";
 import { View } from "react-native";
 import { useCopy } from "@/ui/copy";
@@ -19,11 +18,12 @@ import { StewardsScreen } from "./stewards-screen";
 import { ToolDirectory } from "./tool-directory";
 import { isManagementSection, managementSections, type ManagementSection } from "./sections";
 import { useProjectList } from "../workspace/use-project-directory";
+import { goBack } from "@/ui/navigation";
 
 export function ManagementHome() {
   const copy = useCopy();
   const machine = useActiveMachine();
-  const { projectId: selectedProjectId, setProjectId } = useRequiredProjectScope();
+  const { projectId: selectedProjectId, setProjectId, fallback } = useRequiredProjectScope();
   const projects = useProjectList();
   const [search, setSearch] = useState("");
   // The search icon trails the scope row; the open field takes the row below it.
@@ -38,7 +38,7 @@ export function ManagementHome() {
       ) : (
         <>
           {toolSearch.field}
-          <ToolDirectory projectId={projectId} query={search} onClearSearch={() => setSearch("")} />
+          <ToolDirectory projectId={projectId} fallback={fallback} query={search} onClearSearch={() => setSearch("")} />
         </>
       )}
     </Screen>
@@ -73,7 +73,7 @@ export function ManagementScreen({ section }: ManagementScreenProps) {
     <Screen title={title} scroll={false}>
       <View style={{ flex: 1 }}>
         <Empty compact={false} illustration="search-empty" title={copy("Bölüm bulunamadı", "Section not found")}
-          action={{ label: copy("Geri dön", "Go back"), onPress: () => router.back() }} />
+          action={{ label: copy("Geri dön", "Go back"), onPress: () => goBack("/manage") }} />
       </View>
     </Screen>
   );

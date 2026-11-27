@@ -3,10 +3,10 @@ import { useLocale } from "@/i18n";
 import { matchesSearch } from "@/ui/search-matching";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { View } from "react-native";
-import { useBackHandler } from "panelui-native/hooks/use-back-handler";
+import { useScreenBackHandler } from "@/ui/screen-back-handler";
 import { useIsFocused } from "expo-router/react-navigation";
 import type { GitBlameLine, GitChangedFile, GitFileDiff, GitHistoryCommit } from "../../../../src/platform/tauri/fs";
-import { Badge, Body, Button, CodeText, Disclosure, ErrorNotice, NavigationRow, QueryState, Row, ScreenList, SearchField, SegmentedControl } from "@/ui/primitives";
+import { Badge, Body, Button, CodeText, ErrorNotice, NavigationRow, QueryState, Row, ScreenList, SearchField, SegmentedControl } from "@/ui/primitives";
 import { useProjectSubpage } from "./subpage-chrome";
 import { useCopy } from "@/ui/copy";
 import { gitChangeLabel, gitFilePresentation } from "./git-file-presentation";
@@ -34,15 +34,15 @@ export function GitHistoryPanel({ scope, onClose, registerExit }: { scope: GitSc
   useProjectSubpage(copy("Commit geçmişi", "Commit history"), back);
   useEffect(() => { registerExit?.(back); return () => registerExit?.(null); }, [back, registerExit]);
   const focused = useIsFocused();
-  useBackHandler(focused, back);
+  useScreenBackHandler(focused, back);
   const header = <View style={{ gap: space.sm }}>
     {view.kind !== "history" ? <>
       <Body>{view.commit.subject}</Body>
     </> : null}
-    <Disclosure label={copy("Ayrıntılar", "Details")}>
-      <Body mono selectable>{scope.root}</Body>
+    <View>
+      <Body mono muted selectable>{scope.root}</Body>
       {view.kind !== "history" ? <Body mono muted selectable>{view.commit.sha}</Body> : null}
-    </Disclosure>
+    </View>
   </View>;
   if (view.kind === "history") return <CommitList scope={scope} header={header} onSelect={(commit) => setView({ kind: "commit", commit })} />;
   if (view.kind === "commit") return <CommitFiles scope={scope} commit={view.commit} header={header} onSelect={(path) => setView({ kind: "file", commit: view.commit, path, mode: "diff" })} />;
@@ -73,13 +73,14 @@ function CommitList({ scope, header, onSelect, path }: ListProps & { path?: stri
       {path ? <Body>{copy("Dosya geçmişi · mevcut dal", "File history · current branch")}</Body> : null}
       <SearchField ref={searchRef} label={copy("Yüklenen commitlerde ara", "Search loaded commits")} value={search} maxLength={200} onChangeText={setSearch} />
       <QueryState size="region" query={commits.length ? query : { ...query, data: undefined }} empty={!filtered.length}
+        noResults={{ searching: !!deferredSearch.trim(), title: copy("Aramana uyan commit yok.", "No commits match your search."), onClearSearch: () => { setSearch(""); searchRef.current?.focus(); } }}
         emptyTitle={deferredSearch.trim() ? copy("Aramana uyan commit yok.", "No commits match your search.") : copy("Commit bulunamadı", "No commits found")}
         emptyAction={deferredSearch.trim() ?{ label: copy("Aramayı temizle", "Clear search"), onPress: () => { setSearch(""); searchRef.current?.focus(); } } : undefined} />
     </View>}
     footer={hasMore || capped ? <View style={{ gap: space.sm }}>
       <ErrorNotice error={moreError} onRetry={loadMore} />
       {hasMore
-        ? <Button label={copy("Daha fazla yükle", "Load more")} onPress={loadMore} disabled={query.isFetching || loadingMore} />
+        ? <Button tone="quiet" label={copy("Daha fazla yükle", "Load more")} onPress={loadMore} busy={loadingMore} disabled={query.isFetching} />
         : <Body muted>{copy("En fazla 500 commit gösteriliyor.", "Showing up to 500 commits.")}</Body>}
     </View> : undefined}
     renderItem={({ item }) => <GitHistoryCommitRow commit={item} onSelect={() => onSelect(item)} />} />;

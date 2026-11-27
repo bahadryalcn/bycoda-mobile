@@ -4,7 +4,7 @@ import Constants from "expo-constants";
 import * as Application from "expo-application";
 import { Avatar } from "panelui-native/components/avatar";
 import Laptop from "lucide-react-native/icons/laptop";
-import Bot from "lucide-react-native/icons/bot";
+import Sparkles from "lucide-react-native/icons/sparkles";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import Palette from "lucide-react-native/icons/palette";
 import MessageSquare from "lucide-react-native/icons/message-square";
@@ -18,6 +18,7 @@ import Info from "lucide-react-native/icons/info";
 import UserRound from "lucide-react-native/icons/user-round";
 import { LANGUAGES } from "../../localization";
 import { useActiveMachine, useMachines } from "../../state/machines";
+import { storageErrorText } from "@/features/connections/storage-error-copy";
 import { useAppearance } from "../../state/appearance";
 import { useBusySend } from "../../state/busy-send";
 import { useSecurity } from "../../state/security";
@@ -108,11 +109,11 @@ export function SettingsScreen() {
             onPress={go(settingsRoutes.computers)}
           />
           <NavigationRow
-            label={copy("Ajanlar ve görevler", "Agents and tasks")}
-            detail={machine?.name ?? copy("Bilgisayar bağla", "Connect a computer")}
-            icon={<SettingIcon glyph={Bot} />}
+            label={copy("Asistan", "Assistant")}
+            detail={machine ? undefined : copy("Bilgisayar bağla", "Connect a computer")}
+            icon={<SettingIcon glyph={Sparkles} />}
             separator={false}
-            onPress={go(settingsRoutes.agents)}
+            onPress={go(settingsRoutes.assistant)}
           />
         </NavigationGroup>
         {storageError ? (
@@ -120,7 +121,7 @@ export function SettingsScreen() {
             compact
             tone="warning"
             title={copy("Kaydedilmiş bağlantılar kullanılamıyor", "Saved connections are unavailable")}
-            description={storageError}
+            description={storageErrorText(storageError, copy)}
             action={{ label: copy("Depolamayı kurtar", "Recover saved connections"), onPress: go(settingsRoutes.computers) }}
           />
         ) : null}
@@ -144,7 +145,7 @@ export function SettingsScreen() {
             onPress={go(settingsRoutes.appearance)}
           />
           <NavigationRow
-            label={copy("Sohbet", "Chat")}
+            label={copy("Mesajlar", "Messages")}
             detail={busySend === "queue"
               ? copy("Çalışırken: Sıraya al", "While running: Queue")
               : copy("Çalışırken: Yönlendir", "While running: Steer")}

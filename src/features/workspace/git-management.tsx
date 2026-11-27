@@ -2,7 +2,7 @@ import { useLocale } from "@/i18n";
 import { matchesSearch } from "@/ui/search-matching";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
-import { useBackHandler } from "panelui-native/hooks/use-back-handler";
+import { useScreenBackHandler } from "@/ui/screen-back-handler";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useHostMutation, useHostQuery } from "@/state/queries";
@@ -113,7 +113,7 @@ export function GitManagement({ scope, initialTab = "branches", onClose, onBusyC
   useEffect(() => { registerExit(close); return () => registerExit(null); }, [close, registerExit]);
   useProjectSubpage(copy("Git yönetimi", "Git management"), close);
   const focused = useIsFocused();
-  useBackHandler(focused, close);
+  useScreenBackHandler(focused, close);
   let invalid: GitManagementIssue | undefined;
   if (editor) { try { managementSnapshotRequest(openingScope, editor.value, editor.snapshot); } catch (reason) { invalid = reason instanceof GitManagementIssueError ? reason.issue : "snapshotInvalid"; } }
   const shownIssue = invalid && (editor?.touched || gitManagementStateIssues.has(invalid)) ? issueText[invalid] : undefined;

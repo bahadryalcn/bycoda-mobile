@@ -281,10 +281,29 @@ export function buildWidgetSnapshot(input: BuildSnapshotInput): WidgetSnapshot |
   };
 }
 
-/** Everything except timing; used to publish only when something visible changed. */
+/**
+ * Everything except timing; used to publish only when something visible changed. Row
+ * `updatedAt` is not shown (the row order already carries the sort it drives), so activity
+ * bumps alone never reload the widgets.
+ */
 export function snapshotIdentity(snapshot: WidgetSnapshot): string {
-  const { generatedAt: _generatedAt, expiresAt: _expiresAt, ...stable } = snapshot;
-  return JSON.stringify(stable);
+  const { generatedAt: _generatedAt, expiresAt: _expiresAt, sessions, ...stable } = snapshot;
+  return JSON.stringify({
+    ...stable,
+    sessions: sessions.map(({ updatedAt: _updatedAt, ...row }) => row),
+  });
+}
+
+/** What the NeedsAttention widget shows: question and failed rows, their counts and the shared chrome. */
+export function attentionIdentity(snapshot: WidgetSnapshot): string {
+  const { generatedAt: _generatedAt, expiresAt: _expiresAt, sessions, counts, ...stable } = snapshot;
+  return JSON.stringify({
+    ...stable,
+    counts: { needsInput: counts.needsInput, failed: counts.failed },
+    sessions: sessions
+      .filter((row) => row.status === "needs_input" || row.status === "failed")
+      .map(({ updatedAt: _updatedAt, ...row }) => row),
+  });
 }
 
 /** iOS timeline: the live entry now and a stale entry when the snapshot expires. */
@@ -330,4 +349,24 @@ export function liveActivityProps(snapshot: WidgetSnapshot): LiveActivityProps |
     updatedAt: snapshot.generatedAt,
     url: active[0]?.url ?? snapshot.url,
   };
+}
+
+/** A visible-content-identical activity keeps its instance until its stale deadline needs a push. */
+export const LIVE_ACTIVITY_REFRESH_MS = 5 * 60_000;
+
+/**
+ * Keeps `previous` when only the publish time moved, so an unchanged activity is not
+ * re-rendered on every publish; still refreshes it often enough to move the stale deadline.
+ */
+export function nextLiveActivity(
+  previous: LiveActivityProps | null,
+  next: LiveActivityProps | null,
+  refreshMs = LIVE_ACTIVITY_REFRESH_MS,
+): LiveActivityProps | null {
+  if (!previous || !next) return next;
+  const { updatedAt: previousAt, ...previousContent } = previous;
+  const { updatedAt: nextAt, ...nextContent } = next;
+  return JSON.stringify(previousContent) === JSON.stringify(nextContent) && nextAt - previousAt < refreshMs
+    ? previous
+    : next;
 }

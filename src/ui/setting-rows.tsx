@@ -11,7 +11,7 @@ import { gapIcon, metrics, space } from "./tokens";
 /**
  * Settings control rules (one family for every settings screen):
  * - on/off: `ToggleField` (trailing Switch, whole row toggles);
- * - one of 2-4 peers: `SegmentedRow` (this file);
+ * - one of 2-3 peers: `SegmentedRow` (this file; four or more, or labels too long, become a selector);
  * - one of many: `SelectField variant="row"` (current value, opens a picker with a single check style);
  * - read-only current value: `ValueRow`;
  * - destination: `NavigationRow` with chevron; command: `NavigationRow intent="command"`;
@@ -42,7 +42,7 @@ function SettingRowFrame({ children }: { children: ReactNode }) {
 }
 
 /**
- * A choice among two to four peers: label (optional leading icon and info icon) above a
+ * A choice among two or three peers (more fall back to the selector): label (optional leading icon and info icon) above a
  * SegmentedControl. `help` is revealed by the info icon, never printed under the control.
  */
 export function SegmentedRow<T extends string>({

@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { router, useRootNavigationState } from "expo-router";
+import { useRootNavigationState, type Href } from "expo-router";
+import { openExternalEntry } from "../../ui/navigation";
 import { useEffect } from "react";
 import { Linking } from "react-native";
 import { notifications } from "../permissions/device-permissions";
@@ -124,10 +125,11 @@ async function restoreLastSession() {
     launchedFromNotification: fromNotification,
   });
   if (!target) return;
-  router.push({
+  // From the launch position the Sessions list goes beneath, so Back returns to it.
+  openExternalEntry({
     pathname: "/session/[id]",
     params: { id: target.id, projectId: target.projectId, machineId: target.machineId },
-  });
+  } as Href, { push: true });
 }
 
 /**

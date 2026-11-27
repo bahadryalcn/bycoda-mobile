@@ -24,6 +24,7 @@ vi.mock("panelui-native/components/chip", () => ({ Chip: ({ children, onPress }:
 vi.mock("lucide-react-native/icons/link", () => ({ default: () => null }));
 vi.mock("./activity-group", () => ({ ActivityGroup: () => createElement("button", { style: { minHeight: 48 } }, "Work") }));
 vi.mock("./transcript-block", () => ({ TranscriptBlock: () => null }));
+vi.mock("./transcript-subagents", () => ({ TranscriptSubagents: () => null }));
 vi.mock("./transcript-model", () => ({ isSystemFailure: () => false }));
 vi.mock("./system-failure-card", () => ({ SystemFailureCard: () => null }));
 vi.mock("./turn-chrome", () => ({ TurnFooter: () => createElement("footer", null, "Turn"), ModelSwitchDivider: () => null, ModelSwitchRow: () => null }));

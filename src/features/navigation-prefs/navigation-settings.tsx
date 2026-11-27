@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { Body, Button, NavigationGroup, NavigationRow, SettingIcon, Sheet, ToggleField } from "@/ui/primitives";
+import { Platform } from "react-native";
+import { Body, Button, NavigationGroup, NavigationRow, SelectField, SettingIcon, Sheet, ToggleField } from "@/ui/primitives";
+import PanelBottom from "lucide-react-native/icons/panel-bottom";
+import { useAppearance } from "@/state/appearance";
 import Rows3 from "lucide-react-native/icons/rows-3";
 import FolderClock from "lucide-react-native/icons/folder-clock";
 import { useCopy } from "@/ui/copy";
@@ -7,7 +10,29 @@ import { PreferenceStorageNotice } from "@/ui/preference-storage-notice";
 import { appPreferences, useAppPreferences, type AppPreferences } from "./app-preferences";
 import { DOCK_TAB_IDS, defaultTabPreferences, hasCustomTabLayout, isLastVisibleTab, setTabHidden, visibleDockTabs, type DockTabId } from "./tab-preferences";
 
-/** Settings → Navigation: which dock tabs show, and the new-session default. */
+/** Android's dock look (floating dock or full-width bar); kept with the other navigation choices. */
+function NavigationStyleRow() {
+  const copy = useCopy();
+  const navigationStyle = useAppearance((state) => state.navigationStyle);
+  const setNavigationStyle = useAppearance((state) => state.setNavigationStyle);
+  const hydrated = useAppearance((state) => state.hydrated);
+  return (
+    <SelectField
+      variant="row"
+      icon={<SettingIcon glyph={PanelBottom} />}
+      label={copy("Gezinme stili", "Navigation style")}
+      value={navigationStyle}
+      disabled={!hydrated}
+      options={[
+        { value: "floating" as const, label: copy("Yüzen", "Floating") },
+        { value: "bar" as const, label: copy("Çubuk", "Bar") },
+      ]}
+      onChange={(value) => { void setNavigationStyle(value); }}
+    />
+  );
+}
+
+/** Settings → Navigation: Android's dock style, which dock tabs show, and the new-session default. */
 export function NavigationSettings() {
   const copy = useCopy();
   const { preferences, hydrated, storageError, retry } = useAppPreferences();
@@ -24,6 +49,7 @@ export function NavigationSettings() {
     <>
       <PreferenceStorageNotice error={storageError} retry={retry} />
       <NavigationGroup>
+        {Platform.OS === "android" ? <NavigationStyleRow /> : null}
         <NavigationRow
           label={copy("Sekmeleri düzenle", "Customize tabs")}
           icon={<SettingIcon glyph={Rows3} />}

@@ -179,7 +179,9 @@ export function useSessionSnapshot(
         identity,
       );
       const known = cache.getQueryData<HostSession>(key);
-      const waitMs = streaming ? 0 : schedule.waitMs(known);
+      // While the stream is failing this read is the fallback poll: long-poll like the
+      // non-streaming path so it does not re-read back to back at the 25 ms cadence.
+      const waitMs = streaming && !streamFailing.current ? 0 : schedule.waitMs(known);
       const started = Date.now();
       try {
         try {
@@ -231,6 +233,8 @@ export function useSessionSnapshot(
     },
     enabled,
     staleTime: 1_000,
+    // The session stream reopens on reconnect with its own snapshot (see reconnect-refresh).
+    meta: { streamOwned: streaming },
     refetchInterval: (query) => {
       if (streaming && !streamFailing.current) return false;
       if (!enabled || query.state.fetchStatus === "fetching") return false;
@@ -238,12 +242,14 @@ export function useSessionSnapshot(
       if (query.state.error instanceof SessionProjectMismatch) return false;
       if (kind === "auth" || kind === "identity" || kind === "unsupported") return false;
       if (query.state.data === undefined && isTransientConnectionError(query.state.error)) return 30_000;
-      return sessionReadSchedule(query, identity).delay(
+      const delay = sessionReadSchedule(query, identity).delay(
         query.state.data?.status === "running",
         !!query.state.error,
         Date.now(),
         query.state.fetchFailureCount,
       );
+      // The fallback for a failing stream never re-reads faster than once a second.
+      return streaming ? Math.max(1_000, delay) : delay;
     },
   });
   dataStamp.current = query.dataUpdatedAt;
@@ -260,8 +266,18 @@ export function useSessionSnapshot(
     ["auth", "identity"].includes(
       ((streamError ?? query.error) as { kind?: string } | null)?.kind ?? "",
     );
+  // Only the fields callers read: React Query re-renders for each property read, and a spread
+  // would also subscribe this whole screen to isStale flips and other bookkeeping changes.
   return {
-    ...query,
+    status: query.status,
+    fetchStatus: query.fetchStatus,
+    isPending: query.isPending,
+    isLoading: query.isLoading,
+    isSuccess: query.isSuccess,
+    isFetching: query.isFetching,
+    isEnabled: query.isEnabled,
+    failureCount: query.failureCount,
+    refetch: query.refetch,
     error: streamError ?? query.error,
     isError: !!streamError || query.isError,
     streaming,

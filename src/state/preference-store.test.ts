@@ -121,3 +121,17 @@ it("keeps recovery visible until held choices are written after a failed read", 
   expect(store.getState().storageError).toBeNull();
   expect(JSON.parse(storage.data.get(key)!)).toEqual({ on: true, order: ["x"] });
 });
+
+it("reports an unreadable stored record instead of silently resetting it, and a retry saves the shown values", async () => {
+  const storage = fakeStorage("{not json");
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  const store = createStore(storage);
+  await store.getState().hydrate();
+  expect(store.getState().preferences).toEqual(defaults);
+  expect(store.getState().storageError).toMatchObject({ operation: "read", corrupt: true });
+  expect(storage.data.get(key)).toBe("{not json");
+  await store.getState().retry();
+  expect(store.getState().storageError).toBeNull();
+  expect(JSON.parse(storage.data.get(key)!)).toEqual(defaults);
+  warn.mockRestore();
+});

@@ -7,6 +7,7 @@ import { useSheetGuard } from "@/ui/sheet-guard";
 import { confirmAction } from "@/ui/confirm";
 import { Field, FormActions, MultiSelectField, MutationState, Notice, SelectField, Stack, ToggleField } from "@/ui/primitives";
 import { identifier } from "../shared/format";
+import { crewInputDefinitelyRejected } from "./runtime-model";
 
 export function CrewAssignmentEditor({ run, onClose }: { run: CrewRunView; onClose: () => void }) {
   const copy = useCopy();
@@ -33,7 +34,12 @@ export function CrewAssignmentEditor({ run, onClose }: { run: CrewRunView; onClo
     sending.current = true; setSent(true);
     mutation.mutate({ projectId: run.projectId, runId: run.id, requestId, memberId, title: title.trim(), prompt: prompt.trim(),
       files: integration ? ["."] : scopes, integration, dependsOn: integration ? run.assignments.map((entry) => entry.taskId) : dependsOn,
-      verifyCommand: verifyCommand.trim() || undefined }, { onSuccess: onClose });
+      verifyCommand: verifyCommand.trim() || undefined }, {
+      onSuccess: onClose,
+      // A definite refusal created nothing: unlock the form so it can be corrected and sent again.
+      onError: (error) => { if (crewInputDefinitelyRejected(error)) setSent(false); },
+      onSettled: () => { sending.current = false; },
+    });
   };
   return <Stack>
     <SelectField searchable label={copy("Görevlendirilecek üye", "Assigned member")} value={memberId} disabled={locked}
@@ -49,6 +55,6 @@ export function CrewAssignmentEditor({ run, onClose }: { run: CrewRunView; onClo
     {sent && mutation.isError && <Notice tone="warning" message={copy("İsteğin durumu belirsiz olabilir. Yeniden görev oluşturmadan çalışma listesini yenileyin.", "Request delivery may be uncertain. Refresh work before creating another assignment.")} />}
     <FormActions submitLabel={copy("Görevi başlat", "Start task")} disabled={!valid || locked} busy={mutation.isPending} onCancel={requestClose} cancelDisabled={mutation.isPending}
       cancelLabel={copy("Vazgeç", "Cancel")} feedback={<MutationState mutation={mutation} />} onSubmit={() => confirmAction(copy("Ekip görevi başlat", "Start crew task"),
-        copy("Görev bilgisayarda çalışır; host kapsam, bütçe ve bağımsız inceleme kurallarını uygular.", "The task runs on the computer; the host enforces scope, budget and independent review."), copy("Başlat", "Start"), submit, undefined, "default")} />
+        copy("Görev bilgisayarda çalışır; bilgisayar kapsam, bütçe ve bağımsız inceleme kurallarını uygular.", "The task runs on the computer, which enforces scope, budget and independent review."), copy("Başlat", "Start"), submit, undefined, "default")} />
   </Stack>;
 }

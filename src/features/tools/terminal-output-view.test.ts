@@ -16,7 +16,10 @@ vi.mock("react-native", () => ({
   },
 }));
 vi.mock("lucide-react-native/icons/arrow-down-to-line", () => ({ default: () => null }));
-vi.mock("@/ui/tokens", () => ({ darkColors: { background: "black", text: "white" }, iconSize: { action: 20 }, space: { xs: 4, md: 12, xl: 20 } }));
+vi.mock("@/ui/tokens", () => ({ darkColors: { background: "black", text: "white" }, iconSize: { action: 20 }, space: { xs: 4, md: 12, xl: 20 },
+  terminalAnsiPalettes: { dark: Array.from({ length: 16 }, (_, index) => index === 1 ? "#EF7777" : "#888888"),
+    light: Array.from({ length: 16 }, (_, index) => index === 1 ? "#EF7777" : "#888888") } }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "light", colors: { text: "ink", panel: "paper" } }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, params?: Record<string, number>) => en.replace(/\{(p\d+)\}/g, (_match, key: string) => String(params?.[key] ?? key)) }));
 vi.mock("@/ui/primitives", () => {
   return { CodeText: ({ children, style }: PropsWithChildren<{ style?: React.CSSProperties }>) => createElement("span", { style }, children),
@@ -44,7 +47,7 @@ it("filters complete output lines locally and restores the transcript when clear
   expect(container.querySelector("button")).toBeNull();
   await render(output);
   expect(container.querySelector("section")!.textContent).toBe("Starting\nERROR: build failed\nCompleted");
-  expect(container.querySelector<HTMLElement>("span span")?.style.color).toBe("rgb(239, 119, 119)");
+  expect(container.querySelector<HTMLElement>("span span")?.style.color).toBe("#EF7777");
 });
 it("stops following when the user reads older output and resumes only on explicit follow", async () => {
   await render();

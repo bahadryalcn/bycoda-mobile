@@ -3,13 +3,11 @@ import { router } from "expo-router";
 import { useAsyncAction } from "@/state/actions";
 import { useActiveMachine } from "@/state/machines";
 import { useHostClient } from "@/state/queries";
-import { View } from "react-native";
-import { NavigationGroup, Notice, SectionHeader, StateView, ToggleField } from "@/ui/primitives";
+import { NavigationGroup, Notice, StateView, ToggleField } from "@/ui/primitives";
 import { pushTokenMessage } from "./push-error-copy";
-import { useInfoHint } from "@/ui/info-hint";
+import { HintSection, useInfoHint } from "@/ui/info-hint";
 import { useCopy } from "@/ui/copy";
 import { errorMessage } from "@/ui/error-message";
-import { space } from "@/ui/tokens";
 import { usePushPreferences, usePushStatus, type PushPreferenceKind } from "./push-model";
 
 /**
@@ -28,10 +26,11 @@ export function PushSettings() {
     void preferences.hydrate();
   }, [preferences.hydrate]);
   const events: { kind: PushPreferenceKind; label: string }[] = [
-    { kind: "input", label: copy("Onay veya cevap beklediğinde", "Waiting for approval or an answer") },
-    { kind: "approvals", label: copy("Onay istekleri", "Approval requests") },
+    // Same names as the account's events; "approvals" are the assistant's own requests, not a session's.
+    { kind: "input", label: copy("Oturum onay veya cevap beklediğinde", "A session needs approval or an answer") },
+    { kind: "approvals", label: copy("Asistan onayını beklediğinde", "The assistant needs your approval") },
     { kind: "finished", label: copy("Ajan işini bitirdiğinde", "Agent finished") },
-    { kind: "failed", label: copy("Bir tur başarısız olduğunda", "A turn failed") },
+    { kind: "failed", label: copy("Ajan başarısız olduğunda", "Agent failed") },
     { kind: "assistant", label: copy("Asistan güncellemeleri", "Assistant updates") },
   ];
   const detail = !machine
@@ -51,10 +50,16 @@ export function PushSettings() {
                 : status.state === "error"
                   ? pushTokenMessage(status.error, copy) ?? errorMessage(status.error, copy)
                   : copy("Kontrol ediliyor…", "Checking…");
+  // The state line is status, not help, so it stays visible under the heading.
   const stateInfo = useInfoHint(status.state === "error" || !machine ? undefined : detail, "visible");
   return (
-    <View style={{ gap: space.sm }}>
-      <SectionHeader title={copy("Bilgisayarından", "From your computer")} trailing={stateInfo.button} />
+    <HintSection
+      title={copy("Bilgisayarından", "From your computer")}
+      help={copy(
+        "Bağlı bilgisayarın bu telefona doğrudan gönderir. Hesabından gelen bildirimler aşağıda ayrı ayarlanır.",
+        "Your connected computer sends these straight to this phone. Notifications from your account are set separately below.",
+      )}
+    >
       {stateInfo.panel}
       {!machine ? (
         <StateView
@@ -69,15 +74,14 @@ export function PushSettings() {
           label={copy("Telefona bildirim gönder", "Notify this phone")}
           help={copy(
             "Bilgisayarın başında değilken gelir. Bildirimde proje ve oturum adları yer almaz.",
-            "Sent while you are away from the computer. Project and conversation names are never included.",
+            "Sent while you are away from the computer. Project and session names are never included.",
           )}
           value={preferences.enabled}
           disabled={!machine}
           onChange={(enabled) => preferences.update({ enabled })}
         />
-      </NavigationGroup>
-      {preferences.enabled ? (
-        <NavigationGroup style={{ marginStart: space.lg }}>
+        {/* Event switches follow the main switch in the same group, without an indented second group. */}
+        {preferences.enabled ? <>
           {events.map(({ kind, label }) => (
             <ToggleField
               key={kind}
@@ -87,17 +91,9 @@ export function PushSettings() {
               onChange={(value) => preferences.update({ events: { ...preferences.events, [kind]: value } })}
             />
           ))}
-          {preferences.events.assistant ? (
-            <ToggleField
-              label={copy("Sessiz saatlerde acil güncellemeler", "Urgent updates during quiet hours")}
-              value={preferences.assistantUrgentDuringQuiet}
-              disabled={!machine}
-              onChange={(assistantUrgentDuringQuiet) => preferences.update({ assistantUrgentDuringQuiet })}
-            />
-          ) : null}
-        </NavigationGroup>
-      ) : null}
-    </View>
+        </> : null}
+      </NavigationGroup>
+    </HintSection>
   );
 }
 

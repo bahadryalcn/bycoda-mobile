@@ -1,38 +1,48 @@
 // @vitest-environment happy-dom
-import { act, createElement as h, useState, type PropsWithChildren, type ReactNode } from "react";
+import { act, createElement as h, useState, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import { assistantProfileDefaults } from "../../../../host/assistant/profile-defaults";
 import { AssistantReplyModel } from "./assistant-reply-model";
-import { filterSelection } from "@/ui/selection-model";
 
-const fixture = vi.hoisted(() => ({ search: "", empty: false, discovering: false }));
+const fixture = vi.hoisted(() => ({ empty: false, discovering: false }));
 
-vi.mock("@/i18n", () => ({ useLocale: () => "tr" }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/sheet-guard", () => ({ useSheetGuard: () => undefined }));
 vi.mock("@/state/queries", () => ({ useHostQuery: () => ({
   isSuccess: true,
-  data: { pending: fixture.discovering ? ["codex"] : [], models: fixture.empty ? {} : {
-    codex: [{ id: "ten", name: "GPT-10" }, { id: "two", name: "GPT-2" }],
-    claude: [{ id: "sonnet", name: "Sonnet" }],
-    grok: [{ id: "grok-4.7", name: "Grok 4.7" }],
-  } },
+  data: {
+    pending: fixture.discovering ? ["codex"] : [],
+    accounts: { codex: [{ id: "work", label: "Work" }] },
+    models: fixture.empty ? {} : {
+      codex: [{ id: "ten", name: "GPT-10" }, { id: "two", name: "GPT-2" }],
+      claude: [{ id: "sonnet", name: "Sonnet" }],
+    },
+  },
 }) }));
-vi.mock("@/ui/provider-identity", () => ({
-  ProviderIcon: ({ provider }: { provider: string }) => h("i", { "data-provider": provider }),
-}));
 vi.mock("@/ui/primitives", () => ({
   Loading: ({ label }: { label: string }) => h("p", { role: "status" }, label),
-  Notice: ({ message, children }: PropsWithChildren<{ message: string }>) => h("section", null, message, children), QueryState: () => null,
+  Notice: ({ message, action }: { message: string; action?: { label: string; onPress(): void } }) =>
+    h("section", null, message, action ? h("button", { onClick: action.onPress }, action.label) : null), QueryState: () => null,
   StateView: ({ title }: { title: string }) => h("p", null, title),
-  Button: ({ label, onPress }: { label: string; onPress: () => void }) => h("button", { onClick: onPress }, label),
-  SelectField: ({ disabled, value, options, onChange }: { disabled: boolean; value?: string; options: { value: string; label: string; group: string; icon: ReactNode }[]; onChange: (value: string) => void }) =>
-    h("div", { "aria-disabled": disabled }, filterSelection(options, fixture.search, "tr").map(row => h("p", {
-      key: row.value, "data-group": row.group, "data-selected": row.value === value,
-      onClick: () => onChange(row.value),
-    }, row.icon, row.label))),
+  NavigationGroup: ({ children }: PropsWithChildren) => h("div", null, children),
+  FormActions: ({ submitLabel, onSubmit, disabled }: { submitLabel: string; onSubmit(): void; disabled?: boolean }) =>
+    h("button", { onClick: onSubmit, disabled, "data-save": true }, submitLabel),
+}));
+type Choice = { key: string; provider: string; accountId?: string };
+/** The shared picker as rows: each provider choice with that provider's models. */
+vi.mock("../workspace/model-picker-field", () => ({
+  ModelPickerField: ({ label, disabled, choices, choice, model, catalog, onChooseModel }: {
+    label: string; disabled?: boolean; choices: Choice[]; choice?: Choice; model: string;
+    catalog?: { accounts?: unknown; models: Record<string, { id: string; name: string }[]> };
+    onChooseModel(next: Choice, model: string, settings: Record<string, string>): void;
+  }) => h("div", { "aria-label": label, "aria-disabled": !!disabled, "data-accounts": catalog?.accounts === undefined ? "none" : "listed" },
+    h("span", { "data-selected-model": model, "data-selected-provider": choice?.provider }),
+    ...choices.flatMap(entry => (catalog?.models[entry.provider] ?? []).map(row => h("p", {
+      key: `${entry.key}:${row.id}`, "data-provider": entry.provider, "data-account": entry.accountId ?? "",
+      onClick: () => onChooseModel(entry, row.id, { effort: "high" }),
+    }, row.name)))),
 }));
 
 function render() {
@@ -45,20 +55,15 @@ function render() {
   }));
 }
 
-it("sorts model names naturally within each provider and keeps an absent saved model in its group", () => {
+// The reply model was a plain searchable list; it now uses the shared model picker the rest of the app uses.
+it("uses the shared model picker for the reply model, with providers but no accounts it cannot store", () => {
   const html = render();
-  expect(html.indexOf("GPT-2")).toBeLessThan(html.indexOf("GPT-10"));
-  expect(html).toContain('data-group="OpenAI · Codex" data-selected="false"><i data-provider="codex"></i>GPT-2');
-  expect(html).toContain('data-group="Claude" data-selected="true"><i data-provider="claude"></i>Older');
-});
-
-it.each([["OpenAI", "GPT-2"], ["openai", "GPT-2"], ["open ai", "GPT-2"], ["Grok", "Grok 4.7"]])("finds a model using the %s provider name", (query, model) => {
-  fixture.search = query;
-  try {
-    expect(render()).toContain(model);
-  } finally {
-    fixture.search = "";
-  }
+  expect(html).toContain('aria-label="Reply model"');
+  expect(html).toContain('data-accounts="none"');
+  expect(html).toContain('data-selected-model="claude:Older" data-selected-provider="claude"');
+  expect(html).not.toContain('data-account="work"');
+  expect(html).toContain("GPT-2");
+  expect(html).toContain("Sonnet");
 });
 
 it("explains progressive model discovery and a settled empty catalog while retaining the saved choice", () => {
@@ -73,7 +78,7 @@ it("explains progressive model discovery and a settled empty catalog while retai
     const empty = render();
     expect(empty).toContain("No models available.");
     expect(empty).toContain('aria-disabled="true"');
-    expect(empty).toContain('data-selected="true"><i data-provider="claude"></i>Older');
+    expect(empty).toContain('data-selected-model="claude:Older"');
     expect(empty).not.toContain('role="status"');
   } finally {
     fixture.empty = false;
@@ -81,13 +86,13 @@ it("explains progressive model discovery and a settled empty catalog while retai
   }
 });
 
-it("offers a first reply model and saves it only after an explicit selection", async () => {
+it("offers a first reply model and saves it, with its effort, only after an explicit selection", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const container = document.createElement("div");
   const root = createRoot(container);
   const replyExecution = {
     harness: "codex" as const, model: "two", runtimeMode: "supervised" as const,
-    maxRunMinutes: 60, modelSettings: {},
+    maxRunMinutes: 60, modelSettings: { effort: "high" },
   };
   const profile = { ...assistantProfileDefaults, version: 1, replyExecution };
   const updateProfile = vi.fn().mockResolvedValue(profile);
@@ -99,10 +104,13 @@ it("offers a first reply model and saves it only after an explicit selection", a
       current: () => true, reviewRequired: false, onReviewRequired: vi.fn(), onRefresh: vi.fn(),
     })));
     expect(container.querySelector('[aria-disabled="false"]')).not.toBeNull();
-    expect(container.querySelector('[data-selected="true"]')).toBeNull();
+    expect(container.querySelector("[data-selected-model]")?.getAttribute("data-selected-model")).toBe("");
     expect(updateProfile).not.toHaveBeenCalled();
     const option = [...container.querySelectorAll("p")].find(row => row.textContent === "GPT-2")!;
     await act(async () => option.click());
+    // Picking is a draft: nothing is written until Save.
+    expect(updateProfile).not.toHaveBeenCalled();
+    await act(async () => container.querySelector<HTMLButtonElement>("[data-save]")!.click());
     expect(updateProfile).toHaveBeenCalledExactlyOnceWith(0, { replyExecution });
     expect(onSaved).toHaveBeenCalledExactlyOnceWith(profile);
   } finally {
@@ -116,7 +124,7 @@ it("requires a fresh Host profile before another explicit selection after a fail
   const container = document.createElement("div");
   const root = createRoot(container);
   const refreshedProfile = { ...assistantProfileDefaults, version: 2, replyExecution: {
-    harness: "codex" as const, model: "two", runtimeMode: "supervised" as const, modelSettings: {}, maxRunMinutes: 60,
+    harness: "codex" as const, model: "two", runtimeMode: "supervised" as const, modelSettings: { effort: "high" }, maxRunMinutes: 60,
   } };
   const refresh = vi.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce(refreshedProfile);
   const updateProfile = vi.fn().mockRejectedValueOnce(new Error("Profile changed")).mockResolvedValueOnce({ ...assistantProfileDefaults, version: 3 });
@@ -130,7 +138,11 @@ it("requires a fresh Host profile before another explicit selection after a fail
     }) : null;
   }
   const render = () => act(async () => root.render(h(Workspace)));
-  const choose = (model = "GPT-2") => act(async () => [...container.querySelectorAll("p")].find(row => row.textContent === model)!.click());
+  // Choosing drafts the model; Save (when offered) writes it.
+  const choose = async (model = "GPT-2") => {
+    await act(async () => [...container.querySelectorAll("p")].find(row => row.textContent === model)!.click());
+    await act(async () => container.querySelector<HTMLButtonElement>("[data-save]")?.click());
+  };
   const refreshRow = (count = 1) => act(async () => {
     const button = [...container.querySelectorAll("button")].find(row => row.textContent === "Refresh")!;
     for (let taps = 0; taps < count; taps++) button.click();
@@ -152,9 +164,10 @@ it("requires a fresh Host profile before another explicit selection after a fail
     expect(updateProfile).toHaveBeenCalledOnce();
     await refreshRow();
     expect(updateProfile).toHaveBeenCalledOnce();
+    // The refreshed profile already holds GPT-2 with this effort: choosing it again writes nothing.
     await choose();
     expect(updateProfile).toHaveBeenCalledOnce();
-    expect(container.querySelector('[data-selected="true"]')?.textContent).toBe("GPT-2");
+    expect(container.querySelector("[data-selected-model]")?.getAttribute("data-selected-model")).toBe("two");
     await choose("GPT-10");
     expect(updateProfile).toHaveBeenCalledTimes(2);
     expect(updateProfile.mock.calls[1][0]).toBe(2);

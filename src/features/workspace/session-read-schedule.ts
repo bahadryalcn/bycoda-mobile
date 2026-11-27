@@ -1,3 +1,6 @@
+/** Long-poll re-arm gap while a turn runs. */
+export const RUNNING_REARM_MS = 250;
+
 /** Compatibility probing is per reader; an older host may ignore waitMs. */
 export class SessionReadSchedule {
   private retryWaitAt = 0;
@@ -12,7 +15,9 @@ export class SessionReadSchedule {
   /** `failures` is the consecutive failed reads; error cadence doubles per failure up to 30s. */
   delay(running: boolean, error: boolean, now = Date.now(), failures = 1) {
     if (error) return backoffMs(running ? 2_500 : 7_500, failures - 1, 30_000);
-    return now < this.retryWaitAt ? (running ? 2_500 : 7_500) : 25;
+    // A running turn changes every Host batch, so its long poll answers at once; a short gap
+    // coalesces several batches per read instead of re-reading back to back.
+    return now < this.retryWaitAt ? (running ? 2_500 : 7_500) : running ? RUNNING_REARM_MS : 25;
   }
 }
 

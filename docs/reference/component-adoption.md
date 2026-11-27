@@ -165,15 +165,11 @@ actions so repeated chrome does not consume its viewport.
 Setup/close review replaces its initiating action in that same region; keep a
 close review beside the preview controls instead of moving it to the page top.
 
-Line-based terminals use one page scroller for output, not a fixed-height output
-scroller nested inside it. `Screen.footer` reserves real layout space for the
-command action outside that scroller and owns its bottom/side safe-area padding.
-Editors open in the existing Sheet body/action owners; closing a command editor
-keeps its per-terminal draft. Switching terminals does not send or discard it.
-If a terminal disappears, retain its draft in a read-only recovery view rather
-than targeting a different terminal. A reviewed connection/project change owns
-new terminal state and rejects old callbacks. Stop/close review names the exact
-terminal; uncertain operations keep drafts and require explicit reconciliation.
+Project terminals render the PTY full height in the shared terminal viewport;
+the session keyboard frame docks the terminal key bar above the keyboard and the
+fitted grid size is sent to the PTY. A reviewed connection/project change owns
+new terminal state and rejects old callbacks. Close review names the exact
+terminal; uncertain writes pause typing and require explicit reconciliation.
 
 Server start/detail overlays are siblings of their virtualized list. Keep form
 fields and detail state mounted when the header leaves view. A reviewed target

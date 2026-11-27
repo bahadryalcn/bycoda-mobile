@@ -13,7 +13,10 @@ function setup(canRun: () => boolean = () => true) {
   const calls = new Map<string, number>();
   const unsubscribe: (() => void)[] = [];
   /** A mounted query holding old data; `enabled: false` models a stack route behind the front one. */
-  const observe = (key: unknown[], options: { staleTime?: number; enabled?: boolean } = {}) => {
+  const observe = (
+    key: unknown[],
+    options: { staleTime?: number; enabled?: boolean; meta?: Record<string, unknown> } = {},
+  ) => {
     const id = JSON.stringify(key);
     calls.set(id, 0);
     cache.setQueryData(key, "old");
@@ -26,6 +29,7 @@ function setup(canRun: () => boolean = () => true) {
       staleTime: options.staleTime ?? 0,
       enabled: options.enabled ?? true,
       refetchOnMount: false,
+      meta: options.meta,
     });
     unsubscribe.push(observer.subscribe(() => undefined));
   };
@@ -66,6 +70,16 @@ describe("createReconnectRefresh", () => {
     expect(total()).toBe(RECONNECT_WAVE_SIZE * 2);
     await advance(RECONNECT_WAVE_GAP_MS);
     expect(total()).toBe(keys.length);
+  });
+
+  it("leaves reads a live stream owns to that stream's own snapshot", async () => {
+    const { observe, fetched, refresh } = setup();
+    observe(["machine", "pc", "streamed"], { meta: { streamOwned: true } });
+    observe(["machine", "pc", "polled"], { meta: { streamOwned: false } });
+    refresh.schedule("pc");
+    await advance(RECONNECT_DEBOUNCE_MS + RECONNECT_WAVE_GAP_MS);
+    expect(fetched(["machine", "pc", "streamed"])).toBe(0);
+    expect(fetched(["machine", "pc", "polled"])).toBe(1);
   });
 
   it("skips fresh reads, project privacy proof and other computers", async () => {

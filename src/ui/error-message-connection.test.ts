@@ -7,7 +7,7 @@ const tr = (turkish: string, _english: string) => turkish;
 const en = (_turkish: string, english: string) => english;
 const cases = [
   ["auth", "Computer access was denied. Reconnect this computer.", "erişim reddedildi"],
-  ["protocol", "The mobile app and Host use incompatible data. Update both and reconnect.", "Host verileri uyumsuz"],
+  ["protocol", "The mobile app and Host use incompatible data. Update both and reconnect.", "bilgisayardaki bycoda uyumsuz"],
   ["auth", "The computer certificate could not be verified. Reconnect this computer.", "sertifikası doğrulanamadı"],
   ["host", "This computer is busy. Try again shortly.", "Bilgisayar meşgul"],
   ["host", "This computer is not ready for this request. Try again shortly.", "isteğe hazır değil"],
@@ -24,7 +24,11 @@ it.each(cases)("localizes exact %s connection message: %s", (kind, message, expe
 
 it.each(["auth", "protocol", "host"] as const)("keeps %s details that extend a known message", kind => {
   const message = `${cases[1][1]} Field: session.authorityGeneration; HTTP 409.`;
-  expect(errorMessage(new RemoteHostError("computer", kind, message), tr)).toBe(message);
+  const text = errorMessage(new RemoteHostError("computer", kind, message), tr);
+  // A translated summary leads; the unrecognized English stays as a collapsible detail paragraph.
+  expect(text.split("\n\n")[0]).not.toContain("HTTP 409");
+  expect(text.endsWith(`\n\n${message}`)).toBe(true);
+  expect(errorMessage(new RemoteHostError("computer", kind, message), en)).toBe(message);
 });
 
 it.each(["tr", "de", "es", "fr", "pt", "ja", "zh-CN"] as const)("uses %s catalog copy for each known connection failure", locale => {

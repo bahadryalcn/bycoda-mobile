@@ -30,7 +30,7 @@ import {
   Notice,
   Screen,
   SearchField,
-  SearchToolbar,
+  useCollapsibleSearch,
   Row,
   SectionHeader,
   Sheet,
@@ -39,8 +39,9 @@ import {
 } from "@/ui/primitives";
 import { RowOptionsSheet, type MenuAction } from "@/ui/overflow-menu";
 import { showToast } from "@/ui/toast";
+import { errorMessage } from "@/ui/error-message";
 import { useScreenContentInsets } from "@/ui/screen-content-insets";
-import { metrics, space } from "@/ui/tokens";
+import { iconSize, metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { haptic } from "@/ui/motion";
 import { SwipeActionsGroup } from "@/ui/swipe-actions";
@@ -61,7 +62,7 @@ import {
   type ProjectSort,
 } from "./project-directory";
 import { useProjectDirectory } from "./use-project-directory";
-import { GroupLockSection } from "../group-lock/group-lock-section";
+import { GroupLockSection, HiddenGroupsFlow, HiddenGroupsRow, useHiddenGroupsEntry } from "../group-lock/group-lock-section";
 import { ProjectFolderBrowser } from "./project-folder-browser";
 import { WelcomeScreen } from "../connections/welcome-screen";
 import { useProjectActivity } from "./use-project-activity";
@@ -72,6 +73,7 @@ import { ProjectGroupHeader, ProjectRow, type ProjectRowView } from "./project-r
 import { ProjectDetailsSheet } from "./project-details-sheet";
 import { ProjectOrganization } from "./project-organization";
 import { latestProjectActivity } from "./project-summaries";
+import { openNewChat } from "./new-chat-navigation";
 import {
   projectDirectoryPreferences,
   useProjectDirectoryPreferences,
@@ -82,6 +84,7 @@ import {
   type ModelRoutingState,
 } from "../../../../src/shared/model/host-contracts/model-routing";
 import { modelRoutingProjectKey } from "../../../../src/shared/model/modelRoutingPools";
+import { pushOnce } from "@/ui/navigation";
 
 export function ProjectsScreen() {
   const machine = useActiveMachine();
@@ -103,6 +106,7 @@ function ProjectsConnectionScreen({ machine, connection }: {
   const deferredSearch = useDeferredValue(search);
   const [adding, setAdding] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [hiddenGroupsOpen, setHiddenGroupsOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const {
     preferences,
@@ -123,6 +127,8 @@ function ProjectsConnectionScreen({ machine, connection }: {
     readiness,
     isProjectVisible,
   } = useProjectDirectory();
+  // Hidden groups open from "Sort and view", never as a row in the project list.
+  const hiddenGroups = useHiddenGroupsEntry(directory);
   const { preferences: appPrefs, hydrated: appPrefsHydrated } = useAppPreferences();
   const byRepository = appPrefs.groupByRepository;
   const { projects, groups } = useMemo(
@@ -209,8 +215,14 @@ function ProjectsConnectionScreen({ machine, connection }: {
         haptic.success();
         if (!row) setAdding(false);
         go(opened, row?.view);
-      } catch {
-        // The mutation owns failure feedback for both entry points.
+      } catch (cause) {
+        // The folder browser shows its own failure; a row reports beside the tap with Retry, since a
+        // notice at the top of a scrolled list would stay out of sight.
+        if (row && connection.isCurrent()) {
+          open.reset();
+          showToast({ tone: "danger", message: errorMessage(cause, copy),
+            action: { label: copy("Yeniden dene", "Retry"), onPress: () => openFolder(cwd, row) } });
+        }
       } finally {
         if (row && connection.isCurrent()) setOpeningId(undefined);
       }
@@ -232,10 +244,7 @@ function ProjectsConnectionScreen({ machine, connection }: {
     const project = projects.find((item) => item.id === id);
     if (!project?.registered || !connection.isCurrent() || !isProjectVisible(project.id)) return;
     selectProject(project.id);
-    router.navigate({
-      pathname: "/project/[id]",
-      params: { id: project.id, machineId: machine.id, create: "session" },
-    });
+    openNewChat({ projectId: project.id, machineId: machine.id });
   });
   const details = detailsId ? projects.find((item) => item.id === detailsId) : undefined;
   const optionsProject = optionsId ? projects.find((item) => item.id === optionsId) : undefined;
@@ -245,9 +254,6 @@ function ProjectsConnectionScreen({ machine, connection }: {
     const organize = (kind: "projectName" | "projectGroup") => () => {
       if (contextSession && connection.isCurrent()) setOrganizing({ projectId: project.id, sessionId: contextSession, kind });
     };
-    const organizeDetail = contextSession
-      ? undefined
-      : copy("Önce bu projede bir oturum başlat.", "Start a session in this project first.");
     return [
       ...(project.registered ? [
         { key: "new-session", group: "open", label: copy("Yeni oturum", "New session"), icon: <SquarePen />, onPress: () => startSession(project.id) },
@@ -257,17 +263,18 @@ function ProjectsConnectionScreen({ machine, connection }: {
           key: "pull-requests", group: "open", label: copy("Pull request’ler", "Pull requests"), icon: <GitPullRequest />, opens: true,
           onPress: () => {
             if (!connection.isCurrent() || !isProjectVisible(project.id)) return;
-            router.push(`/pull-requests?projectId=${encodeURIComponent(project.id)}&machineId=${encodeURIComponent(machine.id)}` as Href);
+            pushOnce(`/pull-requests?projectId=${encodeURIComponent(project.id)}&machineId=${encodeURIComponent(machine.id)}` as Href);
           },
         },
       ] satisfies MenuAction[] : [
         { key: "open", group: "open", label: copy("Projeyi aç", "Open project"), icon: <FolderTree />, onPress: () => choose(project) },
       ]),
-      ...(project.registered && organizationSupported ? [
+      // The Host organizes a project through one of its sessions; without one the rows stay out of the way.
+      ...(project.registered && organizationSupported && contextSession ? [
         { key: "rename", group: "organize", label: copy("Yeniden adlandır", "Rename"), icon: <Pencil />, opens: true,
-          detail: organizeDetail, disabled: !contextSession, onPress: organize("projectName") },
+          onPress: organize("projectName") },
         { key: "group", group: "organize", label: copy("Gruba taşı", "Move to group"), icon: <FolderInput />, opens: true,
-          detail: organizeDetail, disabled: !contextSession, onPress: organize("projectGroup") },
+          onPress: organize("projectGroup") },
       ] : []),
       {
         key: "copy-path", group: "info", label: copy("Yolu kopyala", "Copy path"), icon: <Copy />,
@@ -296,6 +303,7 @@ function ProjectsConnectionScreen({ machine, connection }: {
     privacyUnavailable,
     loadingLabel: copy("Projeler yükleniyor…", "Loading projects…"),
     empty: directoryReady && !matching,
+    noResults: { searching: !!search.trim(), title: copy("Aramana uyan proje yok.", "No projects match your search."), onClearSearch: () => setSearch("") },
     emptyTitle: search.trim()
       ? copy("Aramana uyan proje yok.", "No projects match your search.")
       : copy("Bu bilgisayarda henüz proje yok.", "No projects on this computer yet."),
@@ -310,43 +318,44 @@ function ProjectsConnectionScreen({ machine, connection }: {
           },
         },
   };
+  const projectSearch = useCollapsibleSearch(
+    <SearchField
+      label={copy("Projelerinde ara", "Search projects")}
+      value={search}
+      onChangeText={setSearch}
+      placeholder={copy("Proje veya grup ara", "Search project or group")}
+    />,
+  );
   const header = useMemo(
     () => (
       <View style={{ gap: space.xs, paddingBottom: space.sm }}>
         <ScreenHeading
           title={copy("Projeler", "Projects")}
-          actions={addInEmptyState ? undefined : (
-            <IconButton
-              label={copy("Proje ekle", "Add project")}
-              disabled={open.isPending || !directoryReady}
-              onPress={() => {
-                open.reset();
-                setAdding(true);
-              }}
-            >
-              <FolderPlus size={20} strokeWidth={2} color={colors.accent} />
-            </IconButton>
-          )}
-        />
-        <SearchToolbar
-          search={
-            <SearchField
-              label={copy("Projelerinde ara", "Search projects")}
-              value={search}
-              onChangeText={setSearch}
-              placeholder={copy("Proje veya grup ara", "Search project or group")}
-            />
-          }
-          actions={
+          // Search, sort and view, and add share the title row; no toolbar row sits above the list.
+          actions={<>
+            {projectSearch.trigger}
             <IconButton
               label={`${copy("Sıralama ve görünüm", "Sort and view")}: ${sortLabels[sort]}`}
               expanded={optionsOpen}
               onPress={() => setOptionsOpen(true)}
             >
-              <ArrowDownUp size={18} color={sort === "desktop" ? colors.muted : colors.accent} />
+              <ArrowDownUp size={iconSize.action} color={sort === "desktop" ? colors.muted : colors.accent} />
             </IconButton>
-          }
+            {addInEmptyState ? null : (
+              <IconButton
+                label={copy("Proje ekle", "Add project")}
+                disabled={open.isPending || !directoryReady}
+                onPress={() => {
+                  open.reset();
+                  setAdding(true);
+                }}
+              >
+                <FolderPlus size={iconSize.action} strokeWidth={2} color={colors.accent} />
+              </IconButton>
+            )}
+          </>}
         />
+        {projectSearch.sheet}
         {preferencesError ? (
           <Notice
             tone="warning"
@@ -357,7 +366,8 @@ function ProjectsConnectionScreen({ machine, connection }: {
           />
         ) : null}
         {!adding ? <MutationState mutation={open} /> : null}
-        <GroupLockSection directory={directory} />
+        {/* Auxiliary rows step aside while a search narrows the list. */}
+        {!search.trim() ? <GroupLockSection directory={directory} /> : null}
       </View>
     ),
     [
@@ -376,6 +386,8 @@ function ProjectsConnectionScreen({ machine, connection }: {
       matching,
       directory,
       sort,
+      projectSearch.trigger,
+      projectSearch.sheet,
     ],
   );
   const keyExtractor = useCallback((row: DirectoryRow) => row.key, []);
@@ -501,22 +513,25 @@ function ProjectsConnectionScreen({ machine, connection }: {
           ))}
         </NavigationGroup>
         <SectionHeader title={copy("Görünüm", "View")} />
+        {/* One choice: repository grouping replaces the list and the desktop groups, so it is a peer view. */}
         <SegmentedControl
           label={copy("Görünüm", "View")}
           hideLabel
-          value={preferences.view}
-          disabled={!hydrated}
+          value={byRepository ? "repository" : preferences.view}
+          disabled={!hydrated || !appPrefsHydrated}
           options={[
-            { value: "grouped", label: copy("Gruplar", "Groups") },
             { value: "list", label: copy("Liste", "List") },
+            { value: "grouped", label: copy("Gruplar", "Groups") },
+            { value: "repository", label: copy("Depoya göre", "By repository") },
           ]}
-          onChange={(view) => updatePreferences({ view })}
-        />
-        <ToggleField
-          label={copy("Depoya göre grupla", "Group by repository")}
-          value={byRepository}
-          disabled={!appPrefsHydrated}
-          onChange={(groupByRepository) => void appPreferences.getState().update({ groupByRepository })}
+          onChange={(view) => {
+            if (view === "repository") {
+              if (!byRepository) void appPreferences.getState().update({ groupByRepository: true });
+              return;
+            }
+            if (byRepository) void appPreferences.getState().update({ groupByRepository: false });
+            if (view !== preferences.view) updatePreferences({ view });
+          }}
         />
         <ToggleField
           label={copy("Tam klasör yolları", "Full folder paths")}
@@ -524,6 +539,11 @@ function ProjectsConnectionScreen({ machine, connection }: {
           disabled={!hydrated}
           onChange={(fullPaths) => updatePreferences({ fullPaths })}
         />
+        {hiddenGroups.supported ? (
+          <NavigationGroup>
+            <HiddenGroupsRow count={hiddenGroups.count} onOpen={() => setHiddenGroupsOpen(true)} />
+          </NavigationGroup>
+        ) : null}
         {showGroups ? (
           <Row>
             <Button
@@ -556,6 +576,7 @@ function ProjectsConnectionScreen({ machine, connection }: {
           </Row>
         ) : null}
       </Sheet>
+      <HiddenGroupsFlow directory={directory} open={hiddenGroupsOpen} onClose={() => setHiddenGroupsOpen(false)} />
       <RowOptionsSheet
         visible={!!optionsProject}
         title={copy("Proje seçenekleri", "Project options")}

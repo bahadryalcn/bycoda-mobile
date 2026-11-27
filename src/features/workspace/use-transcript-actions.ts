@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Share } from "react-native";
 import { randomUUID } from "expo-crypto";
-import { router } from "expo-router";
 import { RemoteHostError } from "@/remote/host-error";
 import { isAppAccessAllowed, useSecurity } from "@/state/security";
 import { useSingleFlight } from "@/state/actions";
@@ -11,6 +10,7 @@ import { useClipboardFeedback } from "@/ui/use-clipboard-feedback";
 import { useCopy } from "@/ui/copy";
 import { startContentReport } from "../reporting/report-store";
 import { matchesTranscriptNote, transcriptNoteTitle } from "./transcript-action-model";
+import { pushOnce } from "@/ui/navigation";
 
 export type TranscriptActionsProps = { text: string; responseText?: string; context?: MessageContext; reportable: boolean; onClose(): void };
 type Action = "share" | "note" | "check" | "report";
@@ -72,7 +72,7 @@ export function useTranscriptActions(props: TranscriptActionsProps) {
     publishNote({ error: null, checkError: null, missing: false });
     opening.context!.client.assertCurrentAccess();
     noteIssued.current = true;
-    const saved = await opening.context!.client.request("notes.upsert", { note: { id: opening.noteId, title: transcriptNoteTitle(opening.text, copy("Sohbet notu", "Chat note")), body: opening.text, tags: [], sourceSessionId: opening.context!.sessionId, sourceCwd: opening.context!.cwd }, expectedUpdatedAt: 0 }, { retry: false });
+    const saved = await opening.context!.client.request("notes.upsert", { note: { id: opening.noteId, title: transcriptNoteTitle(opening.text, copy("Oturum notu", "Session note")), body: opening.text, tags: [], sourceSessionId: opening.context!.sessionId, sourceCwd: opening.context!.cwd }, expectedUpdatedAt: 0 }, { retry: false });
     if (validScope(expected) && matchesTranscriptNote(saved, opening.noteId, opening.text)) publishNote({ status: "saved", error: null });
     else if (live.current) publishNote({ status: "uncertain", error: validScope(expected) ? new Error(copy("Kaydedilen not doğrulanamadı. Kaydı yeniden kontrol edin.", "The saved note could not be verified. Check it again.")) : null });
   }, (cause, expected) => {
@@ -94,7 +94,7 @@ export function useTranscriptActions(props: TranscriptActionsProps) {
     if (validSource(expected)) setCancelled(result.action === "dismissedAction");
   }, (cause, expected) => { if (validSource(expected)) setShareError(cause); });
   const report = () => run("report", () => validSource() && current.current.reportable, () => {
-    setReportError(null); startContentReport(opening.text); finish(); router.push("/report");
+    setReportError(null); startContentReport(opening.text); finish(); pushOnce("/report");
   }, cause => { if (validSource()) setReportError(cause); });
   const select = () => { if (!validSource() || flight.isPending() || !opening.context?.sessionId) return; selectingRef.current = true; setSelecting(true); };
   const visible = sameTarget() && allowed();

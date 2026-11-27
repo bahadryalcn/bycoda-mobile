@@ -33,12 +33,24 @@ export function useCreateSession(
   /** Resolves true once the Host accepted the command; failures stay in `command.error`. */
   const create = (
     onCreated: (sessionId: string) => void,
-    { settings = {}, runtimeMode = "supervised" }: { settings?: Record<string, string>; runtimeMode?: RuntimeMode } = {},
+    {
+      settings = {},
+      runtimeMode = "supervised",
+      commandId,
+      firstTurn,
+    }: {
+      settings?: Record<string, string>;
+      runtimeMode?: RuntimeMode;
+      /** A stable ID makes a retry of the same payload idempotent: the Host replays its receipt. */
+      commandId?: string;
+      /** The first prompt, created atomically with the session (`sessions.createFirstTurn`). */
+      firstTurn?: { type: "send"; commandId: string; sessionId: ""; text: string };
+    } = {},
   ): Promise<boolean> => {
     if (!canStart || !machine || !connection.isCurrent()) return Promise.resolve(false);
     return connection.resource.run(async () => {
       if (!connection.isCurrent()) return false;
-      const receipt = await command.mutateAsync({
+      const params = {
         type: "create",
         projectId,
         ...(cwd ? { worktreeCwd: cwd } : {}),
@@ -47,7 +59,9 @@ export function useCreateSession(
         model: selectedModel,
         modelSettings: creationSettings(selectedModelValue, settings, selectedProvider, models),
         runtimeMode,
-      });
+        ...(firstTurn ? { firstTurn } : {}),
+      };
+      const receipt = await (commandId ? command.mutateAsync(params, { commandId }) : command.mutateAsync(params));
       if (connection.isCurrent()) {
         haptic.success();
         onCreated(receipt.sessionId);

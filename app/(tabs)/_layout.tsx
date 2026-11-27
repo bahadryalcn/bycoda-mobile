@@ -2,11 +2,12 @@ import { Tabs, usePathname } from "expo-router";
 import { View, type ColorValue } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MachineHealthMonitor, MachinePill } from "../../src/ui/machine-bar";
+import { PreferenceSaveToast } from "../../src/features/connections/preference-save-toast";
 import { setToastClearance } from "../../src/ui/provider";
 import { useCopy } from "../../src/ui/copy";
 import { useMachines } from "../../src/state/machines";
 import { ScreenChromeProvider, type HeaderIdentityProps } from "../../src/ui/layout";
-import { NewSessionSheet } from "../../src/features/workspace/new-session-sheet";
+import { openNewChat } from "../../src/features/workspace/new-chat-navigation";
 import { DockIcon, type DockIconName } from "../../src/ui/dock-icon";
 import { FloatingTabBar, TAB_BADGE_DOT, type FloatingTabBarProps } from "../../src/ui/floating-tab-bar";
 import { useMobileTheme } from "../../src/ui/theme";
@@ -55,11 +56,13 @@ function BadgedDock({ ...dockProps }: FloatingTabBarProps) {
       options: {
         ...descriptor.options,
         tabBarBadge: running > 99 ? "99+" : running,
-        tabBarAccessibilityLabel: copy(
-          "Oturumlar, {p0} çalışan oturum",
-          "Sessions, {p0} running sessions",
-          { p0: running > 99 ? "99+" : running },
-        ),
+        tabBarAccessibilityLabel: running === 1
+          ? copy("Oturumlar, 1 çalışan oturum", "Sessions, 1 running session")
+          : copy(
+              "Oturumlar, {p0} çalışan oturum",
+              "Sessions, {p0} running sessions",
+              { p0: running > 99 ? "99+" : running },
+            ),
       },
     };
   }
@@ -93,7 +96,6 @@ export default function TabsLayout() {
   const railVisible = tablet && !isWelcome;
   const dockVisible = !railVisible && dockRoots.includes(pathname);
   const [dockHeight, setDockHeight] = useState(0);
-  const [newSessionOpen, setNewSessionOpen] = useState(false);
   const bottomInset = dockVisible ? dockHeight : 0;
   // The minimized assistant window rests above the dock and overlays the tab scene.
   const assistantReserve = useAssistantWindowReserve((state) => state.reserve);
@@ -111,6 +113,7 @@ export default function TabsLayout() {
       headerTrailing={!isWelcome && machineId ? <AssistantEntryButton /> : undefined}
     >
       {machineId ? <MachineHealthMonitor /> : null}
+      <PreferenceSaveToast />
       {machineId ? <TabActivityBridge /> : null}
       <View style={{ flex: 1, paddingTop: railVisible ? 0 : insets.top, flexDirection: railVisible ? "row" : "column", backgroundColor: colors.background }}>
         {railVisible ? <TabletRail /> : null}
@@ -123,7 +126,7 @@ export default function TabsLayout() {
                 onInsetChange={setDockHeight}
                 quickAction={machineId ? {
                   label: copy("Yeni oturum", "New session"),
-                  onPress: () => setNewSessionOpen(true),
+                  onPress: () => openNewChat(),
                 } : undefined}
               />
             ) : null}
@@ -159,9 +162,6 @@ export default function TabsLayout() {
         </View>
         {tablet && !isWelcome ? (
           <TabletQuickPanel bottomInset={dockVisible ? dockHeight : insets.bottom} />
-        ) : null}
-        {machineId ? (
-          <NewSessionSheet visible={newSessionOpen} onClose={() => setNewSessionOpen(false)} />
         ) : null}
       </View>
     </ScreenChromeProvider>

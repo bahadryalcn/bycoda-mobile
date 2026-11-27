@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Crypto from "expo-crypto";
-import { router } from "expo-router";
 import { MobilePairingCodeError } from "../../../../src/integrations/mobile-pairing";
 import { discoverMachine, RemoteHostError } from "@/remote/transport";
 import { useMachines } from "@/state/machines";
@@ -25,8 +24,9 @@ import {
 } from "./pairing-code";
 import { newProofSeed, proofKeyOf } from "@/remote/device-proof";
 import { redeemMobilePairingCode } from "./pairing-redeem";
+import { pairingPhoneName } from "./phone-name";
+import { leaveTo } from "@/ui/navigation";
 
-const phoneName = "Bycoda phone";
 
 export type AccountPairingState =
   | { phase: "idle" }
@@ -107,7 +107,7 @@ export function useAccountPairing() {
         const claimId = pairingClaimId(await Crypto.getRandomBytesAsync(32));
         // The phone key exists before the credential does; it is persisted with the credential.
         const proofSeed = newProofSeed();
-        const redeemed = await redeemMobilePairingCode(code, claimId, phoneName, {
+        const redeemed = await redeemMobilePairingCode(code, claimId, pairingPhoneName(), {
           signal,
           assertAccess: assertAppAccess,
           proofKey: proofKeyOf(proofSeed),
@@ -142,7 +142,8 @@ export function useAccountPairing() {
         );
         if (request.current === controller) request.current = null;
         if (mounted.current) setState({ phase: "idle" });
-        router.replace("/");
+        // Home is already beneath the Computers page: return to it instead of stacking a second one.
+        leaveTo("/");
       } catch (error) {
         if (signal.aborted && request.current !== controller) return;
         const message =

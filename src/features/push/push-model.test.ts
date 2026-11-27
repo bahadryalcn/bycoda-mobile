@@ -109,7 +109,8 @@ describe("push routes", () => {
 
   it("navigates to push destinations so repeat taps reuse the screen instead of stacking", () => {
     const source = readFileSync(new URL("./use-push.ts", import.meta.url), "utf8");
-    expect(source).toContain("router.navigate(pushRoute(target, machine.id)");
+    // openExternalEntry navigates (never pushes) and puts the parent tab beneath from Home.
+    expect(source).toContain("openExternalEntry(pushRoute(target, machine.id)");
     expect(source).not.toMatch(/router\.push\(/);
   });
 

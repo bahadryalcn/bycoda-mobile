@@ -101,7 +101,7 @@ function ApprovalOwner({ approval, scope, runId, disabled, onCommand, identity }
     {!runId ? <Body muted>{copy("Onay için oturumun güncel durumunu yükle.", "Refresh the session to approve.")}</Body> : null}
     {delivery?.status === "accepted" ? <Body muted>{copy("Karar gönderildi · doğrulama bekleniyor", "Decision sent · waiting for confirmation")}</Body> : null}
     {delivery?.status === "unknown" ? <View accessibilityRole="alert"><Badge tone="warning" label={copy("Onayın teslimi doğrulanamadı", "Approval delivery not confirmed")} /></View> : null}
-    {delivery?.status === "unknown" ? <Body muted>{copy("Yeniden denemeden önce konuşmayı kontrol et.", "Check the conversation before trying again.")}</Body> : null}
+    {delivery?.status === "unknown" ? <Body muted>{copy("Yeniden denemeden önce oturumu kontrol et.", "Check the session before trying again.")}</Body> : null}
     {!runId || delivery?.status === "unknown" ? <Button label={copy("Durumu kontrol et", "Check status")} fullWidth reserveTouchTarget
       busy={checking} disabled={checking} onPress={() => { void checkStatus(); }} /> : null}
     <ErrorText error={error} />

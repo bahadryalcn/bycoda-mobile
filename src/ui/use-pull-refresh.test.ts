@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { usePullRefresh } from "./use-pull-refresh";
+import { PULL_REFRESH_MIN_MS, usePullRefresh } from "./use-pull-refresh";
 
 let root: Root;
 let state: ReturnType<typeof usePullRefresh>;
@@ -37,4 +37,21 @@ it("releases feedback after failure so the user can retry", async () => {
   expect(state.refreshing).toBe(false);
   await act(async () => { await state.onRefresh(); });
   expect(refresh).toHaveBeenCalledTimes(2);
+});
+
+it("holds a fast refresh's indicator for the minimum so the native control can dismiss cleanly", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  try {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    await act(async () => root.render(createElement(Probe, { refresh })));
+    let completion!: Promise<void>;
+    await act(async () => { completion = state.onRefresh(); });
+    expect(state.refreshing).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(PULL_REFRESH_MIN_MS - 1); });
+    expect(state.refreshing).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); await completion; });
+    expect(state.refreshing).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
 });

@@ -14,8 +14,9 @@ import { errorMessage } from "@/ui/error-message";
 import { RecordCard } from "@/ui/record-card";
 import { Status, statusLabel } from "../shared/status";
 import { stamp } from "../shared/format";
-import { joinMeta, useMenuGlyph } from "../shared/record-bits";
+import { joinMeta, useMenuGlyph, useRelativeTime } from "../shared/record-bits";
 import { MemberLines } from "./member-lines";
+import { agentPresentation } from "../shared/agent-presentation";
 import { CrewRuntimePanel } from "./runtime-panel";
 import { canDeleteCrewRun, canStopCrewRun, crewActivityKnown, crewHasRunningWork, crewTaskSessions } from "./runtime-model";
 import { RecordConfirmationSheet, useRecordConfirmation } from "../shared/use-record-confirmation";
@@ -67,7 +68,9 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
       router.navigate({ pathname: "/session/[id]", params: { id: sessionId, machineId, projectId: run.projectId } });
   };
   const done = run.tasks.filter((task) => task.status === "done").length;
-  const created = `${copy("Oluşturulma", "Created")}: ${stamp(run.createdAt)}`;
+  const relative = useRelativeTime();
+  // Lists use relative time like every other record card.
+  const created = relative(run.createdAt) ? copy("Oluşturuldu {p0}", "Created {p0}", { p0: relative(run.createdAt) }) : "";
   const stopWork = () => confirm(copy("Çalışmayı durdur", "Stop work"), copy("Koordinatör ve çalışan ekip görevleri durdurulur. Dosyalar ve çalışma kaydı korunur.", "The coordinator and active crew tasks will stop. Files and the work record are kept."),
     copy("Durdur", "Stop"), () => { if (supported && useMachines.getState().activeId === machineId) stop.mutate({ projectId: run.projectId, runId: run.id }, { onError: refreshAfterFailure }); });
   const runActions = canStopCrewRun(run) || run.status !== "finished" ? <Row>
@@ -93,12 +96,15 @@ export function CrewRunCard({ run }: { run: CrewRunView }) {
         disabled: !supported, onPress: () => openSession(run.coordinatorSessionId!) },
       machine?.capabilities?.includes("crews.run-delete.v1") && { key: "delete", icon: glyph(Trash2, true), label: copy("Çalışmayı sil", "Delete work"), destructive: true,
         disabled: busy || !supported || !canDeleteCrewRun(run),
-        onPress: () => confirm(copy("Çalışmayı sil", "Delete work"), copy("Bu çalışma listeden kaldırılsın mı? Ekip, görevler ve oturumlar korunur.", "Remove this work from the list? The crew, tasks and conversations are kept."),
+        onPress: () => confirm(copy("Çalışmayı sil", "Delete work"), copy("Bu çalışma listeden kaldırılsın mı? Ekip, görevler ve oturumlar korunur.", "Remove this work from the list? The crew, tasks and sessions are kept."),
           copy("Sil", "Delete"), () => { if (supported && !busy && canDeleteCrewRun(run) && useMachines.getState().activeId === machineId) remove.mutate({ projectId: run.projectId, runId: run.id, expectedUpdatedAt: run.updatedAt }); }) },
       ] }}
     details={(expanded) => <CrewRuntimePanel run={run} active={expanded}>
       <NavigationGroup>{run.tasks.map((task) => <CrewTaskRow key={task.id} task={task}
-        model={run.assignments.find((assignment) => assignment.taskId === task.id)?.candidate.model}
+        model={(() => {
+          const candidate = run.assignments.find((assignment) => assignment.taskId === task.id)?.candidate;
+          return candidate ? agentPresentation(candidate.harness, candidate.model) : undefined;
+        })()}
         supported={supported} onOpenSession={openSession} />)}</NavigationGroup>
       {!run.tasks.length && <Body muted>{copy("Henüz ekip görevi oluşmadı.", "No crew tasks have been created yet.")}</Body>}
       <Stack>

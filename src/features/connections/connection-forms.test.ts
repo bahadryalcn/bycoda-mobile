@@ -13,7 +13,7 @@ vi.mock("@/ui/tokens", () => ({ space: {}, gapIcon: 8, iconSize: {} }));
 vi.mock("lucide-react-native/icons/laptop", () => ({ default: "Laptop" }));
 vi.mock("@/ui/primitives", () => ({
   Body: "Body", ErrorNotice: "ErrorNotice", FormActions: "FormActions", Disclosure: "Disclosure",
-  Field: "Field", IdentifierField: "IdentifierField", Stack: "Stack", Heading: "Heading", Row: "Row", RowIcon: "RowIcon",
+  Field: "Field", IdentifierField: "IdentifierField", Stack: "Stack", Heading: "Heading", Row: "Row", RowIcon: "RowIcon", StatusText: "StatusText",
 }));
 import { ManualConnectionForm } from "./manual-connection-form";
 import { ConnectionFeedback } from "./connection-feedback";

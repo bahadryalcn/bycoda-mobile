@@ -10,6 +10,7 @@ const fixture = vi.hoisted(() => ({
   error: false,
   refetch: vi.fn(async () => ({})),
   mutate: vi.fn(),
+  mutateAsync: vi.fn(async ({ goal }: { goal: { id: string } }) => goal),
   selects: new Map<
     string,
     {
@@ -75,6 +76,18 @@ vi.mock("@/ui/primitives", () => {
       fixture.fields.set(label, props);
       return null;
     },
+    SegmentedControl: ({
+      label,
+      ...props
+    }: {
+      label: string;
+      value?: string;
+      options: { value: string }[];
+      onChange(value: string): void;
+    }) => {
+      fixture.selects.set(label, props);
+      return null;
+    },
     SelectField: ({
       label,
       ...props
@@ -120,6 +133,7 @@ vi.mock("@/ui/primitives", () => {
   };
 });
 import { GoalEditor } from "./goal-editor";
+import { HostGoalInputSchema } from "../../../../../src/shared/model/host-contracts/goals";
 beforeEach(() => {
   fixture.current = true;
   fixture.data = undefined;
@@ -127,6 +141,7 @@ beforeEach(() => {
   fixture.error = false;
   fixture.refetch.mockClear();
   fixture.mutate.mockClear();
+  fixture.mutateAsync.mockClear();
   fixture.selects.clear();
   fixture.fields.clear();
 });
@@ -144,6 +159,7 @@ async function mount() {
         create: {
           isPending: false,
           mutate: fixture.mutate,
+          mutateAsync: fixture.mutateAsync,
         } as unknown as GoalEditorProps["create"],
         onClose: vi.fn(),
       }),
@@ -208,6 +224,30 @@ it("offers retry for initial failure without a false empty result", async () => 
     await act(async () => view.container.querySelector("button")!.click());
     expect(fixture.refetch).toHaveBeenCalledOnce();
     expect(fixture.mutate).not.toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});
+
+it("sends the crew choice as the Host contract executor", async () => {
+  fixture.pending = false;
+  fixture.data = { definitions: [{ id: "crew", name: "Review team" }] };
+  const view = await mount();
+  try {
+    await act(async () => {
+      fixture.selects.get("Worker type")!.onChange("crew");
+      fixture.fields.get("Title")!.onChangeText("Crew epic");
+      fixture.fields.get("Desired outcome")!.onChangeText("Ship it");
+    });
+    await act(async () => view.render());
+    expect(fixture.submit?.disabled).toBe(false);
+    await act(async () => fixture.submit!.onSubmit());
+    expect(fixture.mutateAsync).toHaveBeenCalledOnce();
+    const { goal } = fixture.mutateAsync.mock.calls[0][0] as { goal: Record<string, unknown> };
+    expect(goal.executor).toEqual({ kind: "crew", crewDefinitionId: "crew" });
+    expect("crewDefinitionId" in goal).toBe(false);
+    const { expectedAbsent: _ignored, ...input } = goal;
+    expect(HostGoalInputSchema.safeParse(input).success).toBe(true);
   } finally {
     await view.close();
   }

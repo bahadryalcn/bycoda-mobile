@@ -13,7 +13,7 @@ export function SubmoduleView({ machineId, projectId, cwd, onClose }: { machineI
     enabled: !!supported && !!cwd,
     queryFn: async (client, signal) => readInitializedSubmodules(await client.request("workspace.run", { command: "git_submodules", args: { cwd } }, { signal })),
   });
-  return <Sheet visible title={copy("Başlatılmış submodule’ler", "Initialized submodules")} size="full" scroll={false} onClose={onClose}>
+  return <Sheet visible title={copy("Alt depolar (submodule)", "Submodules")} size="full" scroll={false} onClose={onClose}>
     <ScreenList data={supported ? query.data ?? [] : []} keyExtractor={(path) => path}
       header={<View style={{ gap: space.sm }}><Body mono>{cwd}</Body>
         <Body muted>{copy("Yalnız bu çalışma klasöründeki başlatılmış iç depolar listelenir. Başlatılmamış submodule’ler dahil değildir.", "Lists initialized nested repositories in this checkout only. Uninitialized submodules are excluded.")}</Body>

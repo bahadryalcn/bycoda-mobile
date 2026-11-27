@@ -142,3 +142,16 @@ it("marks pinned sessions with a visible pin glyph and the desktop wording", asy
   expect(container.querySelector("[data-pin]")).not.toBeNull();
   expect(container.querySelector("button")?.getAttribute("aria-label")).toContain("Pinned");
 });
+
+it("leads a pinned title with the pin and keeps only the time in the trailing column", async () => {
+  await render({ session: { ...props.session, pinned: true, branch: "main" } });
+  const html = container.innerHTML;
+  // The pin comes before the title; the default branch of a primary checkout is not repeated.
+  expect(html.indexOf("data-pin")).toBeGreaterThan(-1);
+  expect(html.indexOf("data-pin")).toBeLessThan(html.indexOf(">Review<"));
+  expect(container.textContent).not.toContain("main");
+  expect(container.textContent).toContain("1m");
+  await render({ session: { ...props.session, pinned: false, branch: "feature/sheet" } });
+  expect(container.querySelector("[data-pin]")).toBeNull();
+  expect(container.textContent).toContain("feature/sheet");
+});

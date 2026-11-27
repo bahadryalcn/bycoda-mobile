@@ -1,4 +1,4 @@
-import { providerStateLabel, providerStateTone } from "./provider-labels";
+import { providerStateLabel } from "./provider-labels";
 import type { ProviderConnectionsProps, ProviderInboxFeedbackProps, ProviderInboxRowProps } from "./provider-component-types";
 import {
   Badge,
@@ -13,7 +13,13 @@ import { IssueSummary } from "@/ui/issue-summary";
 import { providerName } from "./provider-model";
 import { useRelativeTime } from "../management/shared/record-bits";
 import { IssueRecordRow } from "./issue-record-row";
-import { PullRequestStateBadge } from "../workspace/pull-request-state-badge";
+import CircleDot from "lucide-react-native/icons/circle-dot";
+import GitMerge from "lucide-react-native/icons/git-merge";
+import GitPullRequest from "lucide-react-native/icons/git-pull-request";
+import GitPullRequestClosed from "lucide-react-native/icons/git-pull-request-closed";
+import GitPullRequestDraft from "lucide-react-native/icons/git-pull-request-draft";
+import { ProviderMark } from "./provider-mark";
+import { isPullRequest, statusCategory, statusTone } from "./provider-view-model";
 
 export {
   type ProviderConnectionsProps,
@@ -23,13 +29,20 @@ export {
 
 export function ProviderConnections({ providers, onRetry, retrying }: ProviderConnectionsProps) {
   const copy = useCopy();
+  const { uiStyles } = useMobileTheme();
   return (
     <>
       <Stack>
         {providers.map((provider) => (
           <Row key={provider.provider} style={{ flexWrap: "nowrap", minHeight: 48 }}>
-            <Body style={{ flex: 1, minWidth: 0 }}>{providerName(provider.provider)}</Body>
-            {/* Connected is a green badge; a missing account is a muted word with the way to fix it below. */}
+            <ProviderMark provider={provider.provider} size={20} />
+            <Stack style={{ flex: 1, minWidth: 0, gap: 0 }}>
+              <Body>{providerName(provider.provider)}</Body>
+              {/* A missing account says where it is connected: only the computer holds credentials. */}
+              {provider.connected ? null : <Body muted style={uiStyles.caption}>
+                {copy("Bilgisayarda: Ayarlar → Gelen kutusu → {p0}", "On your computer: Settings → Inbox → {p0}", { p0: providerName(provider.provider) })}
+              </Body>}
+            </Stack>
             {provider.connected
               ? <Badge tone="success" label={copy("Bağlı", "Connected")} />
               : <StatusText label={copy("Bağlı değil", "Not connected")} />}
@@ -38,14 +51,6 @@ export function ProviderConnections({ providers, onRetry, retrying }: ProviderCo
       </Stack>
       <IssueSummary issues={providers.filter((provider) => provider.error).map((provider) => `${providerName(provider.provider)}: ${provider.error}`)}
         onRetry={onRetry} retrying={retrying} />
-      {providers.some((provider) => !provider.connected) ? (
-        <Body muted>
-          {copy(
-            "Hesapları bilgisayarındaki Bycoda ayarlarından bağla; burada yalnızca durumu görünür.",
-            "Connect accounts in Bycoda settings on your computer; only their status shows here.",
-          )}
-        </Body>
-      ) : null}
     </>
   );
 }
@@ -76,7 +81,16 @@ export function ProviderInboxRow({ item, onOpen }: ProviderInboxRowProps) {
   const relative = useRelativeTime();
   const stamp = Date.parse(item.updatedAt);
   const updated = Number.isFinite(stamp) ? relative(stamp) : "";
+  const state = providerStateLabel(item.state, copy);
+  const category = statusCategory(item);
+  const pr = isPullRequest(item);
+  // The type glyph inside the status badge: issue, pull request, draft, merged or closed PR.
+  const TypeIcon = !pr ? CircleDot : category === "merged" ? GitMerge : category === "draft" ? GitPullRequestDraft
+    : category === "closed" ? GitPullRequestClosed : GitPullRequest;
+  const type = pr ? item.provider === "gitlab" ? copy("Merge request", "Merge request") : copy("Pull request", "Pull request")
+    : copy("Issue", "Issue");
   return <IssueRecordRow
+          icon={<ProviderMark provider={item.provider} />}
           label={item.title}
           detail={[
             providerName(item.provider),
@@ -85,11 +99,12 @@ export function ProviderInboxRow({ item, onOpen }: ProviderInboxRowProps) {
           ]
             .filter(Boolean)
             .join(" · ")}
-          state={providerStateLabel(item.state, copy)}
-          stateTone={providerStateTone(item.state)}
-          stateBadge={item.state.toUpperCase() === "MERGED" ? <PullRequestStateBadge state={item.state} label={providerStateLabel(item.state, copy)} /> : undefined}
+          state={`${type} · ${state}`}
+          // One tone owner (statusTone): an ordinary state is quiet text; only one to act on is a badge.
+          stateTone={statusTone(item)}
+          stateBadge={statusTone(item) === "danger" || statusTone(item) === "warning" ? <Badge icon={TypeIcon} tone={statusTone(item)} label={state} /> : undefined}
           extraBadges={[...(item.draft ? [copy("Taslak", "Draft")] : []), ...(item.provider === "jira" && item.priority ? [item.priority] : [])]}
-          caption={[item.assignees?.[0]?.login, updated].filter(Boolean).join(" · ") || undefined}
+          caption={[item.assignees?.[0]?.login ? copy("Atanan: {p0}", "Assignee: {p0}", { p0: item.assignees[0].login }) : "", updated].filter(Boolean).join(" · ") || undefined}
           onPress={() => onOpen(item)}
         />;
 }

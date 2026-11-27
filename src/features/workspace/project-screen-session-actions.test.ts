@@ -15,6 +15,7 @@ const fixture = vi.hoisted(() => ({
   locked: false,
   epoch: 1,
   navigate: vi.fn(),
+  openNewChat: vi.fn(),
   create: vi.fn<(created: (id: string) => void) => Promise<boolean>>(),
 }));
 
@@ -40,7 +41,12 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: {} }) }));
 vi.mock("@/ui/screen-content-insets", () => ({ useScreenContentInsets: () => ({ bottom: 0 }) }));
 vi.mock("@/ui/hierarchy-frame", () => ({ HierarchyWidthProvider: ({ children }: { children: ReactNode }) => children }));
+vi.mock("./session-filter-chip", () => ({ SessionFilterChip: () => null }));
+vi.mock("@/ui/search-field", () => ({
+  useCollapsibleSearch: () => ({ open: false, trigger: null, filterTrigger: null, sheet: null, field: null }),
+}));
 vi.mock("@/ui/primitives", () => ({
+  Row: ({ children }: { children: ReactNode }) => h("div", null, children),
   Body: ({ children }: { children: ReactNode }) => h("h2", null, children),
   SectionHeader: ({ title, trailing }: { title: string; trailing?: ReactNode }) => h("div", null, h("h2", null, title), trailing),
   Button: ({ label, onPress }: { label: string; onPress: () => void }) => h("button", { onClick: onPress }, label),
@@ -72,10 +78,7 @@ vi.mock("./session-folder-row", () => ({}));
 vi.mock("./session-list-row", () => ({}));
 vi.mock("./session-shelf-header", () => ({}));
 vi.mock("./shared", () => ({ CommandError: () => null }));
-vi.mock("./new-session-sheet", () => ({
-  NewSessionSheet: ({ visible, project }: { visible: boolean; project?: { id: string; cwd?: string } }) =>
-    visible ? h("section", { "data-new-session": project?.id }, "New session editor") : null,
-}));
+vi.mock("./new-chat-navigation", () => ({ openNewChat: fixture.openNewChat }));
 
 function renderProjectSessions() {
   return renderToStaticMarkup(h(ProjectSessions, {
@@ -94,6 +97,7 @@ beforeEach(() => {
   fixture.locked = false;
   fixture.epoch = 1;
   fixture.navigate.mockClear();
+  fixture.openNewChat.mockClear();
   fixture.create.mockReset().mockResolvedValue(true);
 });
 
@@ -125,7 +129,7 @@ it("keeps Retry visible after a failed read without showing the empty state acti
   expect(view).not.toContain("<button>New session</button>");
 });
 
-it("identifies the project archive and returns to active sessions directly from the list", async () => {
+it("identifies the project archive and returns to active sessions with the same archive control", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const container = document.createElement("div");
   const root = createRoot(container);
@@ -137,14 +141,12 @@ it("identifies the project archive and returns to active sessions directly from 
       renderFrame: (content, { toggleArchived }) => h("main", null,
         h("button", { onClick: toggleArchived }, "Archive"), content),
     })));
-    expect(button("Active sessions")).toBeUndefined();
-
     await act(async () => button("Archive")!.click());
     expect(container.querySelector("h2")?.textContent).toBe("Archived sessions");
     expect(container.textContent).toContain("No archived sessions.");
 
-    await act(async () => button("Active sessions")!.click());
-    expect(button("Active sessions")).toBeUndefined();
+    await act(async () => button("Archive")!.click());
+    expect(container.querySelector("h2")).toBeNull();
     expect(container.textContent).toContain("No sessions yet.");
   } finally {
     await act(async () => root.unmount());
@@ -152,7 +154,7 @@ it("identifies the project archive and returns to active sessions directly from 
   }
 });
 
-it("opens the shared new-session editor for this project and retires it after re-pairing", async () => {
+it("opens the empty new session for this project once from a create link, not again after re-pairing", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const container = document.createElement("div");
   const root = createRoot(container);
@@ -160,16 +162,14 @@ it("opens the shared new-session editor for this project and retires it after re
     projectId: "project", initialCreating: true, canReadProject: () => true,
     renderFrame: (content) => content,
   });
-  const editor = () => container.querySelector("[data-new-session]");
   try {
     await act(async () => root.render(panel()));
-    expect(editor()?.getAttribute("data-new-session")).toBe("project");
+    expect(fixture.openNewChat).toHaveBeenCalledExactlyOnceWith({ projectId: "project", machineId: "computer" });
     await act(async () => root.render(panel()));
-    expect(editor()).not.toBeNull();
 
     fixture.epoch++;
     await act(async () => root.render(panel()));
-    expect(editor()).toBeNull();
+    expect(fixture.openNewChat).toHaveBeenCalledTimes(1);
     expect(fixture.navigate).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());

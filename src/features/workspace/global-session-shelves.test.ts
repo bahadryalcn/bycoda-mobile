@@ -16,8 +16,7 @@ it("orders attention, running and other sessions by activity within the seven-da
   const directory = [e(a, "idle", { updatedAt: now }), e(a, "run", { status: "running", updatedAt: now - day }),
     e(a, "failed", { issue: "failed", updatedAt: now - 2 * day }), e(a, "input", { needsInput: true, updatedAt: now - day }),
     e(a, "old", { needsInput: true, updatedAt: now - 8 * day })];
-  expect(keys(urgencyGlobalSessionRows(directory, now))).toEqual(["a:input", "a:failed", "a:run", "a:idle"]);
-  expect(keys(urgencyGlobalSessionRows(directory))).toContain("a:old");
+  expect(keys(urgencyGlobalSessionRows(directory, now))).toEqual(["a:input", "a:failed", "a:old", "a:run", "a:idle"]);
   expect(directory[0]).toMatchObject({ session: { id: "idle" } });
 });
 
@@ -37,9 +36,12 @@ it("orders and windows global recents by turn activity like desktop Last session
     e(a, "renamed", { updatedAt: now, lastActivityAt: now - 3 * day }),
     e(a, "active", { updatedAt: now - 5 * day, lastActivityAt: now - day }),
     e(a, "stale", { updatedAt: now - 9 * day }),
+    e(a, "pinned", { pinned: true, updatedAt: now - 20 * day }),
+    e(a, "running", { status: "running", updatedAt: now - 21 * day }),
   ];
-  expect(keys(recentGlobalSessionRows(directory, now))).toEqual(["a:active", "a:renamed"]);
-  expect(keys(recentGlobalSessionRows(directory))).toEqual(["a:active", "a:renamed", "a:stale"]);
+  // Pinned and running sessions are exempt from the window; only quiet history is trimmed.
+  expect(keys(recentGlobalSessionRows(directory, now))).toEqual(["a:active", "a:renamed", "a:pinned", "a:running"]);
+  expect(keys(recentGlobalSessionRows(directory))).toEqual(["a:active", "a:renamed", "a:stale", "a:pinned", "a:running"]);
 });
 
 it("shows each project's folders in Recent and leaves loose sessions in directory order", () => {
@@ -55,4 +57,15 @@ it("keeps status shelves flat and respects folder collapse per project", () => {
   expect(keys(rows)).toEqual(["pinned:1", "a:a1", "recent:1", "a:folder:f"]);
   const open = globalSessionRows([e(a, "a2")], { a: { f: true } }, {}, true);
   expect(keys(open)).toContain("a:session:a2");
+});
+
+it("leads one project's list with its pinned sessions under Pinned, then Recent, without repeating them", async () => {
+  const { withPinnedGroup } = await import("./global-session-shelves");
+  const project = { id: "p", name: "bycoda", cwd: "/p" } as never;
+  const row = (id: string, pinned = false) => ({ kind: "session" as const, key: `p:${id}`, project, depth: 0,
+    session: { id, pinned } as never });
+  const rows = [row("new"), row("pin", true), row("old")];
+  expect(withPinnedGroup(rows).map((entry) => entry.key)).toEqual(["shelf:pinned", "p:pin", "shelf:recent", "p:new", "p:old"]);
+  expect(withPinnedGroup(rows, { pinned: true }).map((entry) => entry.key)).toEqual(["shelf:pinned", "shelf:recent", "p:new", "p:old"]);
+  expect(withPinnedGroup([row("a"), row("b")]).map((entry) => entry.key)).toEqual(["p:a", "p:b"]);
 });

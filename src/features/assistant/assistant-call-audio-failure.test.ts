@@ -12,7 +12,7 @@ vi.mock("@/state/reviewed-machine", () => ({ reviewedMachine: (machine: unknown)
 vi.mock("../privacy/consent-access", () => ({ hasProviderPermission: () => true, useProviderPermission: { subscribe: () => () => {} } }));
 vi.mock("./assistant-send", () => ({ assistantSendKey: () => "send", readStoredSend: async () => null, isAssistantSendPending: () => false, sendRoomMessage: vi.fn() }));
 vi.mock("./assistant-client", () => ({ AssistantMobileClient: class {} }));
-vi.mock("./assistant-companion-state", () => ({ useAssistantCompanion: { getState: () => ({ thread: { id: "room" } }) }, retainAssistantSpeech: vi.fn() }));
+vi.mock("./assistant-companion-state", () => ({ useAssistantCompanion: { getState: () => ({ thread: { id: "room" } }) }, retainAssistantSpeech: vi.fn(), settleAssistantVoice: async () => {} }));
 vi.mock("./assistant-voice-native", () => ({ nativeVoiceDependencies: (callbacks: object) => ({ ...callbacks, capture: f.capture, stopPlayback: vi.fn(), play: vi.fn() }) }));
 import { startAssistantCall, endAssistantCall } from "./assistant-call-session";
 import { useAssistantCall } from "./assistant-call-state";

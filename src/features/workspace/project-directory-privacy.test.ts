@@ -7,12 +7,13 @@ import { useProjectList } from "./use-project-directory";
 import { useProjectActivity } from "./use-project-activity";
 import { invalidateProjectPrivacy, projectPrivacyKey } from "./project-privacy-cache";
 import { getQueryPresentation } from "@/ui/query-presentation";
+import { useSecurity } from "@/state/security";
 const state = vi.hoisted(() => ({ allowed: true, machine: { id: "machine", environmentId: "host", capabilities: ["projects.directory.v1"] }, response: { privacyReady: true, groups: [], projects: [] } as unknown, staleData: undefined as unknown }));
 vi.mock("@/state/machines", async () => {
   const { create } = await import("zustand"); return { useActiveMachine: () => state.machine, useMachines: create(() => ({ machines: [state.machine], activeId: "machine", hydrated: true, storageError: null, connectionPending: false })) };
 });
 vi.mock("@/state/security", async () => {
-  const { create } = await import("zustand"); return { useSecurity: create(() => ({ status: "unlocked", appState: "active", windowFocused: true })), isAppContentVisible: () => state.allowed };
+  const { create } = await import("zustand"); return { useSecurity: create(() => ({ status: "unlocked", appState: "active", windowFocused: true })), isAppContentVisible: () => state.allowed, isAppContentRetained: () => state.allowed };
 });
 vi.mock("../privacy/consent-access", () => ({ hasProviderPermission: () => state.allowed }));
 vi.mock("@/state/queries", async () => {
@@ -30,7 +31,7 @@ let result: ReturnType<typeof useProjectList>; let root: ReturnType<typeof creat
 const key = projectPrivacyKey("machine", true); const visible = () => ({ privacyReady: true, groups: [], projects: [{ id: "visible", name: "Visible", cwd: "/fixture", registered: true }] });
 function Probe() { result = useProjectList(); return null; }
 async function render() { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); cache ??= new QueryClient(); root ??= createRoot(document.createElement("div")); await act(async () => root!.render(createElement(QueryClientProvider, { client: cache }, createElement(Probe)))); }
-afterEach(async () => { await act(async () => root?.unmount()); root = undefined; cache?.clear(); cache = undefined as never; state.allowed = true; state.response = { privacyReady: true, groups: [], projects: [] }; state.staleData = undefined; vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root?.unmount()); root = undefined; cache?.clear(); cache = undefined as never; state.allowed = true; state.response = { privacyReady: true, groups: [], projects: [] }; state.staleData = undefined; useSecurity.setState({ status: "unlocked", appState: "active", enabled: false }); vi.unstubAllGlobals(); });
 it("a privacy-pending directory cannot expose formerly cached project metadata", async () => {
   cache = new QueryClient(); cache.setQueryData(key, { ...visible(), privacyReady: false }); await render(); expect(result.data).toEqual([]); expect(result.isProjectVisible("visible")).toBe(false);
   expect(result.privacyUnavailable).toBe(true); expect(result.directoryReady).toBe(false);
@@ -179,4 +180,18 @@ it("retains proven directory data across an active window blur", async () => {
   expect(cache.getQueryState(key)?.isInvalidated).toBe(false);
   await act(async () => { useSecurity.setState({ windowFocused: true }); });
   expect(result.data?.[0]?.id).toBe("visible");
+});
+it("a screenshot, shade, prompt or share sheet keeps proven projects shown while the lock is off", async () => {
+  cache = new QueryClient(); cache.setQueryData(key, visible()); await render();
+  for (const appState of ["inactive", "background", "active"]) {
+    await act(async () => { useSecurity.setState({ appState, enabled: false }); });
+    expect(result.data?.[0]?.id).toBe("visible"); expect(result.directoryReady).toBe(true);
+    expect(cache.getQueryState(key)?.isInvalidated).toBe(false);
+  }
+});
+it("with the lock on, leaving the foreground still conceals and expires proof", async () => {
+  cache = new QueryClient(); cache.setQueryData(key, visible()); await render();
+  await act(async () => { useSecurity.setState({ appState: "background", enabled: true }); });
+  expect(result.data).toBeUndefined();
+  await vi.waitFor(() => expect(cache.getQueryState(key)?.isInvalidated).toBe(true));
 });

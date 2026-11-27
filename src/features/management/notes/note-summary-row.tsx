@@ -5,12 +5,12 @@ import { useMobileTheme } from "@/ui/theme";
 import type { Note } from "@/domain/types";
 import { useCopy } from "@/ui/copy";
 import { messageSummary } from "@/ui/message-summary";
-import { Badge, Body, PressableCard } from "@/ui/primitives";
+import { Body, PressableCard } from "@/ui/primitives";
 import { metrics, space } from "@/ui/tokens";
 import { useRelativeTime } from "../shared/record-bits";
 import { NOTE_TITLE_LIMIT } from "./note-tags";
 
-const MAX_TAG_BADGES = 2;
+const MAX_TAGS = 3;
 
 function noteExcerpt(body: string, title: string): string {
   const summary = messageSummary(body, {
@@ -29,7 +29,7 @@ function noteExcerpt(body: string, title: string): string {
   return summary;
 }
 
-/** A note card: title, two-line preview, relative edit time and tag/source badges. */
+/** A note row: title, two-line preview, then edit time, project, origin and tags as quiet metadata. */
 export function NoteSummaryRow({
   note,
   disabled,
@@ -54,9 +54,12 @@ export function NoteSummaryRow({
   const title = savedTitle || copy("Başlıksız", "Untitled");
   const excerpt = truncateGraphemes(noteExcerpt(note.body, savedTitle), 600);
   const edited = relative(note.updatedAt);
-  const tags = note.tags.slice(0, MAX_TAG_BADGES);
+  const tags = note.tags.slice(0, MAX_TAGS);
   const extraTags = note.tags.length - tags.length;
-  const accessibilityLabel = [title, edited, note.tags.map((tag) => `#${tag}`).join(" "), projectName ?? note.sourceCwd]
+  const meta = [edited, projectName, note.sourceSessionId && copy("Oturumdan", "From session")].filter(Boolean).join(" · ");
+  const tagLine = [...tags.map((tag) => `#${tag}`), extraTags > 0 && `+${extraTags}`].filter(Boolean).join(" ");
+  // A folder path is not a spoken name; the project name is read when it is known.
+  const accessibilityLabel = [title, edited, note.tags.map((tag) => `#${tag}`).join(" "), projectName]
     .filter(Boolean)
     .join(". ");
   const row = (
@@ -77,14 +80,12 @@ export function NoteSummaryRow({
         borderBottomColor: colors.separator,
       }}
     >
-      <Body selectable={false} numberOfLines={labelLines ?? 2} style={[uiStyles.title, { fontWeight: "600" }]}>{title}</Body>
+      <Body selectable={false} numberOfLines={labelLines ?? 2} style={[uiStyles.title, !savedTitle && { color: colors.subtle }]}>{title}</Body>
       {excerpt ? <Body muted selectable={false} numberOfLines={2}>{excerpt}</Body> : null}
-      {edited || projectName || tags.length || note.sourceSessionId ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm }}>
-          {edited || projectName ? <Body muted selectable={false} numberOfLines={1} style={[uiStyles.caption, { flexShrink: 1 }]}>{[projectName, edited].filter(Boolean).join(" · ")}</Body> : null}
-          {tags.map((tag) => <Badge key={tag} label={`#${tag}`} />)}
-          {extraTags > 0 ? <Badge label={`+${extraTags}`} /> : null}
-          {note.sourceSessionId ? <Badge label={copy("Oturumdan", "From session")} tone="info" /> : null}
+      {meta || tagLine ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space.md, rowGap: space.xxs }}>
+          {meta ? <Body muted selectable={false} numberOfLines={1} style={[uiStyles.caption, { flexShrink: 1 }]}>{meta}</Body> : null}
+          {tagLine ? <Body muted selectable={false} numberOfLines={1} style={[uiStyles.caption, { flexShrink: 1 }]}>{tagLine}</Body> : null}
         </View>
       ) : null}
     </PressableCard>

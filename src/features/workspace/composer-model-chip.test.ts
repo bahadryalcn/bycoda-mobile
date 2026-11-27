@@ -21,7 +21,7 @@ vi.mock("@/state/machines", () => ({
   useActiveMachine: () => ({ providers: ["claude", "codex"], capabilities: fixture.switchAllowed ? ["sessions.harnessSwitch"] : [] }),
 }));
 vi.mock("@/state/model-catalog", () => ({
-  useModelCatalog: () => ({ data: { accounts: { claude: fixture.accounts } } }),
+  useModelCatalog: () => ({ data: { accounts: { claude: fixture.accounts } }, refetch: async () => undefined }),
 }));
 vi.mock("@/ui/primitives", () => ({
   QueryState: () => null,

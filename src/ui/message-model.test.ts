@@ -87,3 +87,31 @@ describe("markdown parse cache", () => {
     others.forEach((nodes, i) => expect(parseMessage(`message ${i}`, true, `other-${i}`)).toBe(nodes));
   });
 });
+
+describe("streaming parse", () => {
+  const documents = [
+    "# Title\n\nFirst paragraph with **bold** and `code`.\n\n- one\n- two\n\n  continued item\n- three\n\nAfter the list.\n\n1. a\n2. b\n\n```ts\nconst x = 1;\n\nconst y = 2;\n```\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\nTail text\nwith a soft break.\n\n> quote\n\n> second quote\n\nPara\n---\n\nDone.",
+    "Intro\n\n$$\nx = 1\n\ny = 2\n$$\n\nMore text\n\n\[\na\n\]\n\nEnd",
+    "See [docs][ref] here.\n\nSecond.\n\n[ref]: https://example.com\n\nThird.",
+    "Text\n\n    indented code\n\n    more code\n\nBack\n\n~~~~\n```\n\nnot closed\n```\n~~~~\n\nLast",
+    "Answer\n\n<oai-mem-citation>\n<citation_entries>\nx\n</citation_entries>\n<rollout_ids>\ny\n</rollout_ids>\n</oai-mem-citation>\n\nAfter",
+    "header\n| a | b |\n|---|---|\n| 1 | 2 |\n\nfoo\n\n- a\n\n  ```\n  x\n\nbar\n```\n\nbaz\n\n```\nqux\n\nquux",
+  ];
+  const plain = (nodes: MessageNode[]) => JSON.stringify(nodes);
+  it.each(documents.map((text, index) => [index, text] as const))("matches a full parse at every prefix (%i)", (index, text) => {
+    for (let end = 1; end <= text.length; end++) {
+      const prefix = text.slice(0, end);
+      expect(plain(parseMessage(prefix, true, `stream-${index}`))).toBe(plain(parseMessage(prefix, true)));
+    }
+    for (let end = 3; end <= text.length + 6; end += 7) {
+      const prefix = text.slice(0, end);
+      expect(plain(parseMessage(prefix, false, `chunk-${index}`))).toBe(plain(parseMessage(prefix, false)));
+    }
+  });
+  it("keeps settled blocks' identity while the tail grows", () => {
+    const first = parseMessage("One.\n\nTwo.\n\nThree", true, "stream-identity");
+    const next = parseMessage("One.\n\nTwo.\n\nThree and more", true, "stream-identity");
+    expect(next[0]).toBe(first[0]);
+    expect(next).toHaveLength(3);
+  });
+});

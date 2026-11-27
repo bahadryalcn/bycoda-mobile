@@ -1,13 +1,21 @@
 import { AudioModule, createAudioPlayer, setAudioModeAsync } from "expo-audio";
 import { File, Paths } from "expo-file-system";
 import { Platform } from "react-native";
-import { nativeVoiceCompanion } from "../../../modules/bycoda-voice-companion";
+import { nativeVoiceCompanion, type NativeVoiceCompanion } from "../../../modules/bycoda-voice-companion";
 import { companionVoiceCapture, companionVoicePlayback } from "./assistant-voice-companion-audio";
-import { decodePcmBase64 } from "../../../../src/features/voice/model/voiceVad";
+import { decodePcmBase64 } from "../../../../src/shared/model/voice-realtime/voiceVad";
 import type { AssistantVoiceDependencies } from "./assistant-voice";
 import { requireMicrophonePermission } from "../permissions/microphone-permission";
 import { applyAndroidMicPriority, applyMicPriority, type MicRecorder } from "../voice-settings/mic-input";
 import { selectedCloudModel, speechConfig, voicePreferences } from "../voice-settings/voice-preferences";
+import { VOICE_RELAY_OUT_RATE } from "../../../../src/shared/model/host-contracts/voice";
+import { REALTIME_BATCH_BYTES, type RealtimeAudio } from "./assistant-realtime-call";
+
+/**
+ * How long a finished dictation keeps the microphone: one 300 ms native batch plus the bridge, so the
+ * last spoken word reaches the recording before it stops.
+ */
+export const DICTATION_TAIL_MS = 400;
 
 /** Local PCM returned by the Host becomes a temporary, standards-compliant mono WAV. */
 export function speechWav(chunks: { audio: string; sampleRate: number }[]) {
@@ -39,6 +47,7 @@ export function nativeVoiceDependencies(callbacks: Pick<AssistantVoiceDependenci
     engine: () => voicePreferences.getState().preferences.engine,
     cloudModel: () => selectedCloudModel(voicePreferences.getState().preferences),
     speech: () => speechConfig(voicePreferences.getState().preferences),
+    tailMs: DICTATION_TAIL_MS,
     async capture(onBuffer: (data: Int16Array, rate: number) => void, onEnded?: (reason: string, error?: string) => void) {
       await requireMicrophonePermission();
       await voicePreferences.getState().hydrate();
@@ -118,5 +127,57 @@ export function nativeVoiceDependencies(callbacks: Pick<AssistantVoiceDependenci
     // Android 12 added a configurable start threshold, including for a short final chunk.
     playStream: Platform.OS === "android" && Number(Platform.Version) >= 31 ? playback?.playStream : undefined,
     stopPlayback: () => { playback?.stop(); stopPlayback(); },
+  };
+}
+
+/**
+ * Microphone and speaker of the native call session. iOS and Android 12+ stream each reply as it arrives;
+ * elsewhere (or an older native build) a reply plays once it is complete. Full duplex is asked of the
+ * native session once, before the call first listens.
+ */
+export function nativeRealtimeAudio(native: NativeVoiceCompanion): RealtimeAudio {
+  const streaming = (Platform.OS === "ios" || (Platform.OS === "android" && Number(Platform.Version) >= 31))
+    && !!native.startPcm && !!native.appendPcm && !!native.finishPcm;
+  const wav = companionVoicePlayback(native);
+  let playbackSequence = 0;
+  return {
+    async duplex() {
+      if (!native.setEchoCancellation) return false;
+      return (await native.setEchoCancellation(native.getState().sessionId, true)) === true;
+    },
+    async capture(onPcm, ended) {
+      const capture = companionVoiceCapture(native, data => onPcm(data), ended, REALTIME_BATCH_BYTES);
+      await capture.start();
+      return capture;
+    },
+    player() {
+      const session = native.getState().sessionId;
+      const playbackId = `realtime-${Date.now()}-${++playbackSequence}`;
+      let stopped = false;
+      if (streaming) {
+        let chain = native.startPcm!(session, playbackId, VOICE_RELAY_OUT_RATE);
+        // An interrupted reply is never finished; its failure must not surface as unhandled.
+        chain.catch(() => {});
+        return {
+          append(audio) {
+            if (stopped) return;
+            chain = chain.then(() => stopped ? undefined : native.appendPcm!(session, playbackId, audio));
+            chain.catch(() => {});
+          },
+          async finish() {
+            try { await chain; if (!stopped) await native.finishPcm!(session, playbackId); }
+            finally { native.stopPlayback(session, playbackId); }
+          },
+          stop() { stopped = true; native.stopPlayback(session, playbackId); },
+          ...(native.pcmPlayedMs ? { playedMs: () => native.pcmPlayedMs!(session, playbackId) } : {}),
+        };
+      }
+      const chunks: { audio: string; sampleRate: number }[] = [];
+      return {
+        append(audio) { if (!stopped) chunks.push({ audio, sampleRate: VOICE_RELAY_OUT_RATE }); },
+        async finish() { if (!stopped && chunks.length) await wav.play(speechWav(chunks), () => !stopped); },
+        stop() { stopped = true; wav.stop(); },
+      };
+    },
   };
 }

@@ -1,7 +1,8 @@
 {
   "ios": {
     "NSLocalNetworkUsageDescription": "Conecte-se ao seu computador Bycoda na sua rede privada.",
-    "NSMicrophoneUsageDescription": "Fale com seu assistente Bycoda. O áudio é processado no computador conectado.",
+    "NSMicrophoneUsageDescription": "Fale com seu assistente Bycoda e dite mensagens. O áudio é processado no seu computador conectado, ou neste telefone se você escolher o ditado no telefone.",
+    "NSSpeechRecognitionUsageDescription": "Ao escolher o ditado no telefone, o Bycoda usa o reconhecimento de fala para transformar o que você diz em texto. Ele é executado neste telefone quando houver suporte.",
     "NSCameraUsageDescription": "Permita que o Bycoda leia o QR code de pareamento no seu computador.",
     "NSFaceIDUsageDescription": "Use o Face ID para acessar com segurança seus computadores Bycoda.",
     "NSPhotoLibraryUsageDescription": "Permita que o Bycoda acesse suas fotos para anexá-las às suas mensagens.",

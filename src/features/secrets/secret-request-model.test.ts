@@ -17,6 +17,9 @@ import {
   secretPollDelay,
   secretPollInterval,
   secretSignalDelay,
+  SECRET_SIGNAL_QUIET_MS,
+  secretSignalSignature,
+  secretSignalWanted,
 } from "./secret-request-model";
 
 describe("secret request model", () => {
@@ -97,6 +100,27 @@ describe("secret request model", () => {
     expect(secretSignalDelay(0, 10_000)).toBe(0);
     expect(secretSignalDelay(10_000, 10_500)).toBe(SECRET_SIGNAL_MIN_MS - 500);
     expect(secretSignalDelay(10_000, 10_000 + SECRET_SIGNAL_MIN_MS)).toBe(0);
+  });
+
+  it("ignores streamed text in the session signal signature", () => {
+    const base = {
+      status: "running",
+      runId: "run",
+      session: { blocks: [{ id: "t", role: "tool", tool: { status: "running" } }, { id: "a", role: "assistant" }] },
+    };
+    const signature = secretSignalSignature(base);
+    expect(secretSignalSignature({ ...base, session: { blocks: [...base.session.blocks.slice(0, 1), { id: "a", role: "assistant" }] } })).toBe(signature);
+    expect(secretSignalSignature({ ...base, session: { blocks: [{ id: "t", role: "tool", tool: { status: "completed" } }, { id: "a", role: "assistant" }] } })).not.toBe(signature);
+    expect(secretSignalSignature({ ...base, session: { ...base.session, pendingQuestion: {} } })).not.toBe(signature);
+    expect(secretSignalSignature({ ...base, status: "idle" })).not.toBe(signature);
+    expect(secretSignalSignature(undefined)).toBe("");
+  });
+
+  it("refreshes on a changed signature at once and otherwise only after the quiet window", () => {
+    expect(secretSignalWanted("a", undefined, 0, 1)).toBe(true);
+    expect(secretSignalWanted("b", "a", 1_000, 1_100)).toBe(true);
+    expect(secretSignalWanted("a", "a", 1_000, 1_100)).toBe(false);
+    expect(secretSignalWanted("a", "a", 1_000, 1_000 + SECRET_SIGNAL_QUIET_MS)).toBe(true);
   });
 
   it("times expiry from the earliest live deadline, capped", () => {

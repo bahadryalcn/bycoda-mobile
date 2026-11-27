@@ -1,9 +1,7 @@
-import { View } from "react-native";
 import { useAsyncAction } from "@/state/actions";
-import { Body, Button, MutationState, Row, Section, SectionHeader, Stack } from "@/ui/primitives";
+import { Body, Button, MutationState, Row, Section, Stack } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
-import { useInfoHint } from "@/ui/info-hint";
-import { space } from "@/ui/tokens";
+import { HintSection } from "@/ui/info-hint";
 import { PushSection } from "../account/ui/PushSection";
 import { AccountNotificationSettings } from "../account/ui/NotificationSettingsScreen";
 import { PushSettings, usePushTestFromComputer } from "../push/PushSettings";
@@ -17,10 +15,10 @@ function NotificationTests() {
   const reads = usePermissionReads();
   const local = useAsyncAction();
   const pushTest = usePushTestFromComputer();
-  const testInfo = useInfoHint(copy(
+  const testHelp = copy(
     "Bu telefonda dene yerel bir bildirim gösterir. Bilgisayardan dene ise bilgisayara bu telefona bildirim göndermesini söyler.",
     "Test on this phone shows a local notification here. Test from the computer asks the computer to send one to this phone.",
-  ));
+  );
   const read = reads.notifications;
   const granted = read.status === "ready" && read.permission.granted;
   // Names the blocking permission state so a dimmed test button is never unexplained.
@@ -29,9 +27,7 @@ function NotificationTests() {
       : read.status === "error" ? copy("Bildirim izni okunamadı. Yukarıdan yenile.", "Notification permission could not be read. Refresh above.")
         : copy("Önce bildirimlere izin ver.", "Allow notifications first.");
   return (
-    <View style={{ gap: space.sm }}>
-      <SectionHeader title={copy("Deneme", "Test")} trailing={testInfo.button} />
-      {testInfo.panel}
+    <HintSection title={copy("Deneme", "Test")} help={testHelp}>
       <Stack>
         <Row style={{ flexWrap: "wrap" }}>
           <Button label={copy("Bu telefonda dene", "Test on this phone")} disabled={!granted || local.isPending} busy={local.isPending}
@@ -43,14 +39,14 @@ function NotificationTests() {
         <MutationState mutation={local} />
         <MutationState mutation={pushTest.action} />
       </Stack>
-    </View>
+    </HintSection>
   );
 }
 
 /**
- * Settings → Notifications: the one place for notifications. This phone's permission and its single
- * enable action, what the computer sends, what the account sends (with push detail text and quiet
- * hours), then a test. Phone permissions keeps only the permission row.
+ * Settings → Notifications: phone-relevant choices only. This phone's permission and its single
+ * enable action, which computer events notify this phone, which account events reach phones (with
+ * push detail text and quiet hours), then a test. Other notification policy stays on desktop.
  */
 export function NotificationsSettingsPage() {
   const copy = useCopy();
@@ -64,6 +60,8 @@ export function NotificationsSettingsPage() {
       <PushSettings />
       <AccountNotificationSettings />
       {process.env.EXPO_OS === "web" ? null : <NotificationTests />}
+      {/* Computer-side notification policy is configured on desktop; one line says where. */}
+      <Body muted>{copy("Diğer bildirim ayarları bilgisayardaki bycoda’dadır.", "Other notification settings are in bycoda on the computer.")}</Body>
     </SettingsPage>
   );
 }

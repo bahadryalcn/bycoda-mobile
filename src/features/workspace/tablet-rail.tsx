@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, usePathname } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,7 +13,8 @@ import { useReducedMotionPreference } from "../../ui/use-reduced-motion";
 import { useMachines } from "../../state/machines";
 import { useAppPreferences } from "../navigation-prefs/app-preferences";
 import { visibleDockTabs, type DockTabId } from "../navigation-prefs/tab-preferences";
-import { NewSessionSheet } from "./new-session-sheet";
+import { openNewChat } from "./new-chat-navigation";
+import { NEW_CHAT_ROUTE_ID } from "./new-chat-model";
 import { useInboxUnseenBadge, useRunningSessionBadge } from "./tab-activity-bridge";
 import { TAB_BADGE_DOT, TabBadge } from "../../ui/floating-tab-bar";
 
@@ -93,7 +94,6 @@ export function TabletRail() {
   const machineId = useMachines((s) => s.activeId);
   const running = useRunningSessionBadge((s) => s.count);
   const inboxUnseen = useInboxUnseenBadge((s) => s.unseen);
-  const [newSessionOpen, setNewSessionOpen] = useState(false);
   const runningText = running > 99 ? "99+" : running;
 
   const { preferences } = useAppPreferences();
@@ -121,8 +121,10 @@ export function TabletRail() {
   ];
   // Same order and visibility as the phone dock; hidden tabs stay routable.
   const items = visibleDockTabs(preferences.tabs).flatMap((id) => all.filter((item) => item.id === id));
+  // The empty new session is the New button's place, not an open session under Chats.
+  const newChatOpen = pathname === `/session/${NEW_CHAT_ROUTE_ID}`;
   const isActive = (route: RailRoute) =>
-    pathname === route || (route === "/chats" && pathname.startsWith("/session/"));
+    pathname === route || (route === "/chats" && pathname.startsWith("/session/") && !newChatOpen);
   const go = (route: RailRoute) => {
     if (isActive(route) && pathname === route) return;
     haptic.select();
@@ -182,7 +184,8 @@ export function TabletRail() {
               caption={copy("Yeni", "New")}
               hint={copy("Sesli asistan için basılı tutun", "Hold for voice assistant")}
               icon={<DockIcon name="new-session" color={colors.primaryText} />}
-              onPress={() => setNewSessionOpen(true)}
+              selected={newChatOpen}
+              onPress={() => openNewChat()}
               // Holding the new-session button is the fastest way into a voice call, as on the phone dock.
               onLongPress={openVoice}
             />
@@ -206,9 +209,6 @@ export function TabletRail() {
           onPress={() => go("/settings")}
         />
       </ScrollView>
-      {machineId ? (
-        <NewSessionSheet visible={newSessionOpen} onClose={() => setNewSessionOpen(false)} />
-      ) : null}
     </View>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useStore } from "zustand";
 import { createPreferenceStore } from "@/state/preference-store";
+import { defaultDictationPreferences, normalizeDictationPreferences, type DictationPreferences } from "./dictation-preferences";
 
 export type TranscriptionEngine = "local" | "cloud" | "openai" | "xai";
 export const MIC_KINDS = ["wired", "bluetooth", "builtin", "carplay"] as const;
@@ -24,11 +25,18 @@ export type VoicePreferences = { engine: TranscriptionEngine; micOrder: MicKind[
   turnPause: TurnPause;
   /** Desktop "I decide when my turn ends": silence keeps listening and only Send now commits the turn. */
   manualTurnEnd: boolean;
-  whisperModel?: "small" | "turbo"; cloudModel?: string; openaiModel?: string; elevenVoice?: string };
+  /**
+   * Dictation (Dictate message) is recognized by this phone's own speech recognizer instead of `engine`.
+   * Calls always keep `engine`, so choosing the phone never moves a call off the computer.
+   */
+  phoneDictation: boolean;
+  whisperModel?: "small" | "turbo"; cloudModel?: string; openaiModel?: string; elevenVoice?: string }
+  /** The desktop's dictation settings (language, custom words, fillers, silence filter, cleanup). */
+  & DictationPreferences;
 export function selectedCloudModel(preferences: VoicePreferences) {
   return preferences.engine === "openai" ? preferences.openaiModel : preferences.engine === "cloud" ? preferences.cloudModel : undefined;
 }
-export const defaultVoicePreferences: VoicePreferences = { engine: "local", micOrder: ["wired", "bluetooth", "builtin", "carplay"], speech: "supertonic", speaker: "M1", turnPause: 1.2, manualTurnEnd: false };
+export const defaultVoicePreferences: VoicePreferences = { engine: "local", micOrder: ["wired", "bluetooth", "builtin", "carplay"], speech: "supertonic", speaker: "M1", turnPause: 1.2, manualTurnEnd: false, phoneDictation: false, ...defaultDictationPreferences };
 
 /**
  * The speech configuration a call sends to the Host. Built like the desktop's: defaults are omitted, so the
@@ -61,10 +69,13 @@ export function normalizeVoicePreferences(value: unknown): VoicePreferences {
     speaker: (SUPERTONIC_SPEAKERS as readonly unknown[]).includes(data.speaker) ? (data.speaker as SupertonicSpeaker) : "M1",
     turnPause: (TURN_PAUSES as readonly unknown[]).includes(data.turnPause) ? (data.turnPause as TurnPause) : 1.2,
     manualTurnEnd: data.manualTurnEnd === true,
+    phoneDictation: data.phoneDictation === true,
     ...(data.whisperModel === "small" || data.whisperModel === "turbo" ? { whisperModel: data.whisperModel } : {}),
     ...(typeof data.cloudModel === "string" && /^[\w./:-]{1,200}$/.test(data.cloudModel) ? { cloudModel: data.cloudModel } : {}),
     ...(typeof data.openaiModel === "string" && /^[\w-]{1,200}$/.test(data.openaiModel) ? { openaiModel: data.openaiModel } : {}),
     ...(typeof data.elevenVoice === "string" && /^[A-Za-z0-9]{1,64}$/.test(data.elevenVoice) ? { elevenVoice: data.elevenVoice } : {}),
+    // A record saved before these existed reads as the desktop defaults.
+    ...normalizeDictationPreferences(data),
   };
 }
 export function createVoicePreferenceStore(storage: Pick<typeof AsyncStorage, "getItem" | "setItem">) {

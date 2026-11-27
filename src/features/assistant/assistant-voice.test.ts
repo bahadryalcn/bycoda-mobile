@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { AssistantVoice, speechParts, type SpeechChunk, type VoicePort } from "./assistant-voice";
+import { AssistantVoice, recognitionLanguage, speechParts, type SpeechChunk, type VoicePort } from "./assistant-voice";
 
 const target = { machineId: "phone-host", environmentId: "host-env", threadId: "room-thread" };
 function setup() {
@@ -300,4 +300,130 @@ it("attributes each failure to the chain step that was running", async () => {
   await playback.voice.speak(playback.port, target, "Read this reply");
   expect(playStage.mock.calls.map(([value]) => value)).toEqual(["synthesis", "synthesis", "playback"]);
   expect(playback.dependencies.error).toHaveBeenCalledWith(new Error("Audio output busy"));
+});
+
+// Every ~8.5 s of call silence released the recognition lease and started a new one: two Host round trips each.
+it("reuses a silent call turn's recognition lease for the next turn and releases it on cancel", async () => {
+  const state = setup();
+  await state.voice.record(state.port, target, { endOnSilence: true });
+  state.buffer(new Int16Array(128000));
+  await vi.waitFor(() => expect(state.dependencies.transcript).toHaveBeenCalledWith(target, ""));
+  await vi.waitFor(() => expect(state.dependencies.state).toHaveBeenLastCalledWith("idle", target));
+  await state.voice.record(state.port, target, { endOnSilence: true });
+  expect(state.capture.start).toHaveBeenCalledTimes(2);
+  expect(state.request.mock.calls.map(([method]) => method)).toEqual(["voice.local.start"]);
+  // The reused lease transcribes the next spoken turn and is released after it, as before.
+  state.buffer(Int16Array.from({ length: 4800 }, (_, index) => 2400 * Math.sin(index * Math.PI / 40)));
+  await state.voice.finish();
+  expect(state.request.mock.calls.map(([method]) => method)).toEqual(["voice.local.start", "voice.local.transcribe", "voice.local.release"]);
+
+  const cancelled = setup();
+  await cancelled.voice.record(cancelled.port, target, { endOnSilence: true });
+  cancelled.buffer(new Int16Array(128000));
+  await vi.waitFor(() => expect(cancelled.dependencies.state).toHaveBeenLastCalledWith("idle", target));
+  cancelled.voice.cancel();
+  expect(cancelled.request).toHaveBeenLastCalledWith("voice.local.release", { lease: "lease-one" }, expect.anything());
+});
+
+it("starts a fresh lease once a spare is too old for the Host to still hold it", async () => {
+  const state = setup();
+  const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+  try {
+    await state.voice.record(state.port, target, { endOnSilence: true });
+    state.buffer(new Int16Array(128000));
+    await vi.waitFor(() => expect(state.dependencies.state).toHaveBeenLastCalledWith("idle", target));
+    now.mockReturnValue(1_000_000 + 60_000);
+    await state.voice.record(state.port, target, { endOnSilence: true });
+    expect(state.request.mock.calls.map(([method]) => method)).toEqual(["voice.local.start", "voice.local.release", "voice.local.start"]);
+  } finally { now.mockRestore(); state.voice.cancel(); }
+});
+
+// Starting a call cancelled message dictation without waiting: its recognition-only lease (still starting)
+// met the call's reply voice and the computer refused the call.
+it("settles a cancelled dictation only after its pending lease start is released on the Host", async () => {
+  const state = setup();
+  let grant!: (value: { lease: string }) => void;
+  const released: string[] = [];
+  state.request.mockImplementation(async (method: string, params?: { id?: string; text?: string }) => {
+    if (method === "voice.local.start") return new Promise(resolve => { grant = resolve; });
+    if (method === "voice.local.release") released.push(String((params as { lease?: string } | undefined)?.lease));
+    return {};
+  });
+  void state.voice.record(state.port, target);
+  await vi.waitFor(() => expect(state.request).toHaveBeenCalledWith("voice.local.start", expect.anything(), expect.anything()));
+  state.revoke();
+  let settled = false;
+  const settling = state.voice.cancelAndSettle().then(() => { settled = true; });
+  await Promise.resolve(); await Promise.resolve();
+  expect(settled).toBe(false);
+  grant({ lease: "late-lease" });
+  await settling;
+  expect(released).toEqual(["late-lease"]);
+});
+
+// Without the owner's language the computer guessed it per clip: short Turkish phrases came back as another language or empty.
+it("sends the owner's language with local recognition and none to a cloud provider", async () => {
+  const local = setup();
+  const spoken = new AssistantVoice({ ...local.dependencies, language: () => "tr-TR" });
+  await spoken.record(local.port, target);
+  local.buffer(new Int16Array(3200).fill(1000));
+  await spoken.finish();
+  expect(local.request).toHaveBeenCalledWith("voice.local.transcribe", expect.objectContaining({ lease: "lease-one", language: "tr" }), expect.anything());
+
+  const cloud = setup();
+  const provider = new AssistantVoice({ ...cloud.dependencies, language: () => "tr", engine: () => "openai" as const });
+  await provider.record(cloud.port, target);
+  cloud.buffer(new Int16Array(3200).fill(1000));
+  await provider.finish();
+  const sent = cloud.request.mock.calls.find(([method]) => method === "voice.cloud.transcribe") as unknown as [string, Record<string, unknown>];
+  expect(sent[1]).not.toHaveProperty("language");
+});
+
+it("sends only a two-letter recognition language the computer accepts", () => {
+  expect(recognitionLanguage("tr-TR")).toBe("tr");
+  expect(recognitionLanguage("en_GB")).toBe("en");
+  expect(recognitionLanguage("zh-CN")).toBe("zh");
+  expect(recognitionLanguage("fil-PH")).toBeUndefined();
+  expect(recognitionLanguage("system")).toBeUndefined();
+  expect(recognitionLanguage(undefined)).toBeUndefined();
+});
+
+// The microphone delivers 300 ms batches: stopping at Finish dropped the batch holding the last word.
+it("keeps the audio that arrives just after a manual Finish, and none after a discard", async () => {
+  vi.useFakeTimers();
+  try {
+    const state = setup();
+    const voice = new AssistantVoice({ ...state.dependencies, tailMs: 400 });
+    await voice.record(state.port, target);
+    state.buffer(new Int16Array(3200).fill(1000));
+    const finishing = voice.finish();
+    expect(state.capture.stop).not.toHaveBeenCalled();
+    state.buffer(new Int16Array(4800).fill(1000));
+    await vi.advanceTimersByTimeAsync(400);
+    await finishing;
+    expect(state.capture.stop).toHaveBeenCalledTimes(1);
+    const payload = state.request.mock.calls.find(([method]) => method === "voice.local.transcribe") as unknown as [string, { audio: string }];
+    expect(atob(payload[1].audio)).toHaveLength((3200 + 4800) * 2);
+    // Audio after the microphone stopped is not part of any recording.
+    state.buffer(new Int16Array(4800).fill(1000));
+
+    const discarded = setup();
+    const dropped = new AssistantVoice({ ...discarded.dependencies, tailMs: 400 });
+    await dropped.record(discarded.port, target);
+    discarded.buffer(new Int16Array(3200).fill(1000));
+    const ending = dropped.finish();
+    dropped.cancel();
+    await vi.advanceTimersByTimeAsync(400);
+    await ending;
+    expect(discarded.request.mock.calls.some(([method]) => method === "voice.local.transcribe")).toBe(false);
+    expect(discarded.dependencies.transcript).not.toHaveBeenCalled();
+  } finally { vi.useRealTimers(); }
+});
+
+it("does not extend a call turn that the silence detector ended", async () => {
+  const state = setup();
+  const voice = new AssistantVoice({ ...state.dependencies, tailMs: 400 });
+  await voice.record(state.port, target, { endOnSilence: true });
+  await voice.finish();
+  expect(state.capture.stop).toHaveBeenCalledTimes(1);
 });

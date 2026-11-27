@@ -121,6 +121,27 @@ contract rather than translated fragment concatenation. Update relevant catalogs
 run `check:locales` and review
 long translations, accessible labels, errors and statuses.
 
+Thrown errors carry one English sentence (`new Error("Choose a computer first.")`);
+template values become `{p0}`, `{p1}`. `check:locales` also requires these
+sentences in every catalog, keyed by the English text. `errorMessage()` shows
+them in the active language, reading only that language's catalog. An English
+message no catalog knows (Host or native detail) becomes a translated summary
+with the English kept as a following paragraph, which `Notice` collapses behind
+"Details". Never pass raw `error.message` to UI text; never branch on Host
+message text when a `RemoteHostError` kind exists.
+
+Navigation goes through `src/ui/navigation.ts`. In-page Back, Close and
+after-delete buttons call `goBack(fallback)`; leaving to Home, a tab or a list
+uses `leaveTo(href)` (`dismissTo`), never `router.replace`, which stacks a second
+copy of what is already beneath. Taps that push use `pushOnce` so a double tap
+opens one page. Notifications, quick actions, shares and restored sessions open
+through `openExternalEntry`; from the launch position it focuses the page's
+parent tab first (`routeParent` in `navigation-model.ts`), and `NavigationAnchor`
+does the same beneath a cold deep link. A `usePreventRemove` callback resumes the
+prevented navigation with `repeat()`, never by dispatching it again while still
+prevented. Page-level Android Back uses `useScreenBackHandler`, which closes an
+open sheet first. `src/ui/navigation-contract.test.ts` checks these rules.
+
 Reuse platform-specific `.native.tsx` and web/native boundaries where needed.
 Use canonical resolvable Lucide Native icon subpaths. Keep browser globals out
 of native runtime. Preserve upstream licenses and pinned integration patches;

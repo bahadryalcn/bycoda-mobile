@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import { expect, it, vi } from "vitest";
-import { machineSuccessStore } from "./machine-success-store";
+import { machineSuccessStore, SUCCESS_GRANULARITY_MS } from "./machine-success-store";
 
 it("wakes only for success events of its own computer and never rescans the cache", () => {
   const client = new QueryClient();
@@ -25,4 +25,35 @@ it("wakes only for success events of its own computer and never rescans the cach
   expect(scan).toHaveBeenCalledTimes(1);
   off();
   expect(cache.getAll().length).toBeGreaterThan(0);
+});
+
+it("publishes streamed successes coarsely, but at once after a failure", async () => {
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(100_000);
+    const client = new QueryClient();
+    client.setQueryData(["machine", "a", "session"], 1);
+    const store = machineSuccessStore(client.getQueryCache(), "a");
+    const listener = vi.fn();
+    const off = store.subscribe(listener);
+    vi.setSystemTime(101_000);
+    client.setQueryData(["machine", "a", "session"], 2);
+    expect(listener).not.toHaveBeenCalled();
+    expect(store.getSnapshot()).toBe(100_000);
+    vi.setSystemTime(100_000 + SUCCESS_GRANULARITY_MS);
+    client.setQueryData(["machine", "a", "session"], 3);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(store.getSnapshot()).toBe(100_000 + SUCCESS_GRANULARITY_MS);
+    vi.setSystemTime(106_000);
+    await client
+      .fetchQuery({ queryKey: ["machine", "a", "connection"], queryFn: () => Promise.reject(new Error("down")), retry: false })
+      .catch(() => undefined);
+    vi.setSystemTime(106_500);
+    client.setQueryData(["machine", "a", "session"], 4);
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(store.getSnapshot()).toBe(106_500);
+    off();
+  } finally {
+    vi.useRealTimers();
+  }
 });

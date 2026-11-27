@@ -62,3 +62,30 @@ export function connectionPhase(input: {
   if (input.successAt > 0 && input.now - input.successAt < CONNECTED_WINDOW_MS) return "connected";
   return "checking";
 }
+
+/** Phases a short link blip passes through; anything else (lock, access, storage) is lasting. */
+const BLIP_PHASES: ReadonlySet<ConnectionPhase> = new Set(["checking", "disconnected", "offline"]);
+/** How long a proven connection keeps reading as connected while a blip may still heal itself. */
+export const CONNECTION_BLIP_GRACE_MS = READ_RETRY_GRACE_MS;
+
+export type ConnectionBlipMemory = { connected: boolean; blipSince: number | null };
+
+/**
+ * Hold "connected" through a short reconnect, timeout or network flap after a proven connection, so
+ * the pill does not flash "Checking…" or "Disconnected" for a blip that heals itself. A blip that
+ * lasts past the grace, or a lasting phase, shows as it is. Returns the shown phase and next memory.
+ */
+export function settleConnectionPhase(
+  raw: ConnectionPhase,
+  memory: ConnectionBlipMemory,
+  now: number,
+  graceMs = CONNECTION_BLIP_GRACE_MS,
+): { phase: ConnectionPhase; memory: ConnectionBlipMemory; holdUntil: number | null } {
+  if (raw === "connected") return { phase: raw, memory: { connected: true, blipSince: null }, holdUntil: null };
+  if (!BLIP_PHASES.has(raw) || !memory.connected)
+    return { phase: raw, memory: { connected: false, blipSince: null }, holdUntil: null };
+  const blipSince = memory.blipSince ?? now;
+  if (now - blipSince < graceMs)
+    return { phase: "connected", memory: { connected: true, blipSince }, holdUntil: blipSince + graceMs };
+  return { phase: raw, memory: { connected: false, blipSince: null }, holdUntil: null };
+}

@@ -1,6 +1,6 @@
 import { View } from "react-native";
 import { Avatar } from "panelui-native/components/avatar";
-import { Body, ErrorNotice, Heading, Loading, NavigationGroup, NavigationRow, Screen, SettingIcon, Stack, Skeleton } from "@/ui/primitives";
+import { Body, ErrorNotice, Heading, NavigationGroup, NavigationRow, Screen, SettingIcon, Stack, Skeleton } from "@/ui/primitives";
 import LogOut from "lucide-react-native/icons/log-out";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
@@ -59,7 +59,8 @@ export function AccountScreen() {
   if (account.status === "loading")
     return (
       <Screen title={title}>
-        <Loading centered immediate />
+        {/* Shaped like the profile and sections that follow; a quick session check never flashes it. */}
+        <Skeleton variant="content" label={copy("Hesap yükleniyor…", "Loading account…")} />
       </Screen>
     );
   if (account.status === "signedOut")

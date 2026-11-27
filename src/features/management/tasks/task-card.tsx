@@ -38,6 +38,10 @@ import { TaskDeclineFeedback } from "./task-feedback";
 import { stamp } from "../shared/format";
 import { RecordConfirmationSheet, useRecordConfirmation } from "../shared/use-record-confirmation";
 import { hasUnmergedBranch } from "../../../../../src/features/tasks/model/taskRules";
+import { taskNeedsInput } from "../../../../../src/shared/model/host-contracts/task-stop";
+import { iconSize } from "@/ui/tokens";
+import { taskWaitReason } from "./task-wait";
+import { remoteErrorKind } from "@/ui/error-message";
 
 export function TaskCard({
   task,
@@ -61,14 +65,21 @@ export function TaskCard({
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const machine = useActiveMachine();
-  const { confirm, review } = useRecordConfirmation(task, machine?.name || machine?.id, busy);
+  const { confirm, review } = useRecordConfirmation(
+    task,
+    machine?.name || copy("Bağlı bilgisayar", "Connected computer"),
+    busy,
+  );
   const relative = useRelativeTime();
   const moves = taskActions(task, machine?.capabilities);
   const supported = !!machine?.capabilities?.includes("tasks.workspaces");
   const moving = move.isPending && move.variables?.taskId === task.id;
-  const admissionWait =
-    task.status === "queued" && !task.needsInput ? task.modelRoutingWait : undefined;
-  const presentedStatus = admissionWait?.reason ? "waiting" : task.status;
+  // The Host explains a pause with `stop` (owner input) and a delayed start with `wait`.
+  const active = ["queued", "running", "verifying"].includes(task.status);
+  const needsInput = active && taskNeedsInput(task);
+  const admissionWait = !needsInput ? task.wait : undefined;
+  const waitReason = admissionWait ? taskWaitReason(admissionWait.code, copy) : undefined;
+  const presentedStatus = needsInput ? "needs-input" : admissionWait ? "waiting" : task.status;
   const starting = start.isPending && start.variables?.taskId === task.id;
   const orderedHere = useRef(false);
   useEffect(() => {
@@ -127,9 +138,11 @@ export function TaskCard({
     task.status === "done"
       ? copy("Yeniden çalıştır", "Run again")
       : task.status === "review"
-        ? copy("Tekrar çalıştır", "Retry")
+        ? copy("Yeniden çalıştır", "Run again")
         : copy("Sıraya al", "Queue");
-  const glyph = (Icon: LucideIcon, color = colors.muted) => <Icon size={18} color={color} />;
+  const glyph = (Icon: LucideIcon, color = colors.muted) => (
+    <Icon size={iconSize.action} color={color} />
+  );
   const menu = [
     canStart &&
       !isBlocked &&
@@ -227,7 +240,7 @@ export function TaskCard({
           busy ||
           editorOpen ||
           !machine?.capabilities?.includes("stewards") ||
-          decline.error?.message.includes("Unsupported host method"),
+          remoteErrorKind(decline.error) === "unsupported",
         onPress: () =>
           confirm(
             copy("Öneriyi reddet", "Decline suggestion"),
@@ -249,8 +262,8 @@ export function TaskCard({
         confirm(
           copy("Görevi sil", "Delete task"),
           copy(
-            "Görev kaydı silinecek. Birleştirilmemiş çalışma varsa host işlemi engeller.",
-            "The task record will be deleted. The host prevents deletion if unmerged work remains.",
+            "Görev kaydı silinecek. Birleştirilmemiş çalışma varsa bilgisayar silmeyi engeller.",
+            "The task record will be deleted. The computer prevents deletion if unmerged work remains.",
           ),
           copy("Sil", "Delete"),
           () =>
@@ -281,7 +294,7 @@ export function TaskCard({
           )
         }
       >
-        <Square size={18} color={colors.danger} />
+        <Square size={iconSize.action} color={colors.danger} />
       </IconButton>
     </Hint>
   ) : null;
@@ -290,13 +303,13 @@ export function TaskCard({
       title={task.title}
       status={<Status value={presentedStatus} />}
       metadata={
-        joinMeta([admissionWait?.reason, agentPresentation(task.harness, task.model), projectName, relative(task.updatedAt)]) || undefined
+        joinMeta([waitReason, agentPresentation(task.harness, task.model), projectName, relative(task.updatedAt)]) || undefined
       }
       menu={
         <Row style={{ gap: 0, flexWrap: "nowrap", alignItems: "flex-start" }}>
           {task.sessionId ? (
             <IconButton label={copy("Oturumu aç", "Open session")} onPress={openSession}>
-              <MessageSquare size={18} color={colors.accent} />
+              <MessageSquare size={iconSize.action} color={colors.accent} />
             </IconButton>
           ) : null}
           {stopAction}
@@ -306,8 +319,7 @@ export function TaskCard({
       selection={selection}
       issues={[task.error, task.mergeError]}
       footer={
-        showStart || reviewingDelivery && moves.complete && deliverySupported ||
-        (moving && ["done", "queued"].includes(String(move.variables?.to))) ? (
+        showStart || (reviewingDelivery && moves.complete && deliverySupported) ? (
           <Row>
             {showStart && (
               <Button
@@ -323,34 +335,16 @@ export function TaskCard({
               <Button label={copy("Teslimi incele", "Review delivery")} tone="primary"
                 disabled={busy || editorOpen} onPress={() => onReviewDelivery(task)} />
             )}
-            {moving && move.variables?.to === "queued" && (
-              <Button
-                label={queueLabel}
-                busy={moving && move.variables?.to === "queued"}
-                tone="quiet"
-                disabled={busy || moves.queueBlocked}
-                onPress={() => move.mutate({ taskId: task.id, to: "queued" })}
-              />
-            )}
-            {moving && move.variables?.to === "done" && (
-              <Button
-                label={copy("Tamamla", "Complete")}
-                busy={moving && move.variables?.to === "done"}
-                tone="success"
-                disabled={busy}
-                onPress={complete}
-              />
-            )}
           </Row>
         ) : null
       }
       details={
         <>
           <TaskBrief prompt={task.prompt} />
-          {admissionWait?.reason ? (
+          {waitReason ? (
             <Body muted>
-              {copy("Bekliyor", "Waiting")}: {admissionWait.reason}
-              {admissionWait.retryAt
+              {waitReason}
+              {admissionWait?.retryAt
                 ? ` · ${copy("Sonraki deneme", "Next attempt")}: ${stamp(admissionWait.retryAt)}`
                 : ""}
             </Body>
@@ -372,9 +366,7 @@ export function TaskCard({
             <Stack>
               <Body muted style={uiStyles.caption}>{copy("Çalışma", "Execution")}</Body>
               {(task.worktreeCwd || task.workspace?.checkoutCwd) && (
-                <Body mono>
-                  {copy("Çalışma", "Execution")}: {task.worktreeCwd || task.workspace?.checkoutCwd}
-                </Body>
+                <Body mono>{task.worktreeCwd || task.workspace?.checkoutCwd}</Body>
               )}
               {(task.deliveryCwd || task.baseBranch) && (
                 <Body mono>
@@ -391,7 +383,7 @@ export function TaskCard({
       }
     >
       {reviewingDelivery && moves.complete && !deliverySupported ? (
-        <Body muted>{copy("Bu özellik için bilgisayarındaki Bycoda’yı güncelle.", "Update Bycoda on your computer to use this feature.")}</Body>
+        <Body muted>{copy("Bu özellik için bilgisayarınızdaki Bycoda’yı güncelleyin.", "Update Bycoda on your computer to use this feature.")}</Body>
       ) : null}
       {move.variables?.taskId === task.id ? <MutationState mutation={move} /> : null}
       {remove.variables?.taskId === task.id ? <MutationState mutation={remove} /> : null}
@@ -407,7 +399,9 @@ export function TaskCard({
       )}
       {task.merged && (
         <Body style={uiStyles.caption}>
-          {copy("Hedef dala teslim edildi", "Delivered to target branch")}: {task.baseBranch}
+          {task.baseBranch
+            ? `${copy("Hedef dala teslim edildi", "Delivered to target branch")}: ${task.baseBranch}`
+            : copy("Hedef dala teslim edildi.", "Delivered to the target branch.")}
         </Body>
       )}
       {moves.queue && moves.queueBlocked && (

@@ -2,7 +2,7 @@ import { logDiagnostic } from "../diagnostics/diagnostic-log";
 import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { withTimeout } from "../../../../src/shared/lib/withTimeout";
-import { router, useRootNavigationState, type Href } from "expo-router";
+import { useRootNavigationState, type Href } from "expo-router";
 import type { NotificationResponse } from "expo-notifications";
 import { useHostClient } from "@/state/queries";
 import { useActiveMachine, useMachines } from "@/state/machines";
@@ -11,6 +11,7 @@ import { useCopy } from "@/ui/copy";
 import { showToast } from "@/ui/primitives";
 import { notifications, readDevicePermission, useNotificationPermissionRevision } from "../permissions/device-permissions";
 import { suppressLastSessionRestore } from "../workspace/last-session";
+import { openExternalEntry } from "@/ui/navigation";
 import { PUSH_CAPABILITY, pushRoute, pushTarget, unmatchedPushNotice, usePushPreferences, usePushStatus, type PushTarget } from "./push-model";
 import { expoProjectId, expoPushToken, onPushTokenRotated, pushRegistration } from "./push-registration";
 
@@ -129,7 +130,7 @@ export function usePushRegistration() {
 
 /** Opens the conversation a tapped push points to, switching computers when needed. */
 export function usePushResponses() {
-  const routerReady = !!useRootNavigationState()?.key;
+  const routerReady = !!useRootNavigationState()?.key;
   const copy = useCopy();
   const connectionsReady = useMachines((state) => state.hydrated && !state.connectionPending);
   const unlocked = useSecurity((state) => state.status === "unlocked" && state.appState === "active");
@@ -193,7 +194,8 @@ export function usePushResponses() {
       return;
     }
     if (machines.activeId !== machine.id) machines.selectMachine(machine.id);
-    router.navigate(pushRoute(target, machine.id) as Href);
+    // Navigate (not push) so a repeat tap reuses the open screen; from Home its parent tab goes beneath.
+    openExternalEntry(pushRoute(target, machine.id) as Href);
     acknowledgePushResponse(pending);
   }, [routerReady, unlocked, connectionsReady, pending, copy]);
 }

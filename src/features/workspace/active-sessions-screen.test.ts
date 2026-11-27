@@ -6,6 +6,8 @@ import { useMachines } from "@/state/machines";
 import { ActiveSessionsScreen } from "./active-sessions-screen";
 vi.mock("@/ui/no-computer", () => ({ NoComputerState: () => null, NoComputerGate: () => null }));
 
+vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
 vi.mock("@/ui/swipe-actions", () => ({
   SwipeActionsGroup: ({ children }: { children: ReactNode }) => children,
 }));
@@ -34,6 +36,10 @@ vi.mock("@/ui/primitives", () => ({
   ChoiceChip: () => null,
   SectionHeader: () => null,
   SearchField: () => null,
+  IconButton: () => null,
+  SelectField: () => null,
+  MultiSelectField: () => null,
+  useCollapsibleSearch: () => ({ open: false, trigger: null, filterTrigger: null, sheet: null, field: null }),
   ScreenList: ({ data, renderItem }: {
     data: { key: string }[];
     renderItem: (entry: { item: { key: string } }) => ReactNode;
@@ -98,7 +104,7 @@ afterEach(async () => {
 });
 
 it("rejects a retained row on the global list after switching computers", async () => {
-  await act(async () => root.render(h(ActiveSessionsScreen, { overview: true })));
+  await act(async () => root.render(h(ActiveSessionsScreen, {})));
   const original = fixture.row!;
   await act(async () => setComputer(secondComputer));
   await act(async () => original.open());
@@ -112,7 +118,7 @@ it("rejects a retained row on the global list after switching computers", async 
 });
 
 it("only lets the currently reviewed row replace the split detail after re-pairing", async () => {
-  await act(async () => root.render(h(ActiveSessionsScreen, { overview: true, urgency: true, onOpenSession: fixture.openInSplit })));
+  await act(async () => root.render(h(ActiveSessionsScreen, { urgency: true, onOpenSession: fixture.openInSplit })));
   const original = fixture.row!;
   await act(async () => setComputer({ ...firstComputer }));
   await act(async () => original.open());
@@ -129,7 +135,7 @@ it("only lets the currently reviewed row replace the split detail after re-pairi
 });
 
 it("rechecks project visibility before opening a session", async () => {
-  await act(async () => root.render(h(ActiveSessionsScreen, { overview: true })));
+  await act(async () => root.render(h(ActiveSessionsScreen, {})));
   fixture.readable = false;
   await act(async () => fixture.row!.open());
   expect(fixture.navigate).not.toHaveBeenCalled();

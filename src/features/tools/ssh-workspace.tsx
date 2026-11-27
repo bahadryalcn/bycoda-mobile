@@ -205,7 +205,7 @@ export function SshWorkspace({
           {receipt ? <Body>{stateLabel(receipt.state)}</Body> : null}
           {receipt?.connectionId ? <Body mono>{receipt.connectionId}</Body> : null}
           <Button busy={busy && pendingAction === "secondary-1"}
-            label={copy("Sonucu oku", "Read result")}
+            label={copy("Durumu denetle", "Check status")}
             disabled={busy || !supported}
             onPress={() => {
               void run(async () =>
@@ -241,16 +241,16 @@ export function SshWorkspace({
           {receipt && !["pending", "opening"].includes(receipt.state) ? (
             <Button busy={busy && pendingAction === "secondary-3"}
               tone="quiet"
-              label={copy("Yerel takibi temizle", "Clear local tracking")}
+              label={copy("Bu isteği unut", "Forget this request")}
               disabled={busy || !supported}
               onPress={() =>
                 confirmAction(
-                  copy("Yerel takibi temizle", "Clear local tracking"),
+                  copy("Bu isteği unut", "Forget this request"),
                   copy(
                     "Bu işlem SSH terminalini kapatmaz ve bilgisayardaki isteği iptal etmez. Bilinmeyen sonucu önce bilgisayarda inceleyin. Yeni bağlantı ayrı terminal açabilir.",
                     "This does not close the SSH terminal or cancel the computer's request. Inspect an unknown result on the computer first. A new connection may open a separate terminal.",
                   ),
-                  copy("Yerel takibi temizle", "Clear local tracking"),
+                  copy("Bu isteği unut", "Forget this request"),
                   () => {
                     void run(async () => {
                       await stores[activeKind].clear(active.operationId);
@@ -268,7 +268,7 @@ export function SshWorkspace({
       ) : initialUnavailable ? null : (
         <>
           <Button busy={busy && pendingAction === "secondary-4"}
-            label={copy("Görünür SSH sunucularını oku", "Read visible SSH servers")}
+            label={copy("SSH sunucularını getir", "Get SSH servers")}
             disabled={disabled}
             onPress={() => {
               void run(async () => {
@@ -399,7 +399,7 @@ export function SshWorkspace({
       {error && storageReady ? (
         <Button
           tone="quiet"
-          label={copy("Hatayı temizle", "Clear error")}
+          label={copy("Hatayı gizle", "Dismiss error")}
           disabled={busy || !supported}
           onPress={() => setError(undefined)}
         />

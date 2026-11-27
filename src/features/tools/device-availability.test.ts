@@ -22,3 +22,8 @@ it("ignores available platform notes and retains an explicit fallback for missin
     { platform: "ios", available: false, reason: " " },
   ], "Unavailable")).toEqual(["ios: Unavailable"]);
 });
+
+it("names platforms as people know them", async () => {
+  const { deviceAvailabilityIssues, devicePlatformName } = await import("./device-availability");
+  expect(deviceAvailabilityIssues([], [{ platform: "ios", available: false, reason: null }], "Unavailable", devicePlatformName)).toEqual(["iOS: Unavailable"]);
+});

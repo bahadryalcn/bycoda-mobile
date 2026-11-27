@@ -13,7 +13,7 @@ export function AccessTunnels({ computer, tunnel, onClose }: {
   const copy = useCopy();
   const provider = tunnel.provider === "cloudflare" ? "Cloudflare" : "ngrok";
   const target = tunnel.target === "host"
-    ? copy("Bilgisayar erişimi", "Host access")
+    ? copy("Bilgisayar erişimi", "Computer access")
     : copy("Geliştirme sunucusu", "Dev server");
   const { label, tone } = tunnelPresentation(tunnel.state);
   return (

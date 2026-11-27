@@ -16,10 +16,10 @@ const state = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
 vi.mock("@/ui/provider-account-kind", () => ({ ProviderAccountKind: () => null }));
-vi.mock("./provider-account-editor", () => ({ ProviderAccountEditor: () => null }));
 vi.mock("react-native", () => ({ View: "div" }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
+vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("expo-router", () => ({ router: { navigate: state.navigate } }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 const machine = () => ({
@@ -207,8 +207,8 @@ it("renders cached account/MCP metadata through the finite read only", async () 
   expect(container.textContent).toContain("Fixture account");
   expect(container.textContent).toContain("Fixture docs");
   expect(container.textContent).toContain("Quota information unavailable");
-  expect(container.textContent).toContain("Account actions");
-  expect(container.textContent).not.toContain("Account display settings");
+  // Account configuration stays on the computer: the phone shows the snapshot only.
+  expect(container.textContent).not.toContain("Account actions");
 });
 it("hides cached private rows for an old host and same-id replacement endpoint", async () => {
   state.supported = false;
@@ -262,7 +262,7 @@ it("does not revive a retired connection when its previous endpoint returns", as
   await render();
   expect(state.methods).toHaveLength(calls);
   expect(container.textContent).not.toContain("Fixture account");
-  expect(container.textContent).toContain("connection or project changed");
+  expect(container.textContent).toContain("The connection changed");
   expect(state.pull).toBeUndefined();
 });
 it("gives failed cached reads priority over empty success messages", async () => {
@@ -293,10 +293,12 @@ it("coalesces toolbar and pull refresh into one read", async () => {
   await act(async () => release());
 });
 
-it("exposes Claude account actions when only quota observation is supported", async () => {
-  state.metadata = false;
-  await render();
-  expect(container.textContent).toContain("Account actions");
+it("offers no account changes even when the computer supports them", async () => {
+  for (const metadata of [true, false]) {
+    state.metadata = metadata;
+    await render();
+    expect(container.textContent).not.toContain("Account actions");
+  }
 });
 it("replaces the cached quota with a link to Usage Limits in the same machine and project scope", async () => {
   state.limits = true;

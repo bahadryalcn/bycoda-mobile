@@ -11,6 +11,7 @@ vi.mock("@/ui/swipe-actions", () => ({
 
 const f = vi.hoisted(() => ({
   navigate: vi.fn(),
+  openNewChat: vi.fn(),
   selectProject: vi.fn(),
   open: vi.fn<(payload: { cwd: string }) => Promise<DirectoryProject>>(),
   success: vi.fn(),
@@ -21,6 +22,7 @@ const f = vi.hoisted(() => ({
 
 vi.mock("expo-crypto", () => ({ randomUUID: () => globalThis.crypto.randomUUID() }));
 vi.mock("expo-router", () => ({ router: { navigate: f.navigate }, Stack: { Screen: () => null } }));
+vi.mock("./new-chat-navigation", () => ({ openNewChat: f.openNewChat }));
 vi.mock("react-native", () => ({
   View: ({ children }: { children: ReactNode }) => h("div", null, children),
   FlatList: ({ data, renderItem }: { data: unknown[]; renderItem: (entry: { item: unknown; index: number }) => ReactNode }) =>
@@ -46,6 +48,7 @@ vi.mock("@/ui/primitives", () => {
   return {
     Screen: ({ children }: { children: ReactNode }) => h("div", null, children),
     ...Object.fromEntries(controls.map((name) => [name, () => null])),
+    useCollapsibleSearch: (field: unknown) => ({ open: false, trigger: null, filterTrigger: null, sheet: field, field }),
   };
 });
 vi.mock("lucide-react-native/icons/folder-plus", () => ({ default: () => null }));
@@ -71,7 +74,7 @@ vi.mock("@/ui/overflow-menu", () => ({
 vi.mock("./project-directory-feedback", () => ({ ProjectDirectorySlot: () => null }));
 vi.mock("./project-folder-browser", () => ({ ProjectFolderBrowser: () => null }));
 vi.mock("./use-project-activity", () => ({ useProjectActivity: () => ({ directory: [] }) }));
-vi.mock("../group-lock/group-lock-section", () => ({ GroupLockSection: () => null }));
+vi.mock("../group-lock/group-lock-section", () => ({ GroupLockSection: () => null, HiddenGroupsFlow: () => null, HiddenGroupsRow: () => null, useHiddenGroupsEntry: () => ({ supported: false }) }));
 vi.mock("../connections/welcome-screen", () => ({ WelcomeScreen: () => null }));
 vi.mock("../navigation-prefs/app-preferences", () => ({ appPreferences: {}, useAppPreferences: () => ({ preferences: { groupByRepository: false } }) }));
 vi.mock("./use-project-directory", async () => {
@@ -157,16 +160,14 @@ it.each([
   });
 });
 
-it("lists project options in the desktop order and starts a session through the project route", async () => {
+it("lists project options in the desktop order and starts a session in the empty new session", async () => {
   await act(async () => root.render(h(ProjectsScreen)));
   await act(async () => click("Options"));
   const labels = [...container.querySelectorAll("section button")].map((button) => button.textContent);
   expect(labels).toEqual(["New session", "Files", "Changes", "Pull requests", "Copy path", "Details"]);
   await act(async () => click("New session"));
-  expect(f.navigate).toHaveBeenCalledExactlyOnceWith({
-    pathname: "/project/[id]",
-    params: { id: "shared-id", machineId: "phone", create: "session" },
-  });
+  expect(f.openNewChat).toHaveBeenCalledExactlyOnceWith({ projectId: "shared-id", machineId: "phone" });
+  expect(f.navigate).not.toHaveBeenCalled();
 });
 
 it("ignores a late open receipt from the retired connection", async () => {

@@ -37,6 +37,20 @@ export function desktopIssueClock(expiresAt: unknown): number {
   return Number.isFinite(expiry) ? expiry - MOBILE_PAIRING_TTL_MS : Date.now();
 }
 
+/**
+ * Whether a scanned QR at least claims to be a bycoda pairing code. Anything else (a URL, Wi-Fi
+ * credentials, another app's code) is ignored by the scanner, which keeps scanning.
+ */
+export function isPairingPayload(value: string): boolean {
+  if (value.length > MOBILE_PAIRING_MAX_BYTES) return false;
+  try {
+    const decoded = JSON.parse(value.trim()) as { kind?: unknown } | null;
+    return !!decoded && typeof decoded === "object" && decoded.kind === "bycoda.mobile-pairing";
+  } catch {
+    return false;
+  }
+}
+
 /** An unkeyed HTTPS pairing address that is not a tailnet name is the owner's public-internet route. */
 export function pairingRouteIsPublic(code: Pick<MobilePairingCode, "endpoint" | "lanKey">): boolean {
   return code.lanKey === undefined && routeKind({ endpoint: code.endpoint }) === null;

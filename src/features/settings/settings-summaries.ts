@@ -3,13 +3,21 @@ import { permissionKinds } from "../permissions/device-permission-status";
 
 type Copy = (tr: string, en: string, params?: Record<string, string | number>) => string;
 
+/** This phone's notification permission in one vocabulary, shared by the root and the Notifications page. */
+export type NotificationPermissionState = "on" | "off" | "blocked";
+export function notificationStateLabel(state: NotificationPermissionState, copy: Copy): string {
+  return state === "on" ? copy("Açık", "On")
+    : state === "off" ? copy("Kapalı", "Off")
+      : copy("Telefon ayarlarında kapalı", "Off in phone settings");
+}
+
 /** Settings root value for Notifications: what the phone allows, not each event choice. */
 export function notificationSummary(read: PermissionRead, copy: Copy): string | undefined {
   if (read.status === "error") return copy("Durum okunamadı", "Status unavailable");
   if (read.status !== "ready") return undefined;
-  if (read.permission.granted) return copy("Açık", "On");
-  if (read.permission.status === "undetermined" || read.permission.canAskAgain) return copy("İzin gerekli", "Permission needed");
-  return copy("Kapalı", "Off");
+  if (read.permission.granted) return notificationStateLabel("on", copy);
+  if (read.permission.status === "undetermined" || read.permission.canAskAgain) return notificationStateLabel("off", copy);
+  return notificationStateLabel("blocked", copy);
 }
 
 /** Settings root value for Phone permissions: how many of the readable permissions are allowed. */

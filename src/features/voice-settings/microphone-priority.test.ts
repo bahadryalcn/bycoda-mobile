@@ -23,7 +23,9 @@ vi.mock("../../../modules/bycoda-voice-companion", () => ({
   nativeVoiceCompanion: () => ({ listInputs: () => fixture.inputs }),
 }));
 vi.mock("./voice-preferences", () => ({ voicePreferences: { getState: () => ({ update: fixture.update }) } }));
-vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string, values?: Record<string, string>) => en.replace(/\{(\w+)\}/g, (_m, key: string) => values?.[key] ?? "") }));
+vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
+vi.mock("@/ui/use-route-focus", () => ({ useRouteFocus: () => true }));
 vi.mock("@/ui/primitives", () => ({
   ValueRow: ({ label, value }: { label: string; value?: string }) => h("div", null, `${label}: ${value}`),
   SelectField: ({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string; detail?: string }[]; onChange(value: string): void }) => {
@@ -45,12 +47,13 @@ it("shows one attached mic as a value, then offers the first-used choice after a
     Object.assign(preferences, patch(preferences)));
   try {
     await act(async () => root.render(h(MicrophonePriority, { order: micOrder, disabled: false })));
-    expect(container.textContent).toBe("Input device: Built-in");
+    expect(container.textContent).toBe("Microphone in use: Phone microphone");
     expect(container.querySelectorAll("button")).toHaveLength(0);
 
-    fixture.inputs = [{ name: "iPhone Microphone", type: "builtin", uid: "1" }, { name: "Headset mic", type: "bluetooth", uid: "2" }];
+    // The phone's own microphone is never named by its model (Android reports e.g. "SM-S928B").
+    fixture.inputs = [{ name: "SM-S928B", type: "builtin", uid: "1" }, { name: "Headset mic", type: "bluetooth", uid: "2" }];
     await act(async () => fixture.refresh());
-    expect([...container.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["Bluetooth · Headset mic", "Built-in · iPhone Microphone"]);
+    expect([...container.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["Bluetooth · Headset mic", "Phone microphone"]);
     await act(async () => fixture.choose("builtin"));
     expect(preferences.micOrder).toEqual(["wired", "builtin", "bluetooth", "carplay"]);
   } finally {

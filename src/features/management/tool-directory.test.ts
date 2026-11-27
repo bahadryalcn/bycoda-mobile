@@ -30,6 +30,7 @@ vi.mock("@/ui/primitives", () => ({
   Section: ({ children, title }: PropsWithChildren<{ title: string }>) => createElement("section", null, createElement("h2", null, title), children),
   NavigationRow: ({ label, detail, onPress }: any) => createElement("div", null, createElement("button", { onClick: onPress }, label), detail),
   Empty: ({ title, action }: any) => createElement("div", null, title, action ? createElement("button", { onClick: action.onPress }, action.label) : null),
+  NoResults: ({ title, onClearSearch }: any) => createElement("div", null, title, onClearSearch ? createElement("button", { onClick: onClearSearch }, "Clear search") : null),
 }));
 import { ToolDirectory } from "./tool-directory";
 let root: ReturnType<typeof createRoot>, container: HTMLDivElement;
@@ -79,7 +80,7 @@ it("matches Turkish tool and group labels using selected app language", async ()
 it("shows unsupported capability and leaves project scope to the opened tool", async () => {
   fixture.capabilities = [];
   await render();
-  expect(container.textContent).toContain("Update needed");
+  expect(container.textContent).toContain("Not on this computer");
   expect(container.textContent).not.toContain("Project required");
   await click("Browser");
   expect(container.querySelector("aside")).toBeNull();
@@ -125,7 +126,7 @@ it("treats usage as supported when the computer serves limits but not session us
   fixture.capabilities = ["usage.limits.read"];
   await render();
   const detail = [...container.querySelectorAll("button")].find((button) => button.textContent === "Usage and limits")!.parentElement!.textContent;
-  expect(detail).not.toContain("Update needed");
+  expect(detail).not.toContain("Not on this computer");
   fixture.capabilities = undefined;
 });
 
@@ -136,4 +137,14 @@ it.each([null, "project"])("opens management with the explicit Tools project fil
     section: "tasks", machineId: "machine", environmentId: "host", projectFilter: projectId ? "project" : "all",
     ...(projectId ? { projectId } : {}),
   } });
+});
+
+it("keeps All projects when a tool opens with the page's stand-in project", async () => {
+  await render("", "fallback", { fallback: true }); await click("Tasks");
+  expect(fixture.selectProject).not.toHaveBeenCalled();
+  expect(fixture.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: "/manage/[section]", params: expect.objectContaining({ section: "tasks", projectFilter: "all" }) }));
+  expect(fixture.push.mock.calls[0][0].params.projectId).toBeUndefined();
+  await click("Terminals");
+  expect(fixture.selectProject).not.toHaveBeenCalled();
+  expect(fixture.push).toHaveBeenLastCalledWith({ pathname: "/tools/[tool]", params: { tool: "terminals", projectId: "fallback", machineId: "machine" } });
 });

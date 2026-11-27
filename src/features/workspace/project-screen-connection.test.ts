@@ -43,6 +43,8 @@ vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }))
 vi.mock("@/ui/layout", () => ({ useScreenChrome: () => ({ nativeTitle: false }) }));
 vi.mock("@/ui/screen-content-insets", () => ({ useScreenContentInsets: () => ({ left: 0, right: 0 }) }));
 vi.mock("@/ui/machine-bar", () => ({ MachineConnectionStatus: () => null }));
+vi.mock("@/ui/scope-pill", () => ({ ScopePill: () => null }));
+vi.mock("@/ui/scope-line", () => ({ ScopePills: () => null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/project-icon", () => ({ ProjectIcon: () => null }));
 vi.mock("@/ui/workspace-frame", () => ({
@@ -61,6 +63,8 @@ vi.mock("@/ui/primitives", () => {
   };
   return {
     Button, IconButton: Button, PressableCard: Button,
+    NavigationRow: Button, RowIcon: () => null,
+    NavigationGroup: ({ children }: { children: ReactNode }) => h("div", null, children),
     HeaderBackButton: () => null, stackBackOptions: () => ({}),
     Screen: ({ children }: { children: ReactNode }) => h("div", null, children),
     ScreenHeading: ({ context, actions }: { context: ReactNode; actions: ReactNode }) => h("header", null, context, actions),

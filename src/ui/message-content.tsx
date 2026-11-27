@@ -1,7 +1,9 @@
 import { useMobileTheme } from "@/ui/theme";
-import { router } from "expo-router";
-import { Fragment, Suspense, lazy, memo, useMemo, useState, type ReactNode } from "react";
-import { Linking, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { Fragment, Suspense, lazy, memo, useCallback, useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { Linking, ScrollView, StyleSheet, Text, View, useWindowDimensions, type TextStyle } from "react-native";
+import AppWindow from "lucide-react-native/icons/app-window";
+import Globe from "lucide-react-native/icons/globe";
+import MessageSquare from "lucide-react-native/icons/message-square";
 import Square from "lucide-react-native/icons/square";
 import SquareCheck from "lucide-react-native/icons/square-check";
 import { decorativeSvgProps } from "./accessibility";
@@ -14,51 +16,85 @@ const MessageMath = lazy(() => import("./message-math-view"));
 import { useCopy } from "./copy";
 import { RECORD_ACCESS_UNAVAILABLE } from "./record-access-copy";
 import { markdownTarget } from "./message-inline";
-import { parseMessage, MESSAGE_RENDER_LIMIT, type MessageNode } from "./message-model";
+import { linkIconKind, type LinkIconKind } from "./message-link-kind";
+import { messageNodeText, parseMessage, MESSAGE_RENDER_LIMIT, type MessageNode } from "./message-model";
 import { MessageReader } from "./message-reader";
 import { MessageCode } from "./message-code";
-import { MessageImage } from "./message-image";
+import { MessageImage, MessageImageGallery } from "./message-image";
+import { messageImageNodes } from "./message-image-gallery";
 import { useChatTextStyles } from "./chat-styles";
 import { useChatAppearance } from "@/state/chat-appearance";
 import type { ChatTextSize } from "@/state/chat-appearance-model";
-import type { MessageContext, OpenDocument } from "./media-policy";
+import { resolveMediaPath, type MessageContext, type OpenDocument } from "./media-policy";
 import { scopedMessageReferences } from "./message-citations";
 import { linkOnlyItem, sourceList } from "./message-link-item";
 import { MessageSource, MessageSources } from "./message-sources";
 import { messageSessionLink, messageSessionRoute } from "./message-session-link";
 import { taskListItem } from "./message-task";
 import { isLoopbackWebUrl, loopbackScopeKey, useLoopbackLink } from "./loopback-link";
-import { messageTableColumnWidths } from "./message-table-model";
+import { messageTableData } from "./message-table-model";
+import { MessageTable } from "./message-table";
+import { InlineFileChip } from "./file-chip";
+import { inlineCodeFilePath } from "./message-file-ref";
 import { hasMention, mentionParts } from "./message-selection-model";
 import { SelectableProse } from "./message-selection";
+import { pushOnce } from "./navigation";
 
 /** Width reserved for a list marker ("•", "12.", task box) so item text aligns. */
 const LIST_MARKER_WIDTH = space.xxl;
 
+// One inline list per parsed paragraph: settled paragraphs of a streaming message keep the same
+// array, so the selection layer's memoized source is not rebuilt on every delta.
+const proseCache = new WeakMap<MessageNode, MessageNode[]>();
+function proseNodes(node: MessageNode): MessageNode[] {
+  let all = proseCache.get(node);
+  if (!all) {
+    all = node.children.flatMap((entry) => (entry.type === "inline" ? entry.children : [entry]));
+    proseCache.set(node, all);
+  }
+  return all;
+}
+
+/**
+ * A workspace file named in prose: a tinted chip that opens the file viewer. Without an owner that
+ * can open it the label stays plain text; the selection layer mirrors the same decision.
+ */
 function FileLink({
   path,
+  label,
   context,
   children,
   onOpenFile,
+  fontSize,
 }: {
   path: string;
+  label: string;
   context?: MessageContext;
   children: ReactNode;
   onOpenFile?: OpenDocument;
+  fontSize: number;
 }) {
+  if (!context || !onOpenFile) return <Text>{children}</Text>;
+  return <InlineFileChip label={label} target={path} fontSize={fontSize} onPress={() => onOpenFile(path, context)} />;
+}
+
+const LINK_ICONS: Record<LinkIconKind, ComponentType<{ size?: number; color?: string; strokeWidth?: number }>> = {
+  session: MessageSquare,
+  local: AppWindow,
+  web: Globe,
+};
+
+/** One-em leading icon of an inline link, in the link's accent; it wraps with the words. */
+function LinkIcon({ kind, fontSize }: { kind: LinkIconKind; fontSize: number }) {
   const { colors } = useMobileTheme();
+  const { fontScale } = useWindowDimensions();
+  const Icon = LINK_ICONS[kind];
+  // Same box as the file chip's icon, which the selection layer mirrors with one em space.
+  const box = fontSize * fontScale;
   return (
-    <Text
-      accessibilityRole={context && onOpenFile ? "link" : undefined}
-      style={
-        context && onOpenFile
-          ? { color: colors.accent, textDecorationLine: "underline" }
-          : undefined
-      }
-      onPress={context && onOpenFile ? () => onOpenFile(path, context) : undefined}
-    >
-      {children}
-    </Text>
+    <View accessible={false} style={{ width: box, height: box, alignItems: "center", justifyContent: "center" }}>
+      <Icon {...decorativeSvgProps} size={Math.round(box * 0.72)} color={colors.accent} strokeWidth={2} />
+    </View>
   );
 }
 
@@ -83,7 +119,6 @@ export const MessageContent = memo(function MessageContent({
   onOpenFile?: OpenDocument;
 }) {
   const { colors } = useMobileTheme();
-  const { fontScale } = useWindowDimensions();
   const preference = useChatAppearance((state) => state.textSize);
   const typography = useChatTextStyles(textSize ?? preference);
   const bodyStyle = role === "user" ? typography.user : typography.assistant;
@@ -106,7 +141,24 @@ export const MessageContent = memo(function MessageContent({
     () => scopedMessageReferences(parseMessage(text, role === "assistant", cacheId), context),
     [text, role, cacheId, context?.cwd, context?.basePath],
   );
-  const inline = (nodes: MessageNode[]): ReactNode =>
+  // Every image the message shows, in reading order: one gallery, so a tap opens the right page.
+  const imageNodes = useMemo(() => messageImageNodes(nodes), [nodes]);
+  const galleryImages = useMemo(
+    () => imageNodes.map((node) => ({ source: node.attrs.src || "", alt: node.text })),
+    [imageNodes],
+  );
+  const galleryIndexOf = useMemo(() => new Map(imageNodes.map((node, index) => [node, index])), [imageNodes]);
+  const fileChips = !!context && !!onOpenFile;
+  // Inline code becomes a file chip only for a recognised file type inside the project/worktree.
+  const codeFile = useCallback(
+    (text: string) => {
+      const path = context ? inlineCodeFilePath(text) : null;
+      return path && context && resolveMediaPath(context, path) ? path : null;
+    },
+    [context?.cwd, context?.basePath, !context],
+  );
+  const proseSize: number = bodyStyle.fontSize ?? 15;
+  const inline = (nodes: MessageNode[], fontSize: number = proseSize): ReactNode =>
     nodes.map((node, index) => {
       if (node.type === "math_inline" || node.type === "math_display")
         return (
@@ -124,20 +176,24 @@ export const MessageContent = memo(function MessageContent({
             />
           </Suspense>
         );
-      const child = node.children.length ? inline(node.children) : node.text;
+      const child = node.children.length ? inline(node.children, fontSize) : node.text;
       if (node.type === "image")
         return compactMedia ? null : <Text key={index}>{node.attrs.alt || node.text}</Text>;
       if (node.type === "softbreak" || node.type === "hardbreak") return "\n";
       if (node.type === "link") {
+        // The accent and a leading icon of what the link opens are its affordance, as in the
+        // desktop transcript; the selection layer reserves the icon's slot (`linkIconKind`).
+        const kind = linkIconKind(node.attrs.href || "");
         const session = messageSessionLink(node.attrs.href || "");
         if (session)
           return (
             <Text
               key={index}
               accessibilityRole="link"
-              style={{ color: colors.accent, textDecorationLine: "underline" }}
-              onPress={() => router.push(messageSessionRoute(session))}
+              style={{ color: colors.accent }}
+              onPress={() => pushOnce(messageSessionRoute(session))}
             >
+              {kind ? <LinkIcon kind={kind} fontSize={fontSize} /> : null}
               {child}
             </Text>
           );
@@ -147,15 +203,16 @@ export const MessageContent = memo(function MessageContent({
             <Text
               key={index}
               accessibilityRole="link"
-              style={{ color: colors.accent, textDecorationLine: "underline" }}
+              style={{ color: colors.accent }}
               onPress={() => openWeb(target.href)}
             >
+              {kind ? <LinkIcon kind={kind} fontSize={fontSize} /> : null}
               {child}
             </Text>
           );
         if (target.kind === "file")
           return (
-            <FileLink onOpenFile={onOpenFile} key={index} path={target.context} context={context}>
+            <FileLink onOpenFile={onOpenFile} key={index} path={target.context} label={messageNodeText(node)} context={context} fontSize={fontSize}>
               {child}
             </FileLink>
           );
@@ -167,12 +224,19 @@ export const MessageContent = memo(function MessageContent({
           typeof part === "string" ? (
             part
           ) : (
-            <FileLink onOpenFile={onOpenFile} key={part.at} path={part.path} context={context}>
+            <FileLink onOpenFile={onOpenFile} key={part.at} path={part.path} label={part.path} context={context} fontSize={fontSize}>
               @{part.path}
             </FileLink>
           ),
         );
         return <Text key={index}>{parts}</Text>;
+      }
+      if (node.type === "code_inline" && fileChips) {
+        const path = codeFile(node.text);
+        if (path)
+          return (
+            <InlineFileChip key={index} label={node.text} target={path} fontSize={fontSize} onPress={() => onOpenFile!(path, context!)} />
+          );
       }
       return (
         <Text
@@ -250,64 +314,17 @@ export const MessageContent = memo(function MessageContent({
             style={{ height: 1, backgroundColor: colors.separator, marginVertical: space.sm }}
           />
         );
-      if (node.type === "table") {
-        const rows = node.children.flatMap((section) => section.children);
-        const widths = messageTableColumnWidths(rows, bodyStyle.fontSize ?? 15, fontScale);
+      if (node.type === "table")
         return (
-          <ScrollView
+          <MessageTable
             key={key}
-            horizontal
-            role="table"
-            accessibilityLabel={copy("Tablo: {p0} sütun, {p1} satır.", "Table: {p0} columns, {p1} rows.", {
-              p0: widths.length,
-              p1: rows.length,
-            })}
-            contentContainerStyle={{ paddingVertical: space.xs }}
-          >
-            <View>
-              {rows.map((row, rowIndex) => (
-                <View
-                  key={rowIndex}
-                  style={{
-                    flexDirection: "row",
-                    borderBottomWidth: 1,
-                    borderBottomColor: colors.separator,
-                    backgroundColor: rowIndex === 0 ? colors.raised : undefined,
-                  }}
-                >
-                  {row.children.map((cell, cellIndex) => (
-                    <View
-                      key={cellIndex}
-                      style={{ width: (widths[cellIndex] ?? 0) + space.sm * 2, padding: space.sm }}
-                    >
-                      <Body
-                        accessibilityRole={cell.type === "th" ? "header" : undefined}
-                        style={[
-                          bodyStyle,
-                          {
-                            textAlign: cell.attrs.style?.includes("right")
-                              ? "right"
-                              : cell.attrs.style?.includes("center")
-                                ? "center"
-                                : "left",
-                          },
-                          cell.type === "th" && { fontWeight: "700" },
-                        ]}
-                      >
-                        {inline(
-                          cell.children.flatMap((entry) =>
-                            entry.type === "inline" ? entry.children : [entry],
-                          ),
-                        )}
-                      </Body>
-                    </View>
-                  ))}
-                </View>
-              ))}
-            </View>
-          </ScrollView>
+            table={messageTableData(node)}
+            bodyStyle={bodyStyle}
+            renderCell={(cell) =>
+              inline(proseNodes(cell), Math.max(12, proseSize - 2))
+            }
+          />
         );
-      }
       if (node.type === "bullet_list" || node.type === "ordered_list") {
         const sources = sourceList(node.children);
         if (sources) return <MessageSources key={key} items={sources} onOpen={openWeb} />;
@@ -388,19 +405,18 @@ export const MessageContent = memo(function MessageContent({
           </View>
         );
       if (node.type === "paragraph" || node.type === "heading") {
-        const all = node.children.flatMap((entry) =>
-          entry.type === "inline" ? entry.children : [entry],
-        );
+        const all = proseNodes(node);
         const proseStyle = [
           bodyStyle,
           node.type === "heading" && {
             ...typography.heading,
+            // Modest scale: h1 one step above the section heading, h3+ one step below it.
             fontSize:
               typography.heading.fontSize +
-              (node.tag === "h1" ? 5 : node.tag === "h2" ? 2 : 0),
+              (node.tag === "h1" ? 2 : node.tag === "h2" ? 0 : -2),
             lineHeight:
               typography.heading.lineHeight +
-              (node.tag === "h1" ? 8 : node.tag === "h2" ? 3 : 0),
+              (node.tag === "h1" ? 3 : node.tag === "h2" ? 0 : -3),
           },
           error && { color: colors.danger },
         ];
@@ -409,7 +425,7 @@ export const MessageContent = memo(function MessageContent({
             key={key}
             style={{
               gap: space.sm,
-              marginTop: node.type === "heading" && depth === 0 && index > 0 ? space.sm : 0,
+              marginTop: node.type === "heading" && depth === 0 && index > 0 ? space.xs : 0,
             }}
           >
             {!compactMedia || hasInlineText(all) ? (
@@ -418,13 +434,15 @@ export const MessageContent = memo(function MessageContent({
                 compactMedia={compactMedia}
                 mentions={!!context}
                 codeSize={typography.code.fontSize}
+                fileChips={fileChips}
+                codeFile={fileChips ? codeFile : undefined}
                 style={proseStyle}
               >
                 <Body
                   accessibilityRole={node.type === "heading" ? "header" : undefined}
                   style={proseStyle}
                 >
-                  {inline(all)}
+                  {inline(all, (StyleSheet.flatten(proseStyle) as TextStyle | undefined)?.fontSize ?? proseSize)}
                 </Body>
               </SelectableProse>
             ) : null}
@@ -435,6 +453,7 @@ export const MessageContent = memo(function MessageContent({
                 alt={image.text}
                 context={context}
                 deferred={compactMedia}
+                galleryIndex={galleryIndexOf.get(image)}
               />
             ))}
           </View>
@@ -451,16 +470,18 @@ export const MessageContent = memo(function MessageContent({
       );
     });
   return (
-    <View style={{ minWidth: 0, width: "100%", gap: space.md }}>
-      {render(nodes)}
-      <ErrorText error={linkError} />
-      {text.length > MESSAGE_RENDER_LIMIT ? (
-        <MessageReader
-          text={text}
-          textStyle={bodyStyle}
-          hideInternalMetadata={role === "assistant"}
-        />
-      ) : null}
-    </View>
+    <MessageImageGallery images={galleryImages} context={context}>
+      <View style={{ minWidth: 0, width: "100%", gap: space.row }}>
+        {render(nodes)}
+        <ErrorText error={linkError} />
+        {text.length > MESSAGE_RENDER_LIMIT ? (
+          <MessageReader
+            text={text}
+            textStyle={bodyStyle}
+            hideInternalMetadata={role === "assistant"}
+          />
+        ) : null}
+      </View>
+    </MessageImageGallery>
   );
 });

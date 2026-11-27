@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 import { SessionScreen } from "./session-screen";
+import { STOP_RECHECK_MS, STOP_REPLY_MS, STOP_SETTLE_MS } from "./composer-send-presentation";
 const state = vi.hoisted(() => ({
   readable: true,
   pending: false,
@@ -21,7 +22,10 @@ const state = vi.hoisted(() => ({
   options: undefined as undefined | { enabled: boolean; projectId?: string },
   command: vi.fn(async (_input: Record<string, unknown>) => ({})),
   onCommand: undefined as undefined | ((input: Record<string, unknown>) => Promise<unknown>),
+  stopping: false,
+  toast: vi.fn(),
 }));
+vi.mock("@/ui/toast", () => ({ showToast: state.toast }));
 vi.mock("@/ui/machine-bar", () => ({ useMachineStatus: () => ({ phase: "connected" }) }));
 // React Native defines __DEV__ at bundle start; modules read it while being imported.
 vi.hoisted(() => { (globalThis as { __DEV__?: boolean }).__DEV__ = false; });
@@ -36,8 +40,9 @@ vi.mock("react-native", () => ({
     return createElement("div", { ...rest, style }, children);
   },
 }));
+vi.mock("@/ui/no-computer", () => ({ NoComputerState: () => null }));
 vi.mock("expo-router", () => ({
-  router: { push: state.navigate },
+  router: { push: state.navigate, replace: state.navigate, dismissTo: state.navigate },
   useFocusEffect: () => undefined,
 }));
 vi.mock("react-native-safe-area-context", () => ({
@@ -118,9 +123,10 @@ vi.mock("./session-project-recovery", () => ({
   SessionProjectRecovery: () => createElement("div", null, "Recover project link"),
 }));
 vi.mock("./session-composer", () => ({
-  SessionComposer: ({ onCommand }: { onCommand: typeof state.onCommand }) => {
+  SessionComposer: ({ onCommand, stopping }: { onCommand: typeof state.onCommand; stopping?: boolean }) => {
     const [draft] = useState("Preserved owner draft");
     state.onCommand = onCommand;
+    state.stopping = !!stopping;
     useEffect(() => {
       state.mounted += 1;
     }, []);
@@ -180,12 +186,11 @@ vi.mock("./session-transcript", () => ({
       : null,
 }));
 vi.mock("@/ui/error-boundary", () => ({ SectionErrorBoundary: ({ children }: { children: unknown }) => children }));
-vi.mock("./session-parent-bar", () => ({ SessionParentBar: () => null }));
+vi.mock("./session-agent-runs", () => ({ SessionAgentRunsProvider: ({ children }: { children: unknown }) => children }));
 vi.mock("./session-agents", () => ({
   SessionAgents: ({ children }: { children: (chip: null) => import("react").ReactNode }) =>
     children(null),
 }));
-vi.mock("./session-settings", () => ({ SessionSettings: () => null }));
 // Loopback opening has its own tests; it reaches the native Host socket module and the Expo runtime.
 vi.mock("./session-loopback-browser", () => ({
   SessionLoopbackBrowser: ({ children }: PropsWithChildren) => children,
@@ -282,6 +287,9 @@ afterEach(async () => {
   state.options = undefined;
   state.command.mockClear();
   state.onCommand = undefined;
+  state.stopping = false;
+  state.toast.mockClear();
+  vi.useRealTimers();
   state.privacyUnavailable = false;
   state.projectError = null;
   state.snapshotError = null;
@@ -498,4 +506,68 @@ it("directory verification and transcript arrival preserve the mounted draft own
   expect(container.querySelector("input")).toBe(input);
   expect(state.mounted).toBe(1);
   expect(container.querySelectorAll('[data-query="loading"]')).toHaveLength(0);
+});
+
+const runningSession = () => ({ ...session(), status: "running", runId: "run-1" });
+const stopKey = ["machine", "machine", "session", "session"];
+const cancel = { type: "cancel", sessionId: "session", runId: "run-1" };
+
+it("ends the Stop spinner when the Host never replies and sends a new cancel on the next tap", async () => {
+  vi.useFakeTimers();
+  cache = new QueryClient();
+  cache.setQueryData(stopKey, runningSession());
+  await render();
+  // The Host never answers the first cancel.
+  state.command.mockImplementationOnce(() => new Promise<never>(() => {}));
+  await act(async () => void state.onCommand!(cancel).catch(() => {}));
+  expect(state.stopping).toBe(true);
+  // A second tap inside the wait shares the one in-flight cancel.
+  await act(async () => void state.onCommand!(cancel).catch(() => {}));
+  expect(state.command).toHaveBeenCalledTimes(1);
+  await act(async () => vi.advanceTimersByTimeAsync(STOP_REPLY_MS + STOP_RECHECK_MS + 1));
+  // Bounded: Stop is offered again and the screen says why, without claiming the run stopped.
+  expect(state.stopping).toBe(false);
+  expect(state.toast).toHaveBeenCalledTimes(1);
+  expect(state.toast).toHaveBeenCalledWith({ tone: "danger", message: "No reply from the computer yet. Tap Stop to try again." });
+  await act(async () => void state.onCommand!(cancel).catch(() => {}));
+  expect(state.command).toHaveBeenCalledTimes(2);
+  expect(state.command).toHaveBeenLastCalledWith(expect.objectContaining({ type: "cancel", runId: "run-1" }));
+});
+
+it("holds Stopping after the Host accepts until the snapshot shows the run ended, with no failure notice", async () => {
+  vi.useFakeTimers();
+  cache = new QueryClient();
+  cache.setQueryData(stopKey, runningSession());
+  await render();
+  await act(async () => void state.onCommand!(cancel));
+  expect(state.stopping).toBe(true);
+  // The Host keeps the run "running" while it winds down: longer than the old 8 s spinner.
+  await act(async () => vi.advanceTimersByTimeAsync(20_000));
+  expect(state.stopping).toBe(true);
+  expect(state.command).toHaveBeenCalledTimes(1);
+  cache.setQueryData(stopKey, { ...runningSession(), status: "idle", revision: 2 });
+  await render();
+  expect(state.stopping).toBe(false);
+  await act(async () => vi.advanceTimersByTimeAsync(STOP_SETTLE_MS));
+  expect(state.toast).not.toHaveBeenCalled();
+});
+
+it("offers Stop again with an honest notice when an accepted Stop never shows in the snapshot", async () => {
+  vi.useFakeTimers();
+  cache = new QueryClient();
+  cache.setQueryData(stopKey, runningSession());
+  await render();
+  // The final re-read hangs too (offline): the wait must still end.
+  state.snapshotRefetch.mockImplementation(() => new Promise<never>(() => {}));
+  await act(async () => void state.onCommand!(cancel));
+  await act(async () => vi.advanceTimersByTimeAsync(STOP_SETTLE_MS + STOP_RECHECK_MS + 1));
+  expect(state.stopping).toBe(false);
+  expect(state.toast).toHaveBeenCalledWith({
+    tone: "danger",
+    message: "The computer accepted Stop, but the turn is still running. Tap Stop to try again.",
+  });
+  await act(async () => void state.onCommand!(cancel));
+  expect(state.command).toHaveBeenCalledTimes(2);
+  expect(state.stopping).toBe(true);
+  state.snapshotRefetch.mockReset();
 });

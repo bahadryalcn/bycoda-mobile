@@ -66,3 +66,30 @@ it("keeps a manual unread flag from another device until the next opening", asyn
   visible = false; await render(); visible = true; await render(); await tick();
   expect(state.request).toHaveBeenCalledTimes(1);
 });
+
+it("acknowledges a running turn at most once per window and flushes what was shown on blur", async () => {
+  session = { ...session, status: "running" } as HostSession;
+  await render(); await tick(); expect(state.request).toHaveBeenCalledTimes(1);
+  session = { ...session, revision: 5 }; await render(); await tick(5_000);
+  session = { ...session, revision: 6 }; await render(); await tick(5_000);
+  expect(state.request).toHaveBeenCalledTimes(1);
+  await tick(20_000);
+  expect(state.request).toHaveBeenCalledTimes(2);
+  expect(state.request).toHaveBeenLastCalledWith("sessions.update", expect.objectContaining({ expectedRevision: 6 }));
+  session = { ...session, revision: 7 }; await render(); await tick(1_000);
+  expect(state.request).toHaveBeenCalledTimes(2);
+  visible = false; await render();
+  expect(state.request).toHaveBeenCalledTimes(3);
+  expect(state.request).toHaveBeenLastCalledWith("sessions.update", expect.objectContaining({ expectedRevision: 7 }));
+});
+
+it("acknowledges right away once the run settles and skips re-reading a streamed session", async () => {
+  session = { ...session, status: "running" } as HostSession;
+  const Streamed = () => { useSessionViewed("machine", session, visible, canRead, true); return null; };
+  await act(() => root.render(createElement(Streamed))); await tick();
+  expect(state.request).toHaveBeenCalledTimes(1);
+  expect(state.invalidate).not.toHaveBeenCalledWith({ queryKey: ["machine", "session", "s"] });
+  session = { ...session, revision: 5, status: "idle" } as HostSession;
+  await act(() => root.render(createElement(Streamed))); await tick();
+  expect(state.request).toHaveBeenCalledTimes(2);
+});

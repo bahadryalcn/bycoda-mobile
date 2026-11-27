@@ -14,6 +14,6 @@ export function readBrowserCapture(value: unknown, scope: BrowserCaptureScope): 
   const { screenshot: _screenshot, ...metadata } = capture;
   const { comment: _comment, ...parsed } = parseBrowserAnnotation({ ...metadata, comment: "" });
   if (!scope.projectId || !scope.sessionId || !scope.navigationId || parsed.projectId !== scope.projectId || parsed.sessionId !== scope.sessionId || parsed.navigationId !== scope.navigationId)
-    throw new Error("Browser selection belongs to another page or conversation");
+    throw new Error("Browser selection belongs to another page or session");
   return { ...parsed, screenshot: { mimeType: "image/jpeg", data: screenshot.data, width: screenshot.width, height: screenshot.height } };
 }

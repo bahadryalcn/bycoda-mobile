@@ -2,13 +2,14 @@ import { useMobileTheme } from "@/ui/theme";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Stack } from "expo-router";
 import { AppState, Linking, StyleSheet, View } from "react-native";
-import { useBackHandler } from "panelui-native/hooks/use-back-handler";
+import { useScreenBackHandler } from "@/ui/screen-back-handler";
 import { CameraView, useCameraPermissions, type PermissionResponse } from "expo-camera";
 import { duringSystemPrompt } from "@/state/system-prompt";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useAsyncAction } from "@/state/actions";
 import { useSecurity } from "@/state/security";
 import {
+  Body,
   Button,
   ErrorNotice,
   HeaderBackButton,
@@ -26,6 +27,7 @@ import { InScreenBack } from "@/ui/in-screen-back";
 import { withTimeout } from "../../../../src/shared/lib/withTimeout";
 import { PERMISSION_READ_TIMEOUT_MS } from "../permissions/permission-deadline";
 import type { PairingScannerProps } from "./connection-types";
+import { isPairingPayload } from "./pairing-code";
 import { stackBackOptions } from "@/ui/stack-back";
 
 /**
@@ -49,6 +51,7 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
   const [foreground, setForeground] = useState(AppState.currentState === "active");
   const [cameraRevision, setCameraRevision] = useState(0);
   const [cameraFailed, setCameraFailed] = useState(false);
+  const [foreignCode, setForeignCode] = useState(false);
   const [, requestPermission, refreshPermission] = useCameraPermissions({ get: false });
   const [permissionCheck, setPermissionCheck] = useState<{
     owner: object;
@@ -114,7 +117,7 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
     session.current++;
     next();
   };
-  useBackHandler(focused, () => leave(onClose));
+  useScreenBackHandler(focused, () => leave(onClose));
 
   // Native camera sessions are mounted only while this screen can receive input.
   useEffect(() => {
@@ -200,6 +203,12 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
                 ? undefined
                 : (result) => {
                     if (!active.current || latched.current || currentCamera.current !== cameraOwner) return;
+                    // Another QR in view (a menu, Wi-Fi, a URL) is not an error: keep scanning, say so once.
+                    if (!isPairingPayload(result.data)) {
+                      if (!foreignCode) setForeignCode(true);
+                      return;
+                    }
+                    setForeignCode(false);
                     latched.current = true;
                     const owner = session.current;
                     void scan.run(async () => {
@@ -224,6 +233,11 @@ export function PairingScanner({ onCode, onClose, onPaste }: PairingScannerProps
         </View>
       ) : null}
       <View onLayout={event => setFeedbackHeight(event.nativeEvent.layout.height)} style={{ gap: space.lg }}>
+      {foreignCode && !scan.isError && !scan.isPending ? (
+        <Body muted style={{ textAlign: "center" }}>
+          {copy("Bu bir bycoda bağlantı kodu değil. Bilgisayarındaki kodu tara.", "This is not a bycoda pairing code. Scan the code on your computer.")}
+        </Body>
+      ) : null}
       <ErrorNotice
         onRetry={cameraFailed ? () => setCameraFailed(false) : undefined}
         retryLabel={copy("Kamerayı yeniden aç", "Retry camera")}

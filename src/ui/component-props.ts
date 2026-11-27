@@ -139,8 +139,12 @@ export type IconButtonProps = PropsWithChildren<{
   onLongPress?: () => void;
   disabled?: boolean;
   busy?: boolean;
+  /**
+   * `compact` draws a 28 visual reaching 48 through hitSlop. Only for a button standing alone: in a
+   * row of icon actions the slop areas overlap, so siblings use `reserveTouchTarget` instead.
+   */
   density?: "regular" | "compact";
-  /** Reserve the full layout target when a parent can clip expanded hit areas. */
+  /** Reserve the full layout target when a parent can clip expanded hit areas, or icon actions sit side by side. */
   reserveTouchTarget?: boolean;
   tone?: "default" | "primary" | "danger";
   expanded?: boolean;
@@ -200,7 +204,14 @@ export type UnsavedBadgeProps = { label?: string };
 
 export type FieldErrorProps = { message: string };
 
-export type LoadingProps = { label?: string; centered?: boolean; showLabel?: boolean; immediate?: boolean };
+export type LoadingProps = {
+  label?: string;
+  centered?: boolean;
+  showLabel?: boolean;
+  immediate?: boolean;
+  /** Wait the shared reveal delay before drawing; a read's progress uses it so fast reads never flash. Defaults to `centered && !immediate`. */
+  delayed?: boolean;
+};
 
 export type ErrorTextProps = { error: unknown; message?: string };
 
@@ -245,6 +256,11 @@ export type QueryStateProps = {
   emptyIllustration?: IllustrationName;
   /** A search or filter is active, so empty means "no matches". */
   searching?: boolean;
+  /**
+   * The shared no-results state for a searched or filtered collection. When its `searching` or
+   * `filtered` is true, an empty result renders `NoResults` instead of the ordinary empty state.
+   */
+  noResults?: import("./no-results").NoResultsProps;
   /** The device itself has no network; selects the offline illustration for errors. */
   offline?: boolean;
   /** "list"/"content" draw a skeleton of that shape; "centered" a spinner in the region. */
@@ -280,18 +296,6 @@ export type FormActionsProps = {
   /** Shows the compact "Unsaved changes" pill above the actions. */
   dirty?: boolean;
 };
-
-export type ConfirmationCardProps = PropsWithChildren<{
-  message?: string;
-  cancelLabel: string;
-  onCancel: () => void;
-  confirmLabel: string;
-  onConfirm: () => void;
-  busy?: boolean;
-  disabled?: boolean;
-  tone?: ButtonProps["tone"];
-  additionalActions?: ReactNode;
-}>;
 
 export type CodePanelProps = ContainerProps & { horizontal?: boolean };
 

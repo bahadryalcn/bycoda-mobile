@@ -1,10 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Pressable, View, type ViewStyle } from "react-native";
-import ChevronDown from "lucide-react-native/icons/chevron-down";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Sparkles from "lucide-react-native/icons/sparkles";
-import CircleCheck from "lucide-react-native/icons/circle-check";
-import Circle from "lucide-react-native/icons/circle";
 import CircleStop from "lucide-react-native/icons/circle-stop";
 import TriangleAlert from "lucide-react-native/icons/triangle-alert";
 import FileIcon from "lucide-react-native/icons/file";
@@ -15,6 +12,8 @@ import { Plan } from "panelui-native/components/plan";
 import { ThinkingOrb, type ThinkingOrbState } from "panelui-native/components/thinking-orb";
 import { useHostReadActive } from "@/state/queries";
 import { useReducedMotionPreference } from "./use-reduced-motion";
+import { useFeedbackAnimation } from "./use-feedback-animation";
+import { useAnimationLead } from "./animation-lead";
 import { Body } from "./typography";
 import { fontSize, gapIcon, hitSlopFor, lineHeight, metrics, radii, space } from "./tokens";
 import { useMobileTheme } from "./theme";
@@ -31,6 +30,8 @@ export type ChatActivityStep = {
   code?: string;
   text?: string;
   state: "running" | "failed" | "done";
+  /** Lines the step added and removed ("+12 −3"). */
+  delta?: { added: number; removed: number };
 };
 
 /** Steps beyond this stay in the inspector, so one long turn cannot flood the transcript. */
@@ -69,8 +70,11 @@ export function ChatActivity({
 }) {
   const { colors, pressedFill } = useMobileTheme();
   const copy = useCopy();
-  const reduceMotion = useReducedMotionPreference();
+  // Route focus, foreground and window focus as well as reduced motion: an orb under the shade
+  // or on a stacked route keeps redrawing an SVG for nobody.
+  const feedback = useFeedbackAnimation();
   const active = useHostReadActive();
+  const animate = useAnimationLead(status === "running" && active && feedback);
   const inline = !!steps?.length;
   const [open, setOpen] = useState(inline && defaultOpen);
   const [visited, setVisited] = useState(open);
@@ -82,25 +86,15 @@ export function ChatActivity({
     setOpen(next);
     if (next) setVisited(true);
   };
+  // Like desktop, settled work carries no success glyph: only running, failed, stopped and reasoning rows do.
   const Icon = reasoning
     ? Sparkles
-    : status === "complete"
-      ? CircleCheck
-      : status === "error"
-        ? TriangleAlert
-        : status === "stopped"
-          ? CircleStop
-          : status === "running"
-            ? Circle
-            : Circle;
-  const iconColor =
-    status === "error"
-      ? colors.danger
+    : status === "error"
+      ? TriangleAlert
       : status === "stopped"
-        ? colors.warning
-        : status === "complete" && !reasoning
-          ? colors.success
-          : colors.muted;
+        ? CircleStop
+        : undefined;
+  const iconColor = status === "error" ? colors.danger : colors.muted;
   const statusLabel =
     status === "error"
       ? copy("Başarısız", "Failed")
@@ -124,26 +118,29 @@ export function ChatActivity({
     lineHeight: lineHeight.control,
     color: status === "error" ? colors.danger : colors.muted,
   };
-  const Chevron = onInspect && !inline ? ChevronRight : ChevronDown;
+  // Desktop's "Worked for 46 s ›": the chevron follows the words and turns down while open.
   const header = (
     <>
-      <View style={{ width: 20, alignItems: "center", justifyContent: "center" }}>
-        {status === "running" ? (
-          <ThinkingOrb state={reasoning ? "solving" : busy} size={ORB_SIZE} color={colors.muted} paused={!active || reduceMotion} />
-        ) : (
-          <Icon size={16} color={iconColor} />
-        )}
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <ActivityLine running={status === "running"} mono={literal} style={titleStyle}>
+      {status === "running" || Icon ? (
+        <View style={{ width: 20, alignItems: "center", justifyContent: "center" }}>
+          {status === "running" ? (
+            <ThinkingOrb state={reasoning ? "solving" : busy} size={ORB_SIZE} color={colors.muted} paused={!animate} />
+          ) : Icon ? (
+            <Icon size={16} color={iconColor} />
+          ) : null}
+        </View>
+      ) : null}
+      <View style={{ flexShrink: 1, minWidth: 0 }}>
+        <ActivityLine running={status === "running"} animate={animate} mono={literal} style={titleStyle}>
           {visibleTitle}
         </ActivityLine>
       </View>
-      <Chevron
-        size={16}
+      <ChevronRight
+        size={14}
         color={colors.tertiary}
-        style={{ transform: [{ rotate: open ? "180deg" : "0deg" }] }}
+        style={{ transform: [{ rotate: open && inline ? "90deg" : "0deg" }] }}
       />
+      <View style={{ flex: 1 }} />
     </>
   );
   // Without an inline record, the row is a button into the inspector Sheet.
@@ -247,12 +244,15 @@ const STEP_VERB_FRAME = { flexShrink: 0, maxWidth: "60%" } as const;
  */
 function ActivityLine({
   running,
+  animate,
   mono,
   style,
   frame,
   children,
 }: {
   running: boolean;
+  /** Whether the owning row holds the animation lead; a still shimmer shows its plain text. */
+  animate: boolean;
   mono?: boolean;
   style: { fontSize: number; lineHeight: number; color: string };
   /** Flex constraints for the line, applied to the shimmer frame or the text itself. */
@@ -260,10 +260,9 @@ function ActivityLine({
   children: string;
 }) {
   const reduceMotion = useReducedMotionPreference();
-  const active = useHostReadActive();
   if (running && !reduceMotion)
     return (
-      <Shimmer as="view" enabled={active} baseColor={style.color} style={frame}>
+      <Shimmer as="view" enabled={animate} baseColor={style.color} style={frame}>
         <Body mono={mono} numberOfLines={1} style={style}>
           {children}
         </Body>
@@ -280,6 +279,9 @@ function ActivityLine({
 function ChatActivityStepRow({ step, onPress }: { step: ChatActivityStep; onPress?: () => void }) {
   const { colors, pressedFill } = useMobileTheme();
   const failed = step.state === "failed";
+  const feedback = useFeedbackAnimation();
+  const active = useHostReadActive();
+  const animate = useAnimationLead(step.state === "running" && active && feedback, -1);
   const verbStyle = {
     fontSize: fontSize.control,
     lineHeight: lineHeight.control,
@@ -321,12 +323,24 @@ function ChatActivityStepRow({ step, onPress }: { step: ChatActivityStep; onPres
       {step.code ?? step.text}
     </Body>
   ) : null;
+  const delta = step.delta && (step.delta.added || step.delta.removed) ? (
+    <Body
+      mono
+      numberOfLines={1}
+      style={{ flexShrink: 0, fontSize: fontSize.caption, lineHeight: lineHeight.caption, fontVariant: ["tabular-nums"] }}
+    >
+      <Body mono style={{ fontSize: fontSize.caption, lineHeight: lineHeight.caption, color: colors.success }}>{`+${step.delta.added}`}</Body>
+      {" "}
+      <Body mono style={{ fontSize: fontSize.caption, lineHeight: lineHeight.caption, color: colors.danger }}>{`−${step.delta.removed}`}</Body>
+    </Body>
+  ) : null;
   const content = (
     <>
-      <ActivityLine running={step.state === "running"} style={verbStyle} frame={STEP_VERB_FRAME}>
+      <ActivityLine running={step.state === "running"} animate={animate} style={verbStyle} frame={STEP_VERB_FRAME}>
         {step.label}
       </ActivityLine>
       {target}
+      {delta}
     </>
   );
   const rowStyle = {
@@ -340,7 +354,11 @@ function ChatActivityStepRow({ step, onPress }: { step: ChatActivityStep; onPres
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={[step.label, step.file ?? step.code ?? step.text].filter(Boolean).join(" ")}
+      accessibilityLabel={[
+        step.label,
+        step.file ?? step.code ?? step.text,
+        step.delta ? `+${step.delta.added} −${step.delta.removed}` : undefined,
+      ].filter(Boolean).join(" ")}
       hitSlop={{ top: (metrics.touchTarget - STEP_HEIGHT) / 2, bottom: (metrics.touchTarget - STEP_HEIGHT) / 2 }}
       onPress={onPress}
       style={({ pressed }) => [rowStyle, { borderRadius: radii.badge, backgroundColor: pressed ? pressedFill : "transparent" }]}
@@ -351,15 +369,25 @@ function ChatActivityStepRow({ step, onPress }: { step: ChatActivityStep; onPres
 }
 
 /** PanelUI's inline busy line: an orb saying which kind of busy, beside the shimmering label. */
-export function ChatStreaming({ label, state = "working" }: { label: string; state?: ThinkingOrbState }) {
+export function ChatStreaming({
+  label,
+  state = "working",
+  priority = 1,
+}: {
+  label: string;
+  state?: ThinkingOrbState;
+  /** Animation lead priority: the screen's main busy line outranks in-transcript lines. */
+  priority?: number;
+}) {
   const { colors, uiStyles } = useMobileTheme();
-  const reducedMotion = useReducedMotionPreference();
+  const feedback = useFeedbackAnimation();
   const active = useHostReadActive();
+  const animate = useAnimationLead(active && feedback, priority);
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-      <ThinkingOrb state={state} size={ORB_SIZE} color={colors.muted} paused={!active || reducedMotion} accessibilityLabel={label} />
+      <ThinkingOrb state={state} size={ORB_SIZE} color={colors.muted} paused={!animate} accessibilityLabel={label} />
       <Shimmer
-        enabled={active && !reducedMotion}
+        enabled={animate}
         accessibilityLabel={label}
         textStyle={uiStyles.caption}
       >

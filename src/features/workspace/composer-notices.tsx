@@ -85,7 +85,7 @@ export function ComposerNotices({
           {mode === "steer"
             ? copy("Yönlendirmek için çalışan bir tur gerekiyor.", "Steering requires a running turn.")
             : copy(
-                "Bu bilgisayarda sıra desteklenmiyor. Çalışmanın bitmesini bekle.",
+                "Bu bilgisayarda sıra desteklenmiyor. Turun bitmesini bekle.",
                 "This computer does not support queuing. Wait for the turn to finish.",
               )}
         </Body>

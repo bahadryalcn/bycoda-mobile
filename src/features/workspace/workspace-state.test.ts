@@ -51,7 +51,7 @@ describe("workspace view transitions", () => {
     const screen = readFileSync(new URL("./project-screen.tsx", import.meta.url), "utf8");
     const picker = screen.slice(screen.indexOf("visible={worktreeOpen}"), screen.indexOf("<WorktreeCreate"));
     expect(picker).toContain("dismissible={!changingWorkspace}");
-    expect(picker).toContain("onChange={selectWorktree}");
+    expect(picker).toContain("selectWorktree(option.value)");
   });
   it("keeps a newly opened editor when an older file creation completes", () => {
     const creating = { kind: "create" } as const;

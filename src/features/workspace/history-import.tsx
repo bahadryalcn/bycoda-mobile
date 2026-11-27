@@ -406,7 +406,7 @@ export function HistoryImport({
         visible
         size="full"
         scroll={false}
-        title={copy("Konuşma geçmişini içe aktar", "Import conversation history")}
+        title={copy("Oturum geçmişini içe aktar", "Import session history")}
         onClose={() => {
           if (mounted.current && !occupied.current) requestClose();
         }}
@@ -519,8 +519,8 @@ export function HistoryImport({
                 <Notice
                   tone="warning"
                   message={copy(
-                    "İçe aktarma sonucu bilinmiyor. İsteği tekrar göndermeden bilgisayardaki konuşmaları kontrol edin; durum sorgusu içe aktarmayı tekrar başlatmaz.",
-                    "The import outcome is unknown. Check conversations on the computer before another request; checking status does not restart the import.",
+                    "İçe aktarma sonucu bilinmiyor. İsteği tekrar göndermeden bilgisayardaki oturumları kontrol edin; durum sorgusu içe aktarmayı tekrar başlatmaz.",
+                    "The import outcome is unknown. Check sessions on the computer before another request; checking status does not restart the import.",
                   )}
                 />
               ) : null}
@@ -546,7 +546,7 @@ export function HistoryImport({
                     },
                   )}
                   {status.result.cancelled
-                    ? ` ${copy("İptal edildi; eklenen konuşmalar korunur.", "Cancelled; conversations already imported are retained.")}`
+                    ? ` ${copy("İptal edildi; eklenen oturumlar korunur.", "Cancelled; sessions already imported are retained.")}`
                     : ""}
                 </Body>
               ) : null}
@@ -554,8 +554,8 @@ export function HistoryImport({
                 <Notice
                   tone="warning"
                   message={copy(
-                    "İçe aktarma tamamlanmadı. Yeni incelemeden önce bilgisayardaki konuşmaları kontrol edin.",
-                    "Import did not finish. Check conversations on the computer before a new review.",
+                    "İçe aktarma tamamlanmadı. Yeni incelemeden önce bilgisayardaki oturumları kontrol edin.",
+                    "Import did not finish. Check sessions on the computer before a new review.",
                   )}
                 />
               ) : null}

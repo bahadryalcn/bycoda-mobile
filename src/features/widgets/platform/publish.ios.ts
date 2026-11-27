@@ -1,4 +1,5 @@
 import { requireOptionalNativeModule } from "expo";
+import { attentionPublishDue, markAttentionPublished } from "../model/publish-gate";
 
 import { widgetTimeline, type WidgetSnapshot } from "../model/snapshot";
 import { usageWidgetTimeline, type UsageWidgetSnapshot } from "../model/usage-widget";
@@ -16,7 +17,11 @@ export async function publishWidgetSnapshot(
   if (!isCurrent()) return;
   const timeline = widgetTimeline(snapshot);
   active.default.updateTimeline(timeline);
-  attention.default.updateTimeline(timeline);
+  // NeedsAttention reloads only when its own slice changed or its expiry is near.
+  if (attentionPublishDue(snapshot)) {
+    attention.default.updateTimeline(timeline);
+    markAttentionPublished(snapshot);
+  }
 }
 
 /** Usage widget: the reading now, and the same reading marked stale when it expires. */

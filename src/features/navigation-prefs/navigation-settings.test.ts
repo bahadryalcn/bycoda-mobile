@@ -8,6 +8,9 @@ import { defaultAppPreferences, type AppPreferences } from "./app-preferences";
 const fixture = vi.hoisted(() => ({ preferences: undefined as unknown as AppPreferences }));
 vi.mock("lucide-react-native/icons/rows-3", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/folder-clock", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/panel-bottom", () => ({ default: () => null }));
+vi.mock("react-native", () => ({ Platform: { OS: "ios" } }));
+vi.mock("@/state/appearance", () => ({ useAppearance: (select: (state: unknown) => unknown) => select({ navigationStyle: "floating", setNavigationStyle: vi.fn(), hydrated: true }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (tr: string) => tr }));
 vi.mock("@/ui/preference-storage-notice", () => ({ PreferenceStorageNotice: () => null }));
 vi.mock("@/ui/primitives", () => {
@@ -15,7 +18,7 @@ vi.mock("@/ui/primitives", () => {
   const command = ({ label, onPress }: { label: string; onPress: () => void }) => h("button", { onClick: onPress }, label);
   return {
     Body: wrap, Button: command, NavigationGroup: wrap, NavigationRow: command,
-    SettingIcon: () => null, Sheet: wrap, Stack: wrap,
+    SettingIcon: () => null, Sheet: wrap, Stack: wrap, SelectField: () => null,
     ToggleField: ({ label, onChange }: { label: string; onChange: (shown: boolean) => void }) =>
       h("button", { onClick: () => onChange(false) }, label),
   };

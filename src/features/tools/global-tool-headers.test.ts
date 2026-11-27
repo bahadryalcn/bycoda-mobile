@@ -47,8 +47,10 @@ vi.mock("@/ui/primitives", () => {
     IconButton: ({ label, onPress, disabled }: any) => createElement("button", { "aria-label": label, onClick: onPress, disabled }), NavigationRow: Button, Badge: ({ label }: any) => createElement("span", null, label),
     StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: ({ message }: any) => createElement("p", null, message), QueryState: () => null,
     ScreenList: ({ title, actions, header, data, renderItem, query, refreshState }: any) => { fixture.pull = refreshState?.onRefresh ?? query?.refetch; return createElement("main", null, title, actions, header, ...data.map((item: unknown, i: number) => createElement("div", { key: i }, renderItem({ item })))); },
+    useCollapsibleSearch: (field: unknown) => ({ trigger: null, field, sheet: field, open: false }),
     SearchField: ({ label, value, onChangeText }: any) => createElement("input", { "aria-label": label, value, onChange: (event: any) => onChangeText(event.target.value) }),
     Empty: ({ title, action }: any) => createElement("div", null, title, action ? createElement(Button, { label: action.label, onPress: action.onPress }) : null),
+    NoResults: ({ onClearSearch }: any) => createElement("div", null, "No matching results", onClearSearch ? createElement(Button, { label: "Clear search", onPress: onClearSearch }) : null),
     Field: () => null, FormActions: () => null, MutationState: () => null, ErrorText: () => null, Sheet: Wrap,
     Screen: ({ title, children }: any) => createElement("main", null, title, children),
     NavigationGroup: Wrap, RowIcon: () => null, ValueRow: ({ label, value, trailing }: any) => createElement("div", null, label, value, trailing),
@@ -65,7 +67,7 @@ beforeEach(() => {
   container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
-for (const [name, Component] of [["Host access", AccessCenter], ["Provider center", ProviderCenter]] as const) {
+for (const [name, Component] of [["Computer access", AccessCenter], ["Provider center", ProviderCenter]] as const) {
   it(`${name} owns its native title and one heading refresh, with the same read owner for pull`, async () => {
     await render(createElement(Component));
     expect(fixture.options.some((options) => options.title === name)).toBe(true);
@@ -86,6 +88,6 @@ it("provider filtering distinguishes no matches and recovers the unchanged agent
   const input = container.querySelector<HTMLInputElement>('input[aria-label="Search agents"]')!;
   await act(async () => { Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, "missing"); input.dispatchEvent(new Event("input", { bubbles: true })); });
   expect(container.textContent).toContain("No matching results"); expect(container.textContent).not.toContain("No configured ACP agents.");
-  await act(async () => button("Clear search").click()); expect(input.value).toBe(""); expect(button("Fixture agent")).toBeDefined();
+  await act(async () => button("Clear search").click()); expect(input.value).toBe(""); expect(container.textContent).toContain("Fixture agent");
   expect(fixture.mutate).not.toHaveBeenCalled();
 });

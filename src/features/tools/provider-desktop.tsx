@@ -9,7 +9,6 @@ import { useHostQuery } from "@/state/queries";
 import {
   IconButton,
   Body,
-  Button,
   Disclosure,
   Empty,
   NavigationRow,
@@ -23,12 +22,12 @@ import {
 import { getQueryPresentation } from "@/ui/query-presentation";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { useCopy } from "@/ui/copy";
+import { useLocale } from "@/i18n";
 import { iconSize, space } from "@/ui/tokens";
 import { useMobileTheme } from "@/ui/theme";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { RecordCard } from "@/ui/record-card";
 import type { SessionScope } from "../workspace/session-types";
-import { ProviderAccountEditor } from "./provider-account-editor";
 import {
   readDesktopManagement,
   type DesktopManagementReport,
@@ -48,10 +47,7 @@ export function ProviderDesktop({
   onClose: () => void;
 }) {
   const copy = useCopy();
-  const [selected, setSelected] = useState<{
-    report: DesktopManagementReport;
-    account: DesktopManagementReport["accounts"][number];
-  }>();
+  const locale = useLocale();
   const { colors } = useMobileTheme();
   const machine = useActiveMachine();
   const [opening] = useState(() => ({
@@ -94,7 +90,8 @@ export function ProviderDesktop({
     params,
     {
       enabled: !!supported,
-      interval: 5000,
+      // The Host reads a cached snapshot; a slow check is enough, and Refresh reads it at once.
+      interval: 60_000,
       queryFn: async (client, signal) => {
         if (!current()) throw Error("Provider management source changed");
         const result = readDesktopManagement(
@@ -162,9 +159,13 @@ export function ProviderDesktop({
         }
         header={
           <View style={{ gap: space.sm }}>
+            {/* Availability is a section state, never a notice. */}
             {!supported ? (
-              <Notice
-                message={
+              <StateView
+                size="compact"
+                tone="warning"
+                title={!validScope ? copy("Bağlantı değişti", "The connection changed") : copy("Güncelleme gerekiyor", "Update needed")}
+                description={
                   !validScope
                     ? copy(
                         "Bağlantı veya proje değişti. Devam etmek için bu ekranı yeniden açın.",
@@ -196,7 +197,7 @@ export function ProviderDesktop({
               {report ? (
                 <Body muted>
                   {copy("Önbellek anlık görüntüsü", "Cached snapshot")} ·{" "}
-                  {new Date(report.sampledAt).toLocaleString()}
+                  {new Date(report.sampledAt).toLocaleString(locale)}
                 </Body>
               ) : null}
             </Disclosure>
@@ -243,7 +244,7 @@ export function ProviderDesktop({
                   {limitsLinked ? (
                     <NavigationRow
                       label={copy("Hesap limitleri", "Account limits")}
-                      detail={copy("Oturum kullanımı · Limitler", "Session usage · Limits")}
+                      detail={copy("Kullanım ve limitler › Limitler", "Usage and limits › Limits")}
                       onPress={openLimits}
                     />
                   ) : (
@@ -251,46 +252,18 @@ export function ProviderDesktop({
                   )}
                 </>
               }
-              footer={
-                machine?.capabilities?.includes("providers.desktop.metadata.v1") ||
-                (item.account.provider === "claude" &&
-                  machine?.capabilities?.includes("providers.desktop.quotaRefresh.v1")) ? (
-                  <Button
-                    tone="quiet"
-                    label={copy("Hesap işlemleri", "Account actions")}
-                    disabled={!supported || !ready || !!report?.coverage.truncated}
-                    onPress={() => {
-                      if (ready && report && current())
-                        setSelected({ report, account: item.account });
-                    }}
-                  />
-                ) : undefined
-              }
             />
           ) : (
             <View style={{ gap: space.xs }}>
               <Body>{item.server.name} · MCP</Body>
               <Body muted>
-                {providerName(item.server.provider)} · {item.server.scope} · {item.server.transport} ·{" "}
+                {providerName(item.server.provider)} · {mcpScopeLabel(item.server.scope, copy)} · {mcpTransportLabel(item.server.transport, copy)} ·{" "}
                 {item.server.enabled ? copy("Etkin", "Enabled") : copy("Devre dışı", "Disabled")}
               </Body>
             </View>
           )
         }
       />
-      {selected && supported ? (
-        <ProviderAccountEditor
-          key={`${selected.account.provider}:${selected.account.id}:${selected.report.accountRevision}`}
-          scope={scope}
-          projectId={projectId}
-          report={selected.report}
-          account={selected.account}
-          onClose={() => {
-            setSelected((latest) => (latest === selected ? undefined : latest));
-            if (current()) void query.refetch();
-          }}
-        />
-      ) : null}
     </Sheet>
   );
 }
@@ -336,4 +309,19 @@ export function CachedQuota({ quota }: { quota: DesktopQuota }) {
       })}
     </View>
   );
+}
+
+type LabelCopy = (tr: string, en: string) => string;
+/** Where an MCP server is configured, in words; an unknown Host value is shown as given. */
+function mcpScopeLabel(scope: string, copy: LabelCopy): string {
+  if (scope === "user" || scope === "global") return copy("Tüm projeler", "All projects");
+  if (scope === "project") return copy("Bu proje", "This project");
+  if (scope === "local") return copy("Yalnız bu bilgisayar", "This computer only");
+  return scope;
+}
+/** How the provider reaches an MCP server, in words; an unknown Host value is shown as given. */
+function mcpTransportLabel(transport: string, copy: LabelCopy): string {
+  if (transport === "stdio") return copy("Yerel komut", "Local command");
+  if (transport === "http" || transport === "sse" || transport === "streamable-http") return copy("Uzak sunucu", "Remote server");
+  return transport;
 }

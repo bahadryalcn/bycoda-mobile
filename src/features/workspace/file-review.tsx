@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { FlatList, ScrollView, View, useWindowDimensions } from "react-native";
-import { useBackHandler } from "panelui-native/hooks/use-back-handler";
+import { useScreenBackHandler } from "@/ui/screen-back-handler";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useQuery } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -11,7 +11,6 @@ import {
   Body,
   Button,
   CodeText,
-  Disclosure,
   ErrorText,
   Notice,
   QueryState,
@@ -25,7 +24,8 @@ import { useCopy } from "@/ui/copy";
 import { useProjectSubpage } from "./subpage-chrome";
 import { useLocale } from "@/i18n";
 import { useMobileTheme } from "@/ui/theme";
-import { space } from "@/ui/tokens";
+import { metrics, space } from "@/ui/tokens";
+import { useScreenContentInsets } from "@/ui/screen-content-insets";
 import type { FileEditorProps } from "./file-editor-types";
 import { isMediaFile } from "./file-preview-model";
 import {
@@ -70,7 +70,7 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
           { projectId, cwd, path },
           { signal },
         );
-        if (typeof value !== "string") throw new Error("Invalid file contents.");
+        if (typeof value !== "string") throw new Error(copy("Dosya içeriği okunamadı.", "Invalid file contents."));
         return value;
       },
     },
@@ -98,24 +98,28 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
         : undefined;
   const binary = source === "computer" && media || text?.includes("\0") === true;
   const focused = useIsFocused();
-  useBackHandler(focused, onBack);
+  useScreenBackHandler(focused, onBack);
   useProjectSubpage(path.split("/").filter(Boolean).at(-1) ?? path, onBack);
+  // Safe-area aware gutters and the shared content width, also in landscape and on tablets.
+  const gutter = useScreenContentInsets();
+  const frame = { paddingLeft: gutter.left, paddingRight: gutter.right, width: "100%" as const, maxWidth: metrics.contentWidth, alignSelf: "center" as const };
+  const previewToggle = text !== undefined && /\.(?:html?|md|markdown)$/i.test(path) && text.length <= MAX_REVIEW_CHARACTERS ? (
+    <Button
+      tone="quiet" flush
+      label={preview ? copy("Kaynağı göster", "Show source") : copy("Önizle", "Preview")}
+      onPress={() => setPreview(!preview)}
+    />
+  ) : null;
   return (
     <Screen scroll={false}>
-      <View style={{ paddingHorizontal: space.screen, paddingVertical: space.sm, gap: space.xs }}>
-        <Row>
-          <StatusText
-            label={
-              source === "draft"
-                ? copy("Korunan taslak · salt okunur", "Preserved draft · read only")
-                : copy("Bilgisayardaki dosya · salt okunur", "Computer file · read only")
-            }
-          />
-        </Row>
-        <Disclosure label={copy("Konum", "Location")}>
-          <Body mono muted selectable>{path}</Body>
-          <Body mono muted selectable>{cwd || root || projectId}</Body>
-        </Disclosure>
+      <View style={[frame, { paddingVertical: space.sm, gap: space.xs }]}>
+        {/* One quiet path line; the header already names the file and the viewer is read-only. */}
+        <Body mono muted selectable numberOfLines={1} ellipsizeMode="middle">{path}</Body>
+        {source === "draft" ? (
+          <Row>
+            <StatusText label={copy("Korunan taslak · salt okunur", "Preserved draft · read only")} />
+          </Row>
+        ) : null}
         {hasDraft ? (
           <>
             <Notice
@@ -139,7 +143,7 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
             />
           </>
         ) : null}
-        {source === "computer" && !media ? <QueryState query={file} loading="inline" /> : null}
+        {source === "computer" && !media ? <QueryState query={file} loading="content" /> : null}
         <ErrorText error={active ? draft.error : null} />
         {draft.isError && active ? (
           <Button busy={draft.isFetching}
@@ -165,13 +169,7 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
         </ScrollView>
       ) : text !== undefined ? (
         <>
-          {/\.(?:html?|md|markdown)$/i.test(path) && text.length <= MAX_REVIEW_CHARACTERS ? (
-            <Button
-              tone="quiet"
-              label={preview ? copy("Kaynağı göster", "Show source") : copy("Önizle", "Preview")}
-              onPress={() => setPreview(!preview)}
-            />
-          ) : null}
+          {preview ? <Row style={frame}>{previewToggle}</Row> : null}
           {preview ? (
             <ScrollView style={{ flex: 1 }}>
               <DocumentPreview
@@ -185,6 +183,7 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
               key={source}
               text={text}
               initialLine={source === "computer" ? initialLine : undefined}
+              actions={previewToggle}
             />
           )}
         </>
@@ -194,11 +193,16 @@ function FileReviewScope({ projectId, cwd, root, path, initialLine, onBack }: Fi
 }
 
 /** Line numbers, selectable source, one virtualized vertical owner and a separate wide-content axis. */
-export function FileSource({ text, initialLine }: { text: string; initialLine?: number }) {
+export function FileSource({ text, initialLine, actions }: {
+  text: string;
+  initialLine?: number;
+  /** Extra view commands (Preview) that share the one command row. */
+  actions?: ReactNode;
+}) {
   const { colors, uiStyles } = useMobileTheme();
   const copy = useCopy();
   const numbers = new Intl.NumberFormat(useLocale());
-  const { width } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
   const [atResult, setAtResult] = useState(true);
   const [selecting, setSelecting] = useState(false);
   // Line index the selection window starts at, and the row the line list resumes from.
@@ -211,7 +215,13 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
     [text, initialLine, atResult],
   );
   const selection = selectionWindow(source.lines, selectionStart);
-  const lineHeight = uiStyles.mono.lineHeight;
+  // System text size scales the mono line; rows, widths and the number column follow it, so row
+  // offsets stay exact and long lines and five-digit numbers stay reachable at large text.
+  const scale = Math.max(1, fontScale || 1);
+  const lineHeight = Math.ceil(uiStyles.mono.lineHeight * scale);
+  const glyph = uiStyles.mono.fontSize * 0.65 * scale;
+  const lastNumber = source.lines.at(-1)?.number ?? 1;
+  const numberWidth = Math.ceil(Math.max(3, String(lastNumber).length) * glyph + space.sm + space.xs);
   const toggleSelecting = () => {
     if (selecting) {
       // Resume the line list where the selection window began (it was unmounted meanwhile).
@@ -231,7 +241,7 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
   };
   const contentWidth = Math.max(
     width - space.screen * 2,
-    source.columns * uiStyles.mono.fontSize * 0.65 + 64,
+    source.columns * glyph + numberWidth + space.screen,
   );
   return (
     <View style={{ flex: 1, minHeight: 0, gap: space.xs }}>
@@ -254,6 +264,7 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
         /></View>
       ) : null}
       <Row style={{ paddingHorizontal: space.screen }}>
+        {actions}
         {initialLine !== undefined && !source.locationUnavailable ? (
           <Button
             tone="quiet" flush
@@ -333,14 +344,15 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
             <View
               style={{
                 flexDirection: "row",
-                minHeight: uiStyles.mono.lineHeight,
+                height: lineHeight,
                 backgroundColor: item.number === source.targetLine ? colors.selected : colors.panel,
               }}
             >
               <CodeText
                 selectable={false}
+                numberOfLines={1}
                 style={{
-                  width: 48,
+                  width: numberWidth,
                   textAlign: "right",
                   paddingEnd: space.sm,
                   color: colors.subtle,
@@ -348,7 +360,7 @@ export function FileSource({ text, initialLine }: { text: string; initialLine?: 
               >
                 {item.number}
               </CodeText>
-              <CodeText selectable={false} style={{ flexShrink: 0 }}>
+              <CodeText selectable={false} numberOfLines={1} style={{ flexShrink: 0 }}>
                 {item.text || " "}
               </CodeText>
             </View>

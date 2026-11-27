@@ -49,7 +49,6 @@ export type SessionToolbarProps = {
   query: SessionQueryStatus;
   command: SessionCommandStatus;
   blocked: boolean;
-  onSettings: () => void;
   onRefresh: () => void;
   onCommand: SessionCommand;
 };
@@ -66,12 +65,17 @@ export type SessionTranscriptProps = {
   session?: HostSession;
   blocked: boolean;
   command: SessionCommandStatus;
+  /** A Stop for the current run is in flight or awaiting the snapshot; the live row reads "Stopping…". */
+  stopping: boolean;
+  /** A cancel whose reply was lost; it gets the same status check as `command.error`. */
+  stopError?: unknown;
   onCommand: SessionCommand;
   onReceiptHandled: () => void;
+  onStopReceiptHandled: () => void;
   /** Re-reads the session now; rejects when the read fails. */
   onRefresh: () => Promise<unknown>;
-  /** Measured composer and keyboard space; list padding and the jump pill clear it. */
-  bottomInset?: number;
+  /** Measured height of the floating header the list scrolls under; the first row starts below it. */
+  topInset?: number;
 };
 
 export type TranscriptBlockProps = {

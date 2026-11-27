@@ -35,7 +35,7 @@ vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, disabled, onPress, tone }: { label: string; disabled?: boolean; onPress: () => void; tone?: string }) =>
     createElement("button", { disabled, onClick: onPress, "data-tone": tone }, label);
-  return { StatusText: ({ label }: { label: string }) => createElement("span", null, label), ScopeLine: () => null, StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children),
+  return { ChoiceChip: () => null, StatusLine: () => null, StatusText: ({ label }: { label: string }) => createElement("span", null, label), ScopeLine: () => null, StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children),
     Disclosure: ({ label, children }: PropsWithChildren<{ label: string }>) => {
       const [expanded, setExpanded] = useState(false);
       return createElement("div", null, createElement("button", { onClick: () => setExpanded(!expanded) }, label), expanded ? children : null);
@@ -43,8 +43,7 @@ vi.mock("@/ui/primitives", () => {
     Row: Wrapper, Stack: Wrapper, IconButton: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label),
     FormActions: ({ submitLabel, onSubmit, disabled, busy, feedback }: { submitLabel: string; onSubmit: () => void; disabled?: boolean; busy?: boolean; feedback?: import("react").ReactNode }) => createElement("div", null, feedback, createElement("button", { disabled: disabled || busy, onClick: onSubmit }, "Confirm")), Body: Wrapper, Sheet: Wrapper, QueryState: () => null, MutationState: () => null,
     Notice: ({ message }: { message: string }) => createElement("p", null, message), Button,
-    ToggleField: ({ label, value, onChange }: { label: string; value: boolean; onChange: (value: boolean) => void }) => createElement("input", { "aria-label": label, type: "checkbox", checked: value, onChange: () => onChange(!value) }),
-    ConfirmationCard: ({ disabled, onConfirm }: { disabled?: boolean; onConfirm: () => void }) => createElement(Button, { label: "Confirm", disabled, onPress: onConfirm }) };
+    ToggleField: ({ label, value, onChange }: { label: string; value: boolean; onChange: (value: boolean) => void }) => createElement("input", { "aria-label": label, type: "checkbox", checked: value, onChange: () => onChange(!value) }) };
 });
 let root: ReturnType<typeof createRoot> | undefined; let container: HTMLDivElement;
 async function render() {

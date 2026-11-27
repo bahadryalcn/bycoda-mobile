@@ -13,6 +13,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useMobileTheme } from "./theme";
 import { SpriteFrames, range, useSpriteFrame, type SpriteLoop } from "./sprite-player";
+import { useOwnerVisible } from "./use-owner-visible";
 
 type Mask = { source: ImageSourcePropType; aspect: number };
 /** Frames drawn by the website's rig, played by the shared sprite player. */
@@ -99,15 +100,22 @@ export function CodeArt({ name, width, active }: { name: CodeArtName; width: num
   const reveal = useSharedValue(reduced ? 1 : 0);
   const light = useSharedValue(0);
   const current = useSpriteFrame(sprite, active && !reduced);
+  // A pushed screen, the lock or the background pause the light without covering the figure again.
+  const visible = useOwnerVisible();
+  const shining = active && visible;
   useEffect(() => {
-    // Each activation replays the dissolve and restarts the light and the guide's loop; leaving the page covers it again.
+    // Each activation replays the dissolve and the guide's loop; leaving the page covers it again.
     if (reduced) { reveal.value = 1; return; }
-    if (!active) { cancelAnimation(light); reveal.value = 0; return; }
+    if (!active) { reveal.value = 0; return; }
     reveal.value = 0;
     reveal.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.cubic) });
+  }, [active, reduced, reveal]);
+  useEffect(() => {
+    if (reduced || !shining) { cancelAnimation(light); return; }
     light.value = 0;
     light.value = withRepeat(withTiming(1, { duration: 3600, easing: Easing.inOut(Easing.quad) }), -1);
-  }, [active, reduced, reveal, light]);
+    return () => cancelAnimation(light);
+  }, [shining, reduced, light]);
   const band = useAnimatedStyle(() => ({ transform: [{ translateY: -height * 0.4 + light.value * height * 1.4 }] }));
   // Counter-moves the band's copy so the art inside the moving window stays aligned with the figure.
   const bandArt = useAnimatedStyle(() => ({ transform: [{ translateY: height * 0.4 - light.value * height * 1.4 }] }));

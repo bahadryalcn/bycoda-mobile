@@ -3,6 +3,7 @@ import type { HostTransport } from "./transport";
 import type { MobileStreamSubscription } from "./host-transport";
 import { watchProjectStream } from "./session-sync";
 import { backoffDelayMs } from "./backoff";
+import { replaceEqualDeep } from "@tanstack/react-query";
 
 export type ProjectStreamValue = { etag: string; sessions: HostSessionSummary[] };
 export type ProjectStreamListener = {
@@ -12,7 +13,10 @@ export type ProjectStreamListener = {
 type Entry = {
   listeners: Set<ProjectStreamListener>;
   subscription?: MobileStreamSubscription;
+  /** Structurally shared with the previous snapshot: unchanged session rows keep their identity. */
   last?: ProjectStreamValue;
+  /** Consumers that applied `last` successfully; an identical snapshot skips them. */
+  delivered: WeakSet<ProjectStreamListener>;
   released: boolean;
   attempt: number;
   timer?: ReturnType<typeof setTimeout>;
@@ -33,7 +37,7 @@ export function retainProjectStream(
   if (!entries) hubs.set(client, (entries = new Map()));
   let entry = entries.get(projectId);
   if (!entry) {
-    entry = { listeners: new Set(), released: false, attempt: 0 };
+    entry = { listeners: new Set(), delivered: new WeakSet(), released: false, attempt: 0 };
     entries.set(projectId, entry);
     open(client, projectId, entry);
   }
@@ -49,7 +53,12 @@ export function retainProjectStream(
         if (owned.released || !owned.listeners.has(listener) || owned.last !== value)
           throw new Error("The project stream is no longer current.");
       };
-      listener.apply(value, current).catch((error) => listener.onError(asError(error)));
+      listener.apply(value, current).then(
+        () => {
+          if (owned.last === value) owned.delivered.add(listener);
+        },
+        (error) => listener.onError(asError(error)),
+      );
     });
   }
   return () => {
@@ -66,6 +75,8 @@ function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error("The project stream failed.");
 }
 function broadcast(entry: Entry, error: Error) {
+  // Every consumer is now in an error state; the next snapshot must reach all of them, even if equal.
+  entry.delivered = new WeakSet();
   for (const listener of [...entry.listeners]) {
     try {
       listener.onError(error);
@@ -86,7 +97,11 @@ function open(client: HostTransport, projectId: string, entry: Entry): void {
   watchProjectStream(
     client,
     projectId,
-    async (value, assertCurrent) => {
+    async (received, assertCurrent) => {
+      // The Host re-sends the list on every live change of any of its sessions. A changed list
+      // is structurally shared with the last one, so unchanged session rows keep their identity;
+      // a deep-equal list keeps the delivered object.
+      const value = entry.last ? replaceEqualDeep(entry.last, received) : received;
       const current = () => {
         assertCurrent();
         if (entry.released || entry.last !== value)
@@ -94,12 +109,21 @@ function open(client: HostTransport, projectId: string, entry: Entry): void {
       };
       assertCurrent();
       if (entry.released) throw new Error("The project stream is no longer current.");
+      if (entry.last !== value) entry.delivered = new WeakSet();
       entry.last = value;
       entry.attempt = 0;
+      // Consumers that already applied this exact snapshot have nothing to write.
       await Promise.all(
-        [...entry.listeners].map((listener) =>
-          listener.apply(value, current).catch((error) => listener.onError(asError(error))),
-        ),
+        [...entry.listeners]
+          .filter((listener) => !entry.delivered.has(listener))
+          .map((listener) =>
+            listener.apply(value, current).then(
+              () => {
+                if (entry.last === value) entry.delivered.add(listener);
+              },
+              (error) => listener.onError(asError(error)),
+            ),
+          ),
       );
       current();
     },

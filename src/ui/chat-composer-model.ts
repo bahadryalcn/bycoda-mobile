@@ -20,6 +20,28 @@ export function composerNeedsInlineActions(available: number | null, fontScale: 
   return available < Math.max(3 * metrics.touchTarget, composerMinimumHeight(scale) + chrome);
 }
 
+/**
+ * The measured rows above the editor. The operations row hides on a short frame, and its last
+ * expanded height still decides the frame. A pinned bar (a child session's status and Open parent)
+ * never hides: its full height decides the frame, and a short frame counts its one-line form.
+ * Each pinned row adds the column's `space.xs` gap.
+ */
+export function composerOperationsLayout(input: {
+  available: number | null;
+  fontScale: number;
+  toolbar: number;
+  /** Last expanded height of the hideable operations row. */
+  operations: number;
+  pinned?: { full: number; compact: number };
+}): { short: boolean; height: number } {
+  const { pinned } = input;
+  const operations = measured(input.operations);
+  const full = pinned ? measured(pinned.full) + space.xs : 0;
+  const short = composerNeedsInlineActions(input.available, input.fontScale, input.toolbar, operations + full);
+  const kept = pinned ? (short ? measured(pinned.compact) + space.xs : full) : 0;
+  return { short, height: (short ? 0 : operations) + kept };
+}
+
 /** Below this measured chip width (scaled with text size) the model chip shows only its provider mark. */
 export const MODEL_CHIP_LABEL_MIN = 96;
 

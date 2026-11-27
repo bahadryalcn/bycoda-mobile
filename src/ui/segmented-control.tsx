@@ -67,9 +67,10 @@ export function SegmentedControl<T extends string>({
       variant="segmented"
       size={compact ? "sm" : "md"}
     >
+      {/* The list itself reserves 48: Android clips a trigger's hitSlop at its parent's bounds. */}
       <Tabs.List
         accessibilityLabel={label}
-        className="min-w-0 items-stretch overflow-hidden rounded-control bg-fill p-ui-xxs"
+        className="min-h-touch min-w-0 items-stretch overflow-hidden rounded-control bg-fill p-ui-xxs"
         indicatorClassName="top-ui-xxs bottom-ui-xxs"
       >
         {options.map((option) => (

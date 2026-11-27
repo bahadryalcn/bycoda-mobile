@@ -165,12 +165,27 @@ it("keeps host reads running through a transient iOS inactive state when the loc
   await act(async () => { useSecurity.setState({ appState: "active" }); await vi.advanceTimersByTimeAsync(1); });
   expect(fixture.request).toHaveBeenCalledTimes(1);
 });
-it("keeps host reads suspended through inactive while the app lock is on", async () => {
-  await act(async () => { useSecurity.setState({ enabled: true, appState: "inactive" }); render(); await vi.advanceTimersByTimeAsync(10_000); });
+it("keeps host reads suspended through inactive while the app lock suspends access", async () => {
+  await act(async () => { useSecurity.setState({ enabled: true, status: "suspended", appState: "inactive" }); render(); await vi.advanceTimersByTimeAsync(10_000); });
   expect(fixture.request).not.toHaveBeenCalled();
 });
+it("keeps host reads under an app-initiated system prompt the lock leaves unlocked", async () => {
+  await act(async () => { useSecurity.setState({ enabled: true, appState: "inactive" }); render(); await vi.advanceTimersByTimeAsync(1); });
+  expect(fixture.request).toHaveBeenCalledTimes(1);
+});
 
-for (const state of [{ appState: "background" }, { status: "locked" }] as const) {
+it("keeps reads and cached data through a share sheet or picker (Android background) while the lock is off", async () => {
+  await act(async () => { render(); await vi.advanceTimersByTimeAsync(1); });
+  expect(fixture.request).toHaveBeenCalledTimes(1);
+  // The lifecycle owner unfocuses React Query while away: nothing polls, nothing is parked or cleared.
+  await act(async () => { focusManager.setFocused(false); useSecurity.setState({ appState: "background" }); render(); await vi.advanceTimersByTimeAsync(10_000); });
+  expect(fixture.request).toHaveBeenCalledTimes(1);
+  expect(visibleData).toEqual(["saved"]);
+  await act(async () => { useSecurity.setState({ appState: "active" }); focusManager.setFocused(true); await vi.advanceTimersByTimeAsync(1); });
+  expect(visibleData).toEqual(["saved"]);
+  expect(fixture.request).toHaveBeenCalledTimes(2);
+});
+for (const state of [{ appState: "background", enabled: true }, { status: "locked" }] as const) {
   it(`suspends automatic host reads for ${JSON.stringify(state)} and recovers once active`, async () => {
     await act(async () => { useSecurity.setState(state); render(); await vi.advanceTimersByTimeAsync(10_000); });
     expect(fixture.request).not.toHaveBeenCalled();
@@ -206,7 +221,8 @@ it("slows progressive model discovery to regular refreshes after providers finis
   expect(fixture.request).toHaveBeenCalledWith("models.list", { projectId: "project", progressive: true }, expect.anything());
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
   expect(fixture.request).toHaveBeenCalledTimes(2);
-  await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+  // A settled catalog only gets the slow safety refresh (SETTLED_CATALOG_REFRESH_MS).
+  await act(async () => { await vi.advanceTimersByTimeAsync(59_000); });
   expect(fixture.request).toHaveBeenCalledTimes(2);
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
   expect(fixture.request).toHaveBeenCalledTimes(3);

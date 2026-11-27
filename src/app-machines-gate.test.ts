@@ -8,6 +8,7 @@ vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
 }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: {} }) }));
+vi.mock("./ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./ui/primitives", () => ({ Loading: ({ label }: { label: string }) => createElement("p", null, label) }));
 vi.mock("./state/machines", async () => {
   const { create } = await import("zustand");
@@ -24,12 +25,12 @@ it("keeps the protected workspace unmounted until the saved computers are hydrat
   const root = createRoot(container);
   try {
     await act(async () => root.render(createElement(MachinesReadyGate, null, createElement("main", null, "workspace"))));
-    expect(container.textContent).toBe("bycoda");
+    expect(container.textContent).toBe("Loading…");
     await act(async () => useMachines.setState({ hydrated: true } as never));
     expect(container.textContent).toBe("workspace");
     // A hydration retry hides the workspace again instead of exposing stale machine state.
     await act(async () => useMachines.setState({ hydrated: false } as never));
-    expect(container.textContent).toBe("bycoda");
+    expect(container.textContent).toBe("Loading…");
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

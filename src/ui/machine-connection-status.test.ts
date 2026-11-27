@@ -12,6 +12,8 @@ vi.mock("./busy-indicator", () => ({ BusyIndicator: () => null }));
 vi.mock("expo-router", () => ({ router: {} }));
 vi.mock("lucide-react-native/icons/settings-2", () => ({ default: () => null }));
 vi.mock("../features/connections/connection-feedback", () => ({ ConnectionFeedback: () => null }));
+vi.mock("../features/connections/active-computer-status", () => ({ RetryConnectionRow: () => null }));
+vi.mock("../features/connections/storage-error-copy", () => ({ storageErrorText: (error: string | null) => error ?? undefined }));
 vi.mock("../features/connections/use-switch-computer", () => ({ useSwitchComputer: () => ({ operation: {}, busy: false, switchTo: async () => undefined }) }));
 vi.mock("panelui-native/components/menu", () => ({ Menu: {} }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children), Text: "span", Pressable: "button" }));
@@ -39,11 +41,19 @@ vi.mock("../state/queries", () => ({
   useHostConsentGranted: () => state.consented,
   useHostQuery: () => ({ errorUpdatedAt: state.errorAt, error: state.error, isSuccess: false }),
 }));
-import { MachineConnectionStatus } from "./machine-bar";
-import { RemoteHostError } from "../remote/host-error";
-import { recordHostRuntimeStartupFailed } from "../state/host-runtime-state";
+import { CONNECTION_BLIP_GRACE_MS } from "./connection-presentation";
 
-beforeEach(() => {
+// machine-bar keeps per-computer blip memory at module level; each test loads a fresh copy so a
+// connection proven in one test is never held "connected" through the grace in the next.
+let MachineConnectionStatus: typeof import("./machine-bar").MachineConnectionStatus;
+let RemoteHostError: typeof import("../remote/host-error").RemoteHostError;
+let recordHostRuntimeStartupFailed: typeof import("../state/host-runtime-state").recordHostRuntimeStartupFailed;
+
+beforeEach(async () => {
+  vi.resetModules();
+  ({ MachineConnectionStatus } = await import("./machine-bar"));
+  ({ RemoteHostError } = await import("../remote/host-error"));
+  ({ recordHostRuntimeStartupFailed } = await import("../state/host-runtime-state"));
   Object.assign(state, { paired: true, online: true, permitted: true, consented: false, consentPending: false, successAt: 99_000, errorAt: 0, error: undefined });
   vi.spyOn(Date, "now").mockReturnValue(100_000);
 });
@@ -55,6 +65,9 @@ const render = () => renderToStaticMarkup(createElement(MachineConnectionStatus)
 it("uses no visual space for a healthy connection and removes the warning after recovery", () => {
   expect(render()).toBe("");
   state.errorAt = 99_500;
+  // A failure right after a proven connection is a blip: it stays quiet through the grace.
+  expect(render()).toBe("");
+  vi.spyOn(Date, "now").mockReturnValue(100_000 + CONNECTION_BLIP_GRACE_MS);
   expect(render()).toContain("Disconnected");
   state.successAt = 99_900;
   expect(render()).toBe("");

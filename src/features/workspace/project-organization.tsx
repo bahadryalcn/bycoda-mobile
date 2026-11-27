@@ -261,8 +261,8 @@ export function ProjectOrganization({
               {visible ? <Body mono>{visible.projectCwd}</Body> : null}
               <Notice
                 message={copy(
-                  "Bu ayarlar bycoda’daki görünen adları ve konuşma klasörlerini düzenler. Diskteki dosyalar taşınmaz veya yeniden adlandırılmaz.",
-                  "These settings organize display names and conversation folders in bycoda. Files on disk are not moved or renamed.",
+                  "Bu ayarlar bycoda’daki görünen adları ve oturum klasörlerini düzenler. Diskteki dosyalar taşınmaz veya yeniden adlandırılmaz.",
+                  "These settings organize display names and session folders in bycoda. Files on disk are not moved or renamed.",
                 )}
               />
               {!supported ? (
@@ -366,12 +366,12 @@ export function ProjectOrganization({
                       />
                     ) : null}
                     <NavigationRow
-                      label={copy("Konuşmayı klasöre taşı", "Move conversation to folder")}
+                      label={copy("Oturumu klasöre taşı", "Move session to folder")}
                       disabled={disabled}
                       onPress={() => open({ kind: "sessionMove" })}
                     />
                     <NavigationRow
-                      label={copy("Konuşmaları sırala", "Order conversations")}
+                      label={copy("Oturumları sırala", "Order sessions")}
                       disabled={disabled}
                       onPress={() => open({ kind: "sessionOrder" })}
                     />
@@ -381,7 +381,7 @@ export function ProjectOrganization({
                       onPress={() => open({ kind: "folderOrder" })}
                     />
                     <NavigationRow
-                      label={copy("Konuşma klasörü oluştur", "Create conversation folder")}
+                      label={copy("Oturum klasörü oluştur", "Create session folder")}
                       disabled={disabled || !visible.sessions.length}
                       onPress={() => open({ kind: "folderCreate" })}
                     />
@@ -435,7 +435,7 @@ export function ProjectOrganization({
           renderItem={({ item }) => (
             <NavigationRow
               label={item.name}
-              detail={copy("{p0} konuşma", "{p0} conversations", { p0: item.sessionIds.length })}
+              detail={copy("{p0} oturum", "{p0} sessions", { p0: item.sessionIds.length })}
               disabled={disabled}
               onPress={() => open({ kind: "folder", folderId: item.id })}
             />

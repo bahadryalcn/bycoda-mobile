@@ -29,11 +29,13 @@ vi.mock("@/ui/theme", () => ({
 vi.mock("@/i18n", () => ({ useLocale: () => "tr" }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
-vi.mock("@/ui/tokens", () => ({ space: {}, colors: {} }));
+vi.mock("@/ui/tokens", () => ({ space: {}, colors: {}, iconSize: {} }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
 vi.mock("@/ui/busy-indicator", () => ({ BusyIndicator: () => null }));
 vi.mock("@/ui/project-icon", () => ({ ProjectIcon: () => null }));
 vi.mock("lucide-react-native/icons/arrow-up", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/git-branch", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/text-cursor-input", () => ({ default: () => null }));
 vi.mock("./shared", () => ({
   rowInset: 16,
   GroupedListRow: ({ children }: PropsWithChildren) => createElement("div", null, children),
@@ -51,7 +53,9 @@ vi.mock("@/ui/primitives", () => {
   return {
     Body: Group,
     Row: Group,
-    Disclosure: Group,
+    ActionMenu: ({ actions }: any) =>
+      createElement("div", null, actions.filter(Boolean).map((action: any) =>
+        createElement(Button, { key: action.key, label: action.label, onPress: action.onPress, disabled: action.disabled }))),
     MutationState: () => null,
     Sheet: ({ children, footer, onClose, dirty }: any) => {
       const dismissal = useSheetDismissal({
@@ -154,6 +158,7 @@ afterEach(() => {
 
 it("retains an entered folder path until discard is confirmed without opening it", async () => {
   await render();
+  await click("Enter path");
   const input = container.querySelector<HTMLInputElement>('input[aria-label="Folder path"]')!;
   await act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
@@ -274,10 +279,12 @@ const setInput = async (input: HTMLInputElement, value: string) => {
 const button = (label: string) =>
   [...container.querySelectorAll("button")].find((b) => b.textContent === label)!;
 
-it("offers clone and path entry in the header above a long folder listing", async () => {
+it("offers clone and path entry in the header's folder menu above a long folder listing", async () => {
   await render();
   const header = container.querySelector("header")!;
   expect(header.textContent).toContain("Clone repository");
+  expect(header.querySelector('input[aria-label="Folder path"]')).toBeNull();
+  await click("Enter path");
   expect(header.querySelector('input[aria-label="Folder path"]')).toBeTruthy();
   expect(container.querySelector("main > section")!.contains(button("Clone repository"))).toBe(
     false,
@@ -289,14 +296,13 @@ it("disables clone and path entry while an open is pending", async () => {
   fixture.pending = true;
   await render();
   expect(button("Clone repository").disabled).toBe(true);
-  expect(button("Browse this path").disabled).toBe(true);
-  expect(
-    container.querySelector<HTMLInputElement>('input[aria-label="Folder path"]')!.disabled,
-  ).toBe(true);
+  expect(button("Enter path").disabled).toBe(true);
+  expect(container.querySelector('input[aria-label="Folder path"]')).toBeNull();
 });
 
 it("keeps a typed path after a rejected navigation and clears it once the browser lands on it", async () => {
   await render();
+  await click("Enter path");
   const input = container.querySelector<HTMLInputElement>('input[aria-label="Folder path"]')!;
   await setInput(input, "/work/missing");
   await click("Browse this path");

@@ -19,14 +19,11 @@ describe("git sheet actions", () => {
     for (const key of ["push", "pull", "fetch"])
       expect(find(index, key)).toMatchObject({ disabled: true, detail: "This branch has no remote." });
   });
-  it("summarizes commit and disables everything while busy", () => {
-    expect(find(base, "commit").detail).toBe("2 files changed, 1 staged");
-    expect(find(base, "commit", true).disabled).toBe(true);
-  });
-  it("offers the draft editor on a clean branch", () => {
-    expect(find({ ...base, files: [] }, "commit")).toMatchObject({
-      label: "Commit message", detail: "Nothing to commit.", disabled: false,
-    });
+  it("leaves commit to the page's commit box and refresh to pull-to-refresh", () => {
+    const keys = gitSheetActions(base as never, { busy: false, canRunWorkspace: true }, copy).map((a) => a.key);
+    expect(keys).not.toContain("commit");
+    expect(keys).not.toContain("refresh");
+    expect(find(base, "branches", true).disabled).toBe(true);
   });
   it("gates the pull request row on pushed commits beyond the default branch", () => {
     const pr = { ...base, branch: "feat", defaultBranch: "main", aheadOfDefault: 2, headPushed: true };

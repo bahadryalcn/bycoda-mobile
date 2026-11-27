@@ -7,9 +7,11 @@ import Star from "lucide-react-native/icons/star";
 import Share2 from "lucide-react-native/icons/share-2";
 import Globe from "lucide-react-native/icons/globe";
 import Smartphone from "lucide-react-native/icons/smartphone";
+import ExternalLink from "lucide-react-native/icons/external-link";
+import { useMobileTheme } from "../../ui/theme";
 import { Body, Notice, Stack, NavigationGroup, NavigationRow, SettingIcon, ValueRow } from "../../ui/primitives";
 import { enterItem } from "../../ui/motion";
-import { space } from "../../ui/tokens";
+import { iconSize, space } from "../../ui/tokens";
 import { useCopy } from "../../ui/copy";
 import { appIdentity, engagementLinks } from "./engagement-model";
 import { openPublicLink, sharePublicApp } from "./engagement-actions";
@@ -22,6 +24,9 @@ import { BrandLogo } from "@/ui/brand";
  */
 export function EngagementSettings() {
   const copy = useCopy();
+  const { colors } = useMobileTheme();
+  // Rows that leave the app are commands with the external-link mark, as in the legal documents.
+  const external = <ExternalLink size={iconSize.status} color={colors.muted} />;
   const platform = process.env.EXPO_OS ?? "unknown";
   const links = engagementLinks(Constants.expoConfig, platform);
   const identity = appIdentity(Constants, platform, Application);
@@ -34,7 +39,6 @@ export function EngagementSettings() {
     "review" | "share" | "public" | "website" | null
   >(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const nativeSharing = platform === "ios" || platform === "android";
 
   async function perform(action: NonNullable<typeof busy>) {
@@ -43,7 +47,6 @@ export function EngagementSettings() {
     setBusy(action);
     setFeedbackFor(action);
     setError(null);
-    setNotice(null);
     try {
       if (action === "share") {
         const result = await sharePublicApp(
@@ -63,8 +66,7 @@ export function EngagementSettings() {
           },
         );
         if (!active.current) return;
-        if (result === "dismissed")
-          setNotice(copy("Paylaşım iptal edildi.", "Sharing was cancelled."));
+        // Closing the share sheet is the person's own choice; only a failure is reported.
         if (result === "failed" || result === "unavailable") {
           setError(
             copy(
@@ -108,6 +110,8 @@ export function EngagementSettings() {
           <NavigationRow
             label={copy("bycoda web sitesi", "bycoda website")}
             detail="bycoda.codes"
+            intent="command"
+            trailing={external}
             disabled={!!busy}
             icon={<SettingIcon glyph={Globe} />}
             busy={busy === "website"}
@@ -117,6 +121,8 @@ export function EngagementSettings() {
           {links.reviewUrl ? (
             <NavigationRow
               label={copy("Uygulamayı değerlendir", "Rate the app")}
+              intent="command"
+              trailing={external}
               disabled={!!busy}
               icon={<SettingIcon glyph={Star} />}
               busy={busy === "review"}
@@ -136,6 +142,8 @@ export function EngagementSettings() {
           {links.appPageUrl ? <>
             <NavigationRow
               label={copy("Uygulama sayfası", "App page")}
+              intent="command"
+              trailing={external}
               disabled={!!busy}
               icon={<SettingIcon glyph={Smartphone} />}
               busy={busy === "public"}
@@ -143,7 +151,6 @@ export function EngagementSettings() {
             />
           </> : null}
         </NavigationGroup>
-        {notice ? <Body accessibilityLiveRegion="polite" muted>{notice}</Body> : null}
         {error ? <Notice tone="warning" message={error} /> : null}
         {error && feedbackFor === "share" ? <Body muted selectable>{links.shareUrl}</Body> : null}
       </Animated.View>

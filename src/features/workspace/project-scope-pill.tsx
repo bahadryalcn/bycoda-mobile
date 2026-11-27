@@ -33,10 +33,11 @@ export function ProjectScopePill({ projectId, onChange, allowAll = true }: {
   const [open, setOpen] = useState(false);
   if (!machine) return null;
   const project = projectId && projects.directoryReady ? projects.data?.find((entry) => entry.id === projectId) : undefined;
-  const all = !projectId && allowAll;
+  // A saved project that is no longer listed reads as All projects, matching the pages it scopes.
+  const all = allowAll && (!projectId || (projects.directoryReady && !project));
   const label = project ? project.name
     : all ? copy("Tüm projeler", "All projects")
-    : projects.directoryReady ? copy("Proje seçin", "Choose a project")
+    : projects.directoryReady ? copy("Proje seç", "Choose a project")
     : linkDown ? copy("Bağlantı bekleniyor", "Waiting for a connection")
     : projects.error ? copy("Kullanılamıyor", "Unavailable")
     : copy("Projeler yükleniyor…", "Loading projects…");
@@ -46,7 +47,7 @@ export function ProjectScopePill({ projectId, onChange, allowAll = true }: {
       <ScopePill
         icon={<Icon size={14} strokeWidth={2} color={colors.muted} style={{ flexShrink: 0 }} />}
         label={label}
-        accessibilityLabel={`${copy("Proje", "Project")}: ${label}. ${copy("Proje seçin", "Choose a project")}`}
+        accessibilityLabel={`${copy("Proje", "Project")}: ${label}. ${copy("Proje seç", "Choose a project")}`}
         expanded={open}
         onPress={() => setOpen(true)}
       />

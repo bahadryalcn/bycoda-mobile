@@ -110,7 +110,9 @@ export function encryptedLanFetch(
         value.status < 200 ||
         value.status > 599 ||
         typeof value.body !== "string" ||
-        utf8ToBytes(value.body).length > MOBILE_LAN_MAX_BYTES
+        // The body's UTF-8 never exceeds the decrypted JSON holding it, so only a large reply
+        // needs the full re-encode to be measured.
+        (plain.length > MOBILE_LAN_MAX_BYTES && utf8ToBytes(value.body).length > MOBILE_LAN_MAX_BYTES)
       )
         throw new Error("Invalid local network response.");
       return boundedResponse(value.body, value.status);

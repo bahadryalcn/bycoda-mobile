@@ -6,6 +6,8 @@ import type { HostTransport } from "@/remote/host-transport";
 const CHILD_POLL_MS = 4_000;
 /** Cadence when the Host ignored the parent filter and sent the whole project list. */
 const PROJECT_LIST_POLL_MS = 15_000;
+/** Cadence while nothing shows this run delegating: a slow discovery read for children made without an agent block. */
+const DISCOVERY_POLL_MS = 15_000;
 
 /**
  * Children of one session, read as a scoped `sessions.list` instead of the whole project list.
@@ -28,10 +30,18 @@ export async function readChildSummaries(
 }
 
 /**
- * Poll cadence for the scoped child read. A row that is not this parent's child means an older
+ * Poll cadence for the scoped child read. A run that shows no delegation and has no children yet
+ * only discovers slowly. A row that is not this parent's child means an older
  * Host sent the whole project list, so the fast cadence would re-send every summary: slow down.
  */
-export function childListInterval(rows: readonly HostSessionSummary[] | undefined, parentSessionId: string): number {
-  if (!Array.isArray(rows)) return CHILD_POLL_MS;
+export function childListInterval(
+  rows: readonly HostSessionSummary[] | undefined,
+  parentSessionId: string,
+  /** The transcript shows agents or delegation; without it and with no children yet, only discover slowly. */
+  delegating = true,
+): number {
+  if (!Array.isArray(rows)) return delegating ? CHILD_POLL_MS : DISCOVERY_POLL_MS;
+  if (!delegating && !rows.some((row) => row.delegationParent?.parentSessionId === parentSessionId))
+    return DISCOVERY_POLL_MS;
   return rows.every((row) => row.delegationParent?.parentSessionId === parentSessionId) ? CHILD_POLL_MS : PROJECT_LIST_POLL_MS;
 }

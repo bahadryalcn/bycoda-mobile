@@ -6,7 +6,7 @@ vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("d
 vi.mock("@/ui/primitives", () => ({ Body: ({ children }: PropsWithChildren) => h("p", null, children) }));
 vi.mock("@/ui/message-text", () => ({ MessageText: ({ text }: { text: string }) => h("p", null, text) }));
 vi.mock("@/ui/chat", () => ({ chatUserBubbleStyle: () => ({}) }));
-vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 import { AssistantLiveSpeech } from "./assistant-live-speech";
 import { useAssistantCall } from "./assistant-call-state";

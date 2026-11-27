@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyPatch, createTwoFilesPatch } from "diff";
 
-export const SECURE_STORE_VERSION = "58.0.2";
+export const SECURE_STORE_VERSION = "58.0.3";
 export const bridgeChanges = [
   {
     file: "android/src/main/java/expo/modules/securestore/SecureStoreModule.kt",

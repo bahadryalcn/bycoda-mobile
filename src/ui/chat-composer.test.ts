@@ -6,6 +6,8 @@ vi.mock("react-native", () => ({ View: "View", Text: "Text", StyleSheet: { flatt
 vi.mock("panelui-native/components/ai-input", () => ({ AIInput: Object.assign(() => null, { Field: () => null, Toolbar: () => null, Spacer: () => null }) }));
 vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: { muted: "#111111", tertiary: "#222222" }, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("./composer-actions", () => ({ ComposerActionArea: () => null }));
+vi.mock("react-native-reanimated", () => ({ default: { View: "AnimatedView" } }));
+vi.mock("./motion", () => ({ reveal: undefined }));
 import { ChatComposer } from "./chat-composer";
 const render = (props: Partial<Parameters<typeof ChatComposer>[0]> = {}) =>
   ChatComposer({ value: "Draft", onValueChange: () => {}, leading: null, submit: null, field: {}, ...props });
@@ -124,4 +126,17 @@ it("asks the model for its mark-only form when the measured chip is short", () =
 it("adds the context status between the model and the trailing controls when there is room", () => {
   const toolbar = render({ model: "Model", status: "Ring", leading: "Add", submit: "Send" }).props.children[2];
   expect(toolbar.props.children[2].props.children).toBe("Ring");
+});
+it("swaps the toolbar controls for an action row while the field and toolbar layout stay", () => {
+  const layout = vi.fn();
+  const view = render({ actionRow: "Recording", inlineSubmit: true, submit: "Send", leading: "Add", onToolbarLayout: layout });
+  const [, editor, row] = view.props.children;
+  expect(row.props.children.props.children).toBe("Recording");
+  // Nothing sits beside the field meanwhile, so the row owns every action.
+  expect(editor.props.children[0]).toBeNull();
+  expect(editor.props.children[2]).toBeNull();
+  const measured = { nativeEvent: { layout: { width: 540, height: 52 } } };
+  row.props.onLayout(measured);
+  expect(layout).toHaveBeenCalledWith(measured);
+  expect(row.props.style.minHeight).toBe(render().props.children[2].props.style.minHeight);
 });

@@ -14,7 +14,19 @@ import {
 } from "./machine-model";
 import { decodeProofSeed, encodeProofSeed } from "../remote/device-proof";
 import { assertAppAccess } from "./security";
+import { PreferenceStorageError } from "./preference-store";
 export { isMachinePending } from "./reviewed-machine";
+
+/**
+ * Stable English keys for the only failures that block saved connections: the saved list could not be
+ * read, or a failed save could not be rolled back. Screens translate them with `storageErrorText`.
+ */
+export const SAVED_COMPUTERS_LOAD_FAILED =
+  "Saved computers could not be loaded. Retry before changing connections.";
+export const SAVED_COMPUTERS_RECOVERY_FAILED =
+  "Connection recovery failed. Reload connections and pair this computer again.";
+/** Quiet automatic retries of a failed preference write; the notice keeps a manual retry after them. */
+const PREFERENCE_RETRY_MS = [5_000, 30_000, 120_000] as const;
 
 const key = "bycoda.mobile.remote-machines.v1";
 const validId = (id: string) => /^[a-zA-Z0-9-]{1,80}$/.test(id);
@@ -169,7 +181,13 @@ type MachineState = {
   projects: Record<string, string>;
   language: MobileLanguage;
   hydrated: boolean;
+  /** The saved computer list cannot be trusted (unreadable, or a failed save could not be rolled back). Blocks connections. */
   storageError: string | null;
+  /**
+   * A choice (computer, project, language, learned capabilities) is applied in memory but could not be
+   * written to the phone. Never blocks connections; retried quietly and by `retryPreferences`.
+   */
+  preferenceError: PreferenceStorageError | null;
   /** Any connection change is running; screens that edit connections gate on this. */
   connectionPending: boolean;
   /** Computers whose own connection (credential, route or removal) is changing right now. */
@@ -180,7 +198,16 @@ type MachineState = {
   accountPending: boolean;
   hydrate(): Promise<void>;
   /** `proofSeed` is the key the credential was bound to at pairing; a replaced credential without one drops the old seed. */
-  saveMachine(machine: MobileMachine, token: string, proofSeed?: Uint8Array): Promise<void>;
+  /**
+   * `activate: false` (editing a saved computer) keeps the current selection; a saved computer always
+   * keeps its place in the list.
+   */
+  saveMachine(
+    machine: MobileMachine,
+    token: string,
+    proofSeed?: Uint8Array,
+    options?: { activate?: boolean },
+  ): Promise<void>;
   /** Makes another saved route of the same computer the active one. */
   switchRoute(id: string, route: MobileRoute): Promise<boolean>;
   removeMachine(id: string, expected?: Pick<MobileMachine, "endpoint" | "environmentId" | "lanKey">): Promise<void>;
@@ -188,6 +215,8 @@ type MachineState = {
   refreshDescriptor(id: string, descriptor: HostDescriptor): void;
   selectProject(id: string | null): void;
   setLanguage(value: MobileLanguage): void;
+  /** Writes the current choices again after a failed preference save. */
+  retryPreferences(): Promise<void>;
 };
 let persistence = Promise.resolve();
 let hydration: Promise<void> | null = null;
@@ -233,7 +262,44 @@ function persist() {
   // Always project metadata through the whitelist, even if an imported caller adds fields.
   return persistData(
     JSON.stringify({ machines: restoreMachines(machines), activeId, projects, language }),
-  );
+  ).then(() => {
+    // Every write stores the whole record, so any success also saved earlier unsaved choices.
+    clearPreferenceRetry();
+    if (useMachines.getState().preferenceError) useMachines.setState({ preferenceError: null });
+  });
+}
+let preferenceRetry: ReturnType<typeof setTimeout> | undefined;
+let preferenceRetries = 0;
+function clearPreferenceRetry() {
+  if (preferenceRetry !== undefined) clearTimeout(preferenceRetry);
+  preferenceRetry = undefined;
+  preferenceRetries = 0;
+}
+/**
+ * A choice that could not be written stays applied in memory; connections keep running. The failure is
+ * reported as a non-blocking preference error and retried quietly a few times.
+ */
+function persistPreference(): Promise<void> {
+  return persist().catch(() => {
+    if (!useMachines.getState().hydrated || useMachines.getState().storageError) return;
+    // Keep the reported error while quiet retries fail, so the warning is raised once.
+    if (!useMachines.getState().preferenceError)
+      useMachines.setState({ preferenceError: new PreferenceStorageError("save") });
+    if (preferenceRetry !== undefined) return;
+    const delay = PREFERENCE_RETRY_MS[preferenceRetries];
+    if (delay === undefined) return;
+    preferenceRetries++;
+    preferenceRetry = setTimeout(() => {
+      preferenceRetry = undefined;
+      const state = useMachines.getState();
+      if (state.preferenceError && state.hydrated && !state.storageError) void persistPreference();
+    }, delay);
+    preferenceRetry.unref?.();
+  });
+}
+/** Settles once the connection changes queued so far have finished. */
+export function whenConnectionsSettled(): Promise<void> {
+  return mutations;
 }
 function requireStorage() {
   const state = useMachines.getState();
@@ -256,6 +322,7 @@ export const useMachines = create<MachineState>((set, get) => ({
   language: "system",
   hydrated: false,
   storageError: null,
+  preferenceError: null,
   connectionPending: false,
   pendingMachineIds: [],
   credentialRevisions: new Map(),
@@ -299,11 +366,13 @@ export const useMachines = create<MachineState>((set, get) => ({
           selectedProjectId: activeId ? (projects[activeId] ?? null) : null,
           hydrated: true,
           storageError: null,
+          preferenceError: null,
         });
+        clearPreferenceRetry();
       } catch {
         set({
           hydrated: true,
-          storageError: "Saved computers could not be loaded. Retry before changing connections.",
+          storageError: SAVED_COMPUTERS_LOAD_FAILED,
         });
       }
     })().finally(() => {
@@ -311,7 +380,7 @@ export const useMachines = create<MachineState>((set, get) => ({
     });
     return hydration;
   },
-  async saveMachine(input, token, proofSeed) {
+  async saveMachine(input, token, proofSeed, options) {
     const validated = validateMachine(input);
     if (!validToken(token)) throw new Error("Enter a valid 43-character device credential.");
     return serializeMutation(validated.id, async () => {
@@ -349,11 +418,17 @@ export const useMachines = create<MachineState>((set, get) => ({
         if (seedRead) await restoreProofSeed(machine.id, oldSeed).catch(() => {});
         throw new Error("The computer credential could not be saved securely.");
       }
-      set((s) => ({
-        machines: [...s.machines.filter((m) => m.id !== machine.id), machine],
-        activeId: machine.id,
-        selectedProjectId: s.projects[machine.id] ?? null,
-      }));
+      set((s) => {
+        const activate = options?.activate !== false || !s.activeId;
+        const activeId = activate ? machine.id : s.activeId;
+        return {
+          machines: s.machines.some((m) => m.id === machine.id)
+            ? s.machines.map((m) => (m.id === machine.id ? machine : m))
+            : [...s.machines, machine],
+          activeId,
+          selectedProjectId: activate ? (s.projects[machine.id] ?? null) : s.selectedProjectId,
+        };
+      });
       try {
         await persist();
       } catch {
@@ -367,10 +442,7 @@ export const useMachines = create<MachineState>((set, get) => ({
           else await deleteSecret(machine.id);
           await restoreProofSeed(machine.id, oldSeed);
         } catch {
-          set({
-            storageError:
-              "Connection recovery failed. Reload connections and pair this computer again.",
-          });
+          set({ storageError: SAVED_COMPUTERS_RECOVERY_FAILED });
         }
         throw new Error("Computer could not be saved. Check available device storage.");
       }
@@ -431,10 +503,7 @@ export const useMachines = create<MachineState>((set, get) => ({
           if (oldToken) await writeSecret(id, oldToken);
           await restoreProofSeed(id, oldSeed);
         } catch {
-          set({
-            storageError:
-              "Connection recovery failed. Reload connections and pair this computer again.",
-          });
+          set({ storageError: SAVED_COMPUTERS_RECOVERY_FAILED });
         }
         throw new Error("Computer could not be removed from device storage.");
       }
@@ -477,7 +546,7 @@ export const useMachines = create<MachineState>((set, get) => ({
     )
       return;
     set((s) => ({ activeId: id, selectedProjectId: s.projects[id] ?? null }));
-    void persist().catch(() => set({ storageError: "Connection preference could not be saved." }));
+    void persistPreference();
   },
   refreshDescriptor(id, descriptor) {
     if (!get().hydrated || get().storageError || pendingMutations) return;
@@ -504,28 +573,43 @@ export const useMachines = create<MachineState>((set, get) => ({
         });
       }),
     }));
-    void persist().catch(() => set({ storageError: "Computer capabilities could not be saved." }));
+    void persistPreference();
   },
   selectProject(id) {
-    if (!get().hydrated || get().storageError || pendingMutations) return;
+    if (!get().hydrated || get().storageError) return;
+    if (pendingMutations) {
+      // A connection change is running: apply the choice once it settles, if it still targets the same computer.
+      const target = get().activeId;
+      void mutations.then(() => {
+        if (get().activeId === target) get().selectProject(id);
+      });
+      return;
+    }
     const activeId = get().activeId;
     if (!activeId) return;
     const projects = { ...get().projects };
     if (id) projects[activeId] = id;
     else delete projects[activeId];
     set({ projects, selectedProjectId: id });
-    void persist().catch(() => set({ storageError: "Project preference could not be saved." }));
+    void persistPreference();
   },
   setLanguage(language) {
-    if (
-      !isLanguagePreference(language) ||
-      !get().hydrated ||
-      get().storageError ||
-      pendingMutations
-    )
+    if (!isLanguagePreference(language) || !get().hydrated || get().storageError) return;
+    if (pendingMutations) {
+      void mutations.then(() => get().setLanguage(language));
       return;
+    }
     set({ language });
-    void persist().catch(() => set({ storageError: "Language preference could not be saved." }));
+    void persistPreference();
+  },
+  async retryPreferences() {
+    const state = get();
+    if (!state.preferenceError || !state.hydrated || state.storageError) return;
+    clearPreferenceRetry();
+    await persist().catch(() => {
+      set({ preferenceError: new PreferenceStorageError("save") });
+      throw new PreferenceStorageError("save");
+    });
   },
 }));
 export function useActiveMachine() {

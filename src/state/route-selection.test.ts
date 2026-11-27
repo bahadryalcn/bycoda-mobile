@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { MobileMachine, MobileRoute } from "../remote/types";
-import { chooseReachableRoute, createRouteSelector, orderRoutes } from "./route-selection";
+import { betterRoutes, chooseReachableRoute, createRouteSelector, orderRoutes } from "./route-selection";
 
 const lan: MobileRoute = { endpoint: "http://192.168.2.108:63888", lanKey: "ab".repeat(32) };
 const tailscale: MobileRoute = { endpoint: "https://bab.tail12e784.ts.net" };
@@ -100,7 +100,7 @@ describe("route selection", () => {
 
   it("throttles failure and interval checks but always checks on return to the app", async () => {
     let time = 100_000;
-    const probe = vi.fn(async () => false);
+    const probe = vi.fn(async (_route: MobileRoute) => false);
     const selector = createRouteSelector({
       getMachine: () => machine(lan),
       switchRoute: async () => true,
@@ -130,5 +130,25 @@ describe("route selection", () => {
       canRun: () => true,
     }).check("foreground");
     expect(switchRoute).not.toHaveBeenCalled();
+  });
+
+  it("re-probes a connected computer only for a better route on the interval", async () => {
+    expect(betterRoutes([tailscale, lan], lan)).toEqual([]);
+    expect(betterRoutes([tailscale, lan], tailscale)).toEqual([lan]);
+    let time = 100_000;
+    const probe = vi.fn(async (_route: MobileRoute) => false);
+    const atHome = createRouteSelector({ getMachine: () => machine(lan), switchRoute: async () => true, probe,
+      canRun: () => true, isConnected: () => true, now: () => time });
+    await atHome.check("interval");
+    expect(probe).not.toHaveBeenCalled();
+    // Failures and returning to the app still probe every route.
+    await atHome.check("failure");
+    expect(probe).toHaveBeenCalledTimes(2);
+    probe.mockClear();
+    time += 60_000;
+    await createRouteSelector({ getMachine: () => machine(tailscale), switchRoute: async () => true, probe,
+      canRun: () => true, isConnected: () => true, now: () => time }).check("interval");
+    expect(probe).toHaveBeenCalledTimes(1);
+    expect(probe.mock.calls[0]?.[0]).toBe(lan);
   });
 });

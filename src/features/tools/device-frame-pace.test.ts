@@ -2,6 +2,9 @@ import { expect, it } from "vitest";
 import {
   LIVE_FRAME_BASE_MS,
   LIVE_FRAME_MAX_MS,
+  LIVE_IDLE_FRAME_MS,
+  LIVE_IDLE_MS,
+  LIVE_LONG_IDLE_MS,
   liveFrameInterval,
   paceFrame,
   type FramePace,
@@ -37,4 +40,14 @@ it("re-evaluating the same capture does not count as another repeat", () => {
   const same = frame("AAAA", "2");
   expect(paceFrame(first, same)).toBe(first);
   expect(paceFrame(first, first!.frame)).toBe(first);
+});
+
+it("slows a constantly changing screen once the viewer is idle", () => {
+  const changing = feed([frame("AAAA", "1"), frame("BBBB", "2")]);
+  expect(liveFrameInterval(changing, LIVE_IDLE_MS - 1)).toBe(LIVE_FRAME_BASE_MS);
+  expect(liveFrameInterval(changing, LIVE_IDLE_MS)).toBe(LIVE_IDLE_FRAME_MS);
+  expect(liveFrameInterval(changing, LIVE_LONG_IDLE_MS)).toBe(LIVE_FRAME_MAX_MS);
+  // Idle never shortens a static screen's back-off.
+  const still = Array.from({ length: 10 }, (_, index) => frame("AAAA", String(index)));
+  expect(liveFrameInterval(feed(still), LIVE_IDLE_MS)).toBe(LIVE_FRAME_MAX_MS);
 });

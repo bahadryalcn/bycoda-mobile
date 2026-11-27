@@ -287,7 +287,8 @@ it.each(["active", "paused", "finished"] as const)(
         }),
       ),
     );
-    expect(container.textContent).toContain("Created: DATE:1234");
+    // Lists show relative time; the exact creation date stays out of the metadata line.
+    expect(container.textContent).toContain("Created {p0}");
     expect(container.textContent).not.toContain("DATE:987654321");
   },
 );

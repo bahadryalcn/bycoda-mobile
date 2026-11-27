@@ -41,7 +41,7 @@ vi.mock("@/ui/document-content", () => ({
   DocumentContent: ({ uri }: { uri: string }) => createElement("output", null, uri),
 }));
 vi.mock("@/ui/primitives", () => ({
-  Body: wrapper, Button: wrapper, ErrorText: wrapper,
+  Body: wrapper, Button: wrapper, ErrorText: wrapper, StateView: ({ title }: { title: string }) => createElement("p", null, title),
   Sheet: ({ visible, onClose, children }: PropsWithChildren<{ visible: boolean; onClose(): void }>) =>
     visible ? createElement("section", null, children, createElement("button", { onClick: onClose }, "Close preview")) : null,
 }));

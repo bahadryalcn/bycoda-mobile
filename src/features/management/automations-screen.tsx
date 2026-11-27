@@ -1,4 +1,4 @@
-import { ManagementToolbar } from "./shared/collection-toolbar";
+import { useManagementToolbar } from "./shared/collection-toolbar";
 import { useEditorRecord } from "./shared/use-editor-record";
 import { ManagementList } from "./shared/management-list";
 import { useRef, useState, type ComponentRef } from "react";
@@ -108,11 +108,30 @@ export function AutomationsScreen() {
       },
     });
   };
+  const toolbar = useManagementToolbar({
+    search: <SearchField
+                placeholder={copy("Ara", "Search")}
+                ref={searchInput}
+                label={copy("Otomasyonlarda ara", "Search automations")}
+                value={search}
+                onChangeText={setSearch}
+              />,
+    status: {
+              label: copy("Durum", "Status"),
+              value: filter,
+              unfilteredValue: "all",
+              options: filterOptions,
+              onChange: setFilter,
+              filterable: !!scoped?.length,
+            },
+  });
   const listState = (
     <QueryState
       size="region"
       query={query}
       empty={visible?.length === 0}
+      noResults={{ searching: !!search.trim() && !!scoped?.length, filtered: filter !== "all" && !!scoped?.length,
+        onClearSearch: clearSearch, onClearFilters: () => setFilter("all") }}
       emptyTitle={
         (search.trim() || filter !== "all") && scoped?.length
           ? copy("Eşleşen sonuç yok", "No matching results")
@@ -148,8 +167,9 @@ export function AutomationsScreen() {
       ListEmptyComponent={listState}
       data={visible ?? []}
       keyExtractor={(item) => item.id}
-      actions={
-        showCreateInHeader ? (
+      actions={<>
+        {toolbar.actions}
+        {showCreateInHeader ? (
           <IconButton
             label={copy("Yeni otomasyon", "New automation")}
             disabled={!canCreate}
@@ -157,8 +177,8 @@ export function AutomationsScreen() {
           >
             <Plus size={iconSize.action} strokeWidth={2} color={colors.accent} />
           </IconButton>
-        ) : undefined
-      }
+        ) : null}
+      </>}
       header={
         <>
           {!providers.length ? (
@@ -170,25 +190,7 @@ export function AutomationsScreen() {
               )}
             </>
           ) : null}
-          <ManagementToolbar
-            search={
-              <SearchField
-                placeholder={copy("Ara", "Search")}
-                ref={searchInput}
-                label={copy("Otomasyonlarda ara", "Search automations")}
-                value={search}
-                onChangeText={setSearch}
-              />
-            }
-            status={{
-              label: copy("Durum", "Status"),
-              value: filter,
-              unfilteredValue: "all",
-              options: filterOptions,
-              onChange: setFilter,
-              filterable: !!scoped?.length,
-            }}
-          />
+          {toolbar.sheet}
 
           {!editor && !visible?.some((item) => item.id === savedAutomationId(save.variables)) && (
             <MutationState

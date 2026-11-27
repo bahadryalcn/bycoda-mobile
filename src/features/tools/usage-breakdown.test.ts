@@ -28,7 +28,9 @@ it("aggregates by provider, largest first, with unreported providers last", () =
   expect(providerUsage([])).toEqual([]);
 });
 it("formats compact token readings", () => {
-  expect([null, 0, 999, 1000, 1250, 99_950, 150_000, 3_400_000, 2_100_000_000].map(compactTokens)).toEqual(["—", "0", "999", "1K", "1.3K", "100K", "150K", "3.4M", "2.1B"]);
+  expect([null, 0, 999, 1000, 1250, 99_950, 150_000, 3_400_000, 2_100_000_000].map((value) => compactTokens(value))).toEqual(["—", "0", "999", "1K", "1.3K", "100K", "150K", "3.4M", "2.1B"]);
+  // Turkish reads "B" as thousand: the app language names the scale.
+  expect([1250, 2_100_000_000].map((value) => compactTokens(value, "tr"))).toEqual(["1,3 B", "2,1 Mr"]);
 });
 it("shortens session ids for secondary text and keeps short ids whole", () => {
   expect(shortSessionId("1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d")).toBe("1a2b3c4d");

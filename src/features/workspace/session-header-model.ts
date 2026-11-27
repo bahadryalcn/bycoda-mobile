@@ -1,5 +1,13 @@
 import { questionNeedsAttention, questionStatusLabel } from "./question-status";
 import type { HostSession } from "./wire";
+import { metrics, space } from "@/ui/tokens";
+
+/** The soft fade under a floating session header, part of its measured height. */
+export const SESSION_HEADER_FADE = space.lg;
+
+/** First-frame height of a one-line floating header, until its own layout reports the real one. */
+export const floatingHeaderEstimate = (topInset: number) =>
+  topInset + metrics.headerHeight + space.xs + SESSION_HEADER_FADE;
 
 type Copy = (tr: string, en: string) => string;
 export type SessionHeaderTone = "danger" | "warning" | "live" | "muted";
@@ -27,7 +35,8 @@ export function sessionHeaderStatus(
   // A run blocked on an undecided tool approval is waiting for the owner, not working.
   if (session.status === "running" && session.session.blocks?.some((block) => block.approval && !block.approval.decided))
     return { label: copy("Onayını bekliyor", "Waiting for your approval"), tone: "warning" };
-  if (session.status === "running") return { label: copy("Çalışıyor", "Running"), tone: "live" };
-  if (session.status === "interrupted") return { label: copy("Durduruldu", "Interrupted"), tone: "warning" };
-  return { label: copy("Hazır", "Ready"), tone: "muted" };
+  // Live work is reported once, by the transcript's live row and floating status cluster; the header names exceptions only.
+  if (session.status === "running") return { label: "", tone: "live" };
+  if (session.status === "interrupted") return { label: copy("Kesildi", "Interrupted"), tone: "warning" };
+  return { label: "", tone: "muted" };
 }

@@ -7,6 +7,7 @@ import { useCopy } from "@/ui/copy";
 import { Body, Button, MutationState, Notice, Stack } from "@/ui/primitives";
 import { stamp } from "../shared/format";
 import { validSchedulePreview } from "./schedule-model";
+import { remoteErrorKind } from "@/ui/error-message";
 
 type Schedule = Pick<HostAutomationInput, "scheduleKind" | "minute" | "time" | "dayOfWeek">;
 
@@ -18,7 +19,7 @@ export function SchedulePreview({ schedule, valid, disabled }: { schedule: Sched
   const identity = JSON.stringify([machine?.id, schedule]);
   const current = requested === identity;
   const supported = machine?.capabilities?.includes("automations") === true;
-  const unsupported = current && preview.error?.message.includes("Unsupported host method");
+  const unsupported = current && remoteErrorKind(preview.error) === "unsupported";
   const result = validSchedulePreview(preview.data) ? preview.data : undefined;
   return <Stack>
     <Button tone="quiet" label={copy("Zamanlamayı önizle", "Preview schedule")} busy={preview.isPending}

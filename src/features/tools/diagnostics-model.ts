@@ -1,3 +1,4 @@
+import { numberFormat } from "../../../../src/shared/i18n/numberFormat";
 export type ResourceSample = {
   at: number;
   host: { totalMemoryBytes: number; freeMemoryBytes: number; logicalCpus: number; loadAverage: number[] | null };
@@ -34,4 +35,9 @@ export function readDiagnostics(value: unknown): ResourceDiagnostics {
   });
   return { scope: data.scope, sampling: data.sampling, childProcessesIncluded: false, samples };
 }
-export function memoryLabel(bytes: number) { return `${(bytes / 1024 / 1024).toFixed(1)} MB`; }
+/** Memory in MB, or GB from 1 GB up, one decimal place, in the app language. */
+export function memoryLabel(bytes: number, locale = "en") {
+  const gigabytes = bytes >= 1024 ** 3;
+  const value = bytes / (gigabytes ? 1024 ** 3 : 1024 ** 2);
+  return `${numberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value)} ${gigabytes ? "GB" : "MB"}`;
+}

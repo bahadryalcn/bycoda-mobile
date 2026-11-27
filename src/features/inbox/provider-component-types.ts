@@ -32,12 +32,18 @@ export type ProviderInboxDetailProps = {
   origin: InboxOrigin;
   availability: InboxAvailabilityState & QueryLike & { refetch: () => unknown };
   onClose: (notice?: string) => void;
+  /** The way out when access is lost, named after where it returns (defaults to the inbox). */
+  closeLabel?: string;
+  /** A section only one entry offers, after the description (a Jira issue's board actions). */
+  extra?: ReactNode;
 };
 
 export type ProviderInboxDescriptionProps = { details: RemoteInboxDetails };
 
 export type ProviderInboxConversationProps = {
   showBotActivity?: boolean;
+  /** Shows or hides bot comments; the choice is kept for the rest of this app run. */
+  onShowBotActivity?: (show: boolean) => void;
   onReaction?: (comment: RemoteInboxComment, mode: "add" | "remove", content: string) => void;
   header?: ReactNode;
   refresh?: () => unknown;

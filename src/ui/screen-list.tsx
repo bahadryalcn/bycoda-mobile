@@ -33,6 +33,11 @@ export type ScreenListProps<T> = FlatListProps<T> & {
   onBack?: () => void;
   /** Adjacent rows own their shared surface and separators. */
   grouped?: boolean;
+  /**
+   * The header takes the free height of the viewport (a hero above an empty list, such as the
+   * assistant's home), so its own layout can centre content in it. It still scrolls when taller.
+   */
+  headerFill?: boolean;
 };
 
 function renderSlot(slot: FlatListProps<unknown>["ListHeaderComponent"]): ReactNode {
@@ -56,6 +61,7 @@ export function ScreenList<T>({
   actions,
   onBack,
   grouped = false,
+  headerFill = false,
   style,
   contentContainerStyle,
   ListHeaderComponent,
@@ -113,9 +119,10 @@ export function ScreenList<T>({
           />
         ) : undefined)
       }
+      ListHeaderComponentStyle={headerFill ? { flexGrow: 1 } : props.ListHeaderComponentStyle}
       ListHeaderComponent={
         header !== undefined || heading ? (
-          <View style={{ gap: space.sm, paddingBottom: space.xs }}>
+          <View style={[{ gap: space.sm, paddingBottom: space.xs }, headerFill && { flexGrow: 1 }]}>
             {heading}
             {header}
             {callerHeader}

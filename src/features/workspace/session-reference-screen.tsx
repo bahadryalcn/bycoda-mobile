@@ -13,10 +13,14 @@ import {
   Empty,
   ErrorNotice,
   Loading,
+  NavigationGroup,
+  NavigationRow,
   QueryState,
+  RowIcon,
   Screen,
   StateView,
 } from "@/ui/primitives";
+import Laptop from "lucide-react-native/icons/laptop";
 import { useCopy } from "@/ui/copy";
 import { errorMessage, remoteErrorKind } from "@/ui/error-message";
 import { errorTitle } from "@/ui/state-model";
@@ -28,6 +32,7 @@ import {
   resolveSessionReference,
 } from "./session-reference";
 import { useLatestCallback } from "./use-latest-callback";
+import { leaveTo, pushOnce } from "@/ui/navigation";
 
 export function SessionReferenceScreen({ link }: { link: string }) {
   const copy = useCopy();
@@ -71,7 +76,7 @@ export function SessionReferenceScreen({ link }: { link: string }) {
   const manageConnections = () => {
     if (openingConnections.current) return;
     openingConnections.current = true;
-    router.push({ pathname: "/machines", params: { returnToPrevious: "1" } });
+    pushOnce({ pathname: "/machines", params: { returnToPrevious: "1" } });
   };
   const manageAction = { label: copy("Bağlantıları yönet", "Manage connections"), onPress: manageConnections, reserveTouchTarget: true };
 
@@ -166,14 +171,14 @@ export function SessionReferenceScreen({ link }: { link: string }) {
     <Screen footer={
       <Button tone="quiet"
         label={copy("Projelere dön", "Back to projects")}
-        onPress={() => router.replace("/")}
+        onPress={() => leaveTo("/")}
       />
     }>
       <View style={{ flexGrow: 1, justifyContent: "center", gap: space.md }}>
         {!reference ? (
           <StateView
             illustration="error"
-            title={copy("Oturum bağlantısı geçersiz.", "Invalid conversation link.")}
+            title={copy("Oturum bağlantısı geçersiz.", "Invalid session link.")}
           />
         ) : storageError ? (
           <QueryState query={{ error: storageError }} onManageConnections={manageConnections} />
@@ -183,7 +188,7 @@ export function SessionReferenceScreen({ link }: { link: string }) {
           <Empty
             compact={false}
             illustration="connect-computer"
-            title={copy("Bu oturum için eşleştirilmiş bilgisayar bulunamadı.", "No paired computer is available for this conversation.")}
+            title={copy("Bu oturum için eşleştirilmiş bilgisayar bulunamadı.", "No paired computer is available for this session.")}
             action={{
               label: copy("Bilgisayar bağla", "Connect a computer"),
               onPress: () => router.navigate({ pathname: "/machines", params: { start: "choices" } }),
@@ -218,12 +223,21 @@ export function SessionReferenceScreen({ link }: { link: string }) {
                 }}
               />
             ) : error ? (
-              <ErrorNotice error={error} onRetry={chosen && errorKind !== "unsupported" ? () => choose(chosen.id) : undefined}>
-                {chosen ? <Body muted>{chosen.name}</Body> : null}
-              </ErrorNotice>
+              // A failed read owns this region like other read failures: title, the reason and Retry.
+              <StateView
+                compact
+                tone="danger"
+                title={errorTitle(errorKind, copy)}
+                description={[chosen?.name, errorMessage(error, copy, undefined, { read: true })].filter(Boolean).join(" · ")}
+                action={chosen && errorKind !== "unsupported" ? {
+                  label: copy("Yeniden dene", "Retry"),
+                  onPress: () => choose(chosen.id),
+                  reserveTouchTarget: true,
+                } : undefined}
+              />
             ) : openingConversation ? (
               <View style={{ gap: space.xs }}>
-                <Loading label={copy("Oturum açılıyor…", "Opening conversation…")} />
+                <Loading label={copy("Oturum açılıyor…", "Opening session…")} />
                 <Body muted>{chosen.name}</Body>
               </View>
             ) : selectedHere && consentPending ? (
@@ -232,8 +246,8 @@ export function SessionReferenceScreen({ link }: { link: string }) {
               <StateView compact tone="warning"
                 title={copy("Bağlantı başlatılamadı", "Connection couldn’t start")}
                 description={copy(
-                  "Bycoda’yı yeniden başlat, ardından oturum bağlantısını aç.",
-                  "Close and reopen Bycoda, then open this link again.",
+                  "bycoda’yı yeniden başlat, ardından oturum bağlantısını aç.",
+                  "Close and reopen bycoda, then open this link again.",
                 )}
               />
             ) : waitingForConnection ? (
@@ -246,21 +260,26 @@ export function SessionReferenceScreen({ link }: { link: string }) {
               <Body muted>
                 {copy(
                   "Oturumun bulunduğu eşleştirilmiş bilgisayarı seç.",
-                  "Choose the paired computer that owns this conversation.",
+                  "Choose the paired computer that owns this session.",
                 )}
               </Body>
             )}
-            {candidates.filter((machine) =>
-              machine.id !== chosenId || !(error || waitingForConnection || openingConversation)
-            ).map((machine) => (
-              <Button
-                key={machine.id}
-                label={machine.name}
-                selected={machine.id === chosenId}
-                disabled={switcher.busy}
-                onPress={() => choose(machine.id)}
-              />
-            ))}
+            {/* The paired computers as one selection list, like saved computers elsewhere. */}
+            <NavigationGroup>
+              {candidates.filter((machine) =>
+                machine.id !== chosenId || !(error || waitingForConnection || openingConversation)
+              ).map((machine) => (
+                <NavigationRow
+                  key={machine.id}
+                  intent="select"
+                  icon={<RowIcon glyph={Laptop} />}
+                  label={machine.name}
+                  selected={machine.id === chosenId}
+                  disabled={switcher.busy}
+                  onPress={() => choose(machine.id)}
+                />
+              ))}
+            </NavigationGroup>
             {!repairConnection && !waitingForConnection ? (
               <Button tone="quiet" {...manageAction} />
             ) : null}

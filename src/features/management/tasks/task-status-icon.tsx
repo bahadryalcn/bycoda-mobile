@@ -9,6 +9,7 @@ import Cancel from "lucide-react-native/icons/circle-x";
 import Pause from "lucide-react-native/icons/pause";
 import Help from "lucide-react-native/icons/circle-question-mark";
 import { useMobileTheme } from "@/ui/theme";
+import { iconSize } from "@/ui/tokens";
 
 /** Meaning is announced by the task identity; long press reveals its full label. */
 export function TaskStatusIcon({ value }: { value: string }) {
@@ -21,5 +22,5 @@ export function TaskStatusIcon({ value }: { value: string }) {
     : ["done", "succeeded", "completed", "finished", "review"].includes(value) ? colors.success
     : ["awaiting-approval"].includes(value) ? colors.warning
     : ["running", "verifying", "planning"].includes(value) ? colors.accent : colors.muted;
-  return <Icon size={18} color={color} {...decorativeSvgProps} />;
+  return <Icon size={iconSize.status} color={color} {...decorativeSvgProps} />;
 }

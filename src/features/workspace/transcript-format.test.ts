@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { formatMessageTime, hasTurnMetrics, turnDurationLabel, turnMetricsLines } from "./transcript-format";
+import {
+  formatMessageTime,
+  hasTurnMetrics,
+  liveTurnLabel,
+  stoppedTurnLabel,
+  turnDurationLabel,
+  turnMetricsLines,
+  turnReceiptLabel,
+  workedForLabel,
+} from "./transcript-format";
 
 const copy = (_tr: string, en: string, values?: Record<string, string | number>) =>
   en.replace(/\{(p\d+)\}/g, (_, key: string) => String(values?.[key]));
@@ -32,5 +41,23 @@ describe("transcript formatting", () => {
     expect(lines.headline).toBe("Cache hit 75% · Output 200 tok/s");
     expect(lines.detail).toBe("12K input · 2K output · 9K cached");
     expect(turnMetricsLines({ inputTokens: 5 }, undefined, "en", copy).headline).toBe("Turn tokens");
+  });
+});
+
+describe("quiet turn labels", () => {
+  it("reads the fold row, the stop receipt and the live row like desktop", () => {
+    expect(workedForLabel(46_000, copy)).toBe("Worked for 46 s");
+    expect(workedForLabel(undefined, copy)).toBe("Worked");
+    expect(stoppedTurnLabel(46_000, copy)).toBe("You stopped · 46 s");
+    expect(liveTurnLabel({ startedAt: 0, now: 12_000 }, copy)).toBe("Working 0:12");
+    expect(liveTurnLabel({ startedAt: 0, now: 12_000, stopping: true }, copy)).toBe("Stopping…");
+    expect(liveTurnLabel({ now: 12_000 }, copy)).toBe("Working…");
+  });
+  it("keeps the duration off the receipt when the fold row shows it", () => {
+    const turn = { durationMs: 46_000, turnModel: { harness: "codex" as const, id: "gpt", name: "GPT-5" } };
+    expect(turnReceiptLabel(turn, false, "14:02", copy)).toBe("GPT-5 · 14:02");
+    expect(turnReceiptLabel(turn, true, "14:02", copy)).toBe("GPT-5 · 46 s · 14:02");
+    expect(turnReceiptLabel({ ...turn, turnOutcome: "stopped" }, false, "14:02", copy)).toBe("You stopped · 46 s · 14:02");
+    expect(turnReceiptLabel({}, false, undefined, copy)).toBe("Done");
   });
 });

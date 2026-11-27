@@ -35,7 +35,7 @@ export function PermissionField({ value, disabled, onChange }: {
           label: copy("Tam erişim", "Full access"),
           icon: mark(Shield, colors.warning),
           detail: copy(
-            "Agent komutları ve düzenlemeleri onay beklemeden uygulayabilir.",
+            "Ajan komutları ve düzenlemeleri onay beklemeden uygulayabilir.",
             "The agent may run commands and edits without waiting for approval.",
           ),
         },

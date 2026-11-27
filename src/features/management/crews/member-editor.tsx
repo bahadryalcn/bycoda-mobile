@@ -1,49 +1,28 @@
 import { truncateGraphemes } from "../../../../../src/shared/lib/text/truncate";
 import { metrics, space } from "@/ui/tokens";
-import { agentPresentation } from "../shared/agent-presentation";
+import { catalogProviders } from "../../workspace/catalog";
+import { ModelChoiceField } from "../../workspace/model-selection/model-choice-field";
+import { FixedModelField } from "../../workspace/model-selection/model-selection-field";
+import { memberChoice, memberChoicePatch, memberFixedModel, withMemberFixedModel } from "./member-model";
 import { useRef, useState } from "react";
 import type { HostInstance } from "react-native";
 import type { ReactNode } from "react";
 import type { HostModelCatalog } from "@/domain/types";
 import type { CrewAgent, CrewCandidate } from "@/remote/contracts/crews";
 import { useFormDraft } from "@/state/form-draft";
-import { useHostQuery } from "@/state/queries";
 import { useActiveMachine } from "@/state/machines";
-import {
-  ModelRoutingGetResultSchema,
-  type ModelRoutingState,
-} from "../../../../../src/shared/model/host-contracts/model-routing";
-import { modelRoutingPoolEntryIds } from "../../../../../src/shared/model/modelRoutingPools";
 import { useCopy } from "@/ui/copy";
 import { crewRoleOptions, crewCatalogState, type CrewCatalogRead } from "./presentation";
-import {
-  Body,
-  Button,
-  NavigationRow,
-  Sheet,
-  Input,
-  Disclosure,
-  ErrorText,
-  Field,
-  FormActions,
-  Heading,
-  MultiSelectField,
-  Notice,
-  Section,
-  SelectField,
-  Stack,
-} from "@/ui/primitives";
+import { Body, Button, NavigationRow, Sheet, Input, Disclosure, ErrorText, Field, FormActions, Heading, Section, SelectField, Stack, StatusLine } from "@/ui/primitives";
 import { useSheetGuard } from "@/ui/sheet-guard";
 import { MemberLookFields } from "./member-look-fields";
 import { modelSettingLabels } from "../shared/model-setting-labels";
 import { settingLabel } from "../../workspace/agent-model-settings";
 import {
-  candidateFromCatalog,
   crewNameError,
   crewValidationMessage,
   memberValidation,
   memberValidationFeedback,
-  memberRoutingPatch,
 } from "./model";
 
 export function useRoleOptions() {
@@ -87,41 +66,7 @@ export function MemberEditor({
   const draft = form.values;
   const locked = busy || disabled;
   const machine = useActiveMachine();
-  const [openingMachineId] = useState(machine?.id);
-  const routingSupported =
-    machine?.id === openingMachineId &&
-    machine?.capabilities?.includes("models.routing.v1") === true;
-  const routing = useHostQuery<ModelRoutingState>(
-    ["modelRouting"],
-    "modelRouting.get",
-    {},
-    {
-      enabled: routingSupported,
-      queryFn: async (client, signal) =>
-        ModelRoutingGetResultSchema.parse(await client.request("modelRouting.get", {}, { signal }))
-          .state,
-    },
-  );
-  const routingState = machine?.id === openingMachineId ? routing.data : undefined;
-  const binding =
-    draft.selection === "fixed"
-      ? "fixed"
-      : draft.modelChoice?.kind === "pool"
-        ? `pool:${draft.modelChoice.poolId}`
-        : draft.modelChoice?.kind === "default"
-          ? "default"
-          : draft.modelChoice?.kind === "order"
-            ? "order"
-            : "legacy";
-  const roleBinding = routingState?.roles["crew.member"] ?? { kind: "order" as const };
-  const effective = binding === "default" ? roleBinding : draft.modelChoice;
-  const activePool =
-    effective?.kind === "pool"
-      ? routingState?.pools.find((pool) => pool.id === effective.poolId)
-      : undefined;
-  const boundPoolId = draft.modelChoice?.kind === "pool" ? draft.modelChoice.poolId : undefined;
-  const poolMissing =
-    boundPoolId !== undefined && !routingState?.pools.some((pool) => pool.id === boundPoolId);
+  const providers = catalogProviders(machine?.providers, catalog);
   const [editingInstructions, setEditingInstructions] = useState(false);
   const instructionsTrigger = useRef<HostInstance>(null);
   const [groups, setGroups] = useState((initial.groups ?? []).join(", "));
@@ -136,26 +81,6 @@ export function MemberEditor({
   const roles = useRoleOptions();
   const models = Object.values(catalog?.models ?? {}).flatMap((rows) => rows ?? []);
   const catalogState = catalogRead?.state ?? crewCatalogState(catalog, null);
-  const options = new Map(
-    models.map((model) => [
-      `${model.harness}/${model.id}`,
-      {
-        value: `${model.harness}/${model.id}`,
-        label: model.name,
-        detail: agentPresentation(model.harness, ""),
-      },
-    ]),
-  );
-  for (const candidate of draft.candidates)
-    if (!options.has(candidate.id))
-      options.set(candidate.id, {
-        value: candidate.id,
-        label: candidate.model,
-        detail: candidate.harness,
-      });
-  const candidate = (id: string) =>
-    draft.candidates.find((item) => item.id === id) ??
-    (catalog && candidateFromCatalog(catalog, id));
   const changeCandidate = (id: string, patch: Partial<CrewCandidate>) =>
     form.patch({
       candidates: draft.candidates.map((row) => (row.id === id ? { ...row, ...patch } : row)),
@@ -251,169 +176,66 @@ export function MemberEditor({
           </Stack>
         </Sheet>
       ) : null}
-      <SelectField
-        label={copy("Model kaynağı", "Model source")}
-        hint={copy(
-          "Otomatik seçim, bu üyenin aday listesinden bağımsız olarak bilgisayar sırası veya havuzundan uygun modeli seçebilir. Aşağıdaki adaylar bir izin filtresi değildir.",
-          "Automatic routing can choose an eligible model from Host order or pool outside this member's candidate list. Candidates below are not an allowed-model filter.",
-        )}
-        value={binding}
-        disabled={locked || !routingSupported}
-        options={[
-          { value: "fixed", label: copy("Sabit model", "Fixed model") },
-          { value: "default", label: copy("Ekip üyesi rolünü izle", "Follow crew member role") },
-          { value: "order", label: copy("Bilgisayar model sırası", "Host model order") },
-          ...(binding === "legacy"
-            ? [{ value: "legacy", label: copy("Mevcut aday ayarı", "Existing candidate setting") }]
-            : []),
-          ...(routingState?.pools ?? []).map((pool) => ({
-            value: `pool:${pool.id}`,
-            label: pool.name,
-          })),
-          ...(poolMissing && draft.modelChoice?.kind === "pool"
-            ? [
-                {
-                  value: `pool:${draft.modelChoice.poolId}`,
-                  label: copy("Havuz henüz doğrulanmadı: {p0}", "Pool not yet verified: {p0}", {
-                    p0: draft.modelChoice.poolId,
-                  }),
-                },
-              ]
-            : []),
-        ]}
-        onChange={(value) => {
-          if (value === "legacy") return;
+      {/* The one model selection: the member's first candidate is its fixed (and fallback) model. */}
+      <ModelChoiceField
+        role="crew.member"
+        value={memberChoice(draft)}
+        catalog={catalog}
+        disabled={locked}
+        fallbackOpen={!draft.candidates.length}
+        onChange={(choice) => {
+          const patch = memberChoicePatch(draft, choice);
+          if (!patch) return;
           setModelsTouched(true);
-          form.patch(
-            memberRoutingPatch(
-              value.startsWith("pool:")
-                ? { kind: "pool", poolId: value.slice(5) }
-                : { kind: value as "fixed" | "default" | "order" },
-            ),
-          );
+          form.patch(patch);
         }}
+        fixed={
+          <FixedModelField
+            value={memberFixedModel(draft, providers)}
+            catalog={catalog}
+            providers={providers}
+            disabled={locked}
+            onChange={(next) => {
+              const candidates = withMemberFixedModel(draft.candidates, next);
+              if (!candidates) return;
+              setModelsTouched(true);
+              form.patch({ candidates });
+            }}
+          />
+        }
+        fixedFooter={
+          <>
+            <ErrorText error={modelError} />
+            {draft.candidates.length > 1 ? (
+              <Body muted>
+                {copy(
+                  "Kayıtlı {p0} yedek aday korunur.",
+                  "{p0} more saved candidates are kept.",
+                  { p0: draft.candidates.length - 1 },
+                )}
+              </Body>
+            ) : null}
+          </>
+        }
       />
-      {binding !== "fixed" && binding !== "legacy" ? (
-        <>
-          {routingState ? (
-            <Body muted>
-              {copy("Geçerli kaynak", "Current source")}:{" "}
-              {effective?.kind === "pool"
-                ? (activePool?.name ?? effective.poolId)
-                : binding === "default" && roleBinding.kind === "fixed"
-                  ? agentPresentation(roleBinding.target.harness, roleBinding.target.model)
-                  : copy("Bilgisayar model sırası", "Host model order")}
-              {effective?.kind === "pool" && activePool
-                ? ` · ${modelRoutingPoolEntryIds(routingState.pools, activePool.id).length}`
-                : effective?.kind === "order"
-                  ? ` · ${routingState.entries.length}`
-                  : ""}
-            </Body>
-          ) : (
-            <Notice
-              message={
-                routing.isError
-                  ? copy(
-                      "Model kaynağı okunamadı. Kayıtlı bağlantı korunur.",
-                      "Model source could not be read. Saved binding is preserved.",
-                    )
-                  : copy(
-                      "Model kaynağı henüz doğrulanmadı. Kayıtlı bağlantı korunur.",
-                      "Model source is not yet verified. Saved binding is preserved.",
-                    )
-              }
-            />
-          )}
-          {routing.isError ? (
-            <Button
-              label={copy("Model kaynağını yeniden oku", "Reload model source")}
-              tone="quiet"
-              onPress={() => {
-                void routing.refetch().catch(() => {});
-              }}
-            />
-          ) : null}
-        </>
-      ) : null}
-      {draft.selection === "fixed" ? (
-        <SelectField
-          searchable
-          label={copy("Model", "Model")}
-          value={draft.candidates[0]?.id}
-          error={modelError}
-          hint={
-            !draft.candidates.length
-              ? copy("Bu üyeye bir model seçin.", "Choose a model for this member.")
+      {/* One shared status line per catalog state; existing model settings are always kept. */}
+      {catalogState === "loading" || catalogState === "empty" || catalogState === "error" ? (
+        <StatusLine
+          tone={catalogState === "error" ? "warning" : "neutral"}
+          busy={catalogState === "loading"}
+          label={
+            catalogState === "loading"
+              ? copy("Model kataloğu yükleniyor. Var olan model ayarları korunur.", "Loading the model catalog. Existing model settings are retained.")
+              : catalogState === "empty"
+                ? copy("Bu bilgisayar kullanılabilir model bildirmedi. Var olan model ayarları korunur.", "This computer reported no available models. Existing model settings are retained.")
+                : copy("Model kataloğu yüklenemedi. Var olan model ayarları korunur.", "The model catalog is unavailable. Existing model settings are retained.")
+          }
+          action={
+            catalogState === "error" && catalogRead?.retry
+              ? { label: copy("Yeniden dene", "Retry"), onPress: catalogRead.retry }
               : undefined
           }
-          options={[...options.values()]}
-          disabled={locked}
-          onChange={(id) => {
-            setModelsTouched(true);
-            const next = candidate(id);
-            if (next)
-              form.patch({
-                candidates: [next],
-                ...memberRoutingPatch({ kind: "fixed" }),
-              });
-          }}
         />
-      ) : (
-        <MultiSelectField
-          searchable
-          label={copy("Kayıtlı yedek adaylar", "Saved fallback candidates")}
-          values={draft.candidates.map((row) => row.id)}
-          error={modelError}
-          hint={copy(
-            "İlk aday sabit/yedek modeldir. Bu liste bilgisayar sırasını veya havuzunu sınırlamaz.",
-            "First candidate is the fixed/fallback model. This list does not restrict Host order or pool.",
-          )}
-          options={[...options.values()]}
-          max={20}
-          disabled={locked}
-          onChange={(ids) => {
-            setModelsTouched(true);
-            form.patch({
-              candidates: ids.flatMap((id) => {
-                const next = candidate(id);
-                return next ? [next] : [];
-              }),
-            });
-          }}
-        />
-      )}
-      {catalogState === "loading" ? (
-        <Body muted>
-          {copy(
-            "Model kataloğu yükleniyor. Var olan model ayarları korunur.",
-            "Loading the model catalog. Existing model settings are retained.",
-          )}
-        </Body>
-      ) : null}
-      {catalogState === "empty" ? (
-        <Body muted>
-          {copy(
-            "Bu bilgisayar kullanılabilir model bildirmedi. Var olan model ayarları korunur.",
-            "This computer reported no available models. Existing model settings are retained.",
-          )}
-        </Body>
-      ) : null}
-      {catalogState === "error" ? (
-        <>
-          <Body muted>
-            {copy(
-              "Model kataloğu yüklenemedi. Var olan model ayarları korunur.",
-              "The model catalog is unavailable. Existing model settings are retained.",
-            )}
-          </Body>
-          {catalogRead?.retry ? (
-            <Button
-              tone="quiet"
-              label={copy("Model kataloğunu yeniden yükle", "Retry model catalog")}
-              onPress={catalogRead.retry}
-            />
-          ) : null}
-        </>
       ) : null}
       <Disclosure label={copy("Gelişmiş", "Advanced")}>
         {groupsSupported && (
@@ -431,7 +253,8 @@ export function MemberEditor({
           </Section>
         ) : null}
 
-        {(draft.selection === "fixed" ? draft.candidates.slice(0, 1) : draft.candidates).map(
+        {/* The first candidate's effort is in the model picker; older extra candidates keep theirs here. */}
+        {(draft.selection === "fixed" ? [] : draft.candidates.slice(1)).map(
           (item) => (
             <Stack key={item.id}>
               <Heading>

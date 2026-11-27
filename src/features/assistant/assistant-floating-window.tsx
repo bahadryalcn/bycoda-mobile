@@ -18,7 +18,7 @@ import { useMobileTheme } from "@/ui/theme";
 import { metrics, radii, space } from "@/ui/tokens";
 import { useReducedMotionPreference } from "@/ui/use-reduced-motion";
 import { assistantWindowBounds, normalizeAssistantWindow, readAssistantWindowPosition, restoreAssistantWindow, type AssistantWindowPoint } from "./assistant-window-geometry";
-import { AssistantOrb } from "./assistant-orb";
+import { AssistantVoiceOrb } from "./assistant-voice-stage";
 import { assistantWindowReserve, useAssistantWindowReserve } from "./assistant-window-reserve";
 import type { AssistantOrbState } from "./assistant-voice-presentation";
 
@@ -92,7 +92,7 @@ export function AssistantFloatingWindow({ title, status, active, muted, orbState
           accessibilityActions={[{ name: "moveLeft", label: copy("Sola taşı", "Move left") }, { name: "moveRight", label: copy("Sağa taşı", "Move right") }, { name: "moveUp", label: copy("Yukarı taşı", "Move up") }, { name: "moveDown", label: copy("Aşağı taşı", "Move down") }]}
           onAccessibilityAction={({ nativeEvent }) => move(nativeEvent.actionName)}
           style={{ minHeight: metrics.touchTarget, width: metrics.touchTarget, justifyContent: "center", alignItems: "center" }}>
-          <AssistantOrb size={metrics.touchTarget} state={orbState ?? (muted ? "muted" : active ? "listening" : "idle")} level={level} />
+          <AssistantVoiceOrb size={metrics.touchTarget} state={orbState ?? (muted ? "muted" : active ? "listening" : "idle")} level={level ?? 0} />
         </View>
       </GestureDetector>
       <View style={{ flex: 1, minWidth: metrics.touchTarget }}>

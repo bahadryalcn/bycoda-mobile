@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { ErrorNotice, Loading, NavigationGroup, Notice, Section, Stack, StateView, ToggleField, Skeleton } from "@/ui/primitives";
+import { Body, ErrorNotice, NavigationGroup, Notice, Section, Stack, StateView, ToggleField, Skeleton, ValueRow } from "@/ui/primitives";
+import { HintSection } from "@/ui/info-hint";
 import { useCopy } from "@/ui/copy";
 import { TimeField } from "@/ui/time-field";
 import { HoursOverview } from "@/ui/week-hours";
@@ -15,9 +16,9 @@ import { useGracedReadError } from "./use-graced-read-error";
 import { accountReadMessage, deviceLimitReached, registrationMessage } from "./account-error-copy";
 
 const KEY = ACCOUNT_NOTIFICATION_SETTINGS_KEY;
-const CHANNELS: { channel: Extract<NotificationChannel, "push" | "in_app">; tr: string; en: string }[] = [
-  { channel: "push", tr: "Hesabından bu telefona", en: "From your account to phones" },
-  { channel: "in_app", tr: "Hesabından uygulama içinde", en: "From your account in the app" },
+// Only the channel that reaches a phone is set here; in-app and other channels stay on desktop.
+const CHANNELS: { channel: Extract<NotificationChannel, "push">; tr: string; en: string }[] = [
+  { channel: "push", tr: "Hesabından telefonlarına", en: "From your account to your phones" },
 ];
 
 /** Each saved control has its own id, so its pending and failed state never leaks to another row. */
@@ -50,8 +51,8 @@ function sameQuiet(a: QuietHours | null, b: QuietHours | null) {
 }
 
 /**
- * Settings → Notifications, the account part: event x channel toggles that matter on a phone (push,
- * in app), the mandatory security alerts, push detail text and quiet hours. Rendered inside the one
+ * Settings → Notifications, the account part: the push toggles that reach phones, the mandatory
+ * security alerts, push detail text and quiet hours. Rendered inside the one
  * Notifications page; each toggle saves on its own.
  */
 export function AccountNotificationSettings() {
@@ -76,7 +77,7 @@ export function AccountNotificationSettings() {
     "account.new_device_sign_in": copy("Yeni cihazdan giriş", "Sign-in from a new device"),
     "agent.finished": copy("Ajan işini bitirdiğinde", "Agent finished"),
     "agent.failed": copy("Ajan başarısız olduğunda", "Agent failed"),
-    "approval.pending": copy("Onay beklediğinde", "Approval pending"),
+    "approval.pending": copy("Oturum onay beklediğinde", "A session needs approval"),
     "summary.daily": copy("Günlük özet", "Daily summary"),
     "announcement.published": copy("Duyurular", "Announcements"),
     "account.deletion_scheduled": copy("Hesap silme zamanlandı", "Account deletion scheduled"),
@@ -111,7 +112,7 @@ export function AccountNotificationSettings() {
   if (status === "loading" || (status === "signedIn" && !runtime)) {
     return (
       <Section title={accountTitle}>
-        <Loading immediate />
+        <Skeleton variant="content" rows={2} />
       </Section>
     );
   }
@@ -157,7 +158,9 @@ export function AccountNotificationSettings() {
         ) : (
           <>
             {CHANNELS.map(({ channel, tr, en }) => (
-              <Section key={channel} title={copy(tr, en)}>
+              <HintSection key={channel} title={copy(tr, en)} help={channel === "push"
+                ? copy("bycoda hesabın gönderir ve hesabındaki tüm telefonlar için geçerlidir.", "Sent by your bycoda account; these apply to every phone on the account.")
+                : undefined}>
                 <NavigationGroup>
                   {OPTIONAL_EVENTS.map((event) => {
                     const control = preferenceControl(event.key, channel);
@@ -173,15 +176,17 @@ export function AccountNotificationSettings() {
                     );
                   })}
                 </NavigationGroup>
-              </Section>
+              </HintSection>
             ))}
-            <Section title={copy("Güvenlik bildirimleri", "Security alerts")}>
+            {/* Mandatory alerts are facts, not switches: one value each and the reason once on the heading. */}
+            <HintSection title={copy("Güvenlik bildirimleri", "Security alerts")}
+              help={copy("Güvenlik için zorunlu; kapatılamaz.", "Required for security; it cannot be turned off.")}>
               <NavigationGroup>
                 {MANDATORY_EVENTS.map((event) => (
-                  <ToggleField key={event.key} label={labels[event.key]} detail={copy("Güvenlik için zorunlu; kapatılamaz.", "Required for security; it cannot be turned off.")} value disabled onChange={() => undefined} />
+                  <ValueRow key={event.key} label={labels[event.key]} value={copy("Her zaman açık", "Always on")} />
                 ))}
               </NavigationGroup>
-            </Section>
+            </HintSection>
             <Section title={copy("Bildirim ayrıntıları", "Push details")}>
               <NavigationGroup>
               <ToggleField
@@ -207,8 +212,9 @@ export function AccountNotificationSettings() {
                 </NavigationGroup>
                 {quiet.on ? (
                   <>
-                    <TimeField label={copy("Başlangıç (SS:DD)", "Start (HH:MM)")} value={quiet.start} onChange={(start) => editQuiet({ ...quiet, start })} disabled={busy(QUIET.id)} />
-                    <TimeField label={copy("Bitiş (SS:DD)", "End (HH:MM)")} value={quiet.end} onChange={(end) => editQuiet({ ...quiet, end })} disabled={busy(QUIET.id)} />
+                    <TimeField label={copy("Başlangıç", "Start")} value={quiet.start} onChange={(start) => editQuiet({ ...quiet, start })} disabled={busy(QUIET.id)} />
+                    <TimeField label={copy("Bitiş", "End")} value={quiet.end} onChange={(end) => editQuiet({ ...quiet, end })} disabled={busy(QUIET.id)} />
+                    <Body muted>{copy("Saat dilimi: {p0}", "Time zone: {p0}", { p0: data.quietHours?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone })}</Body>
                     {quiet.start === quiet.end ? (
                       <Notice tone="danger" message={copy("Başlangıç ve bitiş saatleri farklı olmalı.", "Start and end times must differ.")} />
                     ) : (

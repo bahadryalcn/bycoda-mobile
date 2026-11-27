@@ -4,7 +4,6 @@ import type { HostSteward } from "@/remote/types";
 import { useActiveMachine } from "@/state/machines";
 import type { useHostMutation } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
-import { confirmAction } from "@/ui/confirm";
 import { RecordCard } from "@/ui/record-card";
 import Pencil from "lucide-react-native/icons/pencil";
 import MessageSquare from "lucide-react-native/icons/message-square";
@@ -13,11 +12,12 @@ import Play from "lucide-react-native/icons/play";
 import Pause from "lucide-react-native/icons/pause";
 import {
   Body,
-  Button,
   IconButton,
   MutationState,
 } from "@/ui/primitives";
 import { useMobileTheme } from "@/ui/theme";
+import { iconSize } from "@/ui/tokens";
+import { RecordConfirmationSheet, useRecordConfirmation } from "../shared/use-record-confirmation";
 import { joinMeta, RecordTrailing, useMenuGlyph, useRelativeTime } from "../shared/record-bits";
 import { Status } from "../shared/status";
 import { scheduleSentence } from "../automations/schedule-model";
@@ -51,26 +51,35 @@ export function StewardCard({
   const relative = useRelativeTime();
   const running = run.isPending && run.variables?.stewardId === item.id;
   const toggling = save.isPending && (save.variables?.steward as { id?: string } | undefined)?.id === item.id;
+  // The Host reports an active run only through the last run status.
+  const active = item.lastRunStatus === "running";
+  const title =
+    projects.data?.find((project) => project.id === item.projectId)?.name ??
+    copy("Proje sorumlusu", "Project steward");
+  const { confirm, review } = useRecordConfirmation(
+    { id: item.id, title, status: `${item.enabled}:${item.lastRunStatus ?? ""}`, updatedAt: item.updatedAt },
+    machine?.name || machine?.id,
+    busy || editorOpen,
+  );
   const runNow = () =>
-    confirmAction(
-      copy("Şimdi çalıştır", "Run now"),
+    confirm(
+      copy("Proje sorumlusunu şimdi çalıştır", "Run the project steward now"),
       copy(
         "Ajan bu projeyi inceleyip görev önerileri oluşturacak.",
         "The agent will inspect this project and propose tasks.",
       ),
       copy("Çalıştır", "Run"),
       () => run.mutate({ stewardId: item.id }),
-      copy("Vazgeç", "Cancel"),
       "default",
     );
-  return (
+  return (<>
     <RecordCard
-      title={projects.data?.find((project) => project.id === item.projectId)?.name ?? copy("Proje sorumlusu", "Project steward")}
+      title={title}
       preview={item.focus ? <Body muted numberOfLines={2}>{item.focus}</Body> : null}
       status={
         <Status
           value={
-            item.run
+            active
               ? "running"
               : item.enabled
                 ? (item.lastRunStatus ?? "idle")
@@ -80,22 +89,20 @@ export function StewardCard({
       }
       metadata={joinMeta([
         scheduleSentence(item, copy),
-        item.enabled && !item.run && !!relative(item.nextRunAt) && copy("Sonraki {p0}", "Next {p0}", { p0: relative(item.nextRunAt) }),
+        item.enabled && !active && !!relative(item.nextRunAt) && copy("Sonraki {p0}", "Next {p0}", { p0: relative(item.nextRunAt) }),
         !!relative(item.lastRunAt) && copy("Son çalışma {p0}", "Last run {p0}", { p0: relative(item.lastRunAt) }),
       ])}
       details={
         <>
           {item.focus ? <Body>{item.focus}</Body> : null}
           <Body muted>{agentPresentation(item.harness, item.model)}</Body>
-          <Button tone="primary" label={copy("Şimdi çalıştır", "Run now")} busy={running} fullWidth
-            disabled={busy || !!item.run || editorOpen} onPress={runNow} />
         </>
       }
       menu={
         <RecordTrailing>
           <IconButton label={copy("Şimdi çalıştır", "Run now")} busy={running}
-            disabled={busy || !!item.run || editorOpen} onPress={runNow}>
-            <Play size={18} color={colors.accent} />
+            disabled={busy || active || editorOpen} onPress={runNow}>
+            <Play size={iconSize.action} color={colors.accent} />
           </IconButton>
         </RecordTrailing>
       }
@@ -141,15 +148,14 @@ export function StewardCard({
             destructive: true,
             disabled: busy || editorOpen,
             onPress: () =>
-              confirmAction(
-                copy("Sil", "Delete"),
+              confirm(
+                copy("Proje sorumlusunu sil", "Delete project steward"),
                 copy(
                   "Proje sorumlusu silinir ve varsa çalışması durdurulur. Önerilen görevler korunur.",
                   "The steward will be deleted and its active run stopped. Proposed tasks are kept.",
                 ),
                 copy("Sil", "Delete"),
                 () => remove.mutate({ stewardId: item.id }),
-                copy("Vazgeç", "Cancel"),
               ),
           },
         ],
@@ -174,5 +180,6 @@ export function StewardCard({
         <MutationState mutation={remove} />
       ) : null}
     </RecordCard>
-  );
+    <RecordConfirmationSheet review={review} />
+  </>);
 }

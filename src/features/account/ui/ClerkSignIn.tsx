@@ -1,12 +1,13 @@
 import { isClerkAPIResponseError, useSSO } from "@clerk/expo";
 import { useSignInWithApple } from "@clerk/expo/apple";
 import { useSignIn, useSignUp } from "@clerk/expo/legacy";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Body, Button, HeaderBackButton, Input, Notice, Row, Stack } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { CodeField } from "@/ui/code-field";
 import { useMobileTheme } from "@/ui/theme";
 import { SignInProviderMark } from "./SignInProviderMark";
+import { clerkErrorMessage, looksLikeEmail, RESEND_DELAY_SECONDS } from "./clerk-error-copy";
 
 /** Clerk e-mail verification codes are six digits. */
 const CODE_LENGTH = 6;
@@ -38,13 +39,21 @@ export default function ClerkSignIn({ onStepChange }: { onStepChange?: (step: St
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [resendIn, setResendIn] = useState(0);
+  // Reason: one-second countdown before another code may be requested; stops at zero.
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const timer = setTimeout(() => setResendIn((left) => left - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendIn]);
+  const emailValid = looksLikeEmail(email);
+  const emailError = emailTouched && email.trim() && !emailValid
+    ? copy("Geçerli bir e-posta adresi gir.", "Enter a valid email address.")
+    : undefined;
 
-  const fail = (cause: unknown) => {
-    const message = isClerkAPIResponseError(cause)
-      ? (cause.errors[0]?.longMessage ?? cause.errors[0]?.message)
-      : undefined;
-    setError(message ?? copy("Giriş tamamlanamadı. Yeniden dene.", "Sign-in did not complete. Try again."));
-  };
+  // Clerk's own messages are English only; known codes map to the app's language.
+  const fail = (cause: unknown) => setError(clerkErrorMessage(isClerkAPIResponseError(cause) ? cause : undefined, copy));
   const run = async (key: string, task: () => Promise<void>) => {
     if (working.current) return;
     working.current = true;
@@ -78,13 +87,28 @@ export default function ClerkSignIn({ onStepChange }: { onStepChange?: (step: St
       try {
         await signIn.create({ strategy: "email_code", identifier: address });
         setStep({ name: "code", mode: "signIn", email: address });
+        setResendIn(RESEND_DELAY_SECONDS);
       } catch (cause) {
         const unknown = isClerkAPIResponseError(cause) && cause.errors.some((e) => e.code === "form_identifier_not_found");
         if (!unknown) throw cause;
         await signUp.create({ emailAddress: address });
         await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
         setStep({ name: "code", mode: "signUp", email: address });
+        setResendIn(RESEND_DELAY_SECONDS);
       }
+    });
+
+  const resendCode = (current: Extract<Step, { name: "code" }>) =>
+    run("resend", async () => {
+      if (current.mode === "signIn") {
+        const factor = signIn!.supportedFirstFactors?.find((item) => item.strategy === "email_code");
+        if (!factor || !("emailAddressId" in factor)) throw new Error("no email factor");
+        await signIn!.prepareFirstFactor({ strategy: "email_code", emailAddressId: factor.emailAddressId });
+      } else {
+        await signUp!.prepareEmailAddressVerification({ strategy: "email_code" });
+      }
+      setCode("");
+      setResendIn(RESEND_DELAY_SECONDS);
     });
 
   const verify = (current: Extract<Step, { name: "code" }>, value = code) =>
@@ -131,12 +155,23 @@ export default function ClerkSignIn({ onStepChange }: { onStepChange?: (step: St
           disabled={code.length < CODE_LENGTH || !!busy}
           onPress={() => void verify(step)}
         />
+        <Button
+          label={resendIn > 0
+            ? copy("Kodu yeniden gönder ({p0} sn)", "Resend code ({p0}s)", { p0: resendIn })
+            : copy("Kodu yeniden gönder", "Resend code")}
+          tone="default"
+          busy={busy === "resend"}
+          disabled={resendIn > 0 || !!busy}
+          onPress={() => void resendCode(step)}
+        />
       </Stack>
     );
 
+  const apple = { provider: "apple" as const, label: copy("Apple ile devam et", "Continue with Apple") };
+  const google = { provider: "google" as const, label: copy("Google ile devam et", "Continue with Google") };
+  // The platform's own account provider leads: Google on Android, Apple elsewhere.
   const social: { provider: Provider; label: string }[] = [
-    { provider: "apple", label: copy("Apple ile devam et", "Continue with Apple") },
-    { provider: "google", label: copy("Google ile devam et", "Continue with Google") },
+    ...(process.env.EXPO_OS === "android" ? [google, apple] : [apple, google]),
     { provider: "github", label: copy("GitHub ile devam et", "Continue with GitHub") },
   ];
   return (
@@ -154,9 +189,11 @@ export default function ClerkSignIn({ onStepChange }: { onStepChange?: (step: St
       ))}
       <Input
         label={copy("E-posta", "Email")}
-        placeholder={copy("E-posta", "Email")}
+        placeholder={copy("ornek@eposta.com", "name@example.com")}
         value={email}
         onChangeText={setEmail}
+        onBlur={() => setEmailTouched(true)}
+        error={emailError}
         keyboardType="email-address"
         autoComplete="email"
         textContentType="emailAddress"
@@ -165,7 +202,8 @@ export default function ClerkSignIn({ onStepChange }: { onStepChange?: (step: St
         editable={!busy}
         returnKeyType="send"
         onSubmitEditing={() => {
-          if (signInLoaded && signUpLoaded && email.includes("@")) void sendCode();
+          setEmailTouched(true);
+          if (signInLoaded && signUpLoaded && emailValid) void sendCode();
         }}
       />
       {error ? <Notice tone="danger" message={error} /> : null}
@@ -174,7 +212,7 @@ export default function ClerkSignIn({ onStepChange }: { onStepChange?: (step: St
         tone="primary"
         fullWidth
         busy={busy === "email"}
-        disabled={!signInLoaded || !signUpLoaded || !email.includes("@") || !!busy}
+        disabled={!signInLoaded || !signUpLoaded || !emailValid || !!busy}
         onPress={() => void sendCode()}
       />
     </Stack>

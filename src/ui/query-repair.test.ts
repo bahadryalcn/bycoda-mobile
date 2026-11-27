@@ -450,7 +450,7 @@ it("reports a failed load once per screen: the first section owns it, later sect
   }
 });
 
-it("keeps cached data silent after one failed refresh and shows one status line once it repeats", async () => {
+it("keeps cached data silent after one failed refresh and shows one status line once it repeats for 15 s", async () => {
   quiet.on = true;
   recordActiveHostMachine("pc");
   recordHostRuntimeState("pc", "ready");
@@ -459,7 +459,10 @@ it("keeps cached data silent after one failed refresh and shows one status line 
   const mounted = await mountSections([failed()]);
   try {
     expect(mounted.view.rendered[0]).toBeNull();
+    // Two failures in quick succession (a poll that then heals) stay silent.
     await mounted.render([failed()]);
+    expect(mounted.view.rendered[0]).toBeNull();
+    await mounted.advance(15_000);
     const line = mounted.view.rendered[0];
     expect(line?.type).toBe("StatusLine");
     expect(line?.props.tone).toBe("warning");
@@ -520,4 +523,21 @@ it("restarts the read retry grace when the app returns from the background", asy
     vi.useRealTimers();
     vi.unstubAllGlobals();
   }
+});
+
+it("gives a region empty state the shared mascot, keeps caller art and leaves section rows icon-only", () => {
+  const done = { status: "success", isSuccess: true, data: [] } as const;
+  expect(renderQuery({ query: done, empty: true, size: "region" })?.props.illustration).toBe("inbox-empty");
+  expect(renderQuery({ query: done, empty: true })?.props.illustration).toBe("inbox-empty");
+  expect(renderQuery({ query: done, empty: true, emptyIllustration: "no-sessions" })?.props.illustration).toBe("no-sessions");
+  expect(renderQuery({ query: done, empty: true, loading: "inline" })?.props.illustration).toBeUndefined();
+  expect(renderQuery({ query: done, empty: true, compact: true })?.props.illustration).toBeUndefined();
+});
+
+it("never shows an empty state before the read succeeds, and delays an inline read spinner", () => {
+  const pending = { status: "pending", fetchStatus: "fetching", isLoading: true } as const;
+  expect(renderQuery({ query: pending, empty: true })?.type).toBe("Skeleton");
+  const inline = renderQuery({ query: pending, empty: true, loading: "inline" });
+  expect(inline?.type).toBe("Loading");
+  expect(inline?.props.delayed).toBe(true);
 });

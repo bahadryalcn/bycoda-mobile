@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { COMPOSER_FIELD_PADDING, COMPOSER_LINE_HEIGHT, COMPOSER_MAX_LINES, MODEL_CHIP_LABEL_MIN, composerToolbarLayout, composerInputLimits, composerNeedsInlineActions, composerPrefixMaximum, composerSuggestionLimits } from "./chat-composer-model";
+import { COMPOSER_FIELD_PADDING, COMPOSER_LINE_HEIGHT, COMPOSER_MAX_LINES, MODEL_CHIP_LABEL_MIN, composerToolbarLayout, composerInputLimits, composerNeedsInlineActions, composerOperationsLayout, composerPrefixMaximum, composerSuggestionLimits } from "./chat-composer-model";
 
 const ADD = 48, MIC_SEND = 48 * 2 + 4, MIC_STOP_SEND = 48 * 3 + 8;
 it.each([288, 328, 370, 398])("keeps the %i pt toolbar on one line and gives the model the rest", (toolbar) => {
@@ -90,4 +90,20 @@ it("budgets existing notes, recovery and wrapping actions before suggestions",()
 });
 it("caps the field at five lines and starts at the 48dp floor",()=>{
  const roomy=composerInputLimits(900,900,1,0,0,48);expect(roomy.minimum).toBe(48);expect(roomy.maximum).toBe(Math.ceil(COMPOSER_LINE_HEIGHT*COMPOSER_MAX_LINES+COMPOSER_FIELD_PADDING*2));
+});
+
+it("keeps a pinned child status bar on short frames and counts the form it shows", () => {
+  // Without a pinned bar the layout is the plain operations decision.
+  expect(composerOperationsLayout({ available: 200, fontScale: 1, toolbar: 48, operations: 48 })).toEqual({ short: false, height: 48 });
+  expect(composerOperationsLayout({ available: 152, fontScale: 1, toolbar: 100, operations: 48 })).toEqual({ short: true, height: 0 });
+  // A tall frame shows the full bar beside the operations row, with its gap.
+  const tall = composerOperationsLayout({ available: 720, fontScale: 1, toolbar: 48, operations: 48, pinned: { full: 64, compact: 48 } });
+  expect(tall).toEqual({ short: false, height: 48 + 64 + 4 });
+  // The full bar's height alone can make the frame short; then only its compact line is counted.
+  const fitsWithout = composerOperationsLayout({ available: 220, fontScale: 1, toolbar: 48, operations: 48 });
+  expect(fitsWithout.short).toBe(false);
+  const short = composerOperationsLayout({ available: 220, fontScale: 1, toolbar: 48, operations: 48, pinned: { full: 64, compact: 48 } });
+  expect(short).toEqual({ short: true, height: 48 + 4 });
+  // The compact measurement never feeds the decision, so the frame does not flip back.
+  expect(composerOperationsLayout({ available: 220, fontScale: 1, toolbar: 48, operations: 48, pinned: { full: 64, compact: 0 } }).short).toBe(true);
 });

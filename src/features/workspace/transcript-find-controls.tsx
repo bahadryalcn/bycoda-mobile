@@ -2,7 +2,8 @@ import { View } from "react-native";
 import X from "lucide-react-native/icons/x";
 import ChevronUp from "lucide-react-native/icons/chevron-up";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
-import { Body, Button, Disclosure, ErrorText, IconButton, Row, SearchField } from "@/ui/primitives";
+import { Body, Button, ErrorText, IconButton, Row, SearchField } from "@/ui/primitives";
+import { HintLabel } from "@/ui/info-hint";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
@@ -82,12 +83,14 @@ export function TranscriptFindControls({
               {!query.trim()
                 ? copy("Aranacak metni gir", "Enter text to find")
                 : searching
-                  ? copy("İşleniyor…", "Working…")
-                  : count
+                  ? copy("Aranıyor…", "Searching…")
+                  : count && active
                     ? copy("{p1}/{p2} sonuç", "{p1}/{p2} results", {
-                        p1: active ? activeIndex + 1 : 0,
+                        p1: activeIndex + 1,
                         p2: count,
                       })
+                    : count
+                    ? copy("{p0} sonuç", "{p0} results", { p0: count })
                     : copy("Yüklenen görünümde sonuç yok", "No results in the loaded view")}
             </Body>}
             {hasEarlier ? (
@@ -99,16 +102,15 @@ export function TranscriptFindControls({
               />
             ) : null}
           </Row>
-          <Disclosure
+          {/* The scope stays visible as one caption; its explanation sits behind the shared info icon. */}
+          <HintLabel
             label={copy("Yüklenen görünüm · yalnızca önizlemeler", "Loaded view · previews only")}
-          >
-            <Body muted style={uiStyles.caption}>
-              {copy(
-                "Yalnızca bu görünümde yüklenen metin ve önizlemeler aranır; eşleşen her mesaj için bir sonuç gösterilir. Gizli ayrıntılar, yüklenmemiş eski mesajlar ve tam uzak çıktılar dahil değildir.",
-                "Search covers loaded text and previews in this view, with one result per matching block. Hidden details, older unloaded messages and full remote outputs are excluded.",
-              )}
-            </Body>
-          </Disclosure>
+            style={[uiStyles.caption, { color: colors.muted }]}
+            help={copy(
+              "Yalnızca bu görünümde yüklenen metin ve önizlemeler aranır; eşleşen her mesaj için bir sonuç gösterilir. Gizli ayrıntılar, yüklenmemiş eski mesajlar ve tam uzak çıktılar dahil değildir.",
+              "Search covers loaded text and previews in this view, with one result per matching block. Hidden details, older unloaded messages and full remote outputs are excluded.",
+            )}
+          />
           {active ? (
             <Body selectable numberOfLines={3} style={uiStyles.caption}>
               {active.snippet}

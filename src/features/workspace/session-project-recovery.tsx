@@ -65,7 +65,7 @@ export function SessionProjectRecovery({
       controller.abort();
     };
   }, [client, error, machineId, visible, targetTurnId]);
-  if (checking) return <Loading label={copy("Oturum yükleniyor", "Loading session")} />;
+  if (checking) return <Loading delayed label={copy("Oturum yükleniyor", "Loading session")} />;
   return (
     <Empty
       compact={false}

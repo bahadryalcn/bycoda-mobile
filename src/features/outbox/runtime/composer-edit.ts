@@ -8,6 +8,6 @@ export function registerOutboxEditor(scope: { machineId: string; sessionId: stri
 }
 export async function editOutbox(row: OutboxRow) {
   const editor = editors.get(key(row));
-  if (!editor) throw new Error("Open this conversation before editing the waiting message.");
+  if (!editor) throw new Error("Open this session before editing the waiting message.");
   await editor(row);
 }

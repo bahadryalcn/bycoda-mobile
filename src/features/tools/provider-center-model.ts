@@ -23,12 +23,3 @@ export function readProviderCenter(value: unknown, environmentId: string): Provi
   if (new Set(value.providers.map((row) => row.id)).size !== value.providers.length || new Set(value.acp.agents.map((row) => row.id)).size !== value.acp.agents.length) return invalid();
   return value as ProviderCenterReport;
 }
-export function metadataPatch(agent: ProviderCenterAgent, revision: string, name: string, context: string) {
-  const normalized = name.trim();
-  if (!normalized || normalized.length > 160 || /[\r\n\0]/.test(normalized)) throw new Error("Enter a valid agent name.");
-  const value = context.trim(); const contextWindow = value ? Number(value) : null;
-  if (value && (!/^\d+$/.test(value) || !Number.isSafeInteger(contextWindow) || Number(contextWindow) < 1024 || Number(contextWindow) > 10_000_000))
-    throw new Error("Context window must be between 1024 and 10000000.");
-  if (!/^[a-f0-9]{64}$/.test(revision)) throw new Error("Refresh the agent configuration before saving.");
-  return { id: agent.id, expectedRevision: revision, name: normalized, contextWindow };
-}

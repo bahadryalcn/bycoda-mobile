@@ -9,7 +9,7 @@ export function AgentProviderPrerequisite() {
     <Notice
       tone="info"
       message={copy(
-        "Bu bilgisayar kullanılabilir bir ajan bildirmedi. Sağlayıcıları kontrol et.",
+        "Bu bilgisayar kullanılabilir bir ajan bildirmedi. Sağlayıcıları kontrol edin.",
         "This computer has not reported an available agent. Check providers.",
       )}
       retryLabel={copy("Sağlayıcı merkezi", "Provider center")}

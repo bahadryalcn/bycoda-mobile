@@ -260,4 +260,13 @@ describe("cooperative JSON decoding", () => {
     ).rejects.toBe(error);
     expect(checks).toBe(2);
   });
+
+  it("matches JSON.parse on long plain strings split across parts, with escapes and control characters", async () => {
+    const base64 = "QUJD".repeat(60_000);
+    const source = JSON.stringify({ mime: "image/png", base64, note: 'a"b\\cé\n' + base64.slice(0, 9) });
+    for (const width of [7, 4096, 65_536, source.length])
+      expectSameJson(await parseJsonParts(split(source, width)), JSON.parse(source));
+    await expect(parseJsonParts(['"' + "x".repeat(40_000) + "\n" + '"'])).rejects.toThrow(SyntaxError);
+    await expect(parseJsonParts(['"' + "x".repeat(40_000), '"'])).resolves.toBe("x".repeat(40_000));
+  });
 });

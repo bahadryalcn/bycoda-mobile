@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import { createContext, use, type ReactNode, type Ref } from "react";
+import { type ReactNode, type Ref } from "react";
 import { StyleSheet, View, useWindowDimensions, type HostInstance, type TextProps } from "react-native";
 import { AnimatedPressable } from "panelui-native/primitives/animated-pressable";
 import { Separator as PanelSeparator } from "panelui-native/components/separator";
@@ -8,13 +8,13 @@ import Check from "lucide-react-native/icons/check";
 import { Body } from "./typography";
 import { BusyIndicator } from "./busy-indicator";
 import { useHover } from "./use-hover";
+import { GroupedNavigation, useInNavigationGroup } from "./navigation-group-context";
+import { rowPressMotion, useRowPress } from "./row-press";
 import { gapIcon, iconSize, metrics, opacity, space, type SemanticTone } from "./tokens";
 import type { ComponentType } from "react";
 import type { ContainerProps } from "./component-props";
 
-const GroupedNavigation = createContext(false);
-/** True inside a NavigationGroup, so row-like controls can adopt list padding. */
-export const useInNavigationGroup = () => use(GroupedNavigation);
+export { useInNavigationGroup };
 
 /** Related navigation shares one rhythm without adding a decorative container. */
 export function NavigationGroup({ children, style }: ContainerProps) {
@@ -103,8 +103,10 @@ export function NavigationRow({
   detailSelectable?: boolean;
   detailEllipsizeMode?: TextProps["ellipsizeMode"];
 }) {
-  const { colors, semanticColors, uiStyles } = useMobileTheme();
+  const { colors, semanticColors, uiStyles, pressedFill } = useMobileTheme();
   const hover = useHover(disabled || busy);
+  const press = useRowPress();
+  const choice = intent === "select";
   const plain = variant !== "card";
   const semantic = tone ? semanticColors[tone] : undefined;
   const inGroup = useInNavigationGroup();
@@ -114,17 +116,20 @@ export function NavigationRow({
   const row = (
     <AnimatedPressable
       ref={ref}
-      accessibilityRole="button"
-      pressScale={0.99}
-      pressOpacity={0.85}
+      // A choice reads as a radio with its checked state, like SelectField options; others are buttons.
+      accessibilityRole={choice ? "radio" : "button"}
+      {...rowPressMotion}
       accessibilityLabel={accessibilityLabel ?? [label, detail, metadata].filter(Boolean).join(". ")}
-      accessibilityState={{ disabled: !!disabled || !!busy, busy: !!busy, ...(selected === undefined ? {} : { selected }) }}
-      aria-pressed={selected}
+      accessibilityState={{ disabled: !!disabled || !!busy, busy: !!busy,
+        ...(choice ? { checked: !!selected } : selected === undefined ? {} : { selected }) }}
+      aria-pressed={choice ? undefined : selected}
+      aria-checked={choice ? !!selected : undefined}
       aria-disabled={!!disabled || !!busy}
       aria-busy={!!busy}
       disabled={disabled || busy}
       onPress={onPress}
       {...hover.handlers}
+      {...press.handlers}
       style={[
         uiStyles.press,
         plain && { borderWidth: 0, backgroundColor: hover.hovered && !selected ? colors.raised : "transparent" },
@@ -140,6 +145,7 @@ export function NavigationRow({
           opacity: disabled && !busy ? opacity.disabled : 1,
         },
         selected && tintSelected && { backgroundColor: colors.selected },
+        press.pressed && { backgroundColor: pressedFill },
       ]}
     >
       {icon ? <View style={uiStyles.rowLeading}>{icon}</View> : null}
@@ -175,7 +181,7 @@ export function NavigationRow({
       {trailing ? <View style={{ flexShrink: 1, maxWidth: "50%" }}>{trailing}</View> : null}
       {busy ? <BusyIndicator size="sm" color={colors.accent} />
         : intent === "navigate" ? <ChevronRight size={14} strokeWidth={2.4} color={colors.tertiary} style={{ flexShrink: 0 }} />
-        : intent === "select" && selected && !trailing ? <Check size={16} color={colors.accent} style={{ flexShrink: 0 }} />
+        : intent === "select" && selected && !trailing ? <Check size={iconSize.check} color={colors.accent} style={{ flexShrink: 0 }} />
         : null}
     </AnimatedPressable>
   );

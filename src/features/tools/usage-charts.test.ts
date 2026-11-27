@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import type { ProviderUsage } from "./usage-breakdown";
 
+vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) => createElement("div", null, children),
 }));

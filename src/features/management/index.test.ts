@@ -86,10 +86,11 @@ it.each(["loading", "withdrawn"] as const)("never reads an unproven project when
     await render();
     await click("Tasks");
     if (state === "withdrawn") {
-      // A project the computer no longer lists is never read: the directory falls back without asking.
+      // A project the computer no longer lists is never read; Tasks accepts All, so it opens with All.
       expect(fixture.navigate).toHaveBeenLastCalledWith(expect.objectContaining({
-        params: expect.objectContaining({ section: "tasks", projectFilter: "project", projectId: "other-project" }),
+        params: expect.objectContaining({ section: "tasks", projectFilter: "all" }),
       }));
+      expect(fixture.selectProject).not.toHaveBeenCalled();
       return;
     }
     expect(fixture.navigate).not.toHaveBeenCalled();
@@ -103,14 +104,17 @@ it.each(["loading", "withdrawn"] as const)("never reads an unproven project when
     await render();
     await click("All projects");
     expect(fixture.selected).toBe("other-project");
-    // With the shared selection at All it opens tools for the fallback project without asking.
+    // With the shared selection at All, a tool that accepts All opens with All and keeps the selection.
     fixture.selected = null;
     fixture.navigate.mockClear();
+    fixture.selectProject.mockClear();
     await render();
     await click("Tasks");
     expect(fixture.navigate).toHaveBeenLastCalledWith(expect.objectContaining({
-      params: expect.objectContaining({ section: "tasks", projectFilter: "project", projectId: "other-project" }),
+      params: expect.objectContaining({ section: "tasks", projectFilter: "all" }),
     }));
+    expect(fixture.selectProject).not.toHaveBeenCalled();
+    expect(fixture.selected).toBeNull();
   } finally {
     fixture.directoryReady = true;
     fixture.projects = ["workspace-project", "other-project"];

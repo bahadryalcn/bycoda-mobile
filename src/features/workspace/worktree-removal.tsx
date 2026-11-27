@@ -10,7 +10,7 @@ import { reviewedMachine, isReviewedMachine } from "@/state/reviewed-machine";
 import { useCopy } from "@/ui/copy";
 import { RECORD_ACCESS_UNAVAILABLE } from "@/ui/record-access-copy";
 import { ActionReviewSheet } from "@/ui/action-review-sheet";
-import { ActionMenu, Body, Disclosure, ErrorText, FormActions, Notice, QueryState, SelectField, Sheet, Stack } from "@/ui/primitives";
+import { ActionMenu, Body, ErrorText, FormActions, Notice, QueryState, SelectField, Sheet, Stack } from "@/ui/primitives";
 import { CollectionToolbar } from "@/ui/search-field";
 import { PrivateContentAccessProvider, usePrivateContentAccess } from "@/ui/private-access";
 import type { HostWorktrees } from "@/remote/types";
@@ -125,13 +125,13 @@ export function WorktreeRemoval({ scope, projectId, onClose }: { scope: SessionS
         <Notice message={copy("Kaydedilmiş istek tekrar gönderilmez. Sonuç bilinmiyorsa bilgisayardaki çalışma ağacını inceleyin.", "The saved request is never resent. If its result is unknown, inspect the worktree on the computer.")} />
         <Body>{receipt?.state === "applied" ? copy("Tamamlandı", "Completed") : receipt?.state === "failed" ? copy("Tamamlanmadı", "Not completed") : receipt?.state === "pending" ? copy("Bilgisayarda onay bekleniyor", "Awaiting approval on the computer") : copy("Sonuç bilinmiyor", "Result unknown")}</Body>
         {receipt?.path ? <Body mono selectable>{receipt.path}</Body> : null}{receipt?.message ? <Body selectable>{receipt.message}</Body> : null}
-        <Disclosure label={copy("Ayrıntılar", "Details")}><Body mono selectable>{attempt.operationId}</Body></Disclosure>
+        <Body mono muted selectable>{attempt.operationId}</Body>
         <FormActions submitLabel={copy("Sonucu oku", "Read result")} disabled={busy || !ready} busy={busy && pendingAction==="secondary-1"} onSubmit={readStatus} onCancel={close} cancelLabel={copy("Kapat", "Close")} feedback={feedback} />
       </Stack> : <>
         <QueryState query={{...trees,refetch:refresh}} />
         <SelectField label={copy("Çalışma klasörü", "Working folder")} value={path} searchable disabled={disabled || !!review}
           options={(trees.data?.worktrees ?? []).filter(tree=>!tree.isMain&&!tree.missing).map(tree=>({value:tree.path,label:tree.branch||tree.path,detail:tree.path}))} onChange={choose} />
-        <Notice message={copy("Dal ve konuşmalar korunur. Kaldırma için bilgisayarda yeni onay gerekir. Ana çalışma kopyasındaki bir konuşmadan açın.", "The branch and conversations are retained. Removal requires fresh approval on the computer. Open this from a conversation in the base working copy.")} />
+        <Notice message={copy("Dal ve oturumlar korunur. Kaldırma için bilgisayarda yeni onay gerekir. Ana çalışma kopyasındaki bir oturumdan açın.", "The branch and sessions are retained. Removal requires fresh approval on the computer. Open this from a session in the base working copy.")} />
         <FormActions submitLabel={copy("Kaldırmayı incele", "Review removal")} disabled={disabled || !eligible || !trees.isSuccess || !!trees.isError || !!review} busy={busy && pendingAction==="secondary-3"} onSubmit={inspect} feedback={feedback} onCancel={close} cancelLabel={copy("Kapat", "Close")} />
       </>}
     </> : <>

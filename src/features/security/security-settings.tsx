@@ -2,7 +2,6 @@ import Animated from "react-native-reanimated";
 import LockKeyhole from "lucide-react-native/icons/lock-keyhole";
 import Timer from "lucide-react-native/icons/timer";
 import Lock from "lucide-react-native/icons/lock";
-import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import { useSecurity } from "../../state/security";
 import { autoLockTimeoutOptions } from "../../state/security-preferences";
 import type { AutoLockTimeoutMs } from "../../state/security-types";
@@ -11,12 +10,12 @@ import {
   ErrorNotice,
   NavigationGroup,
   NavigationRow,
+  Notice,
   SelectField,
   SettingIcon,
   StateView,
   ToggleField,
 } from "../../ui/primitives";
-import { HintSection } from "../../ui/info-hint";
 import { enterItem } from "../../ui/motion";
 import { space } from "../../ui/tokens";
 import { useSecurityError } from "./app-lock";
@@ -50,6 +49,18 @@ export function SecuritySettings() {
   return (
     <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
       <ErrorNotice error={security.error} message={describeError(security.error) ?? undefined} />
+      {!security.available && security.status === "unlocked" && !security.error ? (
+        // Why the switch cannot turn on, with the way to check again once the phone has a screen lock.
+        <Notice
+          tone="warning"
+          message={copy(
+            "Uygulama kilidi için telefonunda ekran kilidi veya biyometri ayarlı olmalı.",
+            "App lock needs a screen lock or biometrics set up on this phone.",
+          )}
+          action={{ label: copy("Yeniden kontrol et", "Check again"), onPress: () => { if (!security.busy) void security.initialize(); } }}
+        />
+      ) : null}
+      {/* One group: the switch, then the delay and Lock now, which only exist while the lock is on. */}
       <NavigationGroup>
         <ToggleField
           label={copy("Uygulama kilidi", "App lock")}
@@ -64,55 +75,36 @@ export function SecuritySettings() {
             void security.setEnabled(value, prompt);
           }}
         />
-      </NavigationGroup>
-      {security.enabled ? (
-        <HintSection
-          title={copy("Kilitleme", "Locking")}
-          presentation="inline"
-          help={copy(
-            "Uygulama arka planda seçtiğin süre kalınca kilitlenir. İçerik arka planda hemen gizlenir.",
-            "The app locks after the chosen time in the background. Content is hidden immediately in the background.",
-          )}
-        >
-          <NavigationGroup>
-            <SelectField
-              variant="row"
-              icon={<SettingIcon glyph={Timer} />}
-              label={copy("Otomatik kilitle", "Auto-lock")}
-              value={String(security.autoLockTimeoutMs)}
-              disabled={idle}
-              options={autoLockTimeoutOptions.map((value) => ({
-                value: String(value),
-                label: labels[value],
-              }))}
-              onChange={(value) => {
-                void security.setAutoLockTimeout(Number(value) as AutoLockTimeoutMs, prompt);
-              }}
-            />
-          </NavigationGroup>
-        </HintSection>
-      ) : null}
-      {!security.available ? (
-        <NavigationGroup>
-          <NavigationRow
-            label={copy("Telefon güvenliğini yeniden kontrol et", "Check phone security again")}
-            intent="command"
-            icon={<SettingIcon glyph={RefreshCw} />}
-            disabled={security.busy}
-            onPress={() => {
-              void security.initialize();
+        {security.enabled ? (
+          <SelectField
+            variant="row"
+            icon={<SettingIcon glyph={Timer} />}
+            label={copy("Otomatik kilitle", "Auto-lock")}
+            hint={copy(
+              "Uygulama arka planda seçtiğin süre kalınca kilitlenir. İçerik arka planda hemen gizlenir.",
+              "The app locks after the chosen time in the background. Content is hidden immediately in the background.",
+            )}
+            value={String(security.autoLockTimeoutMs)}
+            disabled={idle}
+            options={autoLockTimeoutOptions.map((value) => ({
+              value: String(value),
+              label: labels[value],
+            }))}
+            onChange={(value) => {
+              void security.setAutoLockTimeout(Number(value) as AutoLockTimeoutMs, prompt);
             }}
           />
-        </NavigationGroup>
-      ) : null}
-      <NavigationGroup>
-        <NavigationRow
-          label={copy("Şimdi kilitle", "Lock now")}
-          intent="command"
-          icon={<SettingIcon glyph={LockKeyhole} />}
-          disabled={!security.enabled || security.busy || security.status !== "unlocked"}
-          onPress={security.lock}
-        />
+        ) : null}
+        {security.enabled ? (
+          <NavigationRow
+            label={copy("Şimdi kilitle", "Lock now")}
+            intent="command"
+            icon={<SettingIcon glyph={LockKeyhole} />}
+            separator={false}
+            disabled={security.busy || security.status !== "unlocked"}
+            onPress={security.lock}
+          />
+        ) : null}
       </NavigationGroup>
     </Animated.View>
   );

@@ -13,6 +13,8 @@ vi.mock("./motion", () => ({ haptic: { select: vi.fn() } }));
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./design-system", () => ({ controlClasses: () => "" }));
 vi.mock("./use-hover", () => ({ useHover: () => ({ hovered: false, handlers: {} }) }));
+vi.mock("./navigation-row", () => ({ NavigationRow: "navigation-row" }));
+vi.mock("./row-press", () => ({ rowPressMotion: {}, useRowPress: () => ({ pressed: false, handlers: {} }) }));
 import { PressableCard } from "./buttons";
 it("disabled cards cannot invoke their long-press command through accessibility actions", () => {
   const open = vi.fn();

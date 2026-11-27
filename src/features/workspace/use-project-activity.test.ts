@@ -36,7 +36,7 @@ vi.mock("./use-project-directory", () => ({ useProjectList: () => ({
   isSuccess: state.directoryReady, isPending: !state.directoryReady,
   isFetching: state.verifying, error: undefined, refetch: state.refetch,
 }) }));
-import { activityPollDelay, useProjectActivity } from "./use-project-activity";
+import { activityGroupPollDelay, activityPollDelay, UNSTREAMED_GROUP_POLL_MS, useProjectActivity } from "./use-project-activity";
 
 const key = ["machine", "machine", "project-summaries", ["project"]];
 const session = { id: "session", projectId: "project", title: "Private session", harness: "codex", revision: 1, status: "idle", updatedAt: 1 };
@@ -123,6 +123,33 @@ it.each(["auth", "identity"] as const)("conceals cached session rows after %s fa
   expect(state.request).toHaveBeenCalledTimes(count);
 });
 
+it("does not re-render a hidden consumer on cache writes and reads the latest data on return", async () => {
+  await load();
+  let renders = 0;
+  const counted = () => { renders += 1; result = useProjectActivity(); return null; };
+  state.active = false;
+  await act(async () => { root.render(createElement(QueryClientProvider, { client: cache }, createElement(counted))); });
+  renders = 0;
+  const later = { ...session, title: "Renamed", revision: 2, updatedAt: 2 };
+  await act(async () => {
+    cache.setQueryData(key, (previous: { projects: Record<string, unknown> } | undefined) => ({
+      ...previous, projects: { ...previous?.projects, project: { sessions: [later] } },
+    }));
+    await vi.advanceTimersByTimeAsync(1);
+  });
+  expect(renders).toBe(0);
+  state.active = true;
+  await act(async () => { root.render(createElement(QueryClientProvider, { client: cache }, createElement(counted))); });
+  expect(cache.getQueryData<{ projects: Record<string, unknown> }>(key)?.projects.project).toEqual({ sessions: [later] });
+  expect(renders).toBeGreaterThan(0);
+});
+
 it("backs off summary polling 5s to 60s and resets after success", () => {
   expect([0, 1, 2, 3, 4, 5, 9].map(activityPollDelay)).toEqual([5_000, 5_000, 10_000, 20_000, 40_000, 60_000, 60_000]);
+});
+
+it("slows unstreamed summary groups only while the stream is healthy", () => {
+  expect(activityGroupPollDelay(0, false)).toBe(activityPollDelay(0));
+  expect(activityGroupPollDelay(0, true)).toBe(UNSTREAMED_GROUP_POLL_MS);
+  expect(activityGroupPollDelay(5, true)).toBe(activityPollDelay(5));
 });

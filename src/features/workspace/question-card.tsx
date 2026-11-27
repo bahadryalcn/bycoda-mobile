@@ -163,8 +163,8 @@ function QuestionCardOwner({
         {current.delivery === "unknown" ? (
           <Body muted>
             {copy(
-              "Yeniden denemeden önce konuşmayı kontrol et.",
-              "Check the conversation before trying again.",
+              "Yeniden denemeden önce oturumu kontrol et.",
+              "Check the session before trying again.",
             )}
           </Body>
         ) : null}

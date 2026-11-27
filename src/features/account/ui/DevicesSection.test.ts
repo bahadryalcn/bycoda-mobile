@@ -12,7 +12,8 @@ vi.mock("@/ui/confirm", () => ({ confirmAction: fixture.confirm }));
 vi.mock("lucide-react-native/icons/globe", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/laptop", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/smartphone", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/tablet", () => ({ default: () => null }));
+vi.mock("@/ui/toast", () => ({ showToast: vi.fn() }));
+vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled, busy }: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean }) => createElement("button", { onClick: onPress, disabled: disabled || busy }, label);

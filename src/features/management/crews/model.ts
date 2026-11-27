@@ -11,8 +11,8 @@ export function memberRoutingPatch(choice: ModelRoutingItemChoice): Pick<CrewAge
 export function memberModelSource(agent: CrewAgent, copy: CrewCopy): string | undefined {
   if (agent.selection !== "automatic") return undefined;
   switch (agent.modelChoice?.kind) {
-    case "order": return copy("Bilgisayar model sırası", "Host model order");
-    case "default": return copy("Crew üyesi rolü", "Crew member role");
+    case "order": return copy("Bilgisayar model sırası", "Computer model order");
+    case "default": return copy("Ekip üyesi rolü", "Crew member role");
     case "pool": return `${copy("Havuz", "Pool")} · ${agent.modelChoice.poolId}`;
     default: return undefined;
   }

@@ -2,16 +2,13 @@ import type { ComponentType } from "react";
 import { ScrollView, View } from "react-native";
 import Globe from "lucide-react-native/icons/globe";
 import Smartphone from "lucide-react-native/icons/smartphone";
-import Users from "lucide-react-native/icons/users";
 import { ChatStreaming } from "@/ui/chat-activity";
 import { Body } from "@/ui/typography";
 import { PressableCard } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { fontSize, lineHeight, metrics, radii, space } from "@/ui/tokens";
-import { activityStateLabel, agentCountText, type SessionActivity } from "./session-activity-model";
-import { formatElapsed } from "./run-status-model";
-import { useElapsedNow } from "./use-elapsed-now";
+import { activityBarLabel, type SessionActivity } from "./session-activity-model";
 
 type Props = {
   activity: SessionActivity;
@@ -19,31 +16,29 @@ type Props = {
   device?: { name?: string; platform?: string };
   /** Host name of the held browser page; omitted when unknown. */
   browser?: { host?: string };
-  onAgents: () => void;
   onDevice: () => void;
   onBrowser: () => void;
+  /** False where the session's floating status cluster already says the state (the session screen). */
+  showState?: boolean;
 };
 
-const TIMED = new Set(["working", "waiting", "needs-input"]);
 const BAR_HEIGHT = metrics.touchTarget;
 
 /**
- * One borderless line above the composer: what the session is doing, then quiet segments for the
- * agents, device and browser it is using. Segments scroll sideways instead of wrapping.
+ * One borderless line above the composer for what the transcript does not already say: waiting on
+ * agents or background work, needing the owner, just done, then quiet segments for the device and
+ * browser in use. Plain working and its clock belong to the transcript's live row, and subagents
+ * to the transcript's rows and floating pill, so neither shows twice. Segments scroll sideways
+ * instead of wrapping. On the session screen the state moves into the floating status cluster and
+ * this line keeps only the device and browser.
  */
-export function SessionActivityBar({ activity, device, browser, onAgents, onDevice, onBrowser }: Props) {
+export function SessionActivityBar({ activity, device, browser, onDevice, onBrowser, showState = true }: Props) {
   const { colors } = useMobileTheme();
   const copy = useCopy();
-  const timed = TIMED.has(activity.state) && activity.startedAt !== undefined;
-  const now = useElapsedNow(timed);
-  const hasAgents = activity.counts.total > 0;
-  if (activity.state === "idle" && !hasAgents && !device && !browser) return null;
-  const elapsed = timed && activity.startedAt! <= now ? formatElapsed(now - activity.startedAt!) : undefined;
-  const label = activityStateLabel(activity, copy);
-  const busy = activity.state === "working" || activity.state === "waiting" || activity.state === "background";
+  const label = showState ? activityBarLabel(activity, copy) : "";
+  if (!label && !device && !browser) return null;
+  const busy = activity.state === "waiting" || activity.state === "background";
   const dot = activity.state === "needs-input" ? colors.warning : activity.state === "done" ? colors.success : colors.tertiary;
-  const agentLabel = activity.counts.total === 1 ? copy("1 ajan", "1 agent")
-    : copy("{p0} ajan", "{p0} agents", { p0: activity.counts.total });
   return (
     <View style={{ flexDirection: "row", alignItems: "center", minHeight: BAR_HEIGHT, flexGrow: 1, flexShrink: 1, flexBasis: 240, minWidth: 0,
       paddingHorizontal: space.xs, gap: space.sm }}>
@@ -52,27 +47,16 @@ export function SessionActivityBar({ activity, device, browser, onAgents, onDevi
           {/* Only the state is a live region: the timer changes every second and must not be re-announced. */}
           <View accessible accessibilityLabel={label} accessibilityLiveRegion="polite"
             style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexShrink: 1 }}>
-            {busy ? <ChatStreaming label={label} /> : <>
+            {busy ? <ChatStreaming label={label} priority={2} /> : <>
               <View style={{ width: 6, height: 6, borderRadius: radii.pill, backgroundColor: dot }} />
               <Body muted style={{ flexShrink: 1, fontSize: fontSize.caption, lineHeight: lineHeight.caption }}>{label}</Body>
             </>}
           </View>
-          {/* Read on demand when focused; never announced on its own. */}
-          {elapsed ? (
-            <View accessible accessibilityRole="timer" accessibilityLabel={elapsed} accessibilityLiveRegion="none" style={{ flexShrink: 0 }}>
-              <Body muted style={{ fontSize: fontSize.caption, lineHeight: lineHeight.caption, fontVariant: ["tabular-nums"] }}>{elapsed}</Body>
-            </View>
-          ) : null}
         </View>
       ) : null}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}
+      {/* Rails neither bounce nor glow at their edges. */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} bounces={false} overScrollMode="never" style={{ flex: 1 }}
         contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end", alignItems: "center", gap: space.xs }}>
-        {hasAgents ? (
-          <Segment Icon={Users} text={activity.counts.failed
-            ? `${agentLabel} · ${copy("{p0} başarısız", "{p0} failed", { p0: activity.counts.failed })}`
-            : agentLabel}
-            a11y={`${agentLabel}. ${agentCountText(activity.counts, copy, true)}. ${copy("Ajanları aç", "Open agents")}`} onPress={onAgents} />
-        ) : null}
         {device ? (
           <Segment Icon={Smartphone} text={device.name || copy("Cihaz", "Device")}
             a11y={[copy("Ajan şu cihazı kullanıyor", "Agent is using device"), device.name, device.platform].filter(Boolean).join(" ") + `. ${copy("Canlı görüntüyü aç", "Open live view")}`} onPress={onDevice} />

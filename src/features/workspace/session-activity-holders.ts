@@ -81,6 +81,20 @@ export function resolveHolders(input: ResolveHolders): SessionHolders {
   return { ...(device ? { device } : {}), ...(browser ? { browser } : {}) };
 }
 
+/** Polling while the session's turn shows a device or browser in use, or the last read saw it held. */
+export const HOLDER_ACTIVE_POLL_MS = 6_000;
+/** With no sign of use, a slow safety read still notices a hold taken some other way. */
+export const HOLDER_IDLE_POLL_MS = 30_000;
+
+/**
+ * Holder reads stay quick only while there is evidence of use; most runs never touch a device or
+ * browser, and `devices.list` is a heavy Host call, so idle runs read rarely.
+ */
+export function holderPollInterval(kind: "device" | "browser", blocks: readonly Block[] | undefined, held: boolean): number {
+  if (held) return HOLDER_ACTIVE_POLL_MS;
+  return inferHolders(blocks, true)[kind] ? HOLDER_ACTIVE_POLL_MS : HOLDER_IDLE_POLL_MS;
+}
+
 /** "localhost:5173" for a page URL; undefined when it is not one. */
 export function browserHostLabel(url: string | undefined): string | undefined {
   if (!url) return undefined;

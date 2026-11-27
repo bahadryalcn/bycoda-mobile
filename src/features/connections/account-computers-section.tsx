@@ -3,14 +3,12 @@ import { View } from "react-native";
 import { router } from "expo-router";
 import { useIsFocused } from "expo-router/react-navigation";
 import Laptop from "lucide-react-native/icons/laptop";
-import Network from "lucide-react-native/icons/network";
-import Wifi from "lucide-react-native/icons/wifi";
 import { useCopy } from "@/ui/copy";
-import { useMobileTheme } from "@/ui/theme";
 import { useMachines } from "@/state/machines";
-import { iconSize, space } from "@/ui/tokens";
+import { space } from "@/ui/tokens";
 import {
   Body,
+  Button,
   ErrorNotice,
   FormActions,
   Heading,
@@ -47,7 +45,6 @@ const platformNames: Record<Computer["platform"], string> = {
  */
 export function AccountComputersSection({ others }: { others?: ReactNode }) {
   const copy = useCopy();
-  const { colors } = useMobileTheme();
   const focused = useIsFocused();
   const machines = useMachines((state) => state.machines);
   const { state, refetch } = useAccountComputers();
@@ -65,7 +62,10 @@ export function AccountComputersSection({ others }: { others?: ReactNode }) {
   ) : null;
   // Most first-run accounts have no computers yet: a loading skeleton that then collapses would shift
   // the connect actions under the owner's finger, so the list appears only once it has rows.
-  if (state.kind === "hidden" || state.kind === "loading" || (state.kind === "ready" && !state.computers.length)) return <>{others}</>;
+  // A computer already saved on this phone is listed (and selected) under "On this phone"; the account
+  // section offers only the ones not paired yet, so no computer appears twice with different words.
+  const unpaired = state.kind === "ready" ? state.computers.filter((item) => !savedComputerFor(item, machines)) : [];
+  if (state.kind === "hidden" || state.kind === "loading" || (state.kind === "ready" && !unpaired.length)) return <>{others}</>;
   if (state.kind === "signedOut")
     return (
       <>
@@ -86,7 +86,9 @@ export function AccountComputersSection({ others }: { others?: ReactNode }) {
   const now = Date.now();
   return (
     <>
-      <Section title={copy("Bilgisayarların", "Your computers")}>
+      <Section title={machines.length
+        ? copy("Hesabındaki diğer bilgisayarlar", "Other computers in your account")
+        : copy("Bilgisayarların", "Your computers")}>
         {state.kind === "error" ? (
           <StateView
             compact
@@ -99,9 +101,8 @@ export function AccountComputersSection({ others }: { others?: ReactNode }) {
         ) : null}
         {state.kind === "ready" ? (
           <NavigationGroup>
-            {state.computers.map((item) => {
+            {unpaired.map((item) => {
               const online = isComputerOnline(item, now);
-              const paired = !!savedComputerFor(item, machines);
               const kinds = routeKinds(item);
               return (
                 <NavigationRow
@@ -109,24 +110,13 @@ export function AccountComputersSection({ others }: { others?: ReactNode }) {
                   label={item.name}
                   detail={[
                     platformNames[item.platform],
-                    online ? copy("Çevrimiçi", "Online") : copy("Çevrimdışı", "Offline"),
-                    ...(["lan", "tailscale"] as const).filter((kind) => kinds[kind]).map((kind) => routeLabel(kind, copy)),
+                    online ? copy("Bilgisayar çevrimiçi", "Computer online") : copy("Bilgisayar çevrimdışı", "Computer offline"),
+                    // Route types are named once, here; a public route says so, since anyone on the internet can reach it.
+                    ...(["lan", "tailscale", "public"] as const).filter((kind) => kinds[kind]).map((kind) => routeLabel(kind, copy)),
                   ].join(" · ")}
+                  detailLines={0}
                   icon={<RowIcon glyph={Laptop} />}
-                  trailing={
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                      {kinds.lan ? <Wifi size={iconSize.status} strokeWidth={1.8} color={colors.muted} /> : null}
-                      {kinds.tailscale ? <Network size={iconSize.status} strokeWidth={1.8} color={colors.muted} /> : null}
-                      {/* Reachable by anyone on the internet, protected only by the device credential: say so. */}
-                      {kinds.public ? <StatusText label={routeLabel("public", copy)} tone="warning" /> : null}
-                      {/* Paired is the normal state (quiet text); an unpaired computer invites a connect. */}
-                      <StatusText
-                        label={paired ? copy("Eşlenmiş", "Paired") : copy("Bağlan", "Connect")}
-                        tone={paired ? "default" : "active"}
-                        dot={false}
-                      />
-                    </View>
-                  }
+                  trailing={<StatusText label={copy("Bağlan", "Connect")} tone="active" dot={false} />}
                   disabled={flow.phase !== "idle"}
                   onPress={() => void pairing.start(item)}
                 />
@@ -196,13 +186,10 @@ export function AccountComputersSection({ others }: { others?: ReactNode }) {
                 cancelLabel={copy("Vazgeç", "Cancel")}
                 onCancel={pairing.cancel}
               />
-            ) : (
-              <FormActions
-                submitLabel={copy("Vazgeç", "Cancel")}
-                onSubmit={pairing.cancel}
-                busy={flow.phase === "connecting"}
-              />
-            )}
+            ) : flow.phase === "waiting" ? (
+              // Waiting has nothing to submit: progress is the body, cancelling is quiet. Connecting cannot be cancelled.
+              <Button tone="quiet" label={copy("Vazgeç", "Cancel")} onPress={pairing.cancel} />
+            ) : null}
           </Stack>
         </Sheet>
       ) : null}

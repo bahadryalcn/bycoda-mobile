@@ -20,6 +20,8 @@ vi.mock("@/state/connection-scope",()=>{const value={isCurrent:()=>f.epoch};retu
 vi.mock("@/ui/private-access",()=>({usePrivateContentAccess:()=>({allowed:f.allowed,check:()=>f.allowed}),PrivateContentAccessProvider:({children}:PropsWithChildren)=>children}));
 vi.mock("@/ui/use-list-scroll-memory",()=>({useListScrollMemory:()=>({listProps:{}})}));
 vi.mock("@/ui/copy",()=>({useCopy:()=> (_tr:string,en:string)=>en}));
+vi.mock("@/i18n",()=>({useLocale:()=>"en"}));
+vi.mock("@/ui/scope-line",()=>({ScopeLine:({scope}:any)=>createElement("span",null,scope.computer)}));
 vi.mock("@/ui/styles",()=>({uiStyles:{caption:{}}}));
 vi.mock("@/ui/search-field",()=>({CollectionToolbar:({field,actions}:any)=>createElement("header",null,field,actions)}));
 vi.mock("@/ui/primitives",()=>{

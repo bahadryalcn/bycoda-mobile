@@ -10,7 +10,8 @@ import type { AutomationCardProps } from "./types";
 const query = vi.hoisted(() => ({ data: [] as HostAutomationRun[] | undefined, error: null as Error | null, isPending: false }));
 vi.mock("@/state/queries", () => ({ useHostQuery: () => query }));
 const navigation = vi.hoisted(() => ({ current: true, push: vi.fn(), approvals: [] as Array<() => void>, details: [] as string[], mutate: vi.fn() }));
-vi.mock("@/state/connection-scope", () => ({ useConnectionScope: () => ({ isCurrent: () => navigation.current }) }));
+vi.mock("@/state/connection-scope", () => ({ useConnectionScope: () => ({ token: "connection", isCurrent: () => navigation.current }) }));
+vi.mock("@/ui/toast", () => ({ showToast: vi.fn() }));
 vi.mock("@/ui/layout", () => ({ ScreenChromeProvider: ({ children }: PropsWithChildren) => createElement("div", null, children) }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ id: "computer", name: "Review workstation" }) }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: { caption: {} } }) }));
@@ -49,6 +50,11 @@ vi.mock("@/ui/primitives", () => {
   const Wrapper = ({ children }: PropsWithChildren) => createElement("div", null, children);
   return { Body: Wrapper, Button: ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label), Row: Wrapper, Stack: Wrapper, Separator: () => null,
     Sheet: Wrapper,
+    // The record confirmation sheet: its subject renders as text and its approval is captured once.
+    FormActions: ({ onSubmit }: { onSubmit: () => void }) => {
+      if (!navigation.approvals.includes(onSubmit)) navigation.approvals.push(onSubmit);
+      return null;
+    },
     ScreenList: ({ data, header, renderItem }: { data: HostAutomationRun[]; header: import("react").ReactNode; renderItem: (entry: { item: HostAutomationRun }) => import("react").ReactNode }) => createElement("div", null, header, data.map(item => createElement("div", { key: item.id }, renderItem({ item })))),
     ActionMenu: ({ actions }: { actions: Array<{ key: string; label: string; onPress: () => void } | false> }) =>
       actions.map(action => action && createElement("button", { key: action.key, onClick: action.onPress }, action.label)),
@@ -135,7 +141,7 @@ it.each(["Run now", "Delete"])("retires the reviewed %s action when the connecti
   await render(null);
   await click(label);
   expect(navigation.approvals).toHaveLength(1);
-  expect(navigation.details[0]).toContain(`${item.name} · Review workstation`);
+  expect(container.textContent).toContain(`${item.name} · Review workstation`);
   navigation.current = false;
   await act(async () => navigation.approvals[0]!());
   expect(navigation.mutate).not.toHaveBeenCalled();

@@ -23,6 +23,15 @@ it("limits background access to voice, the reviewed thread and exact project", (
   expect(allowsVoiceRequest(scope, "projects.get", { id: "other" })).toBe(false);
   expect(allowsVoiceRequest(scope, "projects.directory", { projectId: "other" })).toBe(false);
 });
+it("lets the call drive its computer-side realtime voice only for the reviewed thread", () => {
+  for (const method of ["voice.realtime.audio", "voice.realtime.next", "voice.realtime.interrupt", "voice.realtime.text", "voice.realtime.end"])
+    expect(allowsVoiceRequest(scope, method, { lease: "lease" })).toBe(true);
+  expect(allowsVoiceRequest(scope, "voice.realtime.start", { threadId: scope.threadId, provider: "openai" })).toBe(true);
+  expect(allowsVoiceRequest(scope, "voice.realtime.start", { threadId: "other", provider: "openai" })).toBe(false);
+  expect(allowsVoiceRequest(scope, "voice.call.settings.get", {})).toBe(true);
+  expect(allowsVoiceRequest(scope, "voice.call.settings.get", { mode: "grok" })).toBe(false);
+  for (const method of ["voice.call.settings.set", "voice.realtime.secret"]) expect(allowsVoiceRequest(scope, method, {})).toBe(false);
+});
 const binding: CredentialBinding = { machineId: "machine", environmentId: "env", endpoint: "wss://host.invalid/ws", credentialGeneration: 1, accessEpoch: 1 };
 function native() { return { acquireVoiceCredential: vi.fn(async () => ({ handle: "handle", ...binding })), openVoice: vi.fn(), send: vi.fn(), close: vi.fn(), acknowledge: vi.fn(), addListener: vi.fn() } as unknown as HostSocketNative; }
 it("captures binding and target before credential acquisition and cannot be retargeted by caller mutation", async () => {

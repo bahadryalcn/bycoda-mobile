@@ -1,19 +1,18 @@
 import { useMobileTheme } from "@/ui/theme";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { View } from "react-native";
-import { useBackHandler } from "panelui-native/hooks/use-back-handler";
-import { router, useIsFocused } from "expo-router";
-import { useNavigation, usePreventRemove } from "expo-router/react-navigation";
+import { useScreenBackHandler } from "@/ui/screen-back-handler";
+import { useIsFocused } from "expo-router";
+import { usePreventRemove } from "expo-router/react-navigation";
 import {
-  ActionMenu,
-  Body,
-  Button,
   ErrorNotice,
   QueryState,
   Screen,
   ScreenList,
   SearchField,
+  SectionHeader,
   Sheet,
+  NoResults,
   StateView,
 } from "@/ui/primitives";
 import { InScreenBack } from "@/ui/in-screen-back";
@@ -22,10 +21,10 @@ import { useCopy } from "@/ui/copy";
 import { useActiveMachine } from "@/state/machines";
 import { useGitActions } from "./git-actions";
 import { GitBranchesPanel } from "./git-branches";
-import { GitChangeGroupHeader, GitCommitBar, GitCommitPanel } from "./git-changes";
+import { GitChangeGroupHeader, GitCommitBar } from "./git-changes";
 import { gitPushTarget } from "./git-commit-model";
 import { useGitCommitGeneration } from "./use-git-commit-generation";
-import { GitConfirmationCard } from "./git-confirmation";
+import { GitConfirmationReview } from "./git-confirmation";
 import { GitDiffPanel } from "./git-diff";
 import { GitHistoryPanel } from "./git-history";
 import { GitStashes } from "./git-stashes";
@@ -35,7 +34,7 @@ import { isManagedBranch } from "./git-branch-name";
 import { ConflictReview } from "./conflict-review";
 import { GitActionsSheet } from "./git-actions-sheet";
 import { GitLinkPullRequestSheet, useLinkedPullRequest } from "./git-link-pr";
-import { GitFileSwipeRow } from "./git-file-swipe";
+import { GitFileOptionsSheet, GitFileSwipeRow } from "./git-file-swipe";
 import { useGitIndex } from "./git-queries";
 import {
   GitActionFeedback,
@@ -46,14 +45,16 @@ import {
 import { GroupedListRow } from "./shared";
 import { gitReducer, initialGitState, type GitConfirmation } from "./workspace-state";
 import type { GitFileAction, GitScope, ProjectGitProps } from "./git-types";
+import type { GitChangedFile } from "./wire";
 import { gitListRows, type GitChangeGroup, type GitListFilter, type GitListRow } from "./git-list-model";
 import { registerWorkspaceDraft } from "./draft-guard";
 import { DraftWriteError } from "./draft-store";
 import { useLocalDraft } from "./use-local-draft";
 import { space } from "@/ui/tokens";
-import { queryOwnsRegion } from "./query-region";
-import { SearchToolbar } from "@/ui/search-field";
-import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
+import { useCollapsibleSearch } from "@/ui/search-field";
+import { FilterChipRow } from "@/ui/filter-sheet";
+import { useScreenContentInsets } from "@/ui/screen-content-insets";
+import { pushOnce } from "@/ui/navigation";
 
 type GitDraft = { message: string; branchName: string };
 function decodeDraft(value: string): GitDraft {
@@ -69,11 +70,11 @@ function decodeDraft(value: string): GitDraft {
 const encodeDraft = (value: GitDraft | null) =>
   value && (value.message || value.branchName) ? JSON.stringify(value) : null;
 export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hideDraftWriteWarning }: ProjectGitProps) {
-  const { colors, uiStyles } = useMobileTheme();
+  const { uiStyles } = useMobileTheme();
   const copy = useCopy();
-  const manageConnections = () => router.push("/machines");
+  const gutter = useScreenContentInsets();
+  const manageConnections = () => pushOnce("/machines");
   const machine = useActiveMachine();
-  const navigation = useNavigation();
   const scope = useMemo<GitScope>(() => ({ projectId, cwd, root }), [projectId, cwd, root]);
   const index = useGitIndex(scope);
   const actions = useGitActions(scope);
@@ -81,8 +82,8 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
   const [confirmationError, setConfirmationError] = useState<Error | null>(null);
   const [fileQuery, setFileQuery] = useState("");
   const [fileFilter, setFileFilter] = useState<GitListFilter>("all");
-  const [actionsOpen, setActionsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [fileOptions, setFileOptions] = useState<{ file: GitChangedFile; staged: boolean } | null>(null);
   const [linkPrOpen, setLinkPrOpen] = useState(false);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
   const prLink = useLinkedPullRequest(scope);
@@ -156,15 +157,17 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
   // The native swipe is off while a sub-view or a running action owns back, so it never reveals
   // the previous route; the edge swipe and the Android back button run the same exit.
   const edge = <InScreenBack active={inSubview || busy} onBack={() => { if (!busy) exitSubview(); }} />;
-  usePreventRemove(busy || hasDraft || inSubview, ({ data: event }) => {
+  usePreventRemove(busy || hasDraft || inSubview, ({ repeat }) => {
     if (busy) return;
     if (exitSubview()) return;
+    // Reason: a draft that cannot be saved must never trap the user on this screen; leave anyway.
+    // `repeat` lifts the prevention first: a kept draft would otherwise prevent the retried Back again.
     void persist()
-      .then(() => navigation.dispatch(event.action))
-      .catch(() => {});
+      .catch(() => {})
+      .then(() => repeat());
   });
   const focused = useIsFocused();
-  useBackHandler(focused && !!selection && !state.confirmation, () => {
+  useScreenBackHandler(focused && !!selection && !state.confirmation, () => {
     if (!busy) { if (gitReviewExit.current) gitReviewExit.current(); else showFiles(); }
   });
   const patchDraft = (patch: Partial<GitDraft>) =>
@@ -179,7 +182,6 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
     if (busy || !draft.ready) return;
     // Managed branches refuse a direct push; offer the reviewed delivery flow instead.
     if (confirmation.kind === "push" && isManagedBranch(data?.branch)) {
-      setActionsOpen(false);
       setDeliveryOpen(true);
       return;
     }
@@ -291,6 +293,24 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
     () => (selection ? [] : gitListRows(data?.files ?? [], fileQuery, fileFilter, collapsed)),
     [data?.files, fileQuery, fileFilter, selection, collapsed],
   );
+  // Search and the staged filter share the one collection sheet; the icons sit beside the branch card.
+  const fileSearch = useCollapsibleSearch(
+    <SearchField label={copy("Değişen dosyalarda ara", "Search changed files")} value={fileQuery} maxLength={200} onChangeText={setFileQuery} />,
+    {
+      activeFilters: fileFilter !== "all" ? 1 : 0,
+      onResetFilters: () => setFileFilter("all"),
+      filters: <>
+        <SectionHeader title={copy("Göster", "Show")} />
+        <FilterChipRow wrap label={copy("Değişiklik filtreleri", "Change filters")} value={fileFilter}
+          options={[
+            { value: "all", label: copy("Tümü", "All") },
+            { value: "unstaged", label: copy("Stage dışında", "Unstaged") },
+            { value: "staged", label: copy("Stage’de", "Staged") },
+          ]}
+          onChange={setFileFilter} />
+      </>,
+    },
+  );
   if (historyOpen && root)
     return <>{edge}<GitHistoryPanel key={JSON.stringify([machine?.id, projectId, cwd, root])} scope={scope} onClose={() => setHistoryOpen(false)} registerExit={(exit) => { historyExit.current = exit; }} /></>;
   if (stashesOpen && root)
@@ -304,13 +324,13 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
   if (conflictReview && root)
     return <>{edge}<ConflictReview key={`${stashScope}:${conflictReview}`} scope={scope} path={conflictReview} onClose={() => setConflictReview(null)} onChanged={() => { void index.refetch(); }} onBusyChange={(value) => setStashWrite((current) => !value && current?.scope !== stashScope ? current : { scope: stashScope, busy: value })} registerExit={(exit) => { gitReviewExit.current = exit; }} /></>;
   if (!data || data.repository === false) {
-    const regionError = queryOwnsRegion(index);
+    // One feedback owner: QueryState carries its own skeleton and Retry, so no extra Refresh button.
     return (
       <Screen scroll={false}>
-        <View style={{ flex: 1, paddingHorizontal: space.screen, gap: space.sm }}>
+        <View style={{ flex: 1, paddingLeft: gutter.left, paddingRight: gutter.right, gap: space.sm }}>
           {data?.repository === false ? (
             <StateView
-              illustration="inbox-empty"
+              compact
               title={copy("Bu klasör bir Git deposu değil.", "This folder is not a Git repository.")}
               action={{
                 label: copy("Yenile", "Refresh"),
@@ -319,19 +339,8 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
               }}
             />
           ) : (
-            <QueryState query={index} onManageConnections={manageConnections} />
+            <QueryState query={index} loading="list" onManageConnections={manageConnections} />
           )}
-          {data?.repository !== false && !regionError ? (
-            <Button
-              label={copy("Yenile", "Refresh")}
-              tone="quiet"
-              disabled={index.isFetching}
-              onPress={() => {
-                void index.refetch();
-              }}
-              busy={index.isFetching && index.data !== undefined}
-            />
-          ) : null}
         </View>
       </Screen>
     );
@@ -348,16 +357,19 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
         header={
           <View style={uiStyles.stack}>
             {!selection ? (
-              <GitHeader
-                index={data}
-                busy={busy || !draft.ready}
-                refreshing={index.isFetching}
-                onRefresh={() => { void index.refetch(); }}
-                onToggleBranches={showBranches}
-                linkedPr={prLink.linked}
-                onOpenActions={() => setMenuOpen(true)}
-              />
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <GitHeader
+                    index={data}
+                    busy={busy || !draft.ready}
+                    linkedPr={prLink.linked}
+                    onOpenActions={() => setMenuOpen(true)}
+                  />
+                </View>
+                {hasChangedFiles ? <>{fileSearch.trigger}{fileSearch.filterTrigger}</> : null}
+              </View>
             ) : null}
+            {fileSearch.sheet}
             {draftStatus}
             {index.error ? <QueryState query={index} loading="none" /> : null}
             {!state.confirmation && !branchPicker ? feedback : null}
@@ -370,60 +382,6 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
                 busy={busy || !draft.ready}
                 onCommit={(stageAll) => choose({ kind: "commit" }, stageAll)}
                 onPush={() => choose({ kind: "push" })}
-              />
-            ) : null}
-            {!selection && hasChangedFiles ? (
-              <SearchToolbar
-                search={
-                  <SearchField
-                    label={copy("Değişen dosyalarda ara", "Search changed files")}
-                    value={fileQuery}
-                    maxLength={200}
-                    onChangeText={setFileQuery}
-                  />
-                }
-                actions={
-                  <ActionMenu
-                    label={copy("Değişiklik filtreleri", "Change filters")}
-                    active={fileFilter !== "all"}
-                    trigger={
-                      <SlidersHorizontal
-                        size={21}
-                        strokeWidth={2}
-                        color={fileFilter !== "all" ? colors.accent : colors.muted}
-                      />
-                    }
-                    actions={[
-                      {
-                        key: "all",
-                        label: copy("Tümü", "All"),
-                        selected: fileFilter === "all",
-                        onPress: () => setFileFilter("all"),
-                      },
-                      {
-                        key: "unstaged",
-                        label: copy("Stage dışında", "Unstaged"),
-                        selected: fileFilter === "unstaged",
-                        onPress: () => setFileFilter("unstaged"),
-                      },
-                      {
-                        key: "staged",
-                        label: copy("Stage’de", "Staged"),
-                        selected: fileFilter === "staged",
-                        onPress: () => setFileFilter("staged"),
-                      },
-                      {
-                        key: "reset",
-                        label: copy("Sıfırla", "Reset"),
-                        disabled: !filtered,
-                        onPress: () => {
-                          setFileQuery("");
-                          setFileFilter("all");
-                        },
-                      },
-                    ]}
-                  />
-                }
               />
             ) : null}
             {data.operation && root ? (
@@ -465,17 +423,9 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
         contentContainerStyle={{ gap: 0 }}
         ListEmptyComponent={
           selection ? undefined : hasChangedFiles && filtered ? (
-            <StateView
-              compact
-              title={copy("Filtrelere uyan değişiklik yok", "No changes match the filters")}
-              secondaryAction={{
-                label: copy("Filtreleri temizle", "Clear filters"),
-                onPress: () => {
-                  setFileQuery("");
-                  setFileFilter("all");
-                },
-              }}
-            />
+            <NoResults searching={!!fileQuery.trim()} filtered={fileFilter !== "all"}
+              filtersTitle={copy("Filtrelere uyan değişiklik yok", "No changes match the filters")}
+              onClearSearch={() => setFileQuery("")} onClearFilters={() => setFileFilter("all")} />
           ) : data.conflicts?.length || data.operation ? undefined : (
             <StateView
               compact
@@ -513,12 +463,20 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
                     });
                 }}
                 onStage={() => runFileAction(item.staged ? "unstage" : "stage", item.file.relative)}
-                onOpen={() => onOpenFile(item.file.relative)}
-                onDiscard={() => choose({ kind: "discard", path: item.file.relative })}
+                onOptions={() => { if (!busy) setFileOptions({ file: item.file, staged: item.staged }); }}
               />
             </GroupedListRow>
           )
         }
+      />
+      <GitFileOptionsSheet
+        target={fileOptions}
+        busy={busy}
+        onClose={() => setFileOptions(null)}
+        onPreview={(file, staged) => { if (!busy) dispatch({ type: "view", view: { kind: "diff", selection: { path: file.relative, staged } } }); }}
+        onStage={(file, staged) => runFileAction(staged ? "unstage" : "stage", file.relative)}
+        onOpen={(file) => onOpenFile(file.relative)}
+        onDiscard={(file) => choose({ kind: "discard", path: file.relative })}
       />
       <GitActionsSheet
         visible={menuOpen && !state.confirmation}
@@ -528,7 +486,6 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
         linkPr={prLink.supported ? { hasSession: !!prLink.session, linked: prLink.linked } : undefined}
         onClose={() => setMenuOpen(false)}
         handlers={{
-          commit: () => setActionsOpen(true),
           push: () => choose({ kind: "push" }),
           pull: () => choose({ kind: "pull" }),
           fetch: () => { void actions.fetch().catch(() => {}); },
@@ -538,46 +495,12 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
           management: () => { setManagementTab("branches"); setManagementOpen(true); },
           createPr: () => { setManagementTab("pr"); setManagementOpen(true); },
           linkPr: () => setLinkPrOpen(true),
-          refresh: () => { void index.refetch(); },
         }}
       />
       {deliveryOpen && data.branch ? (
         <GitDeliverySheet scope={scope} branch={data.branch} onClose={() => setDeliveryOpen(false)} />
       ) : null}
       <GitLinkPullRequestSheet visible={linkPrOpen && !state.confirmation} projectId={projectId} link={prLink} onClose={() => setLinkPrOpen(false)} />
-      <Sheet
-        visible={actionsOpen && !state.confirmation}
-        size="form"
-        title={copy("Commit ve eşitleme", "Commit and sync")}
-        dismissible={!busy}
-        onClose={() => {
-          void persist()
-            .then(() => setActionsOpen(false))
-            .catch(() => {});
-        }}
-      >
-        {draftStatus}
-        {feedback}
-        {data.files.length > 0 ? <Body muted style={uiStyles.caption}>
-          {copy(
-            "Commit, stage’deki tüm dosyaları içerir. Listedeki filtreler yalnızca görünümü etkiler.",
-            "A commit includes every staged file. List filters only change what you see.",
-          )}
-        </Body> : null}
-        <GitCommitPanel
-          index={data}
-          canRunWorkspace={!!root}
-          message={message}
-          onMessageChange={(value) => patchDraft({ message: value })}
-          generation={generation}
-          busy={busy || !draft.ready}
-          fetching={actions.extended.isPending}
-          onFetch={() => {
-            void actions.fetch().catch(() => {});
-          }}
-          onChoose={choose}
-        />
-      </Sheet>
       {branchPicker ? (
         <GitBranchesPanel
           scope={scope}
@@ -600,7 +523,7 @@ export function ProjectGit({ projectId, cwd, root, onOpenFile, onDraftGuard, hid
           dismissible={!busy}
           onClose={() => dispatch({ type: "confirm", confirmation: null })}
         >
-          <GitConfirmationCard
+          <GitConfirmationReview
             confirmation={state.confirmation}
             stageAll={stageAllReview.current === state.confirmation}
             busy={busy}

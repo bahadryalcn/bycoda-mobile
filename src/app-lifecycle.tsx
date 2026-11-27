@@ -8,6 +8,7 @@ import { useMachines } from "./state/machines";
 import { useSecurity } from "./state/security";
 import { useAttachmentReleaseRetry } from "./state/queries";
 import { holdHostRecoveryClocks, resumeHostRecoveryClocks } from "./state/host-runtime-state";
+import { createAppLifecycleController, hostQueriesFocused } from "./state/app-resume";
 import type { LifecycleProps } from "./app-types";
 import { invalidateProjectPrivacy } from "./features/workspace/project-privacy-cache";
 import { WidgetCoordinator } from "./features/widgets";
@@ -18,7 +19,7 @@ export function AppLifecycle({ children, cache }: LifecycleProps) {
   const hydrate = useMachines((s) => s.hydrate);
   const hydrated = useMachines((s) => s.hydrated);
   const activeId = useMachines((s) => s.activeId);
-  const unlocked = useSecurity((s) => s.status === "unlocked");
+  const status = useSecurity((s) => s.status);
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
@@ -29,55 +30,58 @@ export function AppLifecycle({ children, cache }: LifecycleProps) {
   );
   useEffect(() => {
     if (process.env.EXPO_OS === "web") return;
-    focusManager.setFocused(AppState.currentState === "active");
+    const focus = () => focusManager.setFocused(hostQueriesFocused(useSecurity.getState()));
+    focus();
+    // Screenshots, the notification shade, permission prompts and share sheets are no stay away:
+    // see app-resume.ts. Only a long background expires privacy proof; nothing remounts or clears.
+    const lifecycle = createAppLifecycleController(
+      {
+        holdClocks: holdHostRecoveryClocks,
+        resumeClocks: resumeHostRecoveryClocks,
+        cancelReads: () => void cache.cancelQueries({ queryKey: ["machine"] }),
+        flushDrafts: () => void flushQuestionAttachmentDrafts(AsyncStorage),
+        expirePrivacy: () => void invalidateProjectPrivacy(cache),
+      },
+      { initial: AppState.currentState },
+    );
     const subscription = AppState.addEventListener("change", (state) => {
-      // Background time is not a failed reconnect: the socket is closed there and reopens on return.
-      // Restart the shared feedback graces before the resumed reads refetch on the new socket.
-      if (state === "background") holdHostRecoveryClocks();
-      else if (state === "active") resumeHostRecoveryClocks();
+      // Clocks are held or restarted before the lock reacts and the socket reconnects.
+      lifecycle.appState(state);
       useSecurity.getState().handleAppState(state);
-      focusManager.setFocused(state === "active" && useSecurity.getState().status === "unlocked");
-      if (state !== "active") {
-        // iOS reports "inactive" for the notification shade, call banners and permission alerts; only
-        // a real background cancels in-flight host reads. Lock still gates reads through the security state.
-        if (state !== "inactive") void cache.cancelQueries({ queryKey: ["machine"] });
-        void invalidateProjectPrivacy(cache);
-        // The process may be suspended or killed: coalesced question text must reach disk first.
-        void flushQuestionAttachmentDrafts(AsyncStorage);
-      }
+      focus();
     });
     const blur =
       process.env.EXPO_OS === "android"
         ? AppState.addEventListener("blur", () => {
             useSecurity.getState().handleWindowFocus(false);
-            focusManager.setFocused(false);
-            void flushQuestionAttachmentDrafts(AsyncStorage);
-            void cache.cancelQueries({ queryKey: ["machine"] });
+            lifecycle.windowBlur();
+            focus();
           })
         : null;
-    const focus =
+    const regained =
       process.env.EXPO_OS === "android"
         ? AppState.addEventListener("focus", () => {
             useSecurity.getState().handleWindowFocus(true);
-            focusManager.setFocused(
-              AppState.currentState === "active" && useSecurity.getState().status === "unlocked",
-            );
+            focus();
           })
         : null;
     return () => {
       subscription.remove();
       blur?.remove();
-      focus?.remove();
+      regained?.remove();
+      lifecycle.dispose();
     };
   }, [cache]);
   useEffect(() => {
     focusManager.setFocused(
-      unlocked &&
-        (process.env.EXPO_OS === "web" ||
-          (AppState.currentState === "active" && useSecurity.getState().windowFocused)),
+      process.env.EXPO_OS === "web" ? status === "unlocked" : hostQueriesFocused(useSecurity.getState()),
     );
-    if (!unlocked) { void cache.cancelQueries({ queryKey: ["machine"] }); void invalidateProjectPrivacy(cache); }
-  }, [unlocked, cache]);
+    if (status === "unlocked") return;
+    void cache.cancelQueries({ queryKey: ["machine"] });
+    // A suspension hides the mounted workspace behind the lock and keeps its proof, so a return within
+    // the lock grace shows it as it was; a long stay away expires it through the lifecycle controller.
+    if (status !== "suspended") void invalidateProjectPrivacy(cache);
+  }, [status, cache]);
   useEffect(
     () => () => {
       void cache.cancelQueries({ queryKey: ["machine", activeId] });

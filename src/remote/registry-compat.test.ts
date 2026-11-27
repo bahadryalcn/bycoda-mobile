@@ -68,6 +68,7 @@ describe("mobile compatibility with the generated Host registry", () => {
       ["tasks.start", { taskId: "task" }],
       ["tasks.finishWithFindings", { taskId: "task", expectedUpdatedAt: 1 }],
       ["tasks.reorder", { taskIds: ["task"] }],
+      ["tasks.helpers", { taskId: "task", failedOnly: true }],
       [
         "tasks.retarget",
         {
@@ -125,7 +126,7 @@ describe("mobile compatibility with the generated Host registry", () => {
       goalId: "goal",
       expectedUpdatedAt: 1,
     });
-    expect(calls).toHaveLength(23);
+    expect(calls).toHaveLength(24);
     expect(new Set(calls)).toEqual(
       new Set(
         Object.keys(generated.methods).filter(

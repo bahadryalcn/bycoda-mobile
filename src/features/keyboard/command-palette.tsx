@@ -62,7 +62,7 @@ export function CommandPalette({ onClose }: { onClose(): void }) {
       <FlatList ref={list} data={matches} keyExtractor={(entry) => entry.id} keyboardShouldPersistTaps="handled"
         style={{ flex: 1, minHeight: 0 }} extraData={current}
         ListHeaderComponent={<>
-          {activity.pending ? <Loading /> : null}
+          {activity.pending ? <Loading delayed /> : null}
           <ErrorText error={activity.error} />
           {activity.error ? <Button label={copy("Yeniden dene", "Retry")} onPress={() => { void activity.refetch().catch(() => {}); }} /> : null}
         </>}

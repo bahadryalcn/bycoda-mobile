@@ -58,25 +58,33 @@ const flat = (members: readonly ShelfEntry[]): GlobalSessionRow[] =>
 export const GLOBAL_RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
+ * The seven-day window only trims quiet history: pinned, running and input-waiting sessions
+ * always stay reachable, however old their last turn is.
+ */
+const inRecentWindow = (now?: number) => {
+  const cutoff = now === undefined ? -Infinity : now - GLOBAL_RECENT_WINDOW_MS;
+  return ({ session }: ShelfEntry) =>
+    session.pinned || session.needsInput || session.status === "running" || sessionActivityAt(session) >= cutoff;
+};
+
+/**
  * Global Sessions follows desktop Last sessions: newest turn activity first, across projects.
  * Pinning never reorders this list (desktop parity); rows carry a pin mark and actions confirm with a toast.
  * Pass `now` to keep only the desktop window; archive and search views omit it to reach older sessions.
  */
 export function recentGlobalSessionRows(directory: readonly ShelfEntry[], now?: number): GlobalSessionRow[] {
-  const cutoff = now === undefined ? -Infinity : now - GLOBAL_RECENT_WINDOW_MS;
   return flat(
     directory
-      .filter(({ session }) => sessionActivityAt(session) >= cutoff)
+      .filter(inRecentWindow(now))
       .sort((a, b) => sessionActivityAt(b.session) - sessionActivityAt(a.session)),
   );
 }
 
 /** Attention first, then running sessions, with newest activity first in each group. */
 export function urgencyGlobalSessionRows(directory: readonly ShelfEntry[], now?: number): GlobalSessionRow[] {
-  const cutoff = now === undefined ? -Infinity : now - GLOBAL_RECENT_WINDOW_MS;
   const urgency = (session: ShelfEntry["session"]) =>
     session.needsInput || session.issue === "failed" ? 0 : session.status === "running" ? 1 : 2;
-  return flat(directory.filter(({ session }) => sessionActivityAt(session) >= cutoff)
+  return flat(directory.filter(inRecentWindow(now))
     .sort((a, b) => urgency(a.session) - urgency(b.session) || sessionActivityAt(b.session) - sessionActivityAt(a.session)));
 }
 
@@ -94,4 +102,27 @@ function organize(members: readonly ShelfEntry[], folderCollapse: FolderCollapse
     }
   }
   return [...folderRows, ...flat(members.filter(({ session }) => looseIds.has(session.id)))];
+}
+
+/**
+ * One project's list (a project selected in the pill) follows the desktop project sidebar: pinned
+ * sessions lead under a "Pinned" header and the rest follow under "Recent", each keeping the given
+ * order. Pinned sessions are not repeated below. With nothing pinned the rows stay as they are.
+ */
+export function withPinnedGroup(
+  rows: readonly GlobalSessionRow[],
+  collapse: Readonly<Partial<Record<SessionShelfId, boolean>>> = {},
+): GlobalSessionRow[] {
+  const sessions = rows.filter((row) => row.kind === "session");
+  const pinned = sessions.filter((row) => row.kind === "session" && row.session.pinned);
+  if (!pinned.length) return [...rows];
+  const rest = sessions.filter((row) => row.kind === "session" && !row.session.pinned);
+  const pinnedOpen = !collapse.pinned;
+  const recentOpen = !collapse.recent;
+  return [
+    { kind: "header", key: "shelf:pinned", shelf: "pinned", count: pinned.length, expanded: pinnedOpen },
+    ...(pinnedOpen ? pinned : []),
+    ...(rest.length ? [{ kind: "header", key: "shelf:recent", shelf: "recent", count: rest.length, expanded: recentOpen } as GlobalSessionRow] : []),
+    ...(recentOpen ? rest : []),
+  ];
 }

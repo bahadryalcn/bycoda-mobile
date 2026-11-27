@@ -18,7 +18,7 @@ vi.mock("@/state/machines", async () => {
 });
 vi.mock("@/state/security", async () => {
   const { create } = await import("zustand");
-  return { useSecurity: create(() => ({ status: "unlocked", appState: "active", windowFocused: true })), isAppContentVisible: () => true };
+  return { useSecurity: create(() => ({ status: "unlocked", appState: "active", windowFocused: true })), isAppContentVisible: () => true, isAppContentRetained: () => true };
 });
 vi.mock("../privacy/consent-access", () => ({ hasProviderPermission: () => true }));
 vi.mock("@/state/queries", async () => {

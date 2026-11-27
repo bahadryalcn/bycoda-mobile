@@ -29,6 +29,26 @@ describe("note draft recovery", () => {
     await store.clearSaved("computer-a", draft);
     expect((await store.recover("computer-a"))?.body).toBe("Newer edit");
   });
+  it("keeps each note's draft when another note is edited on the same computer", async () => {
+    const store = createNoteDraftStore(storage());
+    await store.save("computer-a", { ...draft, body: "Unsaved A" });
+    await store.save("computer-a", { ...draft, id: "note-2", body: "B" });
+    expect((await store.recover("computer-a", "note-1"))?.body).toBe("Unsaved A");
+    expect((await store.recoverAll("computer-a")).map((entry) => entry.id)).toEqual(["note-2", "note-1"]);
+    await store.discard("computer-a", "note-2");
+    expect((await store.recoverAll("computer-a")).map((entry) => entry.id)).toEqual(["note-1"]);
+  });
+  it("does not keep a blank new note and reads the earlier single-draft format", async () => {
+    const data = storage();
+    const store = createNoteDraftStore(data);
+    await store.save("computer-a", { ...draft, id: "new", title: "", body: "", expectedUpdatedAt: 0 });
+    expect(data.values.size).toBe(0);
+    await store.save("computer-a", { ...draft, id: "new", title: "", body: "typed", expectedUpdatedAt: 0 });
+    await store.save("computer-a", { ...draft, id: "new", title: "", body: " ", expectedUpdatedAt: 0 });
+    expect(data.values.size).toBe(0);
+    data.values.set("bycoda.mobile.note-draft.computer-b", JSON.stringify(draft));
+    expect(await createNoteDraftStore(data).recover("computer-b")).toEqual(draft);
+  });
   it("does not erase another note drafted on the same computer", async () => {
     const store = createNoteDraftStore(storage());
     await store.save("computer-a", { ...draft, id: "note-2" });

@@ -15,7 +15,6 @@ export type ConnectionDraft = {
 
 export type ConnectionEntryState =
   | { kind: "choices" }
-  | { kind: "methods" }
   | { kind: "scan" }
   | { kind: "paste" }
   | { kind: "manual" }
@@ -50,6 +49,7 @@ export type ComputerConnectionDependencies = {
     machine: MobileMachine,
     credential: string,
     proofSeed?: Uint8Array,
+    options?: { activate?: boolean },
   ) => Promise<void>;
   createId: () => string;
   assertAccess: () => void;

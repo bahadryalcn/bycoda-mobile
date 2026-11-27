@@ -1,7 +1,7 @@
 import { View } from "react-native";
 import type { CrewAgent } from "@/remote/contracts/crews";
 import { useCopy } from "@/ui/copy";
-import { Button, IdentifierField, Row, SelectField, Stack } from "@/ui/primitives";
+import { Button, IdentifierField, NavigationGroup, Row, SelectField, Stack, ToggleField } from "@/ui/primitives";
 import { space } from "@/ui/tokens";
 import { LOOK_PALETTES, LOOK_PARTS, handleError, handleFromInput, memberTraits, shuffledLook, withLookPart } from "./identity-model";
 import { MemberAvatar } from "./member-avatar";
@@ -57,9 +57,10 @@ export function MemberLookFields({ member, disabled, onPatch }: {
       <SelectField label={copy("Renk", "Palette")} value={String(traits.palette)} disabled={disabled}
         options={LOOK_PALETTES.map((index) => ({ value: String(index), label: copy("Renk {p0}", "Palette {p0}", { p0: index + 1 }) }))}
         onChange={(value) => choose({ palette: Number(value) })} />
-      <SelectField label={copy("Gözlük", "Glasses")} value={traits.glasses ? "yes" : "no"} disabled={disabled}
-        options={[{ value: "no", label: copy("Yok", "None") }, { value: "yes", label: copy("Var", "Glasses") }]}
-        onChange={(value) => choose({ glasses: value === "yes" })} />
+      <NavigationGroup>
+        <ToggleField label={copy("Gözlük", "Glasses")} value={traits.glasses} disabled={disabled}
+          onChange={(glasses) => choose({ glasses })} />
+      </NavigationGroup>
     </Stack>
   );
 }

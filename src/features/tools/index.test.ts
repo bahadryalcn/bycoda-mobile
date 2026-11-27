@@ -116,7 +116,7 @@ it("opens computer usage and resources without a project", () => {
   state.capabilities = ["usage.limits.read", "resources.diagnostics"];
   expect(renderToStaticMarkup(createElement(HostToolScreen, { tool: "usage" }))).toContain("Host session usage");
   state.capabilities = ["usage.cost.read"];
-  expect(renderToStaticMarkup(createElement(HostToolScreen, { tool: "diagnostics" }))).toContain("Unavailable");
+  expect(renderToStaticMarkup(createElement(HostToolScreen, { tool: "diagnostics" }))).toContain("Not on this computer");
 });
 
 it("sets the shared project chosen from a tool's empty state", async () => {

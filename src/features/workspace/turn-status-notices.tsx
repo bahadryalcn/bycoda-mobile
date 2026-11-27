@@ -1,17 +1,44 @@
 import { sessionRetryNotice } from "../../../../src/features/sessions/model/sessionIssue";
 import { useRef, useState } from "react";
 import { StatusLine } from "@/ui/feedback";
-import { ChatStreaming } from "@/ui/chat-activity";
+import { SweepLabel } from "@/ui/text-sweep";
 import { useCopy } from "@/ui/copy";
-import { space } from "@/ui/tokens";
+import { fontSize, lineHeight, space } from "@/ui/tokens";
 import { View } from "react-native";
+import { liveTurnLabel } from "./transcript-format";
+import { useElapsedNow } from "./use-elapsed-now";
 
-/** Desktop's placeholder while the running turn has not produced anything readable yet. */
-export function ThinkingPlaceholder() {
+/**
+ * The transcript's one live indicator, at the turn's live end: desktop's sweep over "Working 0:12",
+ * or a still "Stopping…" once a Stop was accepted. It never adds a second state beside itself (a
+ * running reasoning row already says it is thinking). When the turn settles, its fold row reads
+ * "Worked for 46 s". The clock ticks without being announced; the state is read once.
+ */
+export function LiveTurnRow({
+  startedAt,
+  stopping = false,
+}: {
+  /** Host-recorded start of the running turn. */
+  startedAt?: number;
+  /** A Stop was accepted and the snapshot has not settled yet. */
+  stopping?: boolean;
+}) {
   const copy = useCopy();
+  const now = useElapsedNow(startedAt !== undefined && !stopping);
+  const label = liveTurnLabel({ startedAt, now, stopping }, copy);
+  const state = stopping ? copy("Durduruluyor", "Stopping") : copy("Çalışıyor", "Working");
+  const text = { fontSize: fontSize.control, lineHeight: lineHeight.control, fontVariant: ["tabular-nums" as const] };
   return (
-    <View style={{ paddingVertical: space.xs }}>
-      <ChatStreaming label={copy("Düşünüyor…", "Thinking…")} />
+    <View
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={state}
+      accessibilityLiveRegion="polite"
+      style={{ minHeight: 32, flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.xs }}
+    >
+      <SweepLabel active={!stopping} priority={2} style={text} frame={{ flexShrink: 1 }}>
+        {label}
+      </SweepLabel>
     </View>
   );
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AppState, Linking } from "react-native";
 import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from "expo-audio";
 import { useCopy } from "@/ui/copy";
-import { NavigationRow, StatusText } from "@/ui/primitives";
+import { Button, StatusText, ValueRow } from "@/ui/primitives";
 
 export type MicrophoneAccess = "checking" | "granted" | "not-asked" | "denied" | "unknown";
 
@@ -27,8 +27,9 @@ export async function readMicrophoneAccess(
 }
 
 /**
- * Settings → Voice assistant → Microphone → Microphone access, as on the desktop. A tap asks when the
- * phone still may; after a denial it opens the system settings. The state is read again on return.
+ * Settings → Voice and microphone → Microphone access, as on the desktop. Granted (and checking) is a
+ * plain value; otherwise the row names its one action: ask while the phone still may, open the system
+ * Settings after a denial, or check again. The state is read again on return.
  */
 export function MicrophoneAccessRow() {
   const copy = useCopy();
@@ -44,20 +45,16 @@ export function MicrophoneAccessRow() {
     : access === "denied" ? copy("Reddedildi", "Denied")
     : access === "unknown" ? copy("Okunamadı", "Unavailable")
     : copy("Denetleniyor…", "Checking…");
+  const action = access === "not-asked"
+    ? { label: copy("İzin iste", "Ask for access"), onPress: () => { void requestRecordingPermissionsAsync().catch(() => undefined).finally(refresh); } }
+    : access === "denied" ? { label: copy("Ayarları aç", "Open Settings"), onPress: () => { void Linking.openSettings().catch(() => undefined); } }
+    : access === "unknown" ? { label: copy("Yeniden dene", "Retry"), onPress: refresh }
+    : undefined;
   return (
-    // A command with its current state as the trailing value (no navigation chevron): granted is the
-    // quiet normal case, a denial is a warning the owner acts on.
-    <NavigationRow
-      label={copy("Mikrofon erişimi", "Microphone access")}
-      accessibilityLabel={`${copy("Mikrofon erişimi", "Microphone access")}: ${value}`}
-      intent="command"
-      trailing={<StatusText label={value} tone={access === "denied" ? "warning" : "default"} />}
-      busy={access === "checking"}
-      onPress={() => {
-        if (access === "not-asked") void requestRecordingPermissionsAsync().catch(() => undefined).finally(refresh);
-        else if (access === "unknown") refresh();
-        else void Linking.openSettings().catch(() => undefined);
-      }}
-    />
+    <ValueRow label={copy("Mikrofon erişimi", "Microphone access")} value={action ? undefined : value}
+      trailing={action ? <>
+        <StatusText label={value} tone={access === "denied" ? "warning" : "default"} />
+        <Button label={action.label} tone="quiet" density="compact" onPress={action.onPress} />
+      </> : undefined} />
   );
 }

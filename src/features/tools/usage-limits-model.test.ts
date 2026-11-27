@@ -39,7 +39,8 @@ describe("usage limits model", () => {
   it("formats money compactly", () => {
     expect(compactMoney(3.456)).toBe("$3.46");
     expect(compactMoney(250.4)).toBe("$250");
-    expect(compactMoney(1500)).toBe("$1.5k");
+    expect(compactMoney(1500)).toBe("$1.5K");
+    expect(compactMoney(3.456, "tr")).toBe("$3,46");
   });
 
   it("accepts a well-formed limits report and rejects wrong host, shape or ranges", () => {

@@ -5,6 +5,7 @@ import { useMobileTheme } from "@/ui/theme";
 import { useCopy } from "@/ui/copy";
 import { radii, space } from "@/ui/tokens";
 import { useDelayedVisible } from "@/ui/use-delayed-visible";
+import { useFeedbackAnimation } from "@/ui/use-feedback-animation";
 
 const rows = [
   { mine: false, widths: ["72%", "58%"] },
@@ -19,6 +20,9 @@ export function TranscriptSkeleton({ label }: { label?: string }) {
   const copy = useCopy();
   // Like the shared Skeleton: a fast or cached transcript never flashes placeholders.
   const visible = useDelayedVisible();
+  // Like the shared Skeleton: every line is its own pulse loop, so an unfocused route, the shade
+  // or reduced motion keeps the same shapes as plain views instead.
+  const Placeholder = useFeedbackAnimation() ? Skeleton : View;
   // Match the measured chat viewport, including keyboard and native header clearance.
   const placeholders: (typeof rows)[number][] = [];
   let used = space.md * 2;
@@ -55,7 +59,7 @@ export function TranscriptSkeleton({ label }: { label?: string }) {
           }}
         >
           {row.widths.map((width, line) => (
-            <Skeleton
+            <Placeholder
               key={line}
               style={{ height: 12, width, borderRadius: radii.badge, backgroundColor: row.mine ? colors.panel : colors.raised }}
             />

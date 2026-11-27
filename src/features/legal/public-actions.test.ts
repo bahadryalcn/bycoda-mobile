@@ -100,11 +100,13 @@ it("shows a public-page failure once, under the action group",async()=>{
  expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
  expect(button("App page").compareDocumentPosition(message)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();expect(button("Share the app").compareDocumentPosition(message)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
-it("does not let another tap steal a pending share's cancellation feedback",async()=>{
+// Closing the share sheet is the person's own choice: no cancellation notice, and the rows unlock again.
+it("does not let another tap run while a share is pending and stays quiet when it is dismissed",async()=>{
  let finish!:(value:{action:string})=>void;fixture.share.mockImplementationOnce(()=>new Promise(done=>{finish=done;}));await render("engagement");
  await act(async()=>{button("Share the app").click();button("App page").click();});expect(fixture.share).toHaveBeenCalledTimes(1);expect(fixture.open).not.toHaveBeenCalled();
- await act(async()=>finish({action:"dismissedAction"}));const notice=[...container.querySelectorAll("div")].find(node=>node.textContent==="Sharing was cancelled.")!;
- expect(notice).toBeDefined();expect(button("App page").compareDocumentPosition(notice)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+ await act(async()=>finish({action:"dismissedAction"}));await settle();
+ expect(container.textContent).not.toContain("Sharing was cancelled.");expect(container.querySelectorAll('[role="alert"]')).toHaveLength(0);
+ await act(async()=>button("App page").click());await settle();expect(fixture.open).toHaveBeenCalledTimes(1);
 });
 it("does not launch public actions from retained callbacks after unmount",async()=>{
  await render("engagement");const old=fixture.handlers.get("Share the app")!,page=fixture.handlers.get("App page")!;await act(async()=>root!.unmount());root=undefined;

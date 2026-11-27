@@ -78,6 +78,11 @@ export const VOICE_READY_TIMEOUT_MS = 20_000;
  * its reads failed locally as "This computer is busy" without reaching the Host.
  */
 const MAX_LEASES = 1024;
+/** Reconnect delay cap for the first attempts, then for a long outage (computer off or asleep). */
+const BACKOFF_CAP_MS = 30_000;
+const LONG_OUTAGE_CAP_MS = 180_000;
+/** Attempts after which an unreachable computer counts as a long outage. */
+const LONG_OUTAGE_ATTEMPTS = 12;
 
 /** One app-scoped retry owner. Native code performs exactly one attempt. */
 export class MobileHostRuntimeRegistry {
@@ -381,7 +386,10 @@ export class MobileHostRuntimeRegistry {
     // The native side may have dropped this handle; the next attempt re-acquires it.
     runtime.credential = undefined;
     this.setState(runtime, "backoff");
-    const cap = Math.min(30_000, 250 * 2 ** Math.min(runtime.attempt++, 16));
+    // A long outage (computer off or asleep) backs off further; the network's return or an explicit
+    // retry restarts the ladder at once.
+    const limit = runtime.attempt >= LONG_OUTAGE_ATTEMPTS ? LONG_OUTAGE_CAP_MS : BACKOFF_CAP_MS;
+    const cap = Math.min(limit, 250 * 2 ** Math.min(runtime.attempt++, 16));
     runtime.timer = setTimeout(
       () => {
         runtime.timer = undefined;
@@ -454,6 +462,23 @@ export class MobileHostRuntimeRegistry {
         void this.connect(runtime);
       }
   }
+  /**
+   * An explicit "Retry connection": a fresh ladder and an attempt now, including a blocked computer
+   * whose automatic re-checks are exhausted. Returns whether a socket for this computer exists.
+   */
+  retryNow(machineId: string): boolean {
+    if (this.closed || !this.active) return false;
+    let found = false;
+    for (const runtime of this.runtimes.values())
+      if (runtime.binding.machineId === machineId && runtime.refs) {
+        found = true;
+        if (runtime.state === "ready" || runtime.state === "connecting") continue;
+        runtime.attempt = 0;
+        runtime.blockedRechecks = 0;
+        void this.connect(runtime);
+      }
+    return found;
+  }
   invalidateMachine(machineId: string): void {
     for (const [key, runtime] of this.runtimes)
       if (runtime.binding.machineId === machineId) {
@@ -501,6 +526,11 @@ function mobileTlsForRoute(
     }
   });
   return matching ?? descriptor.mobileTls;
+}
+
+/** Retries the active computer's socket now (the "Retry connection" action); false without a live socket. */
+export function retryHostConnection(machineId: string): boolean {
+  return appRegistry?.retryNow(machineId) ?? false;
 }
 
 export function openAssistantVoiceRuntime(
@@ -706,10 +736,11 @@ async function createMobileHostRuntime(options: {
         if (machine.lanKey || endpoint.protocol !== "https:") {
           bootstrap.delete(key);
           resolvedBootstrap.delete(key);
+          // Not published yet (the computer is still starting it): transient, retried, never "update bycoda".
           throw new RemoteHostError(
             machine.id,
-            "unsupported",
-            "This computer's paired WSS listener is not available yet.",
+            "network",
+            "The connection to this computer is not ready yet.",
           );
         }
         endpoint.protocol = "wss:";
@@ -770,8 +801,21 @@ async function createMobileHostRuntime(options: {
       apply(true);
       return;
     }
+    if (AppState.currentState === "background") {
+      // Native has already closed every non-voice socket and its gate for this background
+      // event, so keeping JavaScript active only runs a reconnect ladder against a closed gate
+      // (and fans connection errors into mounted screens). Suspend now; the return still issues
+      // a newer epoch. The grace below keeps covering "inactive", which native never reports.
+      if (backgroundTimer !== undefined) clearTimeout(backgroundTimer);
+      backgroundTimer = undefined;
+      backgroundSince ??= Date.now();
+      apply(false);
+      return;
+    }
+    // "inactive" alone (notification shade, Control Center, Face ID, a permission sheet) is not a stay
+    // away: native keeps its gate open, so the return reuses the live socket and pending writes. Only
+    // a grace that runs out suspends; that return then issues a new epoch through apply(true).
     if (!active || backgroundTimer !== undefined) return;
-    backgroundSince = Date.now();
     backgroundTimer = setTimeout(() => {
       backgroundTimer = undefined;
       apply(false);

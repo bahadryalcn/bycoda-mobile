@@ -29,8 +29,10 @@ import { useComposerDelivery } from "./use-composer-delivery";
 import { useComposerAttachments } from "./use-composer-attachments";
 import { useDraftAppend } from "./use-draft-append";
 import { useDictation } from "./use-dictation";
-import { ComposerDictationButton, ComposerDictationFeedback } from "./composer-dictation";
-import { appendDictation } from "./dictation-model";
+import { ComposerDictationButton } from "./composer-dictation";
+import { LocalizedVoiceError } from "../assistant/assistant-voice-error";
+import { ComposerDictationNotice, ComposerRecordingRow } from "./composer-recording";
+import { insertDictation } from "./dictation-model";
 import { useMounted } from "@/state/use-mounted";
 import { ComposerSuggestions } from "./composer-suggestions";
 import { ComposerAttachments } from "./composer-attachments";
@@ -49,7 +51,7 @@ import { activeComposerMode, setComposerMode, type ComposerMode } from "./compos
 import { ChatComposer } from "@/ui/chat-composer";
 import { ComposerModelChip } from "./composer-model-chip";
 import { ComposerActionsProvider } from "@/ui/composer-actions";
-import { composerInputLimits, composerNeedsInlineActions, composerPrefixMaximum, composerSuggestionLimits } from "@/ui/chat-composer-model";
+import { composerInputLimits, composerOperationsLayout, composerPrefixMaximum, composerSuggestionLimits } from "@/ui/chat-composer-model";
 import { haptic } from "@/ui/motion";
 import {
   composerCommand,
@@ -58,11 +60,14 @@ import {
   type ComposerDelivery,
 } from "./composer-delivery";
 import { ComposerSendButton } from "./composer-send-button";
+import { composerTrailingAction } from "./composer-send-presentation";
 import { busyAlternateMode } from "./busy-send";
 import { useBusySend } from "@/state/busy-send";
 import { useSessionQueue } from "./use-session-queue";
 import { SessionQueue } from "./session-queue";
 import { SessionAgents } from "./session-agents";
+import { SessionParentBar } from "./session-parent-bar";
+import { parentLinkOf } from "./subagent-sessions-model";
 import { composerDeliveryError } from "./composer-delivery-copy";
 import {
   expandTemplateTrigger,
@@ -101,7 +106,21 @@ export function SessionComposer({
   busy,
   onCommand,
   outsidePressRef,
-}: SessionComposerProps & { onOpenSettings?: () => void; outsidePressRef?: RefObject<(() => void) | null> }) {
+  stopBlocked,
+  stopping = false,
+}: SessionComposerProps & {
+  outsidePressRef?: RefObject<(() => void) | null>;
+  /**
+   * Only what must block Stop (the session is not verifiably visible). The screen dispatches cancel
+   * on its own command path, so a send in flight does not hold Stop. Defaults to `blocked`.
+   */
+  stopBlocked?: boolean;
+  /**
+   * The screen's one Stop state: a cancel for this run is awaiting the Host's reply or the snapshot.
+   * It always ends (a bounded wait), after which Stop can be pressed again.
+   */
+  stopping?: boolean;
+}) {
   const { colors } = useMobileTheme();
   useTemplateHydration();
   const copy = useCopy();
@@ -126,17 +145,24 @@ export function SessionComposer({
   const [templatePicker, setTemplatePicker] = useState(false);
   const templateDestination = useRef<{ machineId: string; sessionId: string } | null>(null);
   const [retryingDraft, setRetryingDraft] = useState(false);
-  // The ref is the synchronous double-tap guard; the state only drives the busy indicator.
-  const stopping = useRef(false);
-  const [stopBusy, setStopBusy] = useState(false);
+  // Where the cursor was when dictation started; recognized text goes there if the draft is unchanged.
+  const dictationAnchor = useRef<{ text: string; start: number; end: number } | null>(null);
+  const [dictationNoticeHeight, measureDictationNotice] = useComposerHeight();
   const [localError, setLocalError] = useState<unknown>(null);
   const mounted = useMounted();
   const [prefixHeight, measurePrefix] = useComposerHeight();
   const [measuredOperationsHeight, measureOperations] = useComposerHeight();
   const [footerHeight, measureFooter] = useComposerHeight();
   const [toolbarHeight, measureToolbar] = useComposerHeight();
-  const shortFrame = composerNeedsInlineActions(availableHeight, fontScale, toolbarHeight, measuredOperationsHeight);
-  const operationsHeight = shortFrame ? 0 : measuredOperationsHeight;
+  // A delegated child's status bar and Open parent stay on every frame, outside the hideable
+  // operations row: full height decides the frame, and a short frame shows its one-line form.
+  const hasParentBar = !!session?.projectId && !!parentLinkOf(session.session as Parameters<typeof parentLinkOf>[0]);
+  const [parentBarHeight, measureParentBar] = useComposerHeight();
+  const [compactParentBarHeight, measureCompactParentBar] = useComposerHeight();
+  const { short: shortFrame, height: operationsHeight } = composerOperationsLayout({
+    available: availableHeight, fontScale, toolbar: toolbarHeight, operations: measuredOperationsHeight,
+    ...(hasParentBar ? { pinned: { full: parentBarHeight, compact: compactParentBarHeight } } : {}),
+  });
   const [suggestionsHeight, measureSuggestions] = useComposerHeight();
   const draftKey = composerDraftKey(scope.machineId, scope.sessionId);
   const draft = useLocalDraft(draftKey, decodeComposerDraft, encodeComposerDraft);
@@ -145,6 +171,8 @@ export function SessionComposer({
   const value = draft.value ?? emptyComposerDraft();
   const prompt = value.text;
   const selection = selectedRange ?? { start: prompt.length, end: prompt.length };
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
   const links = useMemo(() => composerLinks(prompt), [prompt]);
   const activeMode = activeComposerMode(prompt);
   const hasPrefix = !!(value.noteCard || value.attachments.length || links.length || activeMode);
@@ -273,13 +301,30 @@ export function SessionComposer({
     sessionId: scope.sessionId,
     locked: !ready || busy || uploading,
     onText: (spoken) => {
-      if (submission.current || transfer.current) throw new Error(copy("Gönderim sürerken sesle yazılamaz.", "Wait for the current send or upload to finish."));
-      setValue((current) => {
-        const base = current ?? emptyComposerDraft();
-        return { ...base, text: appendDictation(base.text, spoken) };
-      });
+      if (submission.current || transfer.current) throw new LocalizedVoiceError(copy("Gönderim sürerken sesle yazılamaz.", "Wait for the current send or upload to finish."));
+      const base = valueRef.current ?? emptyComposerDraft();
+      // The cursor captured at the start, unless the draft changed meanwhile; then the current cursor.
+      const anchor = dictationAnchor.current;
+      const at = anchor && anchor.text === base.text ? anchor : selectionRef.current;
+      const next = insertDictation(base.text, at, spoken);
+      dictationAnchor.current = null;
+      if (next.text === base.text) return;
+      setValue({ ...base, text: next.text });
+      setSelection(next.selection);
     },
   });
+  // Capture the cursor when a recording starts, so the words land where the owner was typing.
+  const dictationActive = dictation.phase !== "idle";
+  useEffect(() => {
+    if (!dictationActive) { dictationAnchor.current = null; return; }
+    const current = valueRef.current?.text ?? "";
+    dictationAnchor.current ??= { text: current, ...selectionRef.current };
+  }, [dictationActive, valueRef]);
+  // A dictation failure line above the capsule spends the same height budget as the other regions.
+  const fieldMaximum = dictation.error && dictationNoticeHeight > 0
+    ? composerInputLimits(windowHeight, availableHeight, fontScale,
+        measuredPrefix + operationsHeight + suggestionPrefix + dictationNoticeHeight + space.xs, footerHeight, toolbarHeight).maximum
+    : maximumInputHeight;
   const submit = async (override?: ComposerDelivery) => {
     // Draft mode saves the message on the Host, whatever the delivery mode is.
     const sendMode =
@@ -296,11 +341,11 @@ export function SessionComposer({
     const crewHandles = composerCrewHandles(submitted.text);
     if (crewHandles.length) {
       const reason = crewHandles.length > MAX_DELEGATIONS
-        ? copy("Bir mesajda en fazla beş ekip veya ajana görev verin.", "Delegate to at most five crews or agents per message.")
+        ? copy("Bir mesajda en fazla beş ekip veya ajana görev ver.", "Delegate to at most five crews or agents per message.")
         : !client.machine.capabilities?.includes("crews.v1")
           ? copy("Ekip ve ajanlara görev verme bu bilgisayarda kullanılamıyor.", "Crew and agent delegation is unavailable on this computer.")
           : sendMode !== "send" || running || activeComposerMode(submitted.text) === "draft"
-            ? copy("Ekip veya ajana görev vermek için bu mesajı çalışma bitince doğrudan gönderin.", "Send this message directly after the run finishes to delegate to a crew or agent.")
+            ? copy("Ekip veya ajana görev vermek için bu mesajı tur bitince doğrudan gönder.", "Send this message directly after the run finishes to delegate to a crew or agent.")
             : undefined;
       if (reason) {
         setLocalError(new Error(reason));
@@ -370,7 +415,7 @@ export function SessionComposer({
         const check = () => {
           if (controller.signal.aborted || !mounted.current ||
               useMachines.getState().activeId !== scope.machineId || !sameComposerContent(valueRef.current, submitted!))
-            throw new Error(copy("Taslak veya bilgisayar değişti. Göndermeden önce yeniden inceleyin.", "The draft or computer changed. Review it before sending."));
+            throw new Error(copy("Taslak veya bilgisayar değişti. Göndermeden önce yeniden incele.", "The draft or computer changed. Review it before sending."));
           client.assertCurrentAccess?.();
         };
         const resolved = await resolveComposerCrews(client, intendedSession.projectId, crewHandles, controller.signal);
@@ -381,7 +426,7 @@ export function SessionComposer({
         const keys = targets.map(({ kind, id }) => `${kind}:${id}`);
         const intent = crewIntentForDraft(submitted, client.machine.environmentId, keys, randomUUID);
         if (intent.targets.some((key, index) => key !== keys[index]) || intent.targets.length !== keys.length)
-          throw new Error(copy("Ekip veya ajan değişti. Mesajdaki bahsetmeyi yeniden seçin.", "The crew or agent changed. Select the mention again."));
+          throw new Error(copy("Ekip veya ajan değişti. Mesajdaki bahsetmeyi yeniden seç.", "The crew or agent changed. Select the mention again."));
         submitted = { ...submitted, crewIntent: intent };
         setValue(submitted);
         // Keep the write identity durable before either Host delegation can be accepted.
@@ -609,11 +654,19 @@ export function SessionComposer({
     (target === "steer" && !canSteer);
   const sendDisabled = sendDisabledFor(mode);
   const keyboardActive = routeFocused && inputFocused && !palette.visible && !picker && !templatePicker && !draftDetailsOpen;
-  const hardwareSend = () => { if (!sendDisabled) void submit().catch(setLocalError); };
-  useKeyCommand({ key: "Enter", primary: true, title: copy("Gönder", "Send"), enabled: keyboardActive, textInput: true }, hardwareSend);
-  useKeyCommand({ key: "Enter", title: copy("Gönder", "Send"), enabled: keyboardActive && enterSends && !token, textInput: true }, hardwareSend);
+  // While dictating, the recording row has replaced Send: a hardware Enter must not send the draft
+  // underneath it (the recognized words would then land in an emptied or still-sending draft).
+  const hardwareSendEnabled = keyboardActive && !dictationActive;
+  const hardwareSend = () => { if (!sendDisabled && !dictationActive) void submit().catch(setLocalError); };
+  useKeyCommand({ key: "Enter", primary: true, title: copy("Gönder", "Send"), enabled: hardwareSendEnabled, textInput: true }, hardwareSend);
+  useKeyCommand({ key: "Enter", title: copy("Gönder", "Send"), enabled: hardwareSendEnabled && enterSends && !token, textInput: true }, hardwareSend);
   const alternateMode = running ? busyAlternateMode(mode, delivery.available) : null;
-  const alternate = alternateMode && !sendDisabledFor(alternateMode) ? alternateMode : null;
+  // Only what is specific to the other mode removes it; the shared pending/availability state already
+  // disables the whole button, so it never silently empties an otherwise usable choice.
+  const alternateBlocked = (target: ComposerDelivery) =>
+    (target === "queue" && (!queue.supported || (!!queue.error && !client?.machine.capabilities?.includes(OUTBOX_CAPABILITY)))) ||
+    (target === "steer" && !canSteer);
+  const alternate = alternateMode && !alternateBlocked(alternateMode) ? alternateMode : null;
   const insertTemplateBody = (body: string) => {
     if (
       !ready ||
@@ -625,8 +678,8 @@ export function SessionComposer({
     )
       throw new Error(
         copy(
-          "Bu konuşmaya şu anda ekleme yapılamıyor. Taslağınız değişmedi.",
-          "This conversation is not available for insertion. Your draft is unchanged.",
+          "Bu oturuma şu anda ekleme yapılamıyor. Taslağın değişmedi.",
+          "This session is not available for insertion. Your draft is unchanged.",
         ),
       );
     const current = valueRef.current ?? emptyComposerDraft();
@@ -640,28 +693,19 @@ export function SessionComposer({
   };
   const hasContent = !!prompt.trim() || value.attachments.length > 0 || !!value.noteCard;
   const canStop = running && !!session?.runId;
+  // Stop state has one owner, the screen: it holds the spinner until the snapshot shows the run
+  // ending or a bounded wait passes, then offers Stop again. Nothing here claims the run stopped.
   const stop = () => {
-    if (!session || !session.runId || stopping.current) return;
-    const intent = sessionIntent(session, {
-      type: "cancel",
-      sessionId: scope.sessionId,
-      runId: session.runId,
-    });
-    // Pause durable follow-ups before stopping the exact active run.
-    // A pause failure must not hide the session's primary Stop action.
-    stopping.current = true;
+    if (!session || !session.runId || stopping) return;
+    const runId = session.runId;
+    const intent = sessionIntent(session, { type: "cancel", sessionId: scope.sessionId, runId });
     setLocalError(null);
-    void (async () => {
-      if (mounted.current) setStopBusy(true);
-      try {
-        if (queue.supported) await queue.pause().catch(() => {});
-        await onCommand(intent);
-      } finally {
-        stopping.current = false;
-        if (mounted.current) setStopBusy(false);
-      }
-    })().catch((cause: unknown) => {
-      // The run may still be going: show why Stop failed instead of dropping it.
+    haptic.tap();
+    // Cancel goes out first and alone on its command path; pausing durable follow-ups runs beside it,
+    // best effort, so a slow queue round-trip never delays Stop and a pause failure never hides it.
+    if (queue.supported) void queue.pause().catch(() => {});
+    void onCommand(intent).catch((cause: unknown) => {
+      // The run may still be going: show why Stop failed. Stop is pressable again at once.
       if (mounted.current) setLocalError(cause);
     });
   };
@@ -694,7 +738,7 @@ export function SessionComposer({
       : running
         ? {
             draft: copy(
-              "Agent çalışırken kullanılamaz",
+              "Ajan çalışırken kullanılamaz",
               "Not available while the agent is running",
             ),
           }
@@ -715,6 +759,18 @@ export function SessionComposer({
     setDraftDetailsOpen(true);
   };
   const noteErrorMessage = noteError ? (composerDeliveryError(noteError, copy) ?? noteError.message) : undefined;
+  const trailing = composerTrailingAction({ canStop, hasContent, mode, alternate });
+  const stopButton = (
+    <ChatCircleAction
+      label={stopping ? copy("Durduruluyor", "Stopping") : copy("Durdur", "Stop")}
+      danger
+      busy={stopping}
+      disabled={stopBlocked ?? blocked}
+      onPress={stop}
+    >
+      <Square size={13} strokeWidth={0} fill={colors.primaryText} color={colors.primaryText} />
+    </ChatCircleAction>
+  );
   const draftDetails = hasPrefix ? (
     <View style={{ gap: space.xs }}>
       {value.noteCard ? (
@@ -744,6 +800,12 @@ export function SessionComposer({
   return (
     <ComposerActionsProvider>
       <View style={{ gap: space.xs }}>
+        {hasParentBar ? (
+          // Each form keeps its own measurement, so the compact line never feeds the full decision.
+          <View onLayout={shortFrame ? measureCompactParentBar : measureParentBar}>
+            <SessionParentBar session={session} machineId={scope.machineId} compact={shortFrame} />
+          </View>
+        ) : null}
         <SessionAgents session={session} scope={scope} disabled={blocked} onCommand={onCommand}>
           {(controls) => (
             <View
@@ -784,6 +846,11 @@ export function SessionComposer({
               onRetry={() => { void suggestions.catalog.refetch(); }}
               onClose={suggestions.close}
             />
+          </View>
+        ) : null}
+        {dictation.error ? (
+          <View onLayout={measureDictationNotice}>
+            <ComposerDictationNotice dictation={dictation} />
           </View>
         ) : null}
         <ChatComposer
@@ -890,45 +957,29 @@ export function SessionComposer({
             submitBehavior: "newline",
             maxLength: 256_000,
             placeholder: copy("Mesaj", "Message"),
-            style: { maxHeight: maximumInputHeight },
+            style: { maxHeight: fieldMaximum },
           }}
           secondarySubmit={<ComposerDictationButton dictation={dictation} />}
+          actionRow={dictation.phase !== "idle" ? (
+            <ComposerRecordingRow dictation={dictation} extra={trailing.kind === "stop" ? stopButton : undefined} />
+          ) : undefined}
           submit={
-            <>
-              {canStop ? (
-                <ChatCircleAction
-                  label={copy("Durdur", "Stop")}
-                  danger
-                  busy={stopBusy}
-                  disabled={blocked}
-                  onPress={stop}
-                >
-                  <Square
-                    size={13}
-                    strokeWidth={0}
-                    fill={colors.primaryText}
-                    color={colors.primaryText}
-                  />
-                </ChatCircleAction>
-              ) : null}
-              {/* One slot: Stop while running with an empty draft; Send otherwise. A draft typed
-                  during a run keeps Stop direct beside Send (steer/queue on long-press). */}
-              {canStop && !hasContent ? null : (
-                <ComposerSendButton
-                  mode={mode}
-                  alternate={alternate}
-                  disabled={sendDisabled}
-                  busy={uploading || (!ready && !!session && !error)}
-                  onSend={(target) => {
-                    void submit(target);
-                  }}
-                />
-              )}
-            </>
+            // One trailing slot: Send when idle, a single Stop while running with an empty draft,
+            // otherwise the delivery button (steer or queue, the other on long-press).
+            trailing.kind === "stop" ? stopButton : (
+              <ComposerSendButton
+                mode={trailing.mode}
+                alternate={trailing.alternate}
+                disabled={sendDisabled}
+                busy={uploading || (!ready && !!session && !error)}
+                onSend={(target) => {
+                  void submit(target).catch(setLocalError);
+                }}
+              />
+            )
           }
         />
         <View onLayout={measureFooter} style={{ gap: space.xs }}>
-          <ComposerDictationFeedback dictation={dictation} />
           <ComposerNotices
             error={error || localError}
             noteError={!showInlinePrefix && !draftDetailsOpen ? noteError : undefined}

@@ -11,7 +11,11 @@ vi.mock("@/ui/primitives", () => ({ Disclosure: ({ children }: PropsWithChildren
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/error-message", () => ({ friendlyProviderFailure: (text: string) => text }));
 vi.mock("@/ui/tokens", () => ({ space: {} }));
-import { SystemFailureCard, failureHeadline } from "./system-failure-card";
+vi.mock("lucide-react-native/icons/square", () => ({ default: () => h("i", { "data-icon": "square" }) }));
+vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { muted: "#888" } }) }));
+vi.mock("@/ui/chat-styles", () => ({ useChatTextStyles: () => ({ metadata: {} }) }));
+vi.mock("@/state/chat-appearance", () => ({ useChatAppearance: () => "default" }));
+import { SystemFailureCard, SystemNoticeRow, failureHeadline, isCompactSystemNotice, systemNoticeLine } from "./system-failure-card";
 
 const render = (text: string, repeat?: number) => renderToStaticMarkup(h(SystemFailureCard, { text, repeat }));
 
@@ -33,5 +37,36 @@ describe("system failure status line", () => {
     expect(html).toContain(">Provider crashed</output>");
     expect(html).toContain("<details>");
     expect(failureHeadline("\n  First\nSecond")).toBe("First");
+  });
+});
+
+describe("compact system notices", () => {
+  const copy = (_tr: string, en: string) => en;
+  it("speaks product words for Stop and interruption markers, never the Host's English", () => {
+    expect(systemNoticeLine({ role: "system", notice: "interrupt", text: "Stopped by you." }, copy)).toEqual({ tone: "neutral", label: "You stopped" });
+    expect(systemNoticeLine({ role: "system", notice: "interrupt", text: "Turn interrupted when bycoda quit." }, copy).label).toBe("This turn was cut off.");
+  });
+  it("shows an unreceipted owner Stop as one muted square line, not a notice card", () => {
+    const html = renderToStaticMarkup(h(SystemNoticeRow, { block: { role: "system", text: "Stopped by you." } }));
+    expect(html).toContain('data-icon="square"');
+    expect(html).toContain("You stopped");
+    expect(html).not.toContain("Stopped by you.");
+    expect(html).not.toContain("<output");
+  });
+  it("shows an info notice as its first line with the rest behind Details", () => {
+    expect(systemNoticeLine({ role: "system", notice: "info", text: "Sign in to GitHub MCP\nOpen settings" }, copy)).toEqual({
+      tone: "info",
+      label: "Sign in to GitHub MCP",
+      detail: "Sign in to GitHub MCP\nOpen settings",
+    });
+    const html = renderToStaticMarkup(h(SystemNoticeRow, { block: { role: "system", notice: "info", text: "One line" } }));
+    expect(html).toContain('data-tone="info"');
+    expect(html).not.toContain("<details>");
+  });
+  it("leaves errors, records and structured notices to their own presentation", () => {
+    expect(isCompactSystemNotice({ role: "system", notice: "info", text: "x" })).toBe(true);
+    expect(isCompactSystemNotice({ role: "system", notice: "error", text: "x" })).toBe(false);
+    expect(isCompactSystemNotice({ role: "system", notice: "info", text: "x", shell: { command: "ls" } })).toBe(false);
+    expect(isCompactSystemNotice({ role: "tool", notice: "interrupt", text: "x" })).toBe(false);
   });
 });

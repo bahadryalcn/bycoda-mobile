@@ -1,52 +1,69 @@
 import { useInboxLocalScope } from "./inbox-local-scope";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { View } from "react-native";
 import type {
   RemoteInboxItem,
-  RemoteInboxReviewComment,
   RemoteInboxReview,
+  RemoteInboxReviewComment,
 } from "../../../../src/features/inbox/model/remoteInbox";
 import { useActiveMachine } from "@/state/machines";
 import {
   Body,
   Button,
-  Field,
   Notice,
+  NoResults,
   QueryState,
-  Row,
+  Screen,
   ScreenList,
-  SelectField,
+  SearchField,
   SectionHeader,
-  Sheet,
-  Stack,
   StateView,
   ToggleField,
+  showToast,
+  useCollapsibleSearch,
 } from "@/ui/primitives";
 import { isTestFile } from "../pull-requests/model/list";
 import { useCopy } from "@/ui/copy";
 import { confirmAction } from "@/ui/confirm";
+import { fontSize, lineHeight, space } from "@/ui/tokens";
 import { ErrorText } from "../workspace/shared";
-import { useInboxRead } from "./provider-queries";
+import { INBOX_RECORD_CACHE_MS, useInboxRead } from "./provider-queries";
 import { inboxItemInput, isInboxPrivateFailure } from "./provider-model";
 import type { InboxOrigin } from "./provider-protocol";
-import { prReviewLines, reviewedPrSubmission, type PrReviewLine } from "./provider-review-model";
+import { reviewedPrSubmission } from "./provider-review-model";
 import { usePrReviewDelivery } from "./provider-review-delivery";
-import { emptyPrReviewDraft, sameReviewedPrDraft } from "./provider-review-draft";
-import { ProviderPrReviewPreflight } from "./provider-pr-review-preflight";
-import { PrDiffLine, PrReviewSummary } from "./provider-pr-review-summary";
-import { prReviewDecisionLabel } from "./provider-labels";
+import { emptyPrReviewDraft } from "./provider-review-draft";
+import { filterPrDiffFiles, prDiffFiles, type PrDiffAnchor, type PrDiffFile } from "./provider-pr-diff-model";
+import { DiffStats, PrFileRow, PrFilesSkeleton, PrReviewHeader } from "./provider-pr-review-summary";
+import { PrReviewSubmitSheet } from "./provider-pr-review-submit";
+import { useSheetGuard } from "@/ui/sheet-guard";
+import { inboxReviewFileHref } from "./inbox-record-route";
+import { publishPrReviewSession, prReviewSessionKey, type PrReviewSession } from "./provider-pr-review-session";
+import { pushOnce } from "@/ui/navigation";
 
+const MAX_COMMENTS = 50;
+const ALL_DECISIONS = ["COMMENT", "APPROVE", "REQUEST_CHANGES"] as const;
+
+/**
+ * Files and review for one GitHub pull request, a pushed page: changed files first, each opening
+ * its own pushed diff page where a tap on a line adds a pending comment; one Submit review sheet
+ * sends the decision, summary and every pending comment together against the reviewed head. The
+ * draft is kept per record on this phone, so leaving the page by Back keeps it.
+ */
 export function ProviderPrReview({
   item: suppliedItem,
   origin,
   canRead,
   canWrite,
-  onClose,
+  onSubmitted,
 }: {
   item: RemoteInboxItem;
   origin: InboxOrigin;
   canRead: boolean;
   canWrite: boolean;
-  onClose: () => void;
+  onClose?: () => void;
+  /** The review reached the provider: the record's conversation, decision and reviewers refresh. */
+  onSubmitted?: () => void;
 }) {
   const inboxScope = useInboxLocalScope();
   const copy = useCopy();
@@ -55,12 +72,10 @@ export function ProviderPrReview({
   const [item] = useState(suppliedItem);
   const writeAllowed = useRef(canWrite);
   writeAllowed.current = canWrite;
-  const [preflight, setPreflight] = useState<RemoteInboxReview | null>(null);
-  const reviewOwner = useRef(preflight); reviewOwner.current = preflight;
   const mounted = useRef(false);
-  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; reviewOwner.current = null; }; }, []);
-  const [editor, setEditor] = useState<number | null>(null);
-  const [selectedPath, setSelectedPath] = useState("");
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const [submitting, setSubmitting] = useState(false);
+  const [query, setQuery] = useState("");
   const [hideTests, setHideTests] = useState(false);
   const supported =
     item.kind === "pr" &&
@@ -71,13 +86,19 @@ export function ProviderPrReview({
   const readAllowed = supported && canRead && originCurrent;
   const readAccess = useRef(readAllowed); readAccess.current = readAllowed;
   const input = inboxItemInput(item, opening.projectId);
-  const query = useInboxRead({ action: "review-context", input }, readAllowed);
-  const privateFailure = isInboxPrivateFailure(query.error);
+  // Same cache entry as the detail screen's head read, so a reopened review shows its files at once.
+  const read = useInboxRead({ action: "review-context", input }, readAllowed, { gcTime: INBOX_RECORD_CACHE_MS });
+  const privateFailure = isInboxPrivateFailure(read.error);
   const contentAvailable = readAllowed && !privateFailure;
-  const context = contentAvailable ? query.data : undefined;
-  const delivery = usePrReviewDelivery(opening, item, input);
+  const context = contentAvailable ? read.data : undefined;
+  // A completed review is announced once and its draft retired at once, so reopening the review
+  // starts a new one instead of showing an old "Review completed" with locked comments.
+  const delivery = usePrReviewDelivery(opening, item, input, () => {
+    showToast({ message: copy("İnceleme gönderildi.", "Review submitted.") });
+    onSubmitted?.();
+  });
   const { draft, value, busy, error } = delivery;
-  const stale = !!value.commitId && value.commitId !== context?.commitId;
+  const stale = !!context && !!value.commitId && value.commitId !== context.commitId;
   const locked =
     !contentAvailable ||
     !canWrite ||
@@ -86,55 +107,31 @@ export function ProviderPrReview({
     busy ||
     !!value.pending ||
     !!value.completed;
-  const rows = useMemo(() => {
-    try {
-      const lines = context?.truncated
-        ? context.patch
-            .split("\n")
-            .slice(0, 50_000)
-            .flatMap((line, at) =>
-              Array.from({ length: Math.max(1, Math.ceil(line.length / 4000)) }, (_, part) => ({
-                id: `partial:${at}:${part}`,
-                path: "",
-                text: line.slice(part * 4000, (part + 1) * 4000),
-                kind: "context" as const,
-                side: "RIGHT" as const,
-                line: at + 1,
-                commentable: false,
-              })),
-            )
-        : (context ? prReviewLines(context) : []).map((line) => ({
-            ...line,
-            commentable: true,
-          }));
-      return { lines, error: null };
-    } catch (cause) {
-      return { lines: [] as Array<PrReviewLine & { commentable: boolean }>, error: cause };
-    }
-  }, [context]);
+  const files = useMemo(() => (context ? prDiffFiles(context) : []), [context]);
+  const visibleFiles = filterPrDiffFiles(files, { query, hideTests, isTest: isTestFile });
+  const hiddenTests = hideTests ? files.filter((file) => isTestFile(file.path)).length : 0;
   const current = () => mounted.current && inboxScope.matches(opening);
+  const latest = useRef({ locked, value, context, contentAvailable, busy, stale });
+  latest.current = { locked, value, context, contentAvailable, busy, stale };
   const refreshContext = () => {
-    if (readAccess.current && current()) return query.refetch();
+    if (readAccess.current && current()) return read.refetch();
   };
-  const readyToReview = !locked && !stale && !!context && !query.isFetching && !query.error && !rows.error;
-  const latest = useRef({ locked, readyToReview, value, context, contentAvailable, busy });
-  latest.current = { locked, readyToReview, value, context, contentAvailable, busy };
-  const closePreflight = () => { reviewOwner.current = null; setPreflight(null); };
-  useLayoutEffect(() => {
-    if (preflight && (!readyToReview || !sameReviewedPrDraft(value, preflight))) closePreflight();
-  }, [preflight, readyToReview, value]);
   const patch = (change: Partial<typeof value>) => {
-    if (!latest.current.locked && !reviewOwner.current && current())
-      draft.setValue((latest) => ({ ...(latest ?? emptyPrReviewDraft()), ...change }));
+    if (!latest.current.locked && current())
+      draft.setValue((saved) => ({ ...(saved ?? emptyPrReviewDraft()), ...change }));
   };
+  // A fresh review starts on the head being shown. A head that moves later is never adopted
+  // silently: the person rebinds explicitly, and inline comments on the old head need confirmation.
+  useEffect(() => {
+    if (context && !locked && !value.commitId && current()) patch({ commitId: context.commitId });
+  }, [context?.commitId, locked, value.commitId]);
   const bindHead = () => {
-    if (!context || latest.current.locked || reviewOwner.current || !current()) return;
+    if (!context || latest.current.locked || !current()) return;
     const reviewedValue = value, reviewedHead = context.commitId;
     const apply = () => {
-      if (!current() || latest.current.locked || reviewOwner.current || latest.current.value !== reviewedValue ||
+      if (!current() || latest.current.locked || latest.current.value !== reviewedValue ||
         latest.current.context?.commitId !== reviewedHead) return;
-      patch({ commitId: context!.commitId, comments: [] });
-      setEditor(null);
+      patch({ commitId: reviewedHead, comments: [] });
     };
     if (value.comments.length)
       confirmAction(
@@ -149,260 +146,216 @@ export function ProviderPrReview({
       );
     else apply();
   };
-  const addComment = (line: PrReviewLine) => {
-    if (latest.current.locked || reviewOwner.current || stale || !value.commitId || !current() || value.comments.length >= 50) return;
-    const existing = value.comments.findIndex(
-      (comment) =>
-        comment.path === line.path && comment.side === line.side && comment.line === line.line,
-    );
-    if (existing >= 0) {
-      setEditor(existing);
-      return;
+  const commenting = context?.truncated
+    ? { enabled: false, reason: copy("Fark kısmi olduğu için satır yorumu eklenemez; yalnız özet gönderilebilir.", "The diff is partial, so line comments are unavailable. You can still submit a summary.") }
+    : stale
+      ? { enabled: false, reason: copy("Pull request’e yeni commit geldi. Yorum eklemek için güncel commit’i incele.", "New commits arrived. Review the current head to add comments.") }
+      : !canWrite || !value.commitId || !draft.ready || !!draft.error
+        ? { enabled: false, reason: copy("Bu bağlantı üzerinden inceleme yazılamıyor.", "Writing reviews is not available from this connection.") }
+        : value.pending || value.completed || busy
+          ? { enabled: false, reason: copy("İnceleme gönderildi; yeni yorumlar için yeni bir inceleme hazırla.", "This review was sent. Prepare another review to add comments.") }
+          : value.comments.length >= MAX_COMMENTS
+            ? { enabled: false, reason: copy("Bir incelemede en fazla 50 satır yorumu olabilir.", "A review can hold at most 50 line comments.") }
+            : { enabled: true };
+  const saveComment = (path: string, anchor: PrDiffAnchor, body: string, index?: number) => {
+    const state = latest.current;
+    if (state.locked || state.stale || !state.value.commitId || !current() || !body.trim()) return;
+    const comments = state.value.comments;
+    const existing = index ?? comments.findIndex((comment) => comment.path === path && comment.side === anchor.side && comment.line === anchor.line);
+    if (existing >= 0 && comments[existing]) {
+      patch({ comments: comments.map((comment, at) => at === existing ? { ...comment, body } : comment) });
+    } else if (comments.length < MAX_COMMENTS) {
+      patch({ comments: [...comments, { path, side: anchor.side, line: anchor.line, body }] });
     }
-    patch({
-      comments: [
-        ...value.comments,
-        { path: line.path, side: line.side, line: line.line, body: "" },
-      ],
-    });
-    setEditor(value.comments.length);
   };
-  const send = () => {
-    if (!latest.current.readyToReview || latest.current.value !== value || latest.current.context !== context ||
-      reviewOwner.current || !context || !current()) return;
-    try {
-      const reviewed = reviewedPrSubmission(context, value.event, value.body, value.comments);
-      reviewOwner.current = reviewed; setPreflight(reviewed);
-    } catch { /* Existing validation owns invalid or stale drafts. */ }
+  const removeComment = (index: number) => {
+    if (latest.current.locked || !current()) return;
+    patch({ comments: latest.current.value.comments.filter((_, at) => at !== index) });
   };
-  const confirmPreflight = () => {
-    if (!preflight || reviewOwner.current !== preflight || !current() || !writeAllowed.current ||
-      !latest.current.readyToReview || latest.current.context?.commitId !== preflight.commitId ||
-      !sameReviewedPrDraft(latest.current.value, preflight)) return;
-    reviewOwner.current = null; setPreflight(null);
-    void delivery.submit(preflight);
-  };
-  let valid = false;
+  const open = item.state.toUpperCase() === "OPEN";
+  // GitHub accepts approvals and change requests only on open pull requests.
+  const decisions = open ? ALL_DECISIONS : (["COMMENT"] as const);
+  const event = decisions.includes(value.event as never) ? value.event : "COMMENT";
+  useEffect(() => {
+    if (!locked && value.event !== event && current()) patch({ event });
+  }, [locked, value.event, event]);
+  let reviewed: RemoteInboxReview | null = null;
+  let blockedReason: string | undefined;
   try {
-    if (context && value.commitId === context.commitId) {
-      reviewedPrSubmission(context, value.event, value.body, value.comments);
-      valid = true;
-    }
-  } catch {
-    /* The exact displayed anchors and bounded content gate submission. */
+    if (context && !stale && value.commitId === context.commitId)
+      reviewed = reviewedPrSubmission(context, event, value.body, value.comments);
+  } catch (cause) {
+    // The displayed anchors and bounded content gate submission; say which one beside Submit.
+    const message = cause instanceof Error ? cause.message : "";
+    blockedReason = event !== "APPROVE" && !value.body.trim()
+      ? copy("Bu karar için bir özet yaz.", "Write a summary for this decision.")
+      : message === "Inline comments require a complete diff"
+        ? copy("Fark kısmi olduğu için satır yorumları gönderilemez. Yorumları kaldır veya yalnız özet gönder.", "The diff is partial, so line comments cannot be sent. Remove them or submit a summary only.")
+        : message === "Review comments must target a displayed diff line"
+          ? copy("Bir satır yorumu artık farkla eşleşmiyor. Dosyasında aç, taşı veya sil.", "A line comment no longer matches the diff. Open it in its file to move or delete it.")
+          : message === "Review content is too large"
+            ? copy("İnceleme çok uzun. Özeti veya yorumları kısalt.", "The review is too long. Shorten the summary or comments.")
+            : copy("İnceleme bu haliyle gönderilemez.", "This review cannot be submitted as it is.");
   }
-  const selected = editor === null ? undefined : value.comments[editor];
-  const updateComment = (change: Partial<RemoteInboxReviewComment>) => {
-    if (editor === null || !selected) return;
-    patch({
-      comments: value.comments.map((comment, index) =>
-        index === editor ? { ...comment, ...change } : comment,
-      ),
-    });
+  const canSubmit = !!reviewed && !locked && !read.isFetching && !read.error;
+  const send = () => {
+    if (!canSubmit || !reviewed || !writeAllowed.current || !current() || latest.current.value !== value) return;
+    void delivery.submit(reviewed);
   };
+  useEffect(() => { if (value.completed || value.pending) setSubmitting(false); }, [value.completed, value.pending]);
+  useEffect(() => {
+    if (draft.ready && value.completed && !busy && current()) draft.setValue(emptyPrReviewDraft());
+  }, [draft.ready, value.completed, busy]);
+  useEffect(() => { if (!contentAvailable) setSubmitting(false); }, [contentAvailable]);
+  // A send in flight keeps the page open: Back and the swipe wait for its receipt.
+  useSheetGuard({ pending: busy });
+  // The file page pushed over this one edits the same draft through this session.
+  const sessionKey = prReviewSessionKey(opening, input.item);
+  const session: PrReviewSession | null = contentAvailable ? {
+    file: (path) => files.find((file) => file.path === path), commitId: context?.commitId, comments: value.comments, commenting,
+    save: (path, anchor, body, index) => saveComment(path, anchor, body, index), remove: removeComment,
+  } : null;
+  const published = useRef<PrReviewSession | null>(null);
+  useLayoutEffect(() => {
+    published.current = session;
+    if (session) publishPrReviewSession(sessionKey, session);
+    else publishPrReviewSession(sessionKey, null);
+  });
+  useLayoutEffect(() => () => publishPrReviewSession(sessionKey, null, published.current ?? undefined), [sessionKey]);
+  const openFilePage = (path: string, anchor?: PrDiffAnchor) => {
+    if (current() && latest.current.contentAvailable) pushOnce(inboxReviewFileHref(input.item, opening, path, anchor));
+  };
+  const commentCount = value.comments.length;
+  const footer = !contentAvailable && !value.pending ? undefined : value.pending ? (
+    <Button tone="primary" fullWidth busy={busy} label={copy("İnceleme sonucunu kontrol et", "Check review result")}
+      disabled={!contentAvailable}
+      onPress={() => { if (latest.current.contentAvailable && current()) void delivery.reconcile(); }} />
+  ) : value.completed ? (
+    <Button fullWidth label={copy("Yeni bir inceleme hazırla", "Prepare another review")} disabled={busy}
+      onPress={() => { if (latest.current.contentAvailable && !latest.current.busy && current()) draft.setValue(emptyPrReviewDraft()); }} />
+  ) : (
+    <Button tone="primary" fullWidth
+      label={commentCount ? copy("İncelemeyi gönder ({p0} yorum)", "Submit review ({p0} comments)", { p0: commentCount }) : copy("İncelemeyi gönder", "Submit review")}
+      disabled={!context || locked}
+      onPress={() => { if (latest.current.contentAvailable && current()) setSubmitting(true); }} />
+  );
+  const search = useCollapsibleSearch(
+    <SearchField label={copy("Dosya ara", "Search files")} value={query} onChangeText={setQuery} />,
+    {
+      filters: <ToggleField label={copy("Test dosyalarını gizle", "Hide test files")} value={hideTests} onChange={setHideTests} />,
+      activeFilters: hideTests ? 1 : 0,
+      onResetFilters: () => setHideTests(false),
+    },
+  );
+  const commentsPerFile = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const comment of value.comments) counts.set(comment.path, (counts.get(comment.path) ?? 0) + 1);
+    return counts;
+  }, [value.comments]);
+  const openComment = (comment: RemoteInboxReviewComment) => {
+    setSubmitting(false);
+    openFilePage(comment.path, { side: comment.side, line: comment.line });
+  };
+  const accessState = !originCurrent || !canRead ? (
+    <StateView tone="warning" title={copy("Bağlantı bekleniyor", "Waiting for a connection")}
+      description={copy("İnceleme erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.",
+        "Review access is unavailable. Check the original computer and project connection.")} />
+  ) : !supported ? (
+    <StateView illustration="permission" title={copy("Güncelleme gerekiyor", "Update needed")}
+      description={copy("Pull request incelemesi için bilgisayardaki bycoda’yı güncelle.", "Update bycoda on this computer to review pull requests.")} />
+  ) : null;
   return (
     <>
-    <Sheet
-      visible
-      title={copy("Pull request incelemesi", "Pull request review")}
-      size="full"
-      scroll={false}
-      dirty={!!value.body || !!value.comments.length}
-      onClose={onClose}
-      dismissible={!busy}
-      footer={
-        !value.pending && !value.completed ? <Button
-          tone="primary"
-          fullWidth
-          label={copy("Göndermeden incele", "Review before sending")}
+      <Screen scroll={false} footer={footer}>
+        <ScreenList<PrDiffFile>
+          data={contentAvailable ? visibleFiles : []}
+          keyExtractor={(file) => file.path}
+          header={
+            <View style={{ gap: space.sm }}>
+              {contentAvailable ? <PrReviewHeader item={item} context={context} /> : null}
+              {accessState ?? <QueryState query={{ ...read, data: context, refetch: refreshContext }} loading="none" />}
+              {/* While the submit sheet is open it reports the send failure beside its action; here only once. */}
+              <ErrorText error={contentAvailable ? draft.error || (submitting ? undefined : error) : undefined} />
+              {contentAvailable && draft.error ? (
+                <Button label={copy("Taslağı yeniden yükle", "Retry loading draft")} onPress={() => { void draft.load(); }} />
+              ) : null}
+              {value.pending ? (
+                <Notice tone="warning" message={copy(
+                  "İncelemenin sonucu doğrulanmadı. Yeni inceleme göndermeden önce mevcut isteği kontrol et.",
+                  "The review outcome is unconfirmed. Check the existing request before submitting another review.",
+                )} />
+              ) : null}
+              {value.completed ? <Notice tone="success" message={copy("İnceleme tamamlandı.", "Review completed.")} /> : null}
+              {contentAvailable && stale ? (
+                <Notice tone="warning"
+                  message={value.comments.length
+                    ? copy("Pull request commit’i değişti. Eski satır yorumları korunuyor; göndermeden önce güncel diff’i incele.",
+                      "The pull request head changed. Old inline comments are retained; review the current diff before submitting.")
+                    : copy("Pull request’e yeni commit geldi. Göndermeden önce güncel farkı incele.", "New commits arrived. Review the current diff before submitting.")}
+                  action={!locked ? { label: copy("Güncel commit’i incele", "Review current head"), onPress: bindHead } : undefined} />
+              ) : null}
+              {contentAvailable && context?.truncated ? (
+                <Notice tone="warning" message={copy(
+                  "Diff kısmi. Satır yorumu eklenemez; yalnız özet incelemesi gönderilebilir.",
+                  "The diff is partial. Inline comments are unavailable; you can submit a summary review.",
+                )} />
+              ) : null}
+              {contentAvailable && !accessState ? (
+                <>
+                  <SectionHeader
+                    title={copy("Değişen dosyalar", "Files changed")}
+                    count={context?.files.length}
+                    trailing={context?.files.length ? <View style={{ flexDirection: "row" }}>{search.trigger}{search.filterTrigger}</View> : undefined}
+                  />
+                  {context && context.files.length ? (
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm }}>
+                      <DiffStats additions={context.additions} deletions={context.deletions} />
+                      {hiddenTests ? (
+                        <Body muted style={{ fontSize: fontSize.small, lineHeight: lineHeight.small }}>
+                          {copy("{p0} test dosyası gizli", "{p0} test files hidden", { p0: hiddenTests })}
+                        </Body>
+                      ) : null}
+                    </View>
+                  ) : null}
+                  {search.sheet}
+                </>
+              ) : null}
+            </View>
+          }
+          ListEmptyComponent={!contentAvailable || accessState ? undefined
+            : !context ? (read.error ? undefined : <PrFilesSkeleton />)
+            : !context.files.length ? <StateView size="compact" title={copy("Değişen dosya yok", "No changed files")} />
+            : <NoResults compact searching={!!query.trim()} filtered={hideTests}
+                title={copy("Aramanla eşleşen dosya yok.", "No files match your search.")}
+                filtersTitle={copy("Bu filtrelerle eşleşen dosya yok.", "No files match these filters.")}
+                onClearSearch={() => setQuery("")} onClearFilters={() => setHideTests(false)} />}
+          renderItem={({ item: file }) => (
+            <PrFileRow file={file} comments={commentsPerFile.get(file.path) ?? 0} onPress={() => openFilePage(file.path)} />
+          )}
+        />
+      </Screen>
+      {contentAvailable && submitting && !value.pending && !value.completed ? (
+        <PrReviewSubmitSheet
+          event={event}
+          body={value.body}
+          comments={value.comments}
+          commitId={value.commitId || context?.commitId}
+          decisions={decisions}
+          restriction={open ? undefined : copy("Kapalı pull request’lerde yalnız yorum gönderilebilir.", "Closed pull requests accept comments only.")}
+          editable={!locked}
+          canSubmit={canSubmit}
+          blockedReason={!reviewed && !locked ? blockedReason : undefined}
           busy={busy}
-          disabled={!!preflight || locked || stale || !valid || query.isFetching || !!query.error || !!rows.error}
-          onPress={send}
-        /> : undefined
-      }
-    >
-      <ScreenList<PrReviewLine & { commentable: boolean }>
-        data={contentAvailable ? rows.lines.filter(line => (!selectedPath || line.path === selectedPath) && (!hideTests || !isTestFile(line.path))) : []}
-        keyExtractor={(line) => line.id}
-        header={
-          <Stack>
-            {contentAvailable ? <PrReviewSummary item={item} context={context} hideTests={hideTests} onSelectFile={setSelectedPath} /> : null}
-            {contentAvailable && context ? <>
-              <ToggleField label={copy("Test dosyalarını gizle", "Hide test files")} value={hideTests} onChange={value => { setHideTests(value); if (value && isTestFile(selectedPath)) setSelectedPath(""); }} />
-              <SelectField label={copy("Dosya", "File")} value={selectedPath} onChange={setSelectedPath}
-                options={[{ value: "", label: copy("Tüm dosyalar", "All files") }, ...context.files.filter(file => !hideTests || !isTestFile(file.path)).map(file => ({ value: file.path, label: file.path }))]} />
-              {selectedPath && !rows.lines.some(line => line.path === selectedPath) ? <Body muted>{copy("Bu dosya için metin diff’i yok. Dosya ikili olabilir veya diff kısmi olabilir.", "No text diff for this file. The file may be binary or the diff may be partial.")}</Body> : null}
-            </> : null}
-            {!originCurrent || !canRead ? (
-              <StateView tone="warning" title={copy("Bağlantı bekleniyor", "Waiting for a connection")}
-                description={copy("İnceleme erişimi kullanılamıyor. İlk bilgisayar ve proje bağlantısını kontrol edin.",
-                "Review access is unavailable. Check the original computer and project connection.")} />
-            ) : !supported ? (
-              <StateView
-                illustration="permission"
-                title={copy("Güncelleme gerekiyor", "Update needed")}
-                description={copy(
-                  "Pull request incelemesi için bilgisayardaki bycoda’yı güncelle.",
-                  "Update bycoda on this computer to review pull requests.",
-                )}
-              />
-            ) : (
-              <QueryState query={{ ...query, data: context, refetch: refreshContext }} />
-            )}
-            <ErrorText error={contentAvailable ? draft.error || error || rows.error : undefined} />
-            {contentAvailable && draft.error ? (
-              <Button
-                label={copy("Taslağı yeniden yükle", "Retry loading draft")}
-                onPress={() => {
-                  void draft.load();
-                }}
-              />
-            ) : null}
-            {value.pending ? (
-              <>
-                <Notice
-                  message={copy(
-                    "İncelemenin sonucu doğrulanmadı. Yeni inceleme göndermeden önce mevcut isteği kontrol et.",
-                    "The review outcome is unconfirmed. Check the existing request before submitting another review.",
-                  )}
-                />
-                <Button
-                  label={copy("İnceleme sonucunu kontrol et", "Check review result")}
-                  busy={busy}
-                  disabled={!contentAvailable}
-                  onPress={() => {
-                    if (latest.current.contentAvailable && current()) void delivery.reconcile();
-                  }}
-                />
-              </>
-            ) : null}
-            {value.completed ? (
-              <>
-                <Notice
-                  tone="success"
-                  message={copy("İnceleme tamamlandı.", "Review completed.")}
-                />
-                <Button
-                  label={copy("Yeni bir inceleme hazırla", "Prepare another review")}
-                  disabled={!contentAvailable || busy}
-                  onPress={() => {
-                    if (latest.current.contentAvailable && !latest.current.busy && current()) draft.setValue(emptyPrReviewDraft());
-                  }}
-                />
-              </>
-            ) : null}
-            {contentAvailable ? <>
-            {context ? (
-              <>
-                {context.truncated ? (
-                  <Notice
-                    tone="warning"
-                    message={copy(
-                      "Diff kısmi. Satır yorumu eklenemez; yalnız özet incelemesi gönderilebilir.",
-                      "The diff is partial. Inline comments are unavailable; you can submit a summary review.",
-                    )}
-                  />
-                ) : null}
-                {stale ? (
-                  <Notice
-                    tone="warning"
-                    message={copy(
-                      "Pull request commit’i değişti. Eski satır yorumları korunuyor; göndermeden önce güncel diff’i incele.",
-                      "The pull request head changed. Old inline comments are retained; review the current diff before submitting.",
-                    )}
-                  />
-                ) : null}
-                <Row>
-                  <Button busy={query.isFetching}
-                    tone="quiet"
-                    label={copy("Diff’i yenile", "Refresh diff")}
-                    disabled={!!preflight || busy || !!value.pending || !current()}
-                    onPress={() => {
-                      void refreshContext();
-                    }}
-                  />
-                  <Button
-                    tone="quiet"
-                    label={copy("Güncel commit’i incele", "Review current head")}
-                    disabled={!!preflight || locked || query.isFetching || !!query.error || value.commitId === context.commitId}
-                    onPress={bindHead}
-                  />
-                </Row>
-              </>
-            ) : null}
-            <SelectField
-              label={copy("İnceleme kararı", "Review decision")}
-              value={value.event}
-              disabled={!!preflight || locked}
-              onChange={(event) => patch({ event: event as typeof value.event })}
-              options={(["COMMENT", "APPROVE", "REQUEST_CHANGES"] as const).map((event) => ({
-                value: event,
-                label: prReviewDecisionLabel(event, copy),
-              }))}
-            />
-            <Field
-              label={copy("İnceleme özeti", "Review summary")}
-              value={value.body}
-              multiline
-              maxLength={30_000}
-              editable={!preflight && !locked}
-              onChangeText={(body) => patch({ body })}
-            />
-            {value.comments.map((comment, index) => (
-              <Button
-                key={`${comment.path}:${comment.side}:${comment.line}:${index}`}
-                tone="quiet"
-                label={`${comment.path}:${comment.side}:${comment.line}`}
-                disabled={!!preflight || locked}
-                onPress={() => setEditor(index)}
-              />
-            ))}
-            {selected ? (
-              <Stack>
-                <Body mono>{`${selected.path}:${selected.side}:${selected.line}`}</Body>
-                <Field
-                  label={copy("Satır yorumu", "Inline comment")}
-                  value={selected.body}
-                  maxLength={30_000}
-                  multiline
-                  editable={!preflight && !locked}
-                  onChangeText={(body) => updateComment({ body })}
-                />
-                <Button
-                  tone="quiet"
-                  label={copy("Satır yorumunu kaldır", "Remove inline comment")}
-                  disabled={!!preflight || locked}
-                  onPress={() => {
-                    patch({ comments: value.comments.filter((_, index) => index !== editor) });
-                    setEditor(null);
-                  }}
-                />
-              </Stack>
-            ) : null}
-            {context ? <SectionHeader title={copy("Fark", "Diff")} /> : null}
-            </> : null}
-          </Stack>
-        }
-        renderItem={({ item: line }) => (
-          <Stack>
-            {line.commentable ? (
-              <Body mono>{`${line.path} · ${line.side}:${line.line}`}</Body>
-            ) : null}
-            <PrDiffLine line={line} />
-            {line.commentable ? (
-              <Button
-                tone="quiet"
-                label={copy("Bu satıra yorum ekle", "Comment on this line")}
-                disabled={!!preflight || locked || stale || !value.commitId || value.comments.length >= 50}
-                onPress={() => addComment(line)}
-              />
-            ) : null}
-          </Stack>
-        )}
-      />
-    </Sheet>
-    {preflight && readyToReview ? <ProviderPrReviewPreflight item={item} review={preflight}
-      onClose={() => { if (reviewOwner.current === preflight) closePreflight(); }} onConfirm={confirmPreflight} /> : null}
+          error={error}
+          stale={stale}
+          onChangeEvent={(next) => patch({ event: next })}
+          onChangeBody={(body) => patch({ body })}
+          onOpenComment={openComment}
+          onRebind={bindHead}
+          onSubmit={send}
+          onClose={() => setSubmitting(false)}
+        />
+      ) : null}
     </>
   );
 }

@@ -59,7 +59,7 @@ export function ToggleField({ label, labelLines, detail, help, value, onChange, 
           {detail ? <Body muted style={uiStyles.caption}>{detail}</Body> : null}
         </View>
       </Pressable>
-      {help ? <InfoHint text={help} /> : null}
+      {help ? <InfoHint text={help} subject={label} /> : null}
       {/* The track accepts touch, but the label is the row's only accessible switch. */}
       <Pressable
         accessible={false}
@@ -91,11 +91,12 @@ export function Input({
   onBlur,
   ref,
   suffix,
+  trailing,
   fill,
   ...props
-}: InputProps & { suffix?: string }) {
+}: InputProps & { suffix?: string; trailing?: ReactNode }) {
   const { colors, semanticColors, uiStyles } = useMobileTheme();
-  const Control = suffix ? InputGroup.Input : PanelInput;
+  const Control = suffix || trailing ? InputGroup.Input : PanelInput;
   const [focused, setFocused] = useState(false);
   const semantic = error
     ? semanticColors.danger
@@ -119,7 +120,7 @@ export function Input({
         maxWidth,
       }}
     >
-      <FieldGroup suffix={suffix} disabled={props.editable === false}>
+      <FieldGroup suffix={suffix} trailing={trailing} disabled={props.editable === false}>
       <Control
         {...props}
         ref={ref as ComponentProps<typeof PanelInput>["ref"]}
@@ -161,16 +162,21 @@ export function Input({
   );
 }
 
-/** A trailing unit uses PanelUI InputGroup so the text never runs under it. */
-function FieldGroup({ suffix, disabled, children }: { suffix?: string; disabled: boolean; children: ReactNode }) {
+/**
+ * A trailing unit or an interactive control (an address bar's Go button) uses PanelUI InputGroup
+ * so the text never runs under it.
+ */
+function FieldGroup({ suffix, trailing, disabled, children }: { suffix?: string; trailing?: ReactNode; disabled: boolean; children: ReactNode }) {
   const { colors, uiStyles } = useMobileTheme();
-  if (!suffix) return <>{children}</>;
+  if (!suffix && !trailing) return <>{children}</>;
   return (
     <InputGroup isDisabled={disabled}>
       {children}
-      <InputGroup.Suffix isDecorative>
-        <Body style={[uiStyles.caption, { color: colors.muted }]}>{suffix}</Body>
-      </InputGroup.Suffix>
+      {trailing ? <InputGroup.Suffix>{trailing}</InputGroup.Suffix> : (
+        <InputGroup.Suffix isDecorative>
+          <Body style={[uiStyles.caption, { color: colors.muted }]}>{suffix}</Body>
+        </InputGroup.Suffix>
+      )}
     </InputGroup>
   );
 }

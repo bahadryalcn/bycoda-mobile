@@ -51,12 +51,12 @@ export function SessionRowCopyMenu({ actions, sessionId, projectId, title, link,
   const copying = linkCopy.inFlight || idCopy.inFlight || textCopy.inFlight || markdownCopy.inFlight;
   const error = linkCopy.error || idCopy.error || textCopy.error || markdownCopy.error;
   const failure = error?.message === "Conversation exceeds the copy limit."
-    ? copy("Konuşma kopyalama sınırını aşıyor.", "Conversation exceeds the copy limit.")
+    ? copy("Oturum kopyalama sınırını aşıyor.", "Session exceeds the copy limit.")
     : error?.message === "Conversation text is incomplete."
-      ? copy("Konuşma metni eksik. Yenileyip tekrar deneyin.", "Conversation text is incomplete. Refresh and try again.")
+      ? copy("Oturum metni eksik. Yenileyip tekrar dene.", "Session text is incomplete. Refresh and try again.")
       : error?.message === "No conversation text to copy."
-        ? copy("Kopyalanacak konuşma metni yok.", "No conversation text to copy.")
-        : copy("Kopyalanamadı. Yeniden deneyin.", "Could not copy. Try again.");
+        ? copy("Kopyalanacak oturum metni yok.", "No session text to copy.")
+        : copy("Kopyalanamadı. Yeniden dene.", "Could not copy. Try again.");
   const row = (key: string, label: string, icon: SessionSheetAction["icon"], feedback: typeof idCopy, disabled = false): SessionSheetAction => ({
     key, label: feedback.copied ? copy("Kopyalandı", "Copied") : label, icon,
     group: "copy",
@@ -80,13 +80,13 @@ export function SessionRowCopyMenu({ actions, sessionId, projectId, title, link,
     row("copy-link", copy("Oturum bağlantısını kopyala", "Copy session link"), <Link />, linkCopy, !link),
     row("copy-markdown", copy("Markdown referansını kopyala", "Copy Markdown reference"), <FileText />, markdownCopy, !link),
     row("copy-id", copy("Oturum kimliğini kopyala", "Copy session ID"), <Copy />, idCopy),
-    row("copy-conversation", copy("Konuşmayı metin olarak kopyala", "Copy conversation as text"), <MessagesSquare />, textCopy, !client),
+    row("copy-conversation", copy("Oturumu metin olarak kopyala", "Copy session as text"), <MessagesSquare />, textCopy, !client),
   ];
   // Desktop session menu order; the copy group sits between editing and managing actions.
   const order = ["settle", "pin", "rename", "unread", "snooze", "move", "copy-link", "copy-markdown", "copy-id", "copy-conversation", "share", "details", "archive", "stop", "delete"];
   return <>
     <SessionActionList actions={[...actions, ...copies].sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key)).map(action => ({ ...action, disabled: action.disabled || copying || sharing }))} />
-    <ErrorText error={shareError} message={copy("Paylaşılamadı. Yeniden deneyin.", "Could not share. Try again.")} />
+    <ErrorText error={shareError} message={copy("Paylaşılamadı. Yeniden dene.", "Could not share. Try again.")} />
     <ErrorText error={error} message={failure} />
   </>;
 }

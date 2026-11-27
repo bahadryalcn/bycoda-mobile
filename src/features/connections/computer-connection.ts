@@ -69,6 +69,8 @@ export async function connectComputer(
     },
     credential,
     input.proofSeed,
+    // Editing a saved computer changes its connection only; it does not switch the active computer.
+    input.editingId ? { activate: false } : undefined,
   );
   check();
 }

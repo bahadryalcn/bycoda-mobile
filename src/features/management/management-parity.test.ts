@@ -9,6 +9,7 @@ import { GoalCard } from "./goals/goal-card";
 import { SchedulePreview } from "./automations/schedule-preview";
 import { TaskCard } from "./tasks/task-card";
 import { ReviewNotes } from "./tasks/review-notes";
+import { RemoteHostError } from "@/remote/host-error";
 
 const state = vi.hoisted(() => ({
   machine: { id: "pc", name: "Harbor computer", capabilities: ["goals.settings", "automations"] },
@@ -161,7 +162,7 @@ it("names the reviewed epic and only cancels after confirmation", async () => {
   await act(async () => cancel.onPress());
   const sheet = container.querySelector('[role="dialog"][aria-label="Cancel epic"]');
   expect(sheet?.textContent).toContain("Harbor plan · Harbor computer");
-  expect(sheet?.textContent).toContain("The goal and its active tasks will stop");
+  expect(sheet?.textContent).toContain("The epic and its active tasks will stop");
   expect(state.mutation.mutate).not.toHaveBeenCalled();
   const acceptStale = state.reviewSubmit!;
   state.currentConnection = false;
@@ -273,7 +274,7 @@ it("rejects invalid preview payloads and gives an old host an update path", asyn
     await act(async () => render());
     expect(container.textContent).toContain("invalid schedule preview");
   }
-  Object.assign(state.mutation, { isSuccess: false, error: new Error("Unsupported host method") });
+  Object.assign(state.mutation, { isSuccess: false, error: new RemoteHostError("computer", "unsupported", "Unsupported host method") });
   await act(async () => render());
   expect(container.textContent).toContain("Update bycoda");
   expect(container.querySelector("button")!.disabled).toBe(true);
@@ -328,7 +329,8 @@ it("shows the review note counts only in the disclosure heading", async () => {
     { id: "resolved", finding: "Resolved finding", resolvedAt: 1 },
   ] } as Parameters<typeof ReviewNotes>[0]["task"];
   await act(async () => root.render(createElement(ReviewNotes, { task })));
-  expect(container.querySelector("summary")?.textContent).toContain("1 open · 1 resolved");
+  expect(container.querySelector("summary")).toBeNull();
+  expect(container.textContent).toContain("Review notes");
   expect(container.textContent?.match(/1 open · 1 resolved/g)).toHaveLength(1);
   expect(container.textContent).toContain("Open finding");
   expect(container.textContent).not.toContain("Resolved finding");

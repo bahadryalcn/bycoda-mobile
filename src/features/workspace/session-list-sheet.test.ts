@@ -89,7 +89,7 @@ it("reports failed reads when only filtered-out records are cached", () => {
   fixture.error = new Error("summary rejected");
   const view = render();
   expect(view).toContain("Load failed");
-  expect(view).not.toContain("No sessions in the last 7 days");
+  expect(view).not.toContain("No sessions yet.");
 });
 
 it("keeps a pending connection and a changed computer distinct from a true empty list", () => {
@@ -99,7 +99,7 @@ it("keeps a pending connection and a changed computer distinct from a true empty
   expect(render()).toContain("Computer connection changed.");
   fixture.activeId = "computer";
   fixture.readiness = "ready";
-  expect(render()).toContain("No sessions in the last 7 days");
+  expect(render()).toContain("No sessions yet.");
 });
 
 it("keeps the portrait switcher on its reviewed connection until it closes", async () => {

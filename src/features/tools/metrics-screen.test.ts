@@ -2,6 +2,8 @@
 import { act, createElement, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+// Usage limits tick only while visible; the visibility owner reads native app state.
+vi.mock("@/ui/use-owner-visible", () => ({ useOwnerVisible: () => true }));
 vi.mock("../workspace/project-picker", () => ({ ProjectPicker: () => null }));
 vi.mock("@/ui/metric-value", () => ({ MetricValue: ({ children }: import("react").PropsWithChildren) => createElement("strong", null, children) }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
@@ -18,14 +20,17 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 }));
 vi.mock("./usage-charts", () => ({ UsageKpis: () => null, ProviderShare: () => null }));
 vi.mock("@/ui/machine-bar", () => ({ MachinePill: ({ accessory }: { accessory?: import("react").ReactNode }) => createElement("nav", null, accessory) }));
-vi.mock("@/ui/usage-meters", () => ({ RemainingMeter: () => null, AccountMeter: () => null, CostKpi: () => null, DailyBars: () => null }));
-vi.mock("expo-router", () => ({ Stack: { Screen: ({ options }: { options: Record<string, unknown> }) => { fixture.nativeOptions.push(options); return null; } }, useLocalSearchParams: () => ({ tab: "tokens" }), router: { setParams: vi.fn() } }));
+vi.mock("@/ui/hint", () => ({ Hint: ({ children }: { children: unknown }) => children }));
+vi.mock("lucide-react-native/icons/rotate-ccw", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/triangle-alert", () => ({ default: () => null }));
+vi.mock("@/ui/usage-meters", () => ({ RemainingMeter: () => null, AccountMeter: () => null, NamedMeter: ({ name }: { name: string }) => createElement("span", null, name), CostKpi: () => null, DailyBars: () => null }));
+vi.mock("expo-router", () => ({ Stack: { Screen: ({ options }: { options: Record<string, unknown> }) => { fixture.nativeOptions.push(options); return (options.headerRight as (() => import("react").ReactNode) | undefined)?.() ?? null; } }, useLocalSearchParams: () => ({ tab: "tokens" }), router: { setParams: vi.fn() } }));
 vi.mock("@/state/machines", () => {
   const machine = () => ({ id: "computer", endpoint: "https://synthetic.invalid", name: "Computer", environmentId: "env", capabilities: fixture.supported ? ["usage.sessions.read"] : [] });
   return { useActiveMachine: machine, useMachines: { getState: () => ({ activeId: "computer", machines: [machine()] }) } };
 });
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
-vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, space: {}, fontSize: {}, radii: {} }));
+vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, space: {}, fontSize: {}, radii: {}, metrics: { touchTarget: 48 } }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/user-round", () => ({ default: () => null }));
@@ -53,6 +58,7 @@ vi.mock("@/ui/primitives", async () => {
     ActionMenu: ({ actions }: { actions: { key: string; label: string; onPress: () => void }[] }) => createElement("nav", null, actions.map(action => createElement(Button, { key: action.key, label: action.label, onPress: action.onPress }))),
     ToggleField: ({ label, value, onChange }: any) => createElement("button", { onClick: () => onChange(!value) }, label),
     ValueRow: ({ label, value, children }: any) => createElement("p", null, `${label}: ${value}`, children),
+    NavigationRow: ({ label, detail, metadata }: any) => createElement("p", null, label, detail, metadata), StatusLine: ({ label }: any) => createElement("p", null, label),
     Screen: ({ children, actions }: any) => createElement("main", null, actions, children),
     ScreenList: ({ header, footer, actions, data, renderItem }: any) => createElement("main", null, actions, header, ...data.map((item: unknown, i: number) => createElement("div", { key: i }, renderItem({ item }))), footer),
     SegmentedControl: ({ value, onChange, disabled, label, options }: any) => options.length === 2 ? createElement("button", { disabled, "aria-label": label, onClick: () => onChange(value === "1" ? "7" : "1") }, "Change range") : null, Card: ({ children }: any) => children, SectionHeader: () => null,
@@ -79,7 +85,8 @@ afterEach(async () => { await act(async () => root.unmount()); container.remove(
 it("owns exactly one visible usage refresh action and preserves UTC window, range and cursor semantics", async () => {
   await render(createElement(UsageScreen, { project }));
   expect([...container.querySelectorAll("button")].filter((button) => button.textContent === "Refresh")).toHaveLength(1);
-  expect(fixture.nativeOptions.every((options) => options.headerRight === undefined)).toBe(true);
+  // The owner pins usage refresh beside the native title instead of the scrolling heading row.
+  expect(fixture.nativeOptions.some((options) => typeof options.headerRight === "function")).toBe(true);
   expect(fixture.params).toMatchObject({ projectId: "project", limit: 50, untilMs: Date.now(), sinceMs: Date.now() - 86400000 });
   await click("Next page"); expect(fixture.params.cursor).toBe("page-two");
   await click("Change range"); expect(fixture.params.cursor).toBeUndefined(); expect(fixture.params.sinceMs).toBe(Date.now() - 7 * 86400000);
@@ -103,12 +110,12 @@ it("distinguishes successful empty diagnostics from loading and cached failure, 
 });
 it("keeps missing readings distinct from zero and reveals only fixed diagnostic fields", async () => {
   await render(createElement(UsageValues, { value: values }));
-  expect(container.textContent).toContain("Input tokens: —"); expect(container.textContent).toContain("Cache read tokens: 0"); expect(container.textContent).not.toContain("Cost: —");
+  expect(container.textContent).not.toContain("Input tokens"); expect(container.textContent).toContain("Cache read tokens: 0"); expect(container.textContent).not.toContain("Cost: —");
   const sample: ResourceSample = { at: Date.now(), host: { totalMemoryBytes: 1024, freeMemoryBytes: 0, logicalCpus: 8, loadAverage: null },
     process: { pid: 9, rssBytes: 1024, heapUsedBytes: 512, externalBytes: 1024 * 1024, cpuPercent: null, uptimeSeconds: 120 } };
   await render(createElement(DiagnosticsDetails, { sample }));
   // Unknown readings are left out instead of shown as a dash; every reading uses the same row.
-  expect(container.textContent).not.toContain("Process CPU"); expect(container.textContent).not.toContain("Load average");
-  expect(container.textContent).toContain("External memory: 1.0 MB"); expect(container.textContent).toContain("Logical CPUs: 8");
+  expect(container.textContent).not.toContain("CPU use"); expect(container.textContent).not.toContain("Load average");
+  expect(container.textContent).not.toContain("External memory"); expect(container.textContent).toContain("App memory: 0.0 MB"); expect(container.textContent).toContain("Logical CPUs: 8");
   expect(container.textContent).toContain("Memory: 0.0 GB / 0.0 GB");
 });

@@ -8,11 +8,11 @@ const english = (_tr: string, en: string) => en;
 
 it("explains the exact desktop conversation guard without suggesting a connection failure", () => {
   const guard = "Terminal lifecycle requires the calling conversation active in its local project workspace.";
-  const recovery = "Open this conversation in its local project in bycoda's main desktop window and keep it selected. Then reopen the terminal on your phone.";
+  const recovery = "Open this session in its local project in bycoda's main desktop window and keep it selected. Then reopen the terminal on your phone.";
   expect(ptyRecoveryMessage(new Error(guard), english)).toBe(recovery);
   expect(ptyRecoveryMessage(guard, english)).toBe(recovery);
   expect(ptyRecoveryMessage(new Error(guard), (tr) => tr)).toBe(
-    "Bu konuşmayı bilgisayarda bycoda'nın ana penceresinde, kendi yerel projesinde açın ve seçili bırakın. Ardından telefonda terminali yeniden açın.",
+    "Bu oturumu bilgisayarda bycoda'nın ana penceresinde, kendi yerel projesinde aç ve seçili bırak. Ardından telefonda terminali yeniden aç.",
   );
   expect(ptyRecoveryMessage(new Error(`${guard} Permission denied.`), english)).toBeUndefined();
   expect(ptyRecoveryMessage(new Error("Conversation workspace is unavailable or locked."), english)).toBeUndefined();

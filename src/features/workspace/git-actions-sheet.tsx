@@ -1,40 +1,37 @@
-import type { ReactNode } from "react";
+import type { ComponentType } from "react";
 import ArrowDownToLine from "lucide-react-native/icons/arrow-down-to-line";
 import ArrowUpFromLine from "lucide-react-native/icons/arrow-up-from-line";
 import Archive from "lucide-react-native/icons/archive";
-import CircleCheck from "lucide-react-native/icons/circle-check";
 import Download from "lucide-react-native/icons/download";
 import GitBranch from "lucide-react-native/icons/git-branch";
 import Link2 from "lucide-react-native/icons/link-2";
 import GitPullRequest from "lucide-react-native/icons/git-pull-request";
 import History from "lucide-react-native/icons/history";
-import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import Settings2 from "lucide-react-native/icons/settings-2";
-import { Body, NavigationGroup, NavigationRow, Sheet, Stack } from "@/ui/primitives";
-import { useLocale } from "@/i18n";
+import { NavigationGroup, NavigationRow, RowIcon, Sheet } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
-import { useMobileTheme } from "@/ui/theme";
 import type { GitDiffIndex } from "./wire";
 import { gitSheetActions, type GitSheetKey } from "./git-actions-model";
-import { gitFileCount } from "./git-status";
 
 export type { GitSheetKey } from "./git-actions-model";
 
-const icons = (color: string): Record<GitSheetKey, ReactNode> => ({
-  commit: <CircleCheck size={20} color={color} />,
-  push: <ArrowUpFromLine size={20} color={color} />,
-  pull: <ArrowDownToLine size={20} color={color} />,
-  fetch: <Download size={20} color={color} />,
-  branches: <GitBranch size={20} color={color} />,
-  history: <History size={20} color={color} />,
-  stashes: <Archive size={20} color={color} />,
-  management: <Settings2 size={20} color={color} />,
-  createPr: <GitPullRequest size={20} color={color} />,
-  linkPr: <Link2 size={20} color={color} />,
-  refresh: <RefreshCw size={20} color={color} />,
-});
+const glyphs: Record<GitSheetKey, ComponentType<{ size?: number; strokeWidth?: number; color?: string }>> = {
+  push: ArrowUpFromLine,
+  pull: ArrowDownToLine,
+  fetch: Download,
+  branches: GitBranch,
+  history: History,
+  stashes: Archive,
+  management: Settings2,
+  createPr: GitPullRequest,
+  linkPr: Link2,
+};
 
-/** The branch row opens this one sheet instead of a loose Commit button, spinner and overflow menu. */
+/**
+ * The branch row opens this one sheet of Git commands and destinations. The branch and change
+ * count are already on the card that opened it, commit is the page's commit box and refresh is
+ * pull-to-refresh, so none of them repeat here.
+ */
 export function GitActionsSheet({
   visible,
   index,
@@ -53,18 +50,13 @@ export function GitActionsSheet({
   onClose: () => void;
 }) {
   const copy = useCopy();
-  const { colors } = useMobileTheme();
-  const glyphs = icons(colors.text);
-  const numbers = new Intl.NumberFormat(useLocale());
-  const additions = index.additions ? ` · +${numbers.format(index.additions)}` : "";
-  const deletions = index.deletions ? ` · −${numbers.format(index.deletions)}` : "";
   const actions = gitSheetActions(index, { busy, canRunWorkspace, linkPr }, copy);
   const groups: readonly (readonly GitSheetKey[])[] = [
-    ["commit", "push", "pull", "fetch"],
+    ["push", "pull", "fetch"],
     ["branches", "history", "stashes", "management"],
-    ["createPr", "linkPr", "refresh"],
+    ["createPr", "linkPr"],
   ];
-  const destinations: readonly GitSheetKey[] = ["commit", "branches", "history", "stashes", "management", "createPr", "linkPr"];
+  const destinations: readonly GitSheetKey[] = ["branches", "history", "stashes", "management", "createPr", "linkPr"];
   return (
     <Sheet
       visible={visible}
@@ -72,10 +64,6 @@ export function GitActionsSheet({
       onClose={onClose}
       title={copy("Git işlemleri", "Git actions")}
     >
-      <Stack>
-        <Body selectable style={{ fontWeight: "600" }}>{index.branch || "Git"}</Body>
-        {index.files.length > 0 ? <Body muted>{gitFileCount(index.files.length, copy, numbers)}{additions}{deletions}</Body> : null}
-      </Stack>
       {groups.map((group) => (
         <NavigationGroup key={group[0]}>
           {actions.filter((action) => group.includes(action.key)).map((action) => (
@@ -84,7 +72,7 @@ export function GitActionsSheet({
             label={action.label}
             detail={action.detail}
             detailLines={2}
-            icon={glyphs[action.key]}
+            icon={<RowIcon glyph={glyphs[action.key]} />}
             intent={destinations.includes(action.key) ? "navigate" : "command"}
             disabled={action.disabled}
             onPress={() => {

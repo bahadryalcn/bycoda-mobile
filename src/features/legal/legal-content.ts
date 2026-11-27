@@ -9,7 +9,7 @@ export type LegalSection = {
 };
 
 export const legalUpdatedDate: LegalText = ["14 Kasım 2026", "14 November 2026"];
-export const privacyUpdatedDate: LegalText = ["25 Kasım 2026", "25 November 2026"];
+export const privacyUpdatedDate: LegalText = ["26 Kasım 2026", "26 November 2026"];
 export const supportEmail = "info@bycoda.codes";
 export const privacyPolicyUrl =
   "https://github.com/bahadryalcn/bycoda/blob/main/docs/guides/privacy-policy.md";
@@ -111,8 +111,8 @@ export const legalSections: Record<LegalDocumentId, readonly LegalSection[]> = {
       title: ["İzinler ve uygulama kilidi", "Permissions & app lock"],
       paragraphs: [
         [
-          "Mikrofon yalnızca sesle yazmayı veya sesli görüşmeyi başlatmayı seçtiğinde açılır. Ses, yerel olarak yazıya çevrilmek üzere bağlı Host’una gönderilir. Sesle yazma metni taslağa ekler; sesli görüşme ise tanınan metni sabit Room konuşmasına ve sağlayıcısına otomatik gönderir, yanıtları seslendirir. Android’de başlatılmış bir görüşme uygulama kilidi kapalıyken arka planda sürebilir; bildirim ve resim içinde resim kontrolleri kullanılabilir. Durdurma, cihazın veya uygulamanın kilitlenmesi ya da erişimin geri çekilmesi görüşmeyi bitirir.",
-          "Microphone access starts only when you choose dictation or a voice call. Audio is sent to your connected Host for local transcription. Dictation adds text to a draft; a voice call automatically sends recognized text to its fixed Room conversation and provider and reads replies aloud. On Android, a started call can continue in the background with app lock off, with notification and picture-in-picture controls. Stop, device/app lock or revoked access ends the call.",
+          "Mikrofon yalnızca sesle yazmayı veya sesli görüşmeyi başlatmayı seçtiğinde açılır. Varsayılan olarak ses, yerel olarak yazıya çevrilmek üzere bağlı Host’una gönderilir; orada OpenAI, Grok veya OpenRouter seçersen Host sesi o sağlayıcıya iletir. Yazıya çeviren için Bu telefon (cihaz içi) seçersen sesle yazma telefonun konuşma tanıma özelliğiyle çevrilir: destekleniyorsa telefonda, değilse kendi koşulları altında işletim sisteminin konuşma servisi (ör. Apple veya Google) tarafından. Sesli görüşmeler her zaman Host’u kullanır. bycoda telefonda sesle yazma sesini kaydetmez. Sesle yazma metni taslağa ekler; sesli görüşme ise tanınan metni sabit Room konuşmasına ve sağlayıcısına otomatik gönderir, yanıtları seslendirir. Android’de başlatılmış bir görüşme uygulama kilidi kapalıyken arka planda sürebilir; bildirim ve resim içinde resim kontrolleri kullanılabilir. Durdurma, cihazın veya uygulamanın kilitlenmesi ya da erişimin geri çekilmesi görüşmeyi bitirir.",
+          "Microphone access starts only when you choose dictation or a voice call. By default, audio is sent to your connected Host for local transcription; if you choose OpenAI, Grok or OpenRouter there, the Host forwards it to that provider. If you choose This phone (on-device) under Transcribed by, dictation is recognized by the phone’s speech recognition: on the phone when supported, otherwise by the operating system’s speech service (for example Apple or Google) under its own terms. Voice calls always use the Host. bycoda does not save phone dictation audio. Dictation adds text to a draft; a voice call automatically sends recognized text to its fixed Room conversation and provider and reads replies aloud. On Android, a started call can continue in the background with app lock off, with notification and picture-in-picture controls. Stop, device/app lock or revoked access ends the call.",
         ],
         [
           "Kamera yalnızca bilgisayar eşleştirme QR kodunu taramayı seçtiğinde istenir. QR taraması görüntü veya video kaydetmez ya da geliştiriciye göndermez. Kamera iznini reddedebilir ve elle bağlantı bilgilerini girebilirsin; izni telefon ayarlarından geri alabilirsin.",

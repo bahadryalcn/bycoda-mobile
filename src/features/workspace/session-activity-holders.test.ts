@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { Block } from "@/domain/types";
-import { BROWSER_HOLDER_CAPABILITY, DEVICE_HOLDER_CAPABILITY, browserHostLabel, inferHolders, resolveHolders } from "./session-activity-holders";
+import { BROWSER_HOLDER_CAPABILITY, DEVICE_HOLDER_CAPABILITY, HOLDER_ACTIVE_POLL_MS, HOLDER_IDLE_POLL_MS, browserHostLabel, holderPollInterval, inferHolders, resolveHolders } from "./session-activity-holders";
 
 const user = { id: "u", role: "user", text: "go" } as Block;
 const tool = (id: string, title: string, extra: Partial<Block["tool"]> = {}): Block => ({ id, role: "tool", text: "", tool: { title, status: "completed", ...extra } } as Block);
@@ -37,4 +37,11 @@ it("labels a page by host", () => {
   expect(browserHostLabel("http://localhost:5173/a?b")).toBe("localhost:5173");
   expect(browserHostLabel("nonsense")).toBeUndefined();
   expect(browserHostLabel(undefined)).toBeUndefined();
+});
+
+it("reads holders quickly only while the turn or the last read shows them in use", () => {
+  expect(holderPollInterval("device", [user, tool("e", "Bash")], false)).toBe(HOLDER_IDLE_POLL_MS);
+  expect(holderPollInterval("device", [user, tool("t", "mcp__workspace-tools__device_open")], false)).toBe(HOLDER_ACTIVE_POLL_MS);
+  expect(holderPollInterval("browser", [user, tool("t", "mcp__workspace-tools__device_open")], false)).toBe(HOLDER_IDLE_POLL_MS);
+  expect(holderPollInterval("browser", undefined, true)).toBe(HOLDER_ACTIVE_POLL_MS);
 });

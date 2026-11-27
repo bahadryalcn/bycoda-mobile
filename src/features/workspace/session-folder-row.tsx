@@ -49,7 +49,7 @@ export function SessionFolderRow({ row, projectName, projectId, onToggle }: {
   const actions: MenuAction[] = supported ? [
     { key: "rename", label: copy("Yeniden adlandır", "Rename"), icon: <Pencil />, opens: true, onPress: edit("folderName") },
     { key: "move", label: copy("Klasörü taşı", "Move folder"), icon: <FolderInput />, opens: true, onPress: edit("folderMove") },
-    { key: "sessions", label: copy("Konuşmaları seç", "Choose conversations"), icon: <ListChecks />, opens: true, onPress: edit("folderSessions") },
+    { key: "sessions", label: copy("Oturumları seç", "Choose sessions"), icon: <ListChecks />, opens: true, onPress: edit("folderSessions") },
   ] : [];
   const name = [...(row.ancestors ?? []), row.folder.name].join(" / ");
   return <>

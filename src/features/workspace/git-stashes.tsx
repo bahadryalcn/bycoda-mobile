@@ -4,7 +4,7 @@ import Info from "lucide-react-native/icons/info";
 import Plus from "lucide-react-native/icons/plus";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import Trash2 from "lucide-react-native/icons/trash-2";
-import { useBackHandler } from "panelui-native/hooks/use-back-handler";
+import { useScreenBackHandler } from "@/ui/screen-back-handler";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
@@ -94,7 +94,7 @@ export function GitStashes({ scope, onClose, onBusyChange, registerExit }: GitSt
   useEffect(() => { registerExit(close); return () => registerExit(null); }, [close, registerExit]);
   useProjectSubpage(copy("Stash’ler", "Stashes"), close);
   const focused = useIsFocused();
-  useBackHandler(focused, close);
+  useScreenBackHandler(focused, close);
   const openReview = (operation: StashReviewOperation) => {
     if (!current() || latest.current.unavailable || occupied.current || !reviewLease.active || reviewOwner.current) return;
     if (operation.kind === "clear" ? !latest.current.clear || operation.stashes !== latest.current.data : !targetCurrent(operation.stash) || selectedNow.current !== operation.stash) return;

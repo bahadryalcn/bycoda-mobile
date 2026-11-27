@@ -30,10 +30,11 @@ export function AssistantEntryButton() {
   const label = status === "live" ? copy("Asistan, sesli görüşme sürüyor", "Assistant, voice call in progress")
     : status === "connecting" ? copy("Asistan, bağlanıyor", "Assistant, connecting")
     : status === "error" ? copy("Asistan, görüşme durdu", "Assistant, call stopped")
-    : copy("Sesli asistan", "Voice assistant");
+    : copy("Asistan", "Assistant");
   return (
     <View>
-      <IconButton label={label} onPress={() => router.navigate(ASSISTANT_ROUTE)}>
+      {/* Each tap names itself: an assistant left on a conversation returns to its home (never during a call). */}
+      <IconButton label={label} onPress={() => router.navigate({ pathname: "/assistant", params: { home: String(Date.now()) } })}>
         <AudioLines size={iconSize.action} color={colors.text} />
       </IconButton>
       {dot ? <View pointerEvents="none" style={{ position: "absolute", top: 8, end: 8, width: 10, height: 10, borderRadius: radii.pill, backgroundColor: dot, borderWidth: 2, borderColor: colors.panel }} /> : null}

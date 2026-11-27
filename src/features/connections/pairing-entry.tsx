@@ -1,24 +1,18 @@
 import { useMobileTheme } from "@/ui/theme";
-import { View } from "react-native";
 import Animated from "react-native-reanimated";
 import QrCode from "lucide-react-native/icons/qr-code";
-import ClipboardPaste from "lucide-react-native/icons/clipboard-paste";
 import PencilLine from "lucide-react-native/icons/pencil-line";
-import { Body, Button, FormActions, Heading, NavigationGroup, NavigationRow, Notice, Row, RowIcon, Stack } from "@/ui/primitives";
+import { Body, Button, FormActions, Heading, NavigationGroup, NavigationRow, Notice, RowIcon, Stack } from "@/ui/primitives";
 import { enterItem } from "@/ui/motion";
 import { iconSize, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
-import { HintLabel } from "@/ui/info-hint";
 import { ManualConnectionForm } from "./manual-connection-form";
 import { PairingPreview } from "./pairing-preview";
 import { PairingPaste } from "./pairing-paste";
 import type { PairingEntryProps } from "./connection-types";
 
-const centered = { alignItems: "stretch" as const, gap: space.sm };
-
-
 export function PairingEntry({ controller, disabled }: PairingEntryProps) {
-  const { colors, uiStyles } = useMobileTheme();
+  const { colors } = useMobileTheme();
   const copy = useCopy();
   const { entry, busy } = controller;
   if (entry.kind === "choices")
@@ -73,45 +67,6 @@ export function PairingEntry({ controller, disabled }: PairingEntryProps) {
   if (entry.kind === "preview")
     return <PairingPreview code={entry.code} operation={controller.operation} disabled={disabled}
       busy={busy} onConnect={controller.connect} onCancel={controller.cancel} />;
-  return (
-    <Animated.View entering={enterItem(0)} style={{ gap: space.lg }}>
-      <View style={centered}>
-        <HintLabel label={controller.connectionMode === "lan" ? copy("Yerel ağ", "Local network") : "Tailscale"} style={uiStyles.heading}
-          presentation="visible" help={copy(
-            "Bilgisayarındaki bycoda’da “Telefon bağla”yı seç ve QR kodunu tara.",
-            "In bycoda on your computer, choose “Connect your phone” and scan the QR code.",
-          )} />
-      </View>
-      <NavigationGroup>
-        <NavigationRow
-          label={copy("QR kodu tara", "Scan QR code")}
-          icon={<RowIcon glyph={QrCode} />}
-          disabled={disabled || busy}
-          onPress={() => controller.begin("scan")}
-        />
-        <NavigationRow
-          label={copy("Kodu yapıştır", "Paste pairing code")}
-          icon={<RowIcon glyph={ClipboardPaste} />}
-          disabled={disabled || busy}
-          onPress={() => controller.begin("paste")}
-        />
-        {controller.connectionMode === "tailscale" ? (
-          <NavigationRow
-            label={copy("Manuel bağlan", "Connect manually")}
-            icon={<RowIcon glyph={PencilLine} />}
-            disabled={disabled || busy}
-            onPress={() => controller.begin("manual")}
-          />
-        ) : null}
-      </NavigationGroup>
-      <Row style={{ justifyContent: "center" }}>
-        <Button
-          tone="quiet"
-          label={copy("Bağlantı türünü değiştir", "Change connection method")}
-          disabled={busy}
-          onPress={() => controller.begin("choices")}
-        />
-      </Row>
-    </Animated.View>
-  );
+  // The scanner is full-screen and rendered by the Computers screen itself.
+  return null;
 }

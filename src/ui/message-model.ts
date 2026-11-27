@@ -1,4 +1,4 @@
-import MarkdownIt from "markdown-it";
+import MarkdownIt, { type Env } from "markdown-it";
 import { inlineRaster } from "./inline-raster";
 import { readLink } from "./message-inline";
 import { isInlineMath } from "./message-math";
@@ -124,7 +124,13 @@ parser.validateLink = (url) =>
   /^data:/i.test(url.trim())
     ? inlineRaster(url) !== null
     : !/^(?:javascript|vbscript|content):/i.test(url.trim());
-type CacheEntry = { digest: string; nodes: MessageNode[]; size: number };
+/**
+ * `stable` marks a settled prefix of a cached parse: the first `nodes` root nodes come from
+ * `source.slice(0, offset)` and no later text can change them, so an appended stream delta
+ * only re-parses from `offset`.
+ */
+type StablePrefix = { offset: number; nodes: number };
+type CacheEntry = { source: string; nodes: MessageNode[]; size: number; stable?: StablePrefix };
 const cache = new Map<string, CacheEntry>();
 let cachedCharacters = 0;
 const CACHE_ENTRIES = 400;
@@ -147,6 +153,28 @@ export function messageCacheKey(hideInternalMetadata: boolean, id?: string, sour
   return id === undefined ? `${mode}:text:${source}` : `${mode}:id:${id}`;
 }
 
+/** `{.python}` / `{python}` (Pandoc attribute style) name the same language as `python`. */
+export function fenceLanguage(info: string): string {
+  return (info.trim().split(/\s/)[0] ?? "").replace(/^\{\.?/, "").replace(/\}$/, "");
+}
+
+/**
+ * Whether a fence can still grow. A fence is settled when its closing marker is on its last line
+ * (after any blockquote `>` markers of its container), or when non-blank text follows it: then its
+ * container (a list item, a quote) ended it and later deltas can never extend it. Only an
+ * unclosed fence that runs to the end of the source is still arriving.
+ */
+export function fenceComplete(lines: readonly string[], map: [number, number] | null, markup: string): boolean {
+  const [start, end] = map ?? [0, 0];
+  if (end <= start + 1) return false;
+  const last = (lines[end - 1] ?? "").replace(/^(?:[ \t]*>)*[ \t]*/, "").trimEnd();
+  const char = markup[0] === "~" ? "~" : "`";
+  const run = /^(`+|~+)$/.exec(last)?.[1];
+  if (run && run[0] === char && run.length >= markup.length) return true;
+  for (let line = end; line < lines.length; line++) if (lines[line]!.trim()) return true;
+  return false;
+}
+
 function tree(tokens: Token[], source: string): MessageNode[] {
   const root: MessageNode[] = [];
   const stack: MessageNode[][] = [root];
@@ -164,11 +192,8 @@ function tree(tokens: Token[], source: string): MessageNode[] {
       children: token.children ? tree(token.children, source) : [],
     };
     if (token.type === "fence") {
-      node.attrs.language = token.info.trim().split(/\s/)[0] ?? "";
-      const lines = sourceLines ??= source.split("\n");
-      const last = lines[(token.map?.[1] ?? 0) - 1]?.trim() ?? "";
-      node.complete =
-        last.startsWith(token.markup) && (token.map?.[1] ?? 0) > (token.map?.[0] ?? 0) + 1;
+      node.attrs.language = fenceLanguage(token.info);
+      node.complete = fenceComplete((sourceLines ??= source.split("\n")), token.map, token.markup);
     }
     stack[stack.length - 1]!.push(node);
     if (token.nesting > 0) stack.push(node.children);
@@ -178,21 +203,26 @@ function tree(tokens: Token[], source: string): MessageNode[] {
 
 /**
  * Bounded native AST. Ordinary Markdown never becomes executable HTML.
- * `cacheId` (the block id) keys the cache by identity plus a content digest instead of the
- * whole text, so a streaming message occupies one slot and never evicts the others.
+ * `cacheId` (the block id) keys the cache by identity instead of the whole text, so a streaming
+ * message occupies one slot and never evicts the others, and an appended delta re-parses only
+ * from its last settled block.
  */
 export function parseMessage(text: string, hideInternalMetadata = false, cacheId?: string): MessageNode[] {
   const source = text.slice(0, MESSAGE_RENDER_LIMIT);
   const key = messageCacheKey(hideInternalMetadata, cacheId, source);
-  const digest = cacheId === undefined ? "" : messageDigest(source);
   const found = cache.get(key);
-  if (found && found.digest === digest) {
+  if (found && found.source === source) {
     // Refresh recency so actively viewed messages outlive stale ones.
     cache.delete(key);
     cache.set(key, found);
     return found.nodes;
   }
-  const nodes = tree(parser.parse(source, { hideInternalMetadata }) as Token[], source);
+  // A streaming block only grows: keep its settled blocks (and their identity) and parse the tail.
+  const appended =
+    found?.stable && source.length > found.source.length && source.startsWith(found.source)
+      ? appendParse(found, source, hideInternalMetadata)
+      : null;
+  const { nodes, stable } = appended ?? fullParse(source, hideInternalMetadata, cacheId !== undefined);
   if (found) {
     cache.delete(key);
     cachedCharacters -= found.size;
@@ -204,9 +234,73 @@ export function parseMessage(text: string, hideInternalMetadata = false, cacheId
     cachedCharacters -= cache.get(oldest)!.size;
     cache.delete(oldest);
   }
-  cache.set(key, { digest, nodes, size });
+  cache.set(key, { source, nodes, size, stable });
   cachedCharacters += size;
   return nodes;
+}
+
+type BlockParse = { nodes: MessageNode[]; starts: number[]; references: boolean };
+
+function parseBlocks(source: string, hideInternalMetadata: boolean): BlockParse {
+  const env: Env = { hideInternalMetadata };
+  const tokens = parser.parse(source, env) as Token[];
+  // Start line of each root node, in the same order `tree` emits them.
+  const starts: number[] = [];
+  let depth = 0;
+  for (const token of tokens) {
+    if (token.nesting < 0) {
+      if (depth > 0) depth--;
+      continue;
+    }
+    if (depth === 0) starts.push(token.map?.[0] ?? -1);
+    if (token.nesting > 0) depth++;
+  }
+  return { nodes: tree(tokens, source), starts, references: !!env.references && Object.keys(env.references).length > 0 };
+}
+
+// Rules that scan ahead without bound (math blocks, hidden citations) can absorb a later block,
+// so no prefix after their opener counts as settled.
+const LOOKAHEAD_OPENER = /^[^\S\n]*(?:[>*+-][^\S\n]*|\d+[.)][^\S\n]*)*(?:\$\$|\\\[|<oai-mem-citation>)/m;
+
+/**
+ * The settled prefix of `source` (parsed into `parsed`), as an offset into `source`.
+ * A root block is settled once a later root block starts on a line that, with the line after it,
+ * is complete: block parsing reads at most one line ahead, so appended text cannot change it.
+ */
+function stablePrefix(source: string, parsed: BlockParse): { offset: number; nodes: number } | undefined {
+  if (parsed.references || source.includes("\r") || parsed.starts.length !== parsed.nodes.length) return undefined;
+  const lineStarts = [0];
+  for (let index = source.indexOf("\n"); index >= 0; index = source.indexOf("\n", index + 1))
+    lineStarts.push(index + 1);
+  const lastLine = lineStarts.length - 1;
+  const opener = LOOKAHEAD_OPENER.exec(source);
+  let openerLine = Infinity;
+  if (opener) for (openerLine = lastLine; lineStarts[openerLine]! > opener.index; openerLine--);
+  for (let node = parsed.starts.length - 1; node >= 1; node--) {
+    const line = parsed.starts[node]!;
+    if (line < 0 || line + 1 >= lastLine || line > openerLine) continue;
+    return { offset: lineStarts[line]!, nodes: node };
+  }
+  return undefined;
+}
+
+function fullParse(source: string, hideInternalMetadata: boolean, streamable: boolean) {
+  const parsed = parseBlocks(source, hideInternalMetadata);
+  return { nodes: parsed.nodes, stable: streamable ? stablePrefix(source, parsed) : undefined };
+}
+
+function appendParse(found: CacheEntry, source: string, hideInternalMetadata: boolean) {
+  const { offset, nodes: kept } = found.stable!;
+  const tailSource = source.slice(offset);
+  const tail = parseBlocks(tailSource, hideInternalMetadata);
+  // A reference definition is document-wide, so it can relink the settled prefix.
+  if (tail.references) return null;
+  const nodes = found.nodes.slice(0, kept).concat(tail.nodes);
+  const next = stablePrefix(tailSource, tail);
+  return {
+    nodes,
+    stable: next ? { offset: offset + next.offset, nodes: kept + next.nodes } : { offset, nodes: kept },
+  };
 }
 /** Presentation-only source for the long reader; callers keep original text for copy. */
 export function messageDisplaySource(text: string): string {

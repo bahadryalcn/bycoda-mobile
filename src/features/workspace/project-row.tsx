@@ -1,13 +1,10 @@
 import { memo } from "react";
 import { Text, View, useWindowDimensions } from "react-native";
 import CornerDownRight from "lucide-react-native/icons/corner-down-right";
-import MoreHorizontal from "lucide-react-native/icons/ellipsis";
-import SquarePen from "lucide-react-native/icons/square-pen";
 import { DisclosureChevron } from "@/ui/disclosure-motion";
 import { ProjectIcon } from "@/ui/project-icon";
-import { Badge, PressableCard, StatusText } from "@/ui/primitives";
-import { SwipeActions, type SwipeRowAction } from "@/ui/swipe-actions";
-import { gapIcon, metrics, space } from "@/ui/tokens";
+import { PressableCard, StatusText } from "@/ui/primitives";
+import { gapIcon, iconSize, metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import type { HostProject } from "@/domain/types";
@@ -17,8 +14,8 @@ export type ProjectRowView = "files" | "git";
 
 /**
  * Compact project row: icon and name, one quiet status (opening, needs you, running or last
- * activity). Long-press and the swipe "More" tile open the shared project options sheet; the swipe
- * primary is "New session" for a registered project. Paths live in details unless the person turns
+ * activity). Long-press (and the row's "Project options" accessibility action) opens the shared
+ * project options sheet, which also holds "New session"; rows do not swipe. Paths live in details unless the person turns
  * on full folder paths; a name another project shares gets its parent folder as a hint.
  */
 export const ProjectRow = memo(function ProjectRow({
@@ -30,7 +27,6 @@ export const ProjectRow = memo(function ProjectRow({
   appearance,
   depth,
   grouped,
-  registered,
   running,
   needsYou = 0,
   activeAt,
@@ -38,7 +34,6 @@ export const ProjectRow = memo(function ProjectRow({
   disabled,
   onPress,
   onOptions,
-  onNewSession,
 }: {
   id: string;
   name: string;
@@ -53,6 +48,7 @@ export const ProjectRow = memo(function ProjectRow({
   depth: number;
   /** Indented under a group header with a guide line. */
   grouped: boolean;
+  /** Registered on the computer; the options sheet offers New session for it. */
   registered: boolean;
   running: number;
   /** Sessions waiting for the owner; shown ahead of running. */
@@ -62,7 +58,7 @@ export const ProjectRow = memo(function ProjectRow({
   disabled: boolean;
   /** Receive the project id so the parent can pass one stable callback to every row. */
   onPress: (id: string) => void;
-  /** Opens the project options sheet (long-press, accessibility action, swipe "More"). */
+  /** Opens the project options sheet (long-press, accessibility action). */
   onOptions: (id: string) => void;
   onNewSession?: (id: string) => void;
 }) {
@@ -71,16 +67,10 @@ export const ProjectRow = memo(function ProjectRow({
   const large = fontScale > 1;
   const copy = useCopy();
   const runningLabel = copy("{p0} çalışıyor", "{p0} running", { p0: running });
-  const needsLabel = copy("Senden bekliyor", "Needs you");
+  const needsLabel = copy("Seni bekliyor", "Needs you");
   const openingLabel = copy("Açılıyor…", "Opening…");
   const since = relativeTime(activeAt, copy);
   const kindLabel = kind === "work" ? copy("İş", "Work") : kind === "personal" ? copy("Kişisel", "Personal") : "";
-  const actions: SwipeRowAction[] = [
-    ...(registered && onNewSession
-      ? [{ key: "new-session", label: copy("Yeni oturum", "New session"), icon: <SquarePen size={18} strokeWidth={2} />, onPress: () => onNewSession(id) }]
-      : []),
-    { key: "more", label: copy("Diğer", "More"), icon: <MoreHorizontal size={18} strokeWidth={2} />, onPress: () => onOptions(id) },
-  ];
   const status = opening ? <StatusText label={openingLabel} tone="info" />
     : needsYou ? <StatusText label={needsLabel} tone="warning" />
     : running ? <StatusText label={runningLabel} tone="live" />
@@ -103,7 +93,7 @@ export const ProjectRow = memo(function ProjectRow({
       }}
     >
       {depth > 0 ? <CornerDownRight size={13 * Math.min(fontScale, 1.6)} color={colors.tertiary} /> : null}
-      <ProjectIcon appearance={appearance} size={depth > 0 ? 18 : 22} box={depth > 0 ? 22 : 28} />
+      <ProjectIcon appearance={appearance} size={depth > 0 ? 18 : iconSize.row} box={depth > 0 ? 22 : metrics.rowLeading} />
       {large ? (
         // Large text: the name wraps and the status gets its own line on every row, so dates align.
         <View style={{ flex: 1, minWidth: 0, gap: space.xxs }}>
@@ -112,29 +102,30 @@ export const ProjectRow = memo(function ProjectRow({
           </Text>
           {kindLabel || status ? (
             <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs }}>
-              {kindLabel ? <Badge label={kindLabel} /> : null}
+              {kindLabel ? <Text style={uiStyles.caption}>{kindLabel}</Text> : null}
               {status}
             </View>
           ) : null}
-          {path ? <Text selectable style={uiStyles.caption}>{path}</Text> : null}
+          {path ? <Text style={uiStyles.caption}>{path}</Text> : null}
         </View>
       ) : (
         <View style={{ flex: 1, minWidth: 0, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs }}>
           <Text numberOfLines={1} style={[uiStyles.label, { flexGrow: 1, flexShrink: 1, flexBasis: 140, minWidth: 0 }]}>
             {name}{context ? <Text style={uiStyles.caption}>{`  ${context}`}</Text> : null}
           </Text>
-          {kindLabel ? <Badge label={kindLabel} /> : null}
+          {kindLabel ? <Text style={uiStyles.caption}>{kindLabel}</Text> : null}
           {status}
-          {path ? <Text selectable style={[uiStyles.caption, { flexBasis: "100%" }]}>{path}</Text> : null}
+          {path ? <Text style={[uiStyles.caption, { flexBasis: "100%" }]}>{path}</Text> : null}
         </View>
       )}
     </PressableCard>
   );
+  // Rows never swipe; New session and the other actions live in the long-press options sheet.
   const swipeable = (
-    <SwipeActions actions={actions} disabled={disabled}>
+    <>
       {row}
-      <View accessible={false} style={[uiStyles.separator, { marginStart: space.xs + depth * space.lg + gapIcon + (depth > 0 ? 22 : 28) }]} />
-    </SwipeActions>
+      <View accessible={false} style={[uiStyles.separator, { marginStart: space.xs + depth * space.lg + gapIcon + (depth > 0 ? 22 : metrics.rowLeading) }]} />
+    </>
   );
   if (!grouped) return swipeable;
   return (
@@ -170,7 +161,7 @@ export function ProjectGroupHeader({
   const runningLabel = copy("{p0} çalışıyor", "{p0} running", { p0: running });
   const content = (
     <>
-      <ProjectIcon appearance={appearance} group size={22} box={28} />
+      <ProjectIcon appearance={appearance} group size={iconSize.row} box={metrics.rowLeading} />
       <Text numberOfLines={fontScale > 1 ? undefined : 1} style={[uiStyles.label, { flex: 1, minWidth: 0, fontWeight: "700" }]}>{name}</Text>
       {running ? <StatusText label={runningLabel} tone="live" /> : null}
       {/* A count is a quiet number, never a pill. */}

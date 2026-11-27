@@ -1,8 +1,7 @@
-import { useState, type ReactNode } from "react";
-import { View } from "react-native";
-import { AppliedFilters, FilterButton, FilterChipRow } from "@/ui/filter-sheet";
-import { SegmentedControl, SearchToolbar } from "@/ui/primitives";
-import { space } from "@/ui/tokens";
+import type { ReactElement, ReactNode } from "react";
+import { FilterChipRow } from "@/ui/filter-sheet";
+import { SectionHeader, SegmentedControl, useCollapsibleSearch } from "@/ui/primitives";
+import type { InputProps } from "@/ui/component-props";
 
 type StatusFilter<T extends string> = {
   label: string;
@@ -15,50 +14,46 @@ type StatusFilter<T extends string> = {
 };
 
 /**
- * One compact row: the shared `SearchToolbar` folds search into an icon beside the status filter
- * until it is opened or a query is active, and names an applied status at the row's start. The
- * project scope is the shared header pill (`scopeControl`), never a field here. The status
- * choices open below only on request.
+ * A management list's search and status filter, following the shared collection convention:
+ * `actions` (search icon, then the filter icon with its dot) go in the page heading beside the
+ * scope pills and before the create action; `sheet` is the one content-height sheet with the
+ * search field and the status choices, applied live. No toolbar, chip or summary row sits in the
+ * list. The project scope is the shared header pill, never a filter here.
  */
-export function ManagementToolbar<T extends string>({
-  search,
-  actions,
-  status,
-}: {
-  search: ReactNode;
-  actions?: ReactNode;
+export function useManagementToolbar<T extends string>({ search, status, view, actions }: {
+  search: ReactElement<InputProps>;
   status?: StatusFilter<T>;
-}) {
-  const [showStatus, setShowStatus] = useState(false);
+  /** Live view choices (grouping, order) shown in the same sheet after the status filter. */
+  view?: { label: string; filters: ReactNode; applied: number; onReset: () => void };
+  /** Other list commands (a view-options trigger) that trail the search and filter icons. */
+  actions?: ReactNode;
+}): { actions: ReactNode; sheet: ReactNode } {
   const applied = !!status && status.value !== status.unfilteredValue;
   const statusShown = !!status && (status.filterable !== false || applied);
-  const appliedLabel = applied ? status.options.find((option) => option.value === status.value)?.label : undefined;
-  return (
-    <View style={{ gap: space.sm }}>
-      <SearchToolbar
-        search={search}
-        leading={appliedLabel && !showStatus ? <AppliedFilters filters={[`${status!.label}: ${appliedLabel}`]} /> : undefined}
-        actions={statusShown ? (
-          <FilterButton
-            label={status.label}
-            count={applied ? 1 : 0}
-            onPress={() => setShowStatus((current) => !current)}
-          />
-        ) : status ? null : actions}
-      />
-      {status && statusShown && showStatus ? (
-        status.options.length <= 3 ? (
-          <SegmentedControl
-            hideLabel
-            label={status.label}
-            value={status.value}
-            options={status.options}
-            onChange={status.onChange}
-          />
-        ) : (
-          <FilterChipRow label={status.label} value={status.value} options={status.options} onChange={status.onChange} />
-        )
-      ) : null}
-    </View>
-  );
+  const statusFilters = status && statusShown ? (
+    <>
+      <SectionHeader title={status.label} />
+      {status.options.length <= 3 ? (
+        <SegmentedControl hideLabel label={status.label} value={status.value} options={status.options} onChange={status.onChange} />
+      ) : (
+        <FilterChipRow wrap label={status.label} value={status.value} options={status.options} onChange={status.onChange} />
+      )}
+    </>
+  ) : undefined;
+  const filters = statusFilters || view ? <>{statusFilters}{view?.filters}</> : undefined;
+  const collection = useCollapsibleSearch(search, {
+    filters,
+    // Search and status share one header control so the title and scope pills fit the top row.
+    combined: true,
+    filtersLabel: status?.label ?? view?.label,
+    activeFilters: (applied ? 1 : 0) + (view?.applied ?? 0),
+    onResetFilters: status || view ? () => {
+      status?.onChange(status.unfilteredValue);
+      view?.onReset();
+    } : undefined,
+  });
+  return {
+    actions: <>{collection.trigger}{collection.filterTrigger}{actions}</>,
+    sheet: collection.sheet,
+  };
 }

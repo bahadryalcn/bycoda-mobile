@@ -1,4 +1,5 @@
 import { formatDuration } from "@/features/management/shared/duration";
+import { formatElapsed } from "./run-status-model";
 import type { Block } from "./wire";
 
 type Copy = (tr: string, en: string, values?: Record<string, string | number>) => string;
@@ -37,6 +38,38 @@ export function turnDurationLabel(durationMs: number | undefined, modelName: str
   return who
     ? copy("{p0} {p1} boyunca çalıştı", "{p0} worked for {p1}", { p0: who, p1: elapsed })
     : copy("{p0} boyunca çalıştı", "Worked for {p0}", { p0: elapsed });
+}
+
+/** The live row's words: "Working 0:12", "Stopping…" once a Stop was accepted, or "Working…" without a start. */
+export function liveTurnLabel(input: { startedAt?: number; now: number; stopping?: boolean }, copy: Copy) {
+  if (input.stopping) return copy("Durduruluyor…", "Stopping…");
+  if (input.startedAt === undefined || input.startedAt > input.now) return copy("Çalışıyor…", "Working…");
+  return copy("Çalışıyor {p0}", "Working {p0}", { p0: formatElapsed(input.now - input.startedAt) });
+}
+
+/** The settled fold row: "46 sn çalıştı" / "Worked for 46 s". */
+export function workedForLabel(durationMs: number | undefined, copy: Copy) {
+  const elapsed = formatDuration(durationMs, copy);
+  return elapsed ? copy("{p0} çalıştı", "Worked for {p0}", { p0: elapsed }) : copy("Çalıştı", "Worked");
+}
+
+/** The receipt of a turn the owner stopped: "Durdurdun · 46 sn". */
+export function stoppedTurnLabel(durationMs: number | undefined, copy: Copy) {
+  const elapsed = formatDuration(durationMs, copy);
+  return elapsed ? copy("Durdurdun · {p0}", "You stopped · {p0}", { p0: elapsed }) : copy("Durdurdun", "You stopped");
+}
+
+/** The settled receipt's visible words: model, the duration when no fold row shows it, then the time. */
+export function turnReceiptLabel(
+  turn: Pick<Block, "durationMs" | "turnModel" | "turnOutcome">,
+  showDuration: boolean,
+  completedAt: string | undefined,
+  copy: Copy,
+) {
+  if (turn.turnOutcome === "stopped")
+    return [stoppedTurnLabel(turn.durationMs, copy), completedAt].filter(Boolean).join(" · ");
+  const parts = [turn.turnModel?.name?.trim(), showDuration ? formatDuration(turn.durationMs, copy) : "", completedAt];
+  return parts.filter(Boolean).join(" · ") || copy("Tamamlandı", "Done");
 }
 
 export function hasTurnMetrics(metrics: TurnMetrics | undefined): metrics is TurnMetrics {

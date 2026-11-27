@@ -30,6 +30,9 @@ function refreshOrder(a: Query, b: Query) {
  */
 function needsRefresh(query: Query) {
   if (!query.isActive() || query.state.fetchStatus === "fetching") return false;
+  // A live stream owns this read: it reopens on `ready` and delivers its own snapshot, so a
+  // refetch would download the same data twice. A failed or empty read still refreshes.
+  if (query.meta?.streamOwned === true && query.state.status === "success") return false;
   return query.state.status === "error" || query.isStale();
 }
 

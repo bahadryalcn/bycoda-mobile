@@ -2,7 +2,7 @@
 import { act, createElement, useEffect, type PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-const nav = vi.hoisted(() => ({ canGoBack: true, focused: true, unlocked: true, back: vi.fn(), replace: vi.fn(),
+const nav = vi.hoisted(() => ({ canGoBack: true, focused: true, unlocked: true, back: vi.fn(), replace: vi.fn(), dismissTo: vi.fn(),
   handleBack: vi.fn(), keyboardVisible: false, dismissKeyboard: vi.fn().mockResolvedValue(undefined), fontScale: 1 }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
@@ -20,7 +20,7 @@ vi.mock("@/ui/chat-controls", () => ({
 vi.mock("lucide-react-native/icons/list", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("expo-router", () => ({
-  router: { canGoBack: () => nav.canGoBack, back: nav.back, replace: nav.replace },
+  router: { canGoBack: () => nav.canGoBack, back: nav.back, replace: nav.replace, dismissTo: nav.dismissTo },
   useCanGoBack: () => nav.canGoBack,
   useIsFocused: () => nav.focused,
 }));
@@ -47,6 +47,7 @@ it("returns a root tablet conversation to the Sessions tab after the keyboard", 
   }
   const render = (tablet = true) => act(() => root.render(createElement(Route, { tablet })));
   nav.replace.mockClear();
+  nav.dismissTo.mockClear();
   nav.canGoBack = true;
   try {
     await render();
@@ -68,10 +69,12 @@ it("returns a root tablet conversation to the Sessions tab after the keyboard", 
     nav.keyboardVisible = true;
     back();
     expect(nav.dismissKeyboard).toHaveBeenCalledOnce();
-    expect(nav.replace).not.toHaveBeenCalled();
+    expect(nav.dismissTo).not.toHaveBeenCalled();
     nav.keyboardVisible = false;
     back();
-    expect(nav.replace).toHaveBeenCalledExactlyOnceWith("/chats");
+    // Returns to the tabs already beneath instead of stacking a second copy of them.
+    expect(nav.dismissTo).toHaveBeenCalledExactlyOnceWith("/chats");
+    expect(nav.replace).not.toHaveBeenCalled();
   } finally {
     await act(() => root.unmount());
     Object.assign(nav, { canGoBack: true, focused: true, unlocked: true, keyboardVisible: false });
@@ -128,7 +131,7 @@ it("goes back, or falls back to the session list when there is no history", asyn
     expect(nav.back).toHaveBeenCalled();
     nav.canGoBack = false;
     await act(async () => button.click());
-    expect(nav.replace).toHaveBeenCalledWith("/sessions");
+    expect(nav.dismissTo).toHaveBeenCalledWith("/sessions");
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

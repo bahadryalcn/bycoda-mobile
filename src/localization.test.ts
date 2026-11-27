@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { LANGUAGES, catalogs, resolveLocale, translate } from "./localization";
+import { LANGUAGES, catalogFor, catalogs, resolveLocale, translate } from "./localization";
 import { isLanguagePreference } from "../../src/shared/i18n/languages";
 
 describe("mobile language parity", () => {
+  it("loads each catalog once, on first use, and serves translate and catalogs from the same copy", () => {
+    expect(Object.keys(catalogs).sort()).toEqual(LANGUAGES.map(({ value }) => value).sort());
+    const german = catalogFor("de");
+    expect(catalogFor("de")).toBe(german);
+    expect(catalogs.de).toBe(german);
+    expect(translate("de", "Backlog", "Backlog")).toBe(german["Backlog"]);
+  });
   it("translates parity confirmations before substituting model and branch names", () => {
     expect(translate("de", "{p0} yukarı", "Move {p0} up", { p0: "Bluetooth" })).toBe("Bluetooth nach oben verschieben");
     expect(translate("ja", "\"{p0}\" dalı oluşturulup bu dala geçilsin mi?", "Create \"{p0}\" and switch to it?", { p0: "feature" })).toBe("「feature」を作成して切り替えますか？");

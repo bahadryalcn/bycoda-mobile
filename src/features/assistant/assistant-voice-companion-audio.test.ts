@@ -6,7 +6,7 @@ vi.mock("expo-file-system", () => ({ Paths: { cache: "file:///cache" }, File: cl
   uri = "file:///cache/bycoda-voice-fixture.wav"; exists = true; write = file.write; writeSync = file.writeSync; delete = file.delete;
 } }));
 import { companionVoiceCapture, companionVoicePlayback } from "./assistant-voice-companion-audio";
-import { pcmBase64 } from "../../../../src/features/voice/model/voiceVad";
+import { pcmBase64 } from "../../../../src/shared/model/voice-realtime/voiceVad";
 
 it("feeds ordered PCM chunks to one playback, then drains it", async () => {
   const f = fixture();

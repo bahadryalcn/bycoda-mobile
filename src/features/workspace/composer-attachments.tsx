@@ -7,7 +7,7 @@ import X from "lucide-react-native/icons/x";
 import File from "lucide-react-native/icons/file";
 import { Attachment } from "panelui-native/components/attachment";
 import { Chip } from "panelui-native/components/chip";
-import { Body, Button, ErrorText, Sheet } from "@/ui/primitives";
+import { Button, ErrorText, Sheet, StateView } from "@/ui/primitives";
 import { MediaViewer } from "@/ui/media-viewer";
 import { DocumentContent } from "@/ui/document-content";
 import { metrics, space } from "@/ui/tokens";
@@ -156,7 +156,7 @@ export function ComposerAttachments({
         >
           {opening?.available
             ? <DocumentContent name={selected.name} mimeType={selected.mimeType} uri={selected.uri} />
-            : <Body muted>{copy("Önizleme açılamadı.", "Preview could not be opened.")}</Body>}
+            : <StateView size="compact" tone="warning" title={copy("Önizleme açılamadı.", "Preview could not be opened.")} />}
         </Sheet>
       ) : null}
     </>

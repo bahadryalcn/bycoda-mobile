@@ -12,8 +12,13 @@ import { Illustration } from "./illustrations";
 import { StatusLine } from "./status-line";
 import { useMobileTheme } from "./theme";
 import { isErrorArt, resolveStateSize } from "./state-model";
-import { iconSize } from "./tokens";
+import { iconSize, space } from "./tokens";
 import type { StateAction, StateTone, StateViewProps } from "./component-props";
+
+/** Region art (first run, unpaired, empty) keeps one size in every state region. */
+const ILLUSTRATION_SIZE = 168;
+/** Tone glyph inside the 48 region icon tile (`uiStyles.stateIconTile`). */
+const REGION_ICON_SIZE = 22;
 
 const toneIcons = { neutral: Inbox, info: Info, success: CircleCheck, warning: TriangleAlert, danger: CircleAlert };
 
@@ -59,11 +64,13 @@ export function StateView({
   const inline = resolved === "compact";
   const Icon = (inline ? toneIcons : regionIcons)[tone];
   const palette = toneColors(tone, theme);
+  // A region title is a heading; a section's inline state reads as a row, so it is not announced as one.
+  const Title = inline ? Body : Heading;
   const text = (
     <>
-      <Heading style={[uiStyles.stateTitle, inline && (tone === "neutral" ? uiStyles.stateInlineQuiet : uiStyles.stateInlineTitle)]}>
+      <Title style={[uiStyles.stateTitle, inline && (tone === "neutral" ? uiStyles.stateInlineQuiet : uiStyles.stateInlineTitle)]}>
         {title}
-      </Heading>
+      </Title>
       {description ? (
         <Body accessibilityLabel={description} numberOfLines={inline ? 2 : art ? undefined : 3}
           style={[uiStyles.stateDescription, inline && uiStyles.stateInlineDescription]}>{description}</Body>
@@ -76,10 +83,10 @@ export function StateView({
     return (
       <View testID={testID} style={uiStyles.stateInline}>
         {tone === "neutral" ? null : <Icon size={iconSize.status} strokeWidth={2} color={palette.text} style={{ marginTop: 2 }} />}
-        <View style={[uiStyles.grow, { gap: 2, alignItems: "flex-start" }]}>
+        <View style={[uiStyles.grow, { gap: space.xxs, alignItems: "flex-start" }]}>
           {text}
           {action || secondaryAction ? (
-            <View style={{ marginTop: 4, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
+            <View style={{ marginTop: space.xs, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs }}>
               {action ? <ActionButton action={action} tone="primary" primary={false} inline /> : null}
               {secondaryAction ? <ActionButton action={secondaryAction} tone="quiet" primary={false} inline /> : null}
             </View>
@@ -95,13 +102,15 @@ export function StateView({
     >
       <EmptyState.Header style={uiStyles.stateColumn}>
         {art ? (
-          <Illustration name={art} size={168} />
+          <Illustration name={art} size={ILLUSTRATION_SIZE} />
         ) : (
           <View accessible={false} style={[uiStyles.stateIconTile, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <Icon size={22} strokeWidth={1.75} color={palette.text} />
+            <Icon size={REGION_ICON_SIZE} strokeWidth={1.75} color={palette.text} />
           </View>
         )}
-        <View style={{ gap: 6, alignItems: "center", marginTop: art ? 8 : 4 }}>{text}</View>
+        {/* The text spans the column and centers itself: shrink-to-fit text was measured narrower
+            than Android draws it, so a short title ("Açık sayfa yok") wrapped its last word and clipped it. */}
+        <View style={{ gap: space.sm, alignSelf: "stretch", alignItems: "stretch", marginTop: art ? space.sm : space.xs }}>{text}</View>
       </EmptyState.Header>
       {action || secondaryAction ? (
         <EmptyState.Content style={[uiStyles.stateActions, { maxWidth: uiStyles.stateColumn.maxWidth, width: "100%" }]}>

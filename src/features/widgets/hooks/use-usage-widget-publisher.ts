@@ -43,7 +43,7 @@ export function useUsageWidgetPublisher() {
   const machineId = machine?.id ?? null;
   // Not auto-fetched: expo-widgets cannot tell whether a widget is placed, so the poll effect below
   // decides. The Tools usage screen keeps its own observer on the same key and its own interval.
-  const { data, refetch } = useHostQuery<UsageLimitsReport>(
+  const { data, refetch, dataUpdatedAt } = useHostQuery<UsageLimitsReport>(
     ["usage-limits"],
     "usage.limits.read",
     {},
@@ -55,12 +55,17 @@ export function useUsageWidgetPublisher() {
   );
   const report = data ?? null;
   const lastFetch = useRef(0);
+  /** When the shared query last got data, from this poll or the Tools screen's own observer. */
+  const dataAt = useRef(0);
+  useEffect(() => {
+    dataAt.current = dataUpdatedAt;
+  }, [dataUpdatedAt]);
 
   useEffect(() => {
     // Reason: the poll must follow the foreground and unlock state, which react-query cannot gate here.
     const poll = (focused: boolean) => {
       const now = Date.now();
-      if (!isUsagePollDue({ supported, gated: gate, focused, lastFetchAt: lastFetch.current, now })) return;
+      if (!isUsagePollDue({ supported, gated: gate, focused, lastFetchAt: Math.max(lastFetch.current, dataAt.current), now })) return;
       lastFetch.current = now;
       // A failed read is kept in the query state; the next due poll retries it.
       void refetch().catch(() => {});

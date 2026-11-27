@@ -4,6 +4,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class VoiceSessionPolicyTest {
+  @Test fun captureBatchIsTheDefaultUnlessTheRealtimeSizeIsAsked() {
+    assertEquals(9600, VoiceSessionPolicy.batchBytes(null))
+    assertEquals(3200, VoiceSessionPolicy.batchBytes(3200))
+    assertEquals(9600, VoiceSessionPolicy.batchBytes(1))
+    assertEquals(9600, VoiceSessionPolicy.batchBytes(1_000_000))
+  }
   @Test fun explicitForegroundStartRequiresAllThreeProofs() {
     assertTrue(VoiceSessionPolicy.mayStart(true, true, true))
     assertFalse(VoiceSessionPolicy.mayStart(false, true, true))

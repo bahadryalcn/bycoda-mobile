@@ -1,10 +1,10 @@
 import { View } from "react-native";
-import { router } from "expo-router";
 import { useMachines } from "../state/machines";
 import { useCopy } from "./copy";
 import { StateView } from "./state-view";
 // Through the barrel so screens and their tests share one owner for these states.
 import { QueryState, Skeleton } from "./primitives";
+import { pushOnce } from "./navigation";
 
 /** Shared [tr, en] copy for "no computer is connected"; informal register everywhere. */
 export const NO_COMPUTER_TITLE: readonly [string, string] = ["Önce bir bilgisayar bağla", "Connect a computer first"];
@@ -22,7 +22,7 @@ export function NoComputerState({ description }: { description?: string }) {
       illustration="connect-computer"
       title={copy(...NO_COMPUTER_TITLE)}
       description={description}
-      action={{ label: copy(...NO_COMPUTER_ACTION), onPress: () => router.push("/machines") }}
+      action={{ label: copy(...NO_COMPUTER_ACTION), onPress: () => pushOnce("/machines") }}
     />
   );
 }

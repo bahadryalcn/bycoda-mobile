@@ -1,19 +1,20 @@
 import { ProviderAccountKind } from "@/ui/provider-account-kind";
 import { useEffect, useMemo, useState } from "react";
-import { View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Badge } from "panelui-native/components/badge";
+import RotateCcw from "lucide-react-native/icons/rotate-ccw";
+import TriangleAlert from "lucide-react-native/icons/triangle-alert";
 import { useActiveMachine } from "@/state/machines";
 import { useHostQuery } from "@/state/queries";
-import { Body, Button, Card, QueryState, SectionHeader, StatusRow, StatusText } from "@/ui/primitives";
+import { Body, IconButton, QueryState, SectionHeader, StatusText } from "@/ui/primitives";
 import { MetricValue } from "@/ui/metric-value";
-import { MetricRow } from "@/ui/metric-row";
-import { usePullRefresh } from "@/ui/use-pull-refresh";
+import { Hint } from "@/ui/hint";
 import { useMobileTheme } from "@/ui/theme";
 import { useCopy } from "@/ui/copy";
-import { useInfoHint } from "@/ui/info-hint";
+import { useOwnerVisible } from "@/ui/use-owner-visible";
 import { useLocale } from "@/i18n";
-import { radii, space } from "@/ui/tokens";
-import { AccountMeter, RemainingMeter } from "@/ui/usage-meters";
+import { space } from "@/ui/tokens";
+import { NamedMeter, RemainingMeter } from "@/ui/usage-meters";
 import {
   latestQuotaObservation,
   presentLimitsReport,
@@ -25,15 +26,20 @@ import {
 } from "./usage-limits-model";
 
 type Card_ = UsageLimitsReport["providers"][number]["cards"][number];
+type Account_ = Card_["accounts"][number];
 const PROVIDER_NAMES = { claude: "Claude", codex: "Codex", opencode: "OpenCode", grok: "Grok" } as const;
 
 /** Wall clock that ticks each minute so reset countdowns stay current. */
 function useMinuteNow() {
   const [now, setNow] = useState(Date.now);
+  // Ticks only while the screen is seen; catching up on return keeps countdowns exact.
+  const visible = useOwnerVisible();
   useEffect(() => {
+    if (!visible) return;
+    setNow(Date.now());
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
-  }, []);
+  }, [visible]);
   return now;
 }
 
@@ -46,17 +52,10 @@ export function shortTime(at: number, now: number, locale: string): string {
     : { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-/** Provider quota windows from the Host: one card per window, one row per account. */
-export function UsageLimits() {
+/** The Host quota report as presented (Host profile named or folded into its duplicate); one shared read. */
+export function useUsageLimitsReport() {
   const copy = useCopy();
-  const { uiStyles } = useMobileTheme();
-  const locale = useLocale();
   const machine = useActiveMachine();
-  const now = useMinuteNow();
-  const info = useInfoHint(copy(
-    "Yüzdeler hesaplar ve pencereler arasında toplanmaz.",
-    "Percentages are per account and window; they are not pooled.",
-  ));
   const supported =
     !!machine?.capabilities?.includes("usage.limits.read") && !!machine.environmentId;
   const query = useHostQuery<UsageLimitsReport>(
@@ -75,13 +74,22 @@ export function UsageLimits() {
   );
   const defaultLabel = copy("Varsayılan hesap", "Default account");
   const report = useMemo(() => query.data ? presentLimitsReport(query.data, defaultLabel) : undefined, [query.data, defaultLabel]);
-  const providers = report?.providers ?? [];
-  const observedAt = report ? latestQuotaObservation(report) : null;
-  const hasCards = providers.some((provider) => provider.cards.length > 0);
-  const refetch = query.refetch;
-  // Only a press of Retry shows its own progress; the page refresh and polling stay quiet here.
-  const retry = usePullRefresh(() => refetch());
-  const failureText = (account: { status: "ok" | "unavailable" | "error"; error: string | null }) => {
+  return { query, report };
+}
+
+/**
+ * Quiet header status for Limits: when the readings were taken and, only when an account could not
+ * be reread, a warning glyph whose tap explains which and why. The header refresh is the retry.
+ */
+export function UsageLimitsStatus() {
+  const copy = useCopy();
+  const locale = useLocale();
+  const now = useMinuteNow();
+  const { semanticColors, uiStyles } = useMobileTheme();
+  const { report } = useUsageLimitsReport();
+  if (!report) return null;
+  const observedAt = latestQuotaObservation(report);
+  const reason = (account: { status: "ok" | "unavailable" | "error"; error: string | null }) => {
     switch (quotaFailure(account)) {
       case "renewal": return copy("bu hesap yeniden kullanılınca güncellenir", "updates when this account is used again");
       case "signedOut": return copy("oturum açılmamış", "not signed in");
@@ -90,7 +98,45 @@ export function UsageLimits() {
       default: return copy("okunamadı", "could not be read");
     }
   };
+  const warnings = report.providers.flatMap((provider) => provider.accounts
+    .filter((account) => account.status !== "ok")
+    .map((account) => {
+      const stale = account.observedAt != null
+        ? ` ${copy("Gösterilen değerler {p0} ölçümünden", "Showing the reading from {p0}", { p0: shortTime(account.observedAt, now, locale) })}.`
+        : "";
+      return `${PROVIDER_NAMES[provider.provider]} · ${account.label}: ${reason(account)}.${stale}`;
+    }));
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 1 }}>
+      {observedAt !== null ? (
+        <Body muted numberOfLines={1} style={[uiStyles.caption, { flexShrink: 1 }]}>
+          {copy("Güncellendi {p0}", "Updated {p0}", { p0: shortTime(observedAt, now, locale) })}
+        </Body>
+      ) : null}
+      {/* The tooltip trigger owns the tap and opens the explanation; the header refresh retries. */}
+      {warnings.length ? (
+        <Hint label={warnings.join("\n")} openOn="press">
+          <IconButton label={`${copy("Uyarı", "Warning")}: ${warnings.join(" ")}`} onPress={() => undefined}>
+            <TriangleAlert size={18} strokeWidth={2} color={semanticColors.warning.text} />
+          </IconButton>
+        </Hint>
+      ) : null}
+    </View>
+  );
+}
+
+/** Provider quota windows from the Host: one section per provider, one block per window. */
+export function UsageLimits() {
+  const copy = useCopy();
+  const { colors, uiStyles } = useMobileTheme();
+  const locale = useLocale();
+  const now = useMinuteNow();
+  const { query, report } = useUsageLimitsReport();
+  const providers = report?.providers ?? [];
+  const hasCards = providers.some((provider) => provider.cards.length > 0);
+  const refetch = query.refetch;
   const units = { day: copy("gün", "d"), hour: copy("sa", "h"), minute: copy("dk", "min") };
+  const kindLabel = (kind: Account_["kind"]) => kind === "work" ? copy("İş", "Work") : copy("Kişisel", "Personal");
   const title = (card: Card_) => {
     const base =
       card.kind === "session"
@@ -108,27 +154,34 @@ export function UsageLimits() {
         : pace === "on"
           ? copy("Beklenen düzeyde", "On pace")
           : null;
-  // Lead with the relative reset; the absolute time follows as secondary text.
+  // One caption: what comes back and when, then the absolute reset time.
   const resetLine = (reading: Card_["best"]) => {
     const left = resetCountdown(reading.resetsAt, now, locale, units);
-    return left
-      ? copy("+%{p0} · {p1} içinde", "+{p0}% in {p1}", {
-          p0: wholePercent(reading.regainPercent),
-          p1: left,
-        })
-      : reading.resetsAt === null ? copy("Sıfırlanma zamanı bilinmiyor", "Reset time unknown") : null;
+    if (!left) return reading.resetsAt === null ? copy("Sıfırlanma zamanı bilinmiyor", "Reset time unknown") : copy("Sıfırlanma: {p0}", "Resets at {p0}", { p0: shortTime(reading.resetsAt, now, locale) });
+    return `${copy("+%{p0} · {p1} içinde", "+{p0}% in {p1}", { p0: wholePercent(reading.regainPercent), p1: left })} · ${shortTime(reading.resetsAt!, now, locale)}`;
+  };
+  // Whose bar: the name inside the bar, the kind as a glyph when the provider mixes accounts.
+  const namedMeter = (account: Account_, showKind: boolean, timeLeft: number | null, cardTitle: string) => {
+    const countdown = resetCountdown(account.reading.resetsAt, now, locale, units);
+    const spoken = [
+      account.label,
+      showKind ? kindLabel(account.kind) : null,
+      cardTitle,
+      `${wholePercent(account.reading.leftPercent)}% ${copy("kaldı", "left")}`,
+      countdown ? copy("{p0} içinde sıfırlanır", "Resets in {p0}", { p0: countdown }) : null,
+    ].filter(Boolean).join(", ");
+    return (
+      <NamedMeter
+        left={account.reading.leftPercent}
+        timeLeft={timeLeft}
+        name={account.label}
+        label={spoken}
+        glyph={showKind ? (ink) => <ProviderAccountKind kind={account.kind} iconOnly color={ink} /> : undefined}
+      />
+    );
   };
   return (
     <View style={{ gap: space.md }}>
-      {report ? <View style={{ gap: space.xs }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-          {observedAt !== null ? <Body muted style={{ flexShrink: 1 }}>
-            {copy("Son ölçüm {p0}", "Last reading {p0}", { p0: shortTime(observedAt, now, locale) })}
-          </Body> : null}
-          {info.button}
-        </View>
-        {info.panel}
-      </View> : null}
       <QueryState
         query={query}
         empty={
@@ -137,43 +190,54 @@ export function UsageLimits() {
           !providers.some((provider) => provider.accounts.length > 0)
         }
         emptyTitle={copy("Henüz limit verisi yok", "No limit data yet")}
-        emptyAction={refetch ? { label: copy("Yenile", "Refresh"), onPress: () => void refetch() } : undefined}
+        emptyAction={{ label: copy("Yenile", "Refresh"), onPress: () => void refetch() }}
       />
       {providers.map((provider) => {
-        // The same single account in every window is named once beside the provider.
+        // One account everywhere: no names or kinds at all, the provider says whose it is.
         const firstAccount = provider.cards[0]?.accounts[0];
-        const onlyAccount = firstAccount && provider.cards.every((card) =>
-          card.accounts.length === 1 && card.accounts[0]!.id === firstAccount.id) ? firstAccount : null;
-        const failed = provider.accounts.filter((account) => account.status !== "ok");
+        const single = provider.accounts.length <= 1 || (!!firstAccount && provider.cards.every((card) =>
+          card.accounts.length === 1 && card.accounts[0]!.id === firstAccount.id));
+        const mixedKinds = new Set(provider.accounts.map((account) => account.kind ?? "personal")).size > 1;
         const credited = provider.accounts.filter((account) => (account.resetCredits ?? 0) > 0);
         return (
         <View key={provider.provider} style={{ gap: space.sm }}>
-          <SectionHeader title={PROVIDER_NAMES[provider.provider]} trailing={onlyAccount ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 1, maxWidth: "60%" }}>
-              <ProviderAccountKind kind={onlyAccount.kind} />
-              <Body muted numberOfLines={2} style={{ flexShrink: 1 }}>{onlyAccount.label}</Body>
+          <SectionHeader title={PROVIDER_NAMES[provider.provider]} trailing={credited.length ? (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center", gap: space.xs }}>
+              {credited.map((account) => {
+                const count = account.resetCredits!.toLocaleString(locale);
+                return (
+                  <Badge
+                    key={account.id}
+                    variant="secondary"
+                    size="sm"
+                    accessible
+                    accessibilityLabel={single
+                      ? copy("Sıfırlama hakkı: {p0}", "Reset credits: {p0}", { p0: count })
+                      : `${account.label}, ${copy("Sıfırlama hakkı: {p0}", "Reset credits: {p0}", { p0: count })}`}
+                  >
+                    <RotateCcw size={12} strokeWidth={2.2} color={colors.muted} />
+                    {single ? count : `${account.label} ${count}`}
+                  </Badge>
+                );
+              })}
             </View>
           ) : undefined} />
-          {credited.length === 1 && onlyAccount ? (
-            <MetricRow label={copy("Sıfırlama hakkı", "Reset credits")} value={credited[0]!.resetCredits!.toLocaleString(locale)} />
-          ) : credited.length > 0 ? (
-            // One caption names the measure; each account then reads as name and count.
-            <View style={{ gap: space.xs }}>
-              <Body muted style={uiStyles.caption}>{copy("Sıfırlama hakkı", "Reset credits")}</Body>
-              {credited.map((account) => (
-                <MetricRow key={account.id} label={account.label} value={account.resetCredits!.toLocaleString(locale)} />
-              ))}
-            </View>
-          ) : null}
-          {provider.cards.map((card) => {
+          {provider.cards.map((card, index) => {
             const left = wholePercent(card.best.leftPercent);
+            const reset = resetLine(card.best);
+            const pace = paceText(card.best.pace);
+            const lone = card.accounts.length === 1 ? card.accounts[0]! : null;
             return (
-            <Card key={card.key} variant="surface">
-              <View
-                style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", columnGap: space.sm, rowGap: space.xs }}
-              >
+            <View
+              key={card.key}
+              style={[
+                { gap: space.sm },
+                index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.separator, paddingTop: space.md },
+              ]}
+            >
+              <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "baseline", columnGap: space.sm, rowGap: space.xs }}>
                 <Body style={{ fontWeight: "600", flexShrink: 1 }}>{title(card)}</Body>
-                {paceText(card.best.pace) ? <Body muted>{paceText(card.best.pace)}</Body> : null}
+                {pace ? <Body muted style={uiStyles.caption}>{pace}</Body> : null}
               </View>
               <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", gap: space.xs }}>
                 <MetricValue>{`${left}%`}</MetricValue>
@@ -181,75 +245,36 @@ export function UsageLimits() {
                   ? <StatusText tone="danger" dot={false} label={copy("Tükendi", "Used up")} />
                   : <Body muted>{copy("kaldı", "left")}</Body>}
               </View>
-              {resetLine(card.best) ? <Body muted>{resetLine(card.best)}</Body> : null}
-              {card.best.resetsAt !== null ? <Body muted style={uiStyles.caption}>{copy("Sıfırlanma: {p0}", "Resets at {p0}", { p0: shortTime(card.best.resetsAt, now, locale) })}</Body> : null}
-              <RemainingMeter
-                left={card.best.leftPercent}
-                timeLeft={card.best.timeLeftPercent}
-                label={`${title(card)} ${copy("kaldı", "left")}`}
-              />
-              {card.accounts.length === 1 ? (onlyAccount ? null : (
-                // One account repeats the headline reading above; show only whose it is.
-                <StatusRow label={card.accounts[0]!.label}>
-                  <ProviderAccountKind kind={card.accounts[0]!.kind} />
-                </StatusRow>
-              )) : (
-              <View style={{ gap: space.sm, marginTop: space.xs }}>
-                {card.accounts.map((account) => {
-                  const countdown = resetCountdown(account.reading.resetsAt, now, locale, units);
-                  return (
-                    <View key={account.id} style={{ gap: space.xs }}>
-                      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.sm }}>
-                        <Badge
-                          shape="dot"
-                          accessible={false}
-                          style={{
-                            width: 10,
-                            height: 10,
-                            borderRadius: radii.pill,
-                            backgroundColor: account.color,
-                          }}
-                        />
-                        <View style={{ flex: 1, minWidth: 0, gap: space.xs }}>
-                          {/* Name and headroom lead; kind and reset sit on a quieter second line. */}
-                          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", columnGap: space.sm, rowGap: space.xs }}>
-                            <Body style={{ flexGrow: 1, flexShrink: 1, flexBasis: 120, minWidth: 0 }}>{account.label}</Body>
-                            <Body mono style={{ marginStart: "auto" }}>{`${wholePercent(account.reading.leftPercent)}% ${copy("kaldı", "left")}`}</Body>
-                          </View>
-                          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space.sm, rowGap: space.xs }}>
-                            <ProviderAccountKind kind={account.kind} />
-                            {countdown || account.reading.resetsAt === null ? <Body muted style={[uiStyles.caption, { flexShrink: 1 }]}>
-                              {countdown
-                                ? copy("{p0} içinde sıfırlanır", "Resets in {p0}", { p0: countdown })
-                                : copy("Sıfırlanma zamanı bilinmiyor", "Reset time unknown")}
-                            </Body> : null}
-                          </View>
-                        </View>
+              {reset ? <Body muted style={uiStyles.caption}>{reset}</Body> : null}
+              {lone && !single
+                // One account in a mixed provider: its name rides in the headline bar.
+                ? namedMeter(lone, mixedKinds, card.best.timeLeftPercent, title(card))
+                : (
+                  <RemainingMeter
+                    left={card.best.leftPercent}
+                    timeLeft={card.best.timeLeftPercent}
+                    label={`${title(card)} ${copy("kaldı", "left")}`}
+                  />
+                )}
+              {card.accounts.length > 1 ? (
+                <View style={{ gap: space.sm, marginTop: space.xs }}>
+                  {card.accounts.map((account) => {
+                    const countdown = resetCountdown(account.reading.resetsAt, now, locale, units);
+                    return (
+                      <View key={account.id} style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                        <View style={{ flex: 1, minWidth: 0 }}>{namedMeter(account, mixedKinds, null, title(card))}</View>
+                        <Body muted numberOfLines={1} importantForAccessibility="no" accessibilityElementsHidden
+                          style={[uiStyles.caption, { fontVariant: ["tabular-nums"], flexShrink: 0 }]}>
+                          {countdown ? `${wholePercent(account.reading.leftPercent)}% · ${countdown}` : `${wholePercent(account.reading.leftPercent)}%`}
+                        </Body>
                       </View>
-                      <AccountMeter
-                        left={account.reading.leftPercent}
-                        label={`${account.label} ${copy("kaldı", "left")}`}
-                      />
-                    </View>
-                  );
-                })}
-              </View>
-              )}
-            </Card>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </View>
             );
           })}
-          {failed.map((account) => (
-            <View key={account.id} style={{ gap: space.xs }}>
-              <StatusText tone="warning" label={`${account.label}: ${failureText(account)}`} />
-              {account.observedAt != null ? <Body muted style={uiStyles.caption}>
-                {copy("Gösterilen değerler {p0} ölçümünden", "Showing the reading from {p0}", { p0: shortTime(account.observedAt, now, locale) })}
-              </Body> : null}
-            </View>
-          ))}
-          {failed.length > 0 ? (
-            <Button tone="quiet" density="compact" label={copy("Yeniden dene", "Retry")} busy={retry.refreshing}
-              disabled={query.isFetching === true} onPress={() => void retry.onRefresh()} style={{ alignSelf: "flex-start" }} />
-          ) : null}
         </View>
         );
       })}

@@ -16,7 +16,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
   useQueryClient: () => ({ refetchQueries: fixture.refetchReports }),
   useIsFetching: () => 0,
 }));
-vi.mock("./usage-limits", () => ({ UsageLimits: () => createElement("div", null, "Synthetic limits report") }));
+vi.mock("./usage-limits", () => ({ UsageLimits: () => createElement("div", null, "Synthetic limits report"), UsageLimitsStatus: () => createElement("span", null, "Synthetic limits status") }));
 vi.mock("./usage-cost", () => ({ UsageCost: () => createElement("div", null, "Synthetic cost report") }));
 vi.mock("lucide-react-native/icons/refresh-cw", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/user-round", () => ({ default: () => null }));
@@ -24,12 +24,13 @@ vi.mock("lucide-react-native/icons/briefcase", () => ({ default: () => null }));
 vi.mock("@/ui/state-view", () => ({ StateView: ({ title, description, action, secondaryAction }: any) => createElement("div", null, title, description, ...[action, secondaryAction].filter(Boolean).map((item: any) => createElement("button", { key: item.label, onClick: item.onPress }, item.label))) }));
 vi.mock("@/ui/toast", () => ({ showToast: () => undefined, useToastAvailable: () => false, useSuccessToast: () => () => undefined }));
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => createElement("div", null, children), StyleSheet: { hairlineWidth: 1 } }));
-vi.mock("expo-router", () => ({ Stack: { Screen: () => null }, router: { push: vi.fn(), setParams: vi.fn() }, useLocalSearchParams: () => ({ tab: fixture.tab }) }));
+vi.mock("expo-router", () => ({ Stack: { Screen: ({ options }: any) => options?.headerRight?.() ?? null }, router: { push: vi.fn(), setParams: vi.fn() }, useLocalSearchParams: () => ({ tab: fixture.tab }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
 vi.mock("@/ui/usage-meters", () => ({ RemainingMeter: () => null, AccountMeter: () => null, CostKpi: () => null, DailyBars: () => null }));
 vi.mock("./usage-charts", () => ({ UsageKpis: ({ items }: any) => createElement("div", null, items.map((item: any) => createElement("span", { key: item.title }, item.title, item.value))), ProviderShare: () => null }));
-vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, space: {}, fontSize: {}, radii: {} }));
+vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, space: {}, fontSize: {}, radii: {}, metrics: { touchTarget: 48 } }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {} }) }));
 vi.mock("@/ui/typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("@/state/machines", () => {
@@ -59,6 +60,8 @@ vi.mock("@/ui/primitives", async () => {
     Button: ({ label, onPress, disabled, busy }: any) => { if (label === "Next page") fixture.oldNext = onPress; return createElement("button", { disabled: disabled || busy, onClick: onPress, "data-busy": String(!!busy) }, label); },
     SegmentedControl: ({ value, onChange, options, disabled, label }: any) => createElement("div", { "aria-label": label, "data-disabled": String(!!disabled) }, options.map((o: any) => createElement("button", { key: o.value, disabled, "aria-pressed": value === o.value, onClick: () => onChange(o.value) }, o.label))),
     Card: Group, SectionHeader: ({ title }: any) => createElement("h3", null, title),
+    StatusLine: ({ label }: any) => createElement("div", null, label),
+    NavigationRow: ({ label, detail, metadata }: any) => createElement("div", null, label, detail, metadata),
     SelectField: ({ label, value, onChange, disabled }: any) => createElement("select", { "aria-label": label, disabled, value, onChange: (e: any) => onChange(e.target.value) }, ["1", "7"].map(v => createElement("option", { key: v, value: v }, v))),
     ScreenList: ({ header, actions, data, renderItem, footer, refreshState, scopeControl, computerSwitch }: any) => { fixture.refresh = refreshState; return createElement("main", null, computerSwitch ? "Computer pill" : null, scopeControl, actions, header, data.map((item: any) => createElement("section", { key: item.sessionId }, renderItem({ item }))), footer); },
   };
@@ -125,12 +128,15 @@ it("does not let an old refresh completion clear the current scope's refresh ind
   await act(async () => first()); expect(fixture.refresh.refreshing).toBe(true);
   await act(async () => second()); expect(fixture.refresh.refreshing).toBe(false);
 });
-it("opens on Limits and asks for a project only inside the Tokens tab", async () => {
+it("opens on the first tab the computer serves and asks for a project only inside the Tokens tab", async () => {
   fixture.tab = undefined;
   await act(() => root.render(createElement(UsageScreen, {})));
-  expect(node.textContent).toContain("Limits are unavailable on this computer");
+  // Without limits or cost, the computer serves only Tokens: it opens there instead of on an unavailable tab.
+  expect(node.textContent).not.toContain("Update bycoda on this computer to view account limits.");
   expect([...node.querySelectorAll("button")].map((item) => item.textContent).slice(-3)).toEqual(["Limits", "Cost", "Tokens"]);
   expect(fixture.reads.every((read) => read.projectId === null)).toBe(true);
+  await click("Limits");
+  expect(node.textContent).toContain("Update bycoda on this computer to view account limits.");
   await click("Tokens");
   expect(node.textContent).toContain("Token usage is shown per project");
   expect(node.textContent).not.toContain("Total tokens");
@@ -138,9 +144,9 @@ it("opens on Limits and asks for a project only inside the Tokens tab", async ()
 it("shows token breakdown from a Tokens link and a Host-update state for Cost and Limits without session rows", async () => {
   await render();
   expect(node.textContent).toContain("Total tokens"); expect(node.textContent).toContain("By provider");
-  await click("Cost"); expect(node.textContent).toContain("Cost is unavailable on this computer");
+  await click("Cost"); expect(node.textContent).toContain("Update bycoda on this computer to view cost.");
   expect(node.textContent).not.toContain("Provider"); expect(node.textContent).not.toContain("Next page");
-  await click("Limits"); expect(node.textContent).toContain("Limits are unavailable on this computer");
+  await click("Limits"); expect(node.textContent).toContain("Update bycoda on this computer to view account limits.");
   await click("Tokens"); expect(node.textContent).toContain("Next page");
 });
 it("refreshes the visible Limits or Cost report without changing the token page", async () => {

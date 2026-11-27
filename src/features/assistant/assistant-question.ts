@@ -85,6 +85,16 @@ export function buildAnswerIntent(
   };
 }
 
+/** Whether every question has a valid choice or custom answer, so Send can stay disabled until then. */
+export function questionAnswerReady(question: AssistantOwnerQuestion, selection: QuestionSelection): boolean {
+  try {
+    buildAnswerIntent(question, selection, "ready");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function buildSnoozeIntent(
   question: AssistantOwnerQuestion,
   requestId: string,

@@ -6,6 +6,7 @@ import { AutomationsScreen } from "./automations-screen";
 import { StewardsScreen } from "./stewards-screen";
 import { TasksScreen } from "./tasks-screen";
 import { CrewsScreen } from "./crews-screen";
+import { RemoteHostError } from "@/remote/host-error";
 
 const state = vi.hoisted(() => ({
   projectId: "project" as string | null,
@@ -34,12 +35,18 @@ vi.mock("@/ui/copy", () => ({
   useCopy: () => (_tr: string, en: string) => en,
 }));
 vi.mock("@/ui/confirm", () => ({ confirmAction: vi.fn() }));
+vi.mock("@/ui/toast", () => ({ showToast: vi.fn() }));
+vi.mock("./shared/use-record-confirmation", () => ({
+  useRecordConfirmation: () => ({ confirm: vi.fn(), review: null }),
+  RecordConfirmationSheet: () => null,
+}));
 vi.mock("../workspace/git-delivery", () => ({ GitDeliverySheet: () => null }));
 vi.mock("./crews/member-avatars", () => ({ MemberAvatars: () => null }));
 vi.mock("./crews/member-lines", () => ({ MemberLines: () => null }));
 vi.mock("./crews/active-crews", () => ({ ActiveCrews: () => null }));
 vi.mock("lucide-react-native/icons/copy", () => ({ default: () => null }));
 vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null,
+  FilterChipRow: () => null,
   FilterButton: () => null,
   FilterSheet: () => null,
 }));
@@ -134,7 +141,8 @@ vi.mock("@/ui/screen-list", () => ({
       ),
     ),
 }));
-vi.mock("@/ui/primitives", () => {
+vi.mock("@/ui/primitives", async () => {
+  const reactForMock = await import("react");
   const Wrapper = ({ children }: { children?: ReactNode }) =>
     createElement("div", null, children);
   const Button = ({
@@ -146,7 +154,17 @@ vi.mock("@/ui/primitives", () => {
     disabled?: boolean;
     onPress?: () => void;
   }) => createElement("button", { disabled, onClick: onPress }, label);
-  return { StatusText: ({ label }: { label: string }) => createElement("span", null, label),
+  return { SectionHeader: ({ title }: { title: string }) => createElement("h3", null, title),
+    // The collection sheet renders inline here: the search field always, the filters after the filter icon.
+    useCollapsibleSearch: function useCollapsibleSearchMock(field: unknown, options: { filters?: unknown; filtersLabel?: string } = {}) {
+      const [open, setOpen] = reactForMock.useState(false);
+      return {
+        open, trigger: null, field: null,
+        filterTrigger: options.filters ? createElement("button", { onClick: () => setOpen(true) }, options.filtersLabel ?? "Filters") : null,
+        sheet: createElement(reactForMock.Fragment, null, field as never, open ? options.filters as never : null),
+      };
+    },
+     StatusText: ({ label }: { label: string }) => createElement("span", null, label),
     Body: Wrapper,
     Screen: ({context,children}:any) => createElement(Wrapper,null,context,children),
     ContextControls: ({scope,view}:any) => createElement(Wrapper,null,scope,view),
@@ -264,7 +282,7 @@ it("keeps task feedback at the visible record and recovers it at collection leve
 it("retains host update recovery for an off-list declined suggestion", async () => {
   state.mutations["stewards.decline"] = {
     variables: { taskId: "hidden" },
-    error: new Error("Unsupported host method"),
+    error: new RemoteHostError("computer", "unsupported", "Unsupported host method"),
   };
   await render(TasksScreen);
   expect(container.textContent).toContain(
@@ -289,7 +307,8 @@ function button(label: string) {
   )!;
 }
 
-it.each([AutomationsScreen, StewardsScreen])(
+// A project has at most one steward, so only Automations offers search.
+it.each([AutomationsScreen])(
   "distinguishes filtered empty results and clears only the search",
   async (Screen) => {
     state.data = [
@@ -358,7 +377,7 @@ it("offers a single create action for a selected project without a steward", asy
   expect(container.textContent).toContain("editing:");
   expect(state.mutate).not.toHaveBeenCalled();
 });
-it("opens the existing steward instead of permitting a duplicate", async () => {
+it("lists the existing steward instead of permitting a duplicate", async () => {
   state.data = [
     {
       id: "existing",
@@ -372,9 +391,9 @@ it("opens the existing steward instead of permitting a duplicate", async () => {
     "This project already has a steward.",
   );
   expect(container.textContent).not.toContain("New project steward");
-  expect(button("Edit project steward").disabled).toBe(false);
-  await act(async () => button("Edit project steward").click());
-  expect(container.textContent).toContain("editing:existing");
+  // Its card offers Edit; the page has no second edit command or search for one record.
+  expect([...container.querySelectorAll("button")].some((node) => node.textContent === "Edit project steward")).toBe(false);
+  expect(container.querySelector("input")).toBeNull();
   expect(state.mutate).not.toHaveBeenCalled();
 });
 it.each(["stewards.save", "stewards.runNow", "stewards.delete"])(

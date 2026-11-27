@@ -27,6 +27,9 @@ vi.mock("panelui-native/components/search-bar", () => ({ SearchBar: (props: Reco
 vi.mock("panelui-native/hooks/use-debounced-value", () => ({ useDebouncedValue: (value: string) => value }));
 vi.mock("lucide-react-native/icons/search", () => ({ default: () => null }));
 vi.mock("./buttons", () => ({ IconButton: () => null }));
+vi.mock("./dialogs", () => ({ Sheet: () => null, FormActions: () => null }));
+vi.mock("./filter-sheet", () => ({ FilterButton: () => null }));
+vi.mock("react-native-reanimated", () => ({ default: { View: ({ children }: PropsWithChildren) => h("div", null, children) } }));
 let root: ReturnType<typeof createRoot> | undefined;
 afterEach(() => { act(() => root?.unmount()); root = undefined; state.fields = []; vi.unstubAllGlobals(); });
 

@@ -33,7 +33,7 @@ it("retains canonical browser snapshot metadata after upload and rejects a diffe
   const result = await uploadAttachment(client, annotated, "s", new AbortController().signal, () => {});
   expect(result.browserAnnotation).toEqual(browserAnnotation); expect(result).not.toHaveProperty("uri"); expect(result).not.toHaveProperty("claimId");
   request.mockClear();
-  await expect(uploadAttachment(client, annotated, "other", new AbortController().signal, () => {})).rejects.toThrow("another conversation"); expect(request).not.toHaveBeenCalled();
+  await expect(uploadAttachment(client, annotated, "other", new AbortController().signal, () => {})).rejects.toThrow("another session"); expect(request).not.toHaveBeenCalled();
 });
 it("never appends after mismatched host data or invalid offsets", async () => {
   for (const status of [{ offset: 3, hash: "mismatch" }, { offset: 7 }]) {

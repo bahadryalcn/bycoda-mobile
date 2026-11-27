@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("react-native", () => ({ AppState: { currentState: "active", addEventListener: () => ({ remove() {} }) }, StyleSheet: { absoluteFill: {} }, Image: "Image", View: "View" }));
+vi.mock("./use-owner-visible", () => ({ useOwnerVisible: () => true }));
 
 import { shownFrame } from "./sprite-player";
 

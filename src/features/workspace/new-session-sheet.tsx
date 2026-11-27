@@ -179,6 +179,7 @@ function NewSessionConnection({ connection, allowAutomaticSelection, fixed, onCl
     readiness: activity.readiness,
     privacyUnavailable: activity.privacyUnavailable,
     empty: readable && !rows.length,
+    noResults: { compact: true, searching: !!query, title: copy("Aramana uyan proje yok.", "No projects match your search."), onClearSearch: () => setSearch("") },
     loadingLabel: copy("Projeler yükleniyor…", "Loading projects…"),
     emptyTitle: query
       ? copy("Aramana uyan proje yok.", "No projects match your search.")

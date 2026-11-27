@@ -1,11 +1,9 @@
-import { useRouteFocus } from "./use-route-focus";
-import { useSecurity } from "@/state/security";
+import { useOwnerVisible } from "./use-owner-visible";
 import { useReducedMotionPreference } from "./use-reduced-motion";
 
-/** Feedback also renders during boot, above the navigator and before unlock. */
+/** Feedback also renders during boot, above the navigator and before unlock; the workspace hidden behind the lock stays still. */
 export function useFeedbackAnimation() {
-  const focused = useRouteFocus();
-  const foreground = useSecurity((state) => state.appState === "active" && state.windowFocused);
+  const visible = useOwnerVisible();
   const reducedMotion = useReducedMotionPreference();
-  return focused && foreground && !reducedMotion;
+  return visible && !reducedMotion;
 }

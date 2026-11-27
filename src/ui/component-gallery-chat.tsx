@@ -40,8 +40,8 @@ export function GalleryChat({
   const copy = useCopy();
   const tour = scenario === "tour";
   const tourReply = copy(
-    "## Kişisel web sitesi planı\n\nÖnce ziyaretçilerin seni ve çalışmalarını kolayca tanıyabileceği bir ana sayfa hazırlayabiliriz.\n\n1. Kısa bir tanıtım ve iletişim bağlantısı\n2. Seçtiğin çalışmalar için bir galeri\n3. Telefon ve bilgisayarda okunabilir bir düzen\n\nBu çevrimdışı örnekte hiçbir proje dosyası değişmez. Gerçek bir oturumda sonuçları ve dosya değişikliklerini bu konuşmadan inceleyebilirsin.",
-    "## Personal website plan\n\nWe can start with a home page that helps visitors get to know you and your work.\n\n1. A short introduction and contact link\n2. A gallery of selected projects\n3. A readable layout on phones and computers\n\nThis offline example changes no project files. In a real session, you can inspect results and file changes in this conversation.",
+    "## Kişisel web sitesi planı\n\nÖnce ziyaretçilerin seni ve çalışmalarını kolayca tanıyabileceği bir ana sayfa hazırlayabiliriz.\n\n1. Kısa bir tanıtım ve iletişim bağlantısı\n2. Seçtiğin çalışmalar için bir galeri\n3. Telefon ve bilgisayarda okunabilir bir düzen\n\nBu çevrimdışı örnekte hiçbir proje dosyası değişmez. Gerçek bir oturumda sonuçları ve dosya değişikliklerini burada inceleyebilirsin.",
+    "## Personal website plan\n\nWe can start with a home page that helps visitors get to know you and your work.\n\n1. A short introduction and contact link\n2. A gallery of selected projects\n3. A readable layout on phones and computers\n\nThis offline example changes no project files. In a real session, you can inspect results and file changes here.",
   );
   const [prompt, setPrompt] = useState("");
   const [queueOpen, setQueueOpen] = useState(false);

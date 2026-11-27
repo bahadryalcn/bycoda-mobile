@@ -34,13 +34,13 @@ const platformEnv: SessionClockEnv = {
  * One beat for every row on screen. Nothing runs without a subscriber or in the background;
  * the OS may freeze timers away, so returning to the foreground notifies at once.
  */
-export function createSessionClock(env: SessionClockEnv = platformEnv) {
+export function createSessionClock(env: SessionClockEnv = platformEnv, beatMs = SESSION_CLOCK_BEAT_MS) {
   const listeners = new Set<() => void>();
   let timer: unknown;
   let stopObserving: (() => void) | undefined;
   const notify = () => listeners.forEach((listener) => listener());
   const startTimer = () => {
-    if (timer === undefined && env.isActive()) timer = env.setInterval(() => (env.isActive() ? notify() : undefined), SESSION_CLOCK_BEAT_MS);
+    if (timer === undefined && env.isActive()) timer = env.setInterval(() => (env.isActive() ? notify() : undefined), beatMs);
   };
   const stop = () => {
     if (timer !== undefined) env.clearInterval(timer);

@@ -502,3 +502,15 @@ it("swipes to one state-dependent action plus the shared options sheet", async (
   await render();
   expect([...f.actions.keys()]).toEqual(["pin", "more"]);
 });
+
+it("leaves the open session after a confirmed delete without refreshing the deleted transcript", async () => {
+  const onDeleted = vi.fn();
+  await render({ onDeleted });
+  await press("delete");
+  expect(onDeleted).not.toHaveBeenCalled();
+  await act(async () => f.confirm!());
+  expect(f.remove).toHaveBeenCalledOnce();
+  expect(onDeleted).toHaveBeenCalledOnce();
+  expect(f.invalidate).toHaveBeenCalledWith({ queryKey: ["machine", "machine", "project-summaries"] });
+  expect(f.invalidate).not.toHaveBeenCalledWith({ queryKey: ["machine", "machine", "session", "session"] });
+});

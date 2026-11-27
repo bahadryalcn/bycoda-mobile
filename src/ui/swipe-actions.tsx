@@ -1,17 +1,5 @@
-import {
-  cloneElement,
-  isValidElement,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  type PropsWithChildren,
-  type ReactNode,
-} from "react";
-import { Platform, View, type HostInstance } from "react-native";
-import { Swipe, type SwipeHandle } from "panelui-native/components/swipe";
-import { usePrivateContentAccess } from "./private-access";
-import { useMobileTheme } from "./theme";
-import { metrics, opacity } from "./tokens";
+import type { PropsWithChildren, ReactNode } from "react";
+import { View } from "react-native";
 
 export type SwipeRowAction = {
   key: string;
@@ -22,112 +10,25 @@ export type SwipeRowAction = {
   onPress(): void;
 };
 
-/** Reveal only. A full swipe never executes an operation without tapping its action. */
-export function SwipeActions({
-  actions,
-  disabled,
-  children,
-}: PropsWithChildren<{
+/**
+ * Rows do not swipe. One convention app-wide: a row's actions open from its options control,
+ * the visible "…" (notes and management records) or a long press, which screen readers reach
+ * through the row's named "options" accessibility action (projects, sessions, changed files).
+ *
+ * Swiping rows was removed after device testing: an open rail clipped the row's text and
+ * divider, floated the row's "…" over the actions, and a tap meant to close it opened the
+ * record instead. `actions` stays in the signature so callers keep describing the same row
+ * actions their options menu offers; nothing slides, so a tap always does what it says.
+ * @deprecated A pass-through: render the row directly and drop the unused `actions` arrays.
+ */
+export function SwipeActions({ children }: PropsWithChildren<{
   actions: readonly SwipeRowAction[];
   disabled?: boolean;
 }>) {
-  const { colors, semanticColors } = useMobileTheme();
-  const access = usePrivateContentAccess();
-  const swipe = useRef<SwipeHandle>(null);
-  const surface = useRef<HostInstance>(null);
-  const mounted = useRef(false);
-  useEffect(() => {
-    if (Platform.OS !== "web") return;
-    const element = surface.current as unknown as HTMLElement | null;
-    if (!element) return;
-    let origin: { x: number; y: number } | null = null;
-    let dragged = false;
-    const start = (event: PointerEvent) => {
-      origin = { x: event.clientX, y: event.clientY };
-      dragged = false;
-    };
-    const move = (event: PointerEvent) => {
-      if (
-        origin &&
-        (Math.abs(event.clientX - origin.x) > 12 || Math.abs(event.clientY - origin.y) > 14)
-      )
-        dragged = true;
-    };
-    // Native gestures cancel Pressable. Browsers can still dispatch a click after a pan.
-    const click = (event: MouseEvent) => {
-      if (dragged && event.detail !== 0) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-      origin = null;
-      dragged = false;
-    };
-    element.addEventListener("pointerdown", start, true);
-    element.addEventListener("pointermove", move, true);
-    element.addEventListener("click", click, true);
-    return () => {
-      element.removeEventListener("pointerdown", start, true);
-      element.removeEventListener("pointermove", move, true);
-      element.removeEventListener("click", click, true);
-    };
-  }, []);
-  useLayoutEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-  const available = !disabled && access.allowed && access.check();
-  const current = useRef({ available, access, actions });
-  current.current = { available, access, actions };
-  useEffect(() => {
-    if (!available) swipe.current?.close();
-  }, [available]);
-  return (
-    <View ref={surface}>
-      <Swipe ref={swipe} fullSwipe={false} disabled={!available} contentClassName="bg-background">
-        <Swipe.End>
-          {actions.map((action) => (
-            <Swipe.Action
-              key={action.key}
-              label={action.label}
-              icon={
-                isValidElement<{ color?: string }>(action.icon)
-                  ? cloneElement(action.icon, {
-                      color: action.destructive ? semanticColors.danger.text : colors.text,
-                    })
-                  : action.icon
-              }
-              color={action.destructive ? "destructive" : "default"}
-              labelClassName={action.destructive ? "text-danger" : "text-foreground"}
-              style={{
-                backgroundColor: colors.background,
-                minHeight: metrics.touchTarget,
-                minWidth: metrics.touchTarget,
-                opacity: !available || action.disabled ? opacity.disabled : 1,
-              }}
-              accessibilityState={{ disabled: !available || !!action.disabled }}
-              onPress={() => {
-                const live = current.current;
-                if (
-                  mounted.current &&
-                  live.available &&
-                  live.access.check() &&
-                  !action.disabled &&
-                  live.actions.includes(action)
-                )
-                  action.onPress();
-              }}
-            />
-          ))}
-        </Swipe.End>
-        <View style={{ backgroundColor: colors.background }}>{children}</View>
-      </Swipe>
-    </View>
-  );
+  return <>{children}</>;
 }
 
-/** Owns one open action rail. Fill is used when the child owns a virtualized viewport. */
+/** Kept for list owners; with no swipe rail it only passes `fill` to its viewport. */
 export function SwipeActionsGroup({ children, fill }: PropsWithChildren<{ fill?: boolean }>) {
-  return <Swipe.Group style={fill ? { flex: 1, minHeight: 0 } : undefined}>{children}</Swipe.Group>;
+  return fill ? <View style={{ flex: 1, minHeight: 0 }}>{children}</View> : <>{children}</>;
 }

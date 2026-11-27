@@ -8,6 +8,8 @@ vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
 vi.mock("@/state/queries", () => ({ useHostQuery: (_key: unknown, _method: unknown, _params: unknown, options: { interval?: number }) => { fixture.interval = options.interval; return { isFetching: fixture.fetching, refetch: fixture.refetch }; } }));
 vi.mock("@/state/machines", () => ({ useActiveMachine: () => ({ name: "Computer" }) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
+vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: null }) }));
+vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("../management/shared/format", () => ({ stamp: () => "Timestamp" }));
 vi.mock("@/ui/metric-row", () => ({ MetricRow: () => null }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { accent: "" }, uiStyles: {} }) }));

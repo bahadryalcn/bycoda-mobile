@@ -2,6 +2,10 @@ import { create } from "zustand";
 import type { AssistantThread } from "../../../../src/shared/model/host-contracts/assistant";
 import { AssistantVoice, type AssistantVoiceState, type AssistantVoiceTarget, type VoicePort } from "./assistant-voice";
 import { DraftStore } from "../workspace/draft-store";
+import { createLevelSignal, type LiveText } from "../workspace/dictation-level";
+import { computerDictationDependencies, computerLanguage, dictationEngineKind, loadDictationRecorder, type DictationRecorder } from "../workspace/dictation-engine";
+import { DICTATION_CLEANUP_CAPABILITY, DictationProcessor, type DictationProcessContext } from "../workspace/dictation-processing";
+import { voicePreferences } from "../voice-settings/voice-preferences";
 import { decodePendingSpeech, pendingSpeechKey, type PendingSpeech } from "./assistant-speech-draft";
 import { useAssistantCall } from "./assistant-call-state";
 
@@ -17,13 +21,41 @@ type CompanionState = {
   transcript?: PendingSpeech;
   speechHydrated: boolean;
   error?: unknown;
+  /** What the phone's own recognizer has heard so far while dictating on the phone; empty otherwise. */
+  dictationPartial?: string;
+  /** The assistant's profile name from the computer, for the floating window's title. */
+  name?: string;
 };
 const initial: CompanionState = { mode: "closed", surface: "chat", machineId: "", environmentId: "", thread: null, projectId: "", voice: "idle", speechHydrated: false };
 export const useAssistantCompanion = create<CompanionState>(() => initial);
+/** Microphone level of the assistant composer's dictation; only its meter reads it. */
+export const assistantDictationLevel = createLevelSignal();
+/** `dictationPartial` for the composer's preview: a store update re-renders only views whose text changed. */
+export const assistantDictationPartial: LiveText = {
+  get: () => useAssistantCompanion.getState().dictationPartial ?? "",
+  subscribe: listener => useAssistantCompanion.subscribe(() => listener()),
+};
 let engine: AssistantVoice | undefined;
 let loading: Promise<AssistantVoice> | undefined;
+/** Dictation on the phone's own recognizer (Settings → Voice assistant → Transcription); read-aloud stays on `engine`. */
+let phoneRecorder: DictationRecorder | undefined;
+let phoneLoading: Promise<DictationRecorder> | undefined;
+let dictating: "phone" | "computer" = "computer";
 let generation = 0;
 let speechSequence = 0;
+/** Custom words, filler removal and the optional cleanup on the computer, as in every composer. */
+const processor = new DictationProcessor({
+  preferences: () => voicePreferences.getState().preferences,
+  createId: async () => (await import("expo-crypto")).randomUUID(),
+  spokenLanguage: async () => (await computerLanguage())(),
+});
+/** The computer the current recording goes to, captured when it starts. */
+let processing: DictationProcessContext | undefined;
+/** Polishes recognized speech before it is kept for the assistant draft; a discarded recording keeps nothing. */
+async function keepRecognizedSpeech(target: AssistantVoiceTarget, text: string) {
+  const processed = processing ? await processor.process(processing, text) : text;
+  if (processed !== null) await retainAssistantSpeech(target, processed);
+}
 let speechStore: Promise<DraftStore<PendingSpeech>> | undefined;
 async function pendingSpeechStore(): Promise<DraftStore<PendingSpeech>> {
   if (!speechStore) speechStore = import("@react-native-async-storage/async-storage").then(async ({ default: storage }) => {
@@ -76,25 +108,41 @@ export function openAssistantCompanion(machineId: string, environmentId: string)
 export function minimizeAssistantCompanion() { useAssistantCompanion.setState({ mode: "minimized" }); }
 export function closeAssistantCompanion() {
   const { transcript, speechHydrated } = useAssistantCompanion.getState();
-  generation++; engine?.cancel();
+  generation++; engine?.cancel(); phoneRecorder?.cancel(); processor.cancel();
   // Closing chrome must not discard recognized speech awaiting its original draft.
   useAssistantCompanion.setState({ ...initial, transcript, speechHydrated }, true);
 }
-export function cancelAssistantVoice() { generation++; engine?.cancel(); }
+export function cancelAssistantVoice() { generation++; engine?.cancel(); phoneRecorder?.cancel(); processor.cancel(); }
+/**
+ * Cancels dictation or read-aloud and resolves once the Host released their lease, also one still
+ * starting. A call waits for it so its reply voice never meets this phone's own dictation lease.
+ */
+export async function settleAssistantVoice() { generation++; phoneRecorder?.cancel(); processor.cancel(); await engine?.cancelAndSettle(); }
 /** Native permission windows can take focus; cancellation stays explicit and never auto-resumes. */
 export function interruptAssistantVoice(message = "Voice stopped because the app lost focus. Return to Bycoda and try again.") {
   const active = useAssistantCompanion.getState().voice !== "idle";
   cancelAssistantVoice();
   if (active) useAssistantCompanion.setState({ voice: "idle", error: new Error(message) });
 }
-export function finishAssistantVoice() { return engine?.finish(); }
+export function finishAssistantVoice() { return dictating === "phone" ? phoneRecorder?.finish() : engine?.finish(); }
+async function phoneDictation() {
+  phoneLoading ??= loadDictationRecorder("phone", {
+    state: (voice, voiceTarget) => useAssistantCompanion.setState({ voice, voiceTarget }),
+    transcript: keepRecognizedSpeech,
+    error: error => useAssistantCompanion.setState({ error }),
+    level: value => assistantDictationLevel.set(value),
+    partial: text => useAssistantCompanion.setState({ dictationPartial: text }),
+  }).then(recorder => { phoneRecorder = recorder; return recorder; }).catch(error => { phoneLoading = undefined; throw error; });
+  return phoneLoading;
+}
 async function voiceEngine() {
-  if (!loading) loading = import("./assistant-voice-native").then(({ nativeVoiceDependencies }) => {
-    engine = new AssistantVoice(nativeVoiceDependencies({
+  if (!loading) loading = Promise.all([import("./assistant-voice-native"), computerDictationDependencies()]).then(([{ nativeVoiceDependencies }, dictation]) => {
+    engine = new AssistantVoice({ ...nativeVoiceDependencies({
       state: (voice, voiceTarget) => useAssistantCompanion.setState({ voice, voiceTarget }),
-      transcript: async (target, text) => { await retainAssistantSpeech(target, text); },
+      transcript: keepRecognizedSpeech,
       error: error => useAssistantCompanion.setState({ error }),
-    }));
+      level: value => assistantDictationLevel.set(value),
+    }), ...dictation });
     return engine;
   }).catch(error => { loading = undefined; throw error; });
   return loading;
@@ -105,7 +153,14 @@ export async function recordAssistantVoice(target: AssistantVoiceTarget, allowed
   try {
     await pendingSpeechStore();
     if (useAssistantCompanion.getState().transcript) throw new Error("Return to the original assistant conversation to keep its recognized text before recording again.");
-    const port = capturedVoicePort(target, allowed); const voice = await voiceEngine(); if (version === generation && port.current()) await voice.record(port, target);
+    const port = capturedVoicePort(target, allowed);
+    await voicePreferences.getState().hydrate();
+    const kind = dictationEngineKind(voicePreferences.getState().preferences);
+    const voice: DictationRecorder = kind === "phone" ? await phoneDictation() : await voiceEngine();
+    const cleanupAvailable = await import("@/state/machines")
+      .then(({ useMachines }) => useMachines.getState().machines.find(machine => machine.id === target.machineId)?.capabilities?.includes(DICTATION_CLEANUP_CAPABILITY) === true)
+      .catch(() => false);
+    if (version === generation && port.current()) { dictating = kind; processing = { port, cleanupAvailable }; await voice.record(port, target); }
   }
   catch (error) { if (version === generation) useAssistantCompanion.setState({ error }); }
 }

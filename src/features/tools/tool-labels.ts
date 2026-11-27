@@ -7,7 +7,7 @@ const labels = {
   diagnostics: ["Bilgisayar kaynakları", "Computer resources"],
   usage: ["Kullanım ve limitler", "Usage and limits"],
   providers: ["Sağlayıcı merkezi", "Provider center"],
-  access: ["Bilgisayar erişimi", "Host access"],
+  access: ["Bilgisayar erişimi", "Computer access"],
 } satisfies Record<string, readonly [tr: string, en: string]>;
 
 export type ToolId = keyof typeof labels;

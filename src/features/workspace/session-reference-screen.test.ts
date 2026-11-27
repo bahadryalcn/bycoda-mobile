@@ -50,13 +50,15 @@ vi.mock("../connections/use-switch-computer", () => ({
 }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/tokens", () => ({ space: { md: 12 } }));
+vi.mock("lucide-react-native/icons/laptop", () => ({ default: () => null }));
 vi.mock("@/ui/primitives", () => {
   const Group = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress }: { label: string; onPress: () => void }) => createElement("button", { onClick: onPress }, label);
   const StateView = ({ title, description, action }: { title: string; description?: string; action?: { label: string; onPress: () => void } }) =>
     createElement("div", null, title, description, action ? createElement(Button, action) : null);
   return {
-    Body: Group, Button, Empty: StateView, StateView,
+    Body: Group, Button, Empty: StateView, StateView, NavigationGroup: Group, RowIcon: () => null,
+    NavigationRow: ({ label, onPress }: { label: string; onPress: () => void }) => createElement(Button, { label, onPress }),
     ErrorNotice: ({ error, onRetry, action, children }: PropsWithChildren<{ error: Error; onRetry?: () => void; action?: { label: string; onPress: () => void } }>) =>
       createElement("div", null, error.message, onRetry ? createElement(Button, { label: "Retry", onPress: onRetry }) : null,
         action ? createElement(Button, action) : null, children),
@@ -88,7 +90,7 @@ it("waits offline, discards an interrupted lookup and resumes the exact link", a
     expect(fixture.request).not.toHaveBeenCalled();
     await act(async () => onlineManager.setOnline(true));
     expect([...container.querySelectorAll('[role="status"]')].map((status) => status.textContent))
-      .toEqual(["Opening conversation…"]);
+      .toEqual(["Opening session…"]);
     expect(container.textContent).toContain("Test computer");
     const openingActions = [...container.querySelectorAll("button")].map((button) => button.textContent);
     expect(openingActions).toEqual(["Manage connections", "Back to projects"]);
@@ -221,7 +223,7 @@ it("offers connection recovery when the paired computer cannot provide a client"
   const render = () => act(async () => root.render(createElement(SessionReferenceScreen, { link: "bycoda://session/v1/host/host/session" })));
   try {
     await render();
-    expect(container.textContent).not.toContain("Opening conversation…");
+    expect(container.textContent).not.toContain("Opening session…");
     expect(container.textContent).toContain("Waiting for a connection");
     expect(container.querySelector("main")?.dataset.scroll).toBe("true");
     const buttons = [...container.querySelectorAll("button")];
@@ -249,7 +251,7 @@ it("offers connection recovery when the paired computer cannot provide a client"
 
     await act(() => recordHostRuntimeStartupFailed(true));
     expect(container.textContent).toContain("Connection couldn’t start");
-    expect(container.textContent).toContain("Close and reopen Bycoda, then open this link again.");
+    expect(container.textContent).toContain("Close and reopen bycoda, then open this link again.");
     expect(container.textContent).not.toContain("Waiting for a connection");
     expect(fixture.request).not.toHaveBeenCalled();
 

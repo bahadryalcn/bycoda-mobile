@@ -68,6 +68,11 @@ export type ModelPickerProps = {
    * and image models from any provider) instead of the provider's native advisor settings.
    */
   catalog?: HostModelCatalog;
+  /**
+   * Offer bycoda's own Agents (advisor, subagents, image models) from the catalogue. Work items
+   * keep their helpers elsewhere and pass false; the catalogue then only lists other accounts' models.
+   */
+  ownAgents?: boolean;
   onChange: (model: string, settings: Record<string, string>) => void;
 };
 
@@ -99,6 +104,7 @@ export function ModelPicker({
   title,
   extra,
   catalog,
+  ownAgents: agentsAllowed = true,
   onChange,
 }: ModelPickerProps) {
   const copy = useCopy();
@@ -139,14 +145,14 @@ export function ModelPicker({
   const grouped = groupedSettings(selected);
   const providerIds = useMemo(() => [...new Set(choices.map((item) => item.provider))], [choices]);
   const candidates = useMemo(
-    () => (catalog ? delegationCandidates(catalog, providerIds, copy("Varsayılan hesap", "Default account")) : []),
+    () => (catalog && agentsAllowed ? delegationCandidates(catalog, providerIds, copy("Varsayılan hesap", "Default account")) : []),
     // copy follows the locale.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [catalog, providerIds, locale],
+    [catalog, providerIds, locale, agentsAllowed],
   );
-  const images = useMemo(() => imageChoices(providerIds), [providerIds]);
+  const images = useMemo(() => (agentsAllowed ? imageChoices(providerIds) : []), [providerIds, agentsAllowed]);
   // bycoda's own delegation replaces the provider-native advisor and subagent model.
-  const ownAgents = !!catalog && (candidates.length > 0 || images.length > 0);
+  const ownAgents = !!catalog && agentsAllowed && (candidates.length > 0 || images.length > 0);
   const delegationItems = ownAgents
     ? grouped.delegation.filter((item) => item.id !== "advisor" && item.id !== "subagentModel")
     : grouped.delegation;

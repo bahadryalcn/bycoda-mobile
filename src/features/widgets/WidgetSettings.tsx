@@ -32,7 +32,7 @@ export function WidgetSettings() {
   return (
     <>
       <SegmentedRow
-        label={copy("Kullanım limitleri", "Usage limits")}
+        label={copy("Widget'ta gösterilen kullanım limiti", "Usage limit shown in widget")}
         value={usageWindows}
         disabled={!usageHydrated}
         options={usageWindowOptions(copy)}
@@ -58,7 +58,7 @@ export function WidgetSettings() {
                 : pending === "save"
                   ? copy("Ayarlar kaydediliyor…", "Saving settings…")
                   : storageError
-                    ? copy("Kaydedilmedi", "Unsaved")
+                    ? copy("Kaydedilemedi", "Not saved")
                     : undefined
         }
         onChange={(value) => {

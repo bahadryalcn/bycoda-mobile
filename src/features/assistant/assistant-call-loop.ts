@@ -1,20 +1,32 @@
 import { AssistantCallError } from "./assistant-call-error";
 import type { AssistantVoiceTarget } from "./assistant-voice";
-import { VoiceVad } from "../../../../src/features/voice/model/voiceVad";
+import { VoiceVad } from "../../../../src/shared/model/voice-realtime/voiceVad";
 
 export type AssistantCallPhase = "idle" | "listening" | "sending" | "speaking" | "muted";
+/** Where a call turn's words came from: the microphone, or the composer opened from "Write". */
+export type AssistantCallTurnOrigin = "spoken" | "typed";
 export type AssistantCallDependencies = {
   capture(target: Readonly<AssistantVoiceTarget>, current: () => boolean): Promise<string>;
   /** Resolve only after durable admission and an authoritative reply; unknown delivery rejects. */
-  send(text: string, target: Readonly<AssistantVoiceTarget>, current: () => boolean): Promise<string>;
+  send(text: string, target: Readonly<AssistantVoiceTarget>, current: () => boolean, origin: AssistantCallTurnOrigin): Promise<string>;
   speak(text: string, target: Readonly<AssistantVoiceTarget>, current: () => boolean): Promise<void>;
   cancelAudio(): void;
+  /**
+   * A typed message waits while the microphone listens: end the capture now (like "Send" in the dock),
+   * so words already spoken go first and the typed message follows. Nothing heard resolves empty.
+   */
+  endCapture?(): void;
   current(target: Readonly<AssistantVoiceTarget>): boolean;
   state(phase: AssistantCallPhase, target?: Readonly<AssistantVoiceTarget>): void;
   error(error: unknown): void;
 };
 
-/** One conversation across expanded, movable and authorized background views. Muting never retries a sent utterance. */
+type TypedTurn = { text: string; resolve(reply: string): void; reject(error: unknown): void };
+
+/**
+ * One conversation across expanded, movable and authorized background views. Muting never retries a sent utterance.
+ * Typed messages join the same turn order: one send at a time, each after the reply in flight (and its playback).
+ */
 export class AssistantCallLoop {
   private active = false;
   private muted = false;
@@ -26,6 +38,8 @@ export class AssistantCallLoop {
   private selected?: Readonly<AssistantVoiceTarget>;
   private wake?: () => void;
   private lastUtteranceAt = 0;
+  private listening = false;
+  private readonly typed: TypedTurn[] = [];
   constructor(private readonly dependencies: AssistantCallDependencies) {}
   get target() { return this.selected; }
   current(): boolean {
@@ -45,6 +59,8 @@ export class AssistantCallLoop {
     if (!this.active) return;
     this.active = false; this.epoch++;
     this.wake?.(); this.wake = undefined;
+    // Messages still waiting were never sent: their drafts stay with the composer.
+    for (const turn of this.typed.splice(0)) turn.reject(new AssistantCallError("stopped"));
     this.dependencies.cancelAudio();
     this.dependencies.state("idle", this.selected);
   }
@@ -63,6 +79,25 @@ export class AssistantCallLoop {
       if (!this.pending) this.launch();
     }
   }
+  /** Messages typed during the call that have not been sent yet. */
+  get queued() { return this.typed.length; }
+  /**
+   * Sends a typed message as the call's next turn and resolves with its reply once admitted. It waits for
+   * a reply being awaited or spoken; a capture in progress ends first and its words are sent before it.
+   */
+  submit(text: string): Promise<string> {
+    const words = text.trim();
+    if (!words) return Promise.reject(new Error("The message is empty."));
+    if (!this.current()) return Promise.reject(new AssistantCallError("stopped"));
+    return new Promise<string>((resolve, reject) => {
+      this.typed.push({ text: words, resolve, reject });
+      // Typing is the owner's activity: the silence limit restarts, and a silence pause ends now.
+      this.lastUtteranceAt = Date.now();
+      this.wake?.(); this.wake = undefined;
+      if (this.listening) this.dependencies.endCapture?.();
+      if (!this.pending) this.launch();
+    });
+  }
   /** Stops the reply being spoken and returns to listening; the sent message and its reply stay in the conversation. */
   interrupt(): boolean {
     if (!this.speaking || !this.current()) return false;
@@ -78,13 +113,14 @@ export class AssistantCallLoop {
   }
   private valid(epoch: number) { return this.epoch === epoch && this.current(); }
   private launch() {
-    if (this.pending || !this.current() || this.muted) return;
+    // A muted microphone still sends typed messages; it only never listens.
+    if (this.pending || !this.current() || (this.muted && !this.typed.length)) return;
     const epoch = this.epoch;
     this.pending = this.run(epoch).finally(() => {
       this.pending = undefined;
       // A capture or reply must settle before unmute can start a new listener.
       if (!this.current()) return;
-      if (this.muted) this.dependencies.state("muted", this.selected);
+      if (this.muted && !this.typed.length) this.dependencies.state("muted", this.selected);
       else this.launch();
     });
   }
@@ -98,32 +134,46 @@ export class AssistantCallLoop {
     const target = this.selected!;
     const current = () => this.valid(epoch);
     try {
-      while (!this.muted && current()) {
+      while (current()) {
+        const typed = this.typed.shift();
+        if (typed) { await this.turn(typed.text, target, current, typed); continue; }
+        if (this.muted) return;
         this.dependencies.state("listening", target);
-        const text = (await this.dependencies.capture(target, current)).trim();
+        this.listening = true;
+        let text: string;
+        try { text = (await this.dependencies.capture(target, current)).trim(); } finally { this.listening = false; }
         if (!current()) return;
         if (!text) {
+          if (this.typed.length) continue;
           // Match the native idle safety: empty captures do not count as owner speech or reset its wall-clock deadline.
           if (Date.now() - this.lastUtteranceAt >= 180000) throw new AssistantCallError("no-speech");
           await this.pause();
           continue;
         }
         this.lastUtteranceAt = Date.now();
-        this.sending = true;
-        this.dependencies.state("sending", target);
-        const reply = await this.dependencies.send(text, target, current);
-        this.sending = false;
-        if (!current()) return;
-        if (reply.trim() && !this.speakerMuted) {
-          this.speaking = true;
-          this.dependencies.state("speaking", target);
-          try { await this.dependencies.speak(reply, target, current); } finally { this.speaking = false; }
-        }
+        await this.turn(text, target, current);
       }
     } catch (error) {
       if (current()) { this.stop(); this.dependencies.error(error); }
     } finally {
       this.sending = false;
+    }
+  }
+  /** One send and its spoken reply; typed and spoken words take the same path. */
+  private async turn(text: string, target: Readonly<AssistantVoiceTarget>, current: () => boolean, typed?: TypedTurn) {
+    this.sending = true;
+    this.dependencies.state("sending", target);
+    let reply: string;
+    try { reply = await this.dependencies.send(text, target, current, typed ? "typed" : "spoken"); }
+    catch (error) { typed?.reject(error); throw error; }
+    finally { this.sending = false; }
+    // Admitted is delivered, even when the call ended while the reply was on its way.
+    typed?.resolve(reply);
+    if (!current()) return;
+    if (reply.trim() && !this.speakerMuted) {
+      this.speaking = true;
+      this.dependencies.state("speaking", target);
+      try { await this.dependencies.speak(reply, target, current); } finally { this.speaking = false; }
     }
   }
 }

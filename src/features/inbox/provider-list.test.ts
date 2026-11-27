@@ -6,6 +6,12 @@ import type { RemoteInboxItem } from "../../../../src/features/inbox/model/remot
 import { ProviderInboxRow } from "./provider-list";
 
 vi.mock("../workspace/pull-request-state-badge", () => ({ PullRequestStateBadge: ({ label }: { label: string }) => createElement("span", null, label) }));
+vi.mock("lucide-react-native/icons/circle-dot", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/git-merge", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/git-pull-request-closed", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/git-pull-request-draft", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/git-pull-request", () => ({ default: () => null }));
+vi.mock("./provider-mark", () => ({ ProviderMark: () => null }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ uiStyles: { caption: {} } }) }));
 vi.mock("@/ui/issue-summary", () => ({ IssueSummary: () => null }));
@@ -32,7 +38,7 @@ it.each([
     updatedAt: "2026-11-03T00:00:00Z", url: "https://example.invalid/original/128" };
   await act(async () => root.render(createElement(ProviderInboxRow, { item, onOpen: open })));
   const row = container.querySelector("button")!;
-  expect(row.getAttribute("aria-label")).toBe(`Review mobile identity. GitHub · REVIEW-128 · owner/original-project. ${label}`);
+  expect(row.getAttribute("aria-label")).toBe(`Review mobile identity. GitHub · REVIEW-128 · owner/original-project. Pull request · ${label}`);
   expect(row.textContent).toContain(label);
   await act(async () => row.click()); expect(open).toHaveBeenCalledOnce(); expect(open.mock.calls[0][0]).toBe(item);
 });

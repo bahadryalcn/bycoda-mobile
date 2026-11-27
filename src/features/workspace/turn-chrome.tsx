@@ -3,7 +3,7 @@ import { View } from "react-native";
 import ArrowLeftRight from "lucide-react-native/icons/arrow-left-right";
 import ChartColumn from "lucide-react-native/icons/chart-column";
 import Check from "lucide-react-native/icons/check";
-import X from "lucide-react-native/icons/x";
+import Square from "lucide-react-native/icons/square";
 import type { ModelSwitchMeta } from "../../../../src/features/sessions/model/modelSwitchHistory";
 import { Body, Row } from "@/ui/primitives";
 import { ChatAction } from "@/ui/chat-controls";
@@ -14,7 +14,14 @@ import { useLocale } from "@/i18n";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
 import { providerName } from "./provider-choices";
-import { formatMessageTime, hasTurnMetrics, turnDurationLabel, turnMetricsLines } from "./transcript-format";
+import {
+  formatMessageTime,
+  hasTurnMetrics,
+  stoppedTurnLabel,
+  turnDurationLabel,
+  turnMetricsLines,
+  turnReceiptLabel,
+} from "./transcript-format";
 import type { Block } from "./wire";
 
 type SwitchState = { harness: string; model: string; account?: string };
@@ -58,29 +65,42 @@ export function ModelSwitchRow({ meta }: { meta: ModelSwitchMeta }) {
 }
 
 /**
- * Desktop's settled turn receipt: how it ended, who worked and for how long, when it finished, and
- * the provider-reported token metrics behind one disclosure.
+ * Desktop's settled turn receipt, one muted line: how it ended, the model, when it finished, and the
+ * provider-reported token metrics behind one disclosure. The duration lives on the turn's fold row
+ * and repeats here only when no fold row shows it. A turn the owner stopped reads "■ You stopped · 46 s".
  */
-export function TurnFooter({ turn }: { turn: Block }) {
+export function TurnFooter({ turn, showDuration = true }: { turn: Block; showDuration?: boolean }) {
   const copy = useCopy();
   const locale = useLocale();
   const { colors } = useMobileTheme();
   const typography = useChatTextStyles(useChatAppearance((state) => state.textSize));
   const [metricsOpen, setMetricsOpen] = useState(false);
-  const label = turnDurationLabel(turn.durationMs, turn.turnModel?.name, copy);
+  const stopped = turn.turnOutcome === "stopped";
   const completedAt =
     turn.startedAt != null && turn.durationMs != null ? turn.startedAt + turn.durationMs : undefined;
+  const time = completedAt != null ? formatMessageTime(completedAt, locale, copy) : undefined;
+  const label = turnReceiptLabel(turn, showDuration, time, copy);
+  // The spoken receipt always says who worked and for how long.
+  const spoken = [
+    stopped ? stoppedTurnLabel(turn.durationMs, copy) : turnDurationLabel(turn.durationMs, turn.turnModel?.name, copy),
+    time,
+  ].filter(Boolean).join(", ");
   const metrics = hasTurnMetrics(turn.turnMetrics)
     ? turnMetricsLines(turn.turnMetrics, turn.durationMs, locale, copy)
     : undefined;
-  const Icon = turn.turnOutcome === "stopped" ? X : Check;
   return (
     <View style={{ gap: space.xxs, paddingTop: space.xs }}>
       <Row style={{ flexWrap: "nowrap", gap: space.xs, minHeight: 24 }}>
-        <Icon size={13} color={colors.muted} />
-        <Body muted style={[typography.metadata, { flexShrink: 1 }]}>
-          {completedAt != null ? `${label} · ${formatMessageTime(completedAt, locale, copy)}` : label}
-        </Body>
+        <View accessible accessibilityLabel={spoken} style={{ flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 1 }}>
+          {stopped ? (
+            <Square size={9} color={colors.muted} fill={colors.muted} strokeWidth={0} />
+          ) : (
+            <Check size={13} color={colors.muted} />
+          )}
+          <Body muted style={[typography.metadata, { flexShrink: 1, fontVariant: ["tabular-nums"] }]}>
+            {label}
+          </Body>
+        </View>
         {metrics ? (
           <ChatAction
             label={metricsOpen ? copy("Tur ölçümlerini gizle", "Hide turn metrics") : copy("Tur ölçümleri", "Turn metrics")}

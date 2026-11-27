@@ -134,7 +134,7 @@ async function click(label: string) {
 }
 async function openReview() {
   await mount();
-  await click("Read visible SSH servers");
+  await click("Get SSH servers");
   await click("Choose fixture");
   await click("Review connection");
 }
@@ -231,7 +231,7 @@ it("durably claims connect before transport and reopens with requestId-only reco
   await click("Request computer approval");
   await act(async () => root.unmount());
   await mount();
-  await click("Read result");
+  await click("Check status");
   expect(
     f.request.mock.calls.filter(([method]) => method === "ssh.workspace.approve"),
   ).toHaveLength(1);
@@ -286,11 +286,11 @@ it("storage failure and same-ID endpoint re-pair both refuse a new connect write
 it("corrupt persisted receipt cannot be cleared into an unreviewed new connection", async () => {
   f.data.set('bycoda.ssh-workspace.v1:["machine","env","project","source"]:close', "corrupt");
   await mount();
-  await click("Read visible SSH servers");
+  await click("Get SSH servers");
   expect(f.request).not.toHaveBeenCalled();
   expect(
     [...container.querySelectorAll("button")].some(
-      (button) => button.textContent === "Clear error",
+      (button) => button.textContent === "Dismiss error",
     ),
   ).toBe(false);
 });
@@ -313,7 +313,7 @@ it("restored receipt refuses a replaced endpoint under the same machine/environm
   await mount();
   expect(
     [...container.querySelectorAll("button")].some(
-      (button) => button.textContent === "Read result",
+      (button) => button.textContent === "Check status",
     ),
   ).toBe(false);
   expect(f.request.mock.calls.filter(([method]) => method === "ssh.workspace.status")).toHaveLength(

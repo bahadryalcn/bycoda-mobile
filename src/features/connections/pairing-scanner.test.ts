@@ -35,6 +35,7 @@ vi.mock("@/ui/primitives", () => {
     ErrorNotice:({error,onRetry,retryLabel}:{error?:Error|string;onRetry?:()=>void;retryLabel?:string})=>error?createElement("div",null,createElement("p",null,error instanceof Error?error.message:error),onRetry?createElement(Button,{label:retryLabel??"Retry",onPress:onRetry}):null):null,
   };
 });
+vi.mock("./pairing-code", () => ({ isPairingPayload: (value: string) => !value.startsWith("https://") }));
 import { PairingScanner } from "./pairing-scanner";
 let root:ReturnType<typeof createRoot>|undefined,container:HTMLDivElement,client:QueryClient;
 const render=()=>act(async()=>root!.render(createElement(QueryClientProvider,{client},createElement(PairingScanner,{onCode:fixture.code,onClose:fixture.close,onPaste:fixture.paste}))));
@@ -50,6 +51,13 @@ it("pauses after one rejected QR and scans again only after explicit retry",asyn
  await act(async()=>old({data:"bad"}));await settle();expect(fixture.code).toHaveBeenCalledTimes(1);
  await click("Scan again");await settle();expect(container.textContent).not.toContain("Invalid pairing QR");
  await act(async()=>fixture.camera!.onBarcodeScanned!({data:"next"}));await settle();expect(fixture.code).toHaveBeenCalledTimes(2);
+});
+it("ignores a QR that is not a pairing code and keeps the camera scanning",async()=>{
+ await render();await settle();
+ await act(async()=>fixture.camera!.onBarcodeScanned!({data:"https://menu.example"}));await settle();
+ expect(fixture.code).not.toHaveBeenCalled();expect(container.textContent).toContain("Synthetic camera");
+ expect(container.textContent).toContain("This is not a bycoda pairing code.");
+ await act(async()=>fixture.camera!.onBarcodeScanned!({data:"pairing"}));await settle();expect(fixture.code).toHaveBeenCalledExactlyOnceWith("pairing");
 });
 it.each(["change","blur","locked","unfocused","unmounted"])("does not request permission after a delayed read loses %s ownership",async reason=>{
  fixture.permission=null;let resolve!:(value:unknown)=>void;fixture.refresh.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));

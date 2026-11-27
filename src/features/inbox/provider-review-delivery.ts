@@ -28,6 +28,8 @@ export function usePrReviewDelivery(
   origin: InboxOrigin,
   item: RemoteInboxItem,
   input: InboxItemInput,
+  /** Runs once a send or a reconciled receipt is known to have completed (refresh reads, announce). */
+  onCompleted?: () => void,
 ) {
   const inboxScope = useInboxLocalScope();
   const client = useHostClient();
@@ -42,6 +44,8 @@ export function usePrReviewDelivery(
   const mounted = useRef(true);
   const opening = useRef(reviewedMachine(client?.machine));
   const value = draft.value ?? emptyPrReviewDraft();
+  const completedRef = useRef(onCompleted);
+  completedRef.current = onCompleted;
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -59,6 +63,7 @@ export function usePrReviewDelivery(
       latest ? settlePrReviewDraft(latest, requestId, { id: requestId, state }) : latest,
     );
     await draft.persist();
+    if (state === "completed") completedRef.current?.();
   };
   const reconcile = async () => {
     const pending = draft.valueRef.current?.pending;

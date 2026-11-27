@@ -4,15 +4,15 @@ import ChevronDown from "lucide-react-native/icons/chevron-down";
 import { LifecycleButton as PanelButton } from "./busy-indicator";
 import { haptic } from "./motion";
 import { useMobileTheme } from "./theme";
-import { hitSlopFor, metrics, radii, SCOPE_PILL_MAX_WIDTH, space } from "./tokens";
+import { hitSlopFor, metrics, opacity, radii, SCOPE_PILL_MAX_WIDTH, space } from "./tokens";
 
 /**
- * A compact scope selector in the page identity row, matching the computer pill: a 28 high pill
- * (48 hit area) with a leading role glyph, the current value and a chevron that opens a picker.
+ * A compact scope selector in the page identity row, matching the computer pill: an at least 28
+ * high pill that grows with system text size (48 hit area) with a leading role glyph, the current value and a chevron that opens a picker.
  * It never wraps: the value stays on one line and ends in an ellipsis within a bounded width, so a
  * long project name cannot push the page down; the full name stays in the spoken label and picker.
  */
-export function ScopePill({ icon, label, status, accessibilityLabel, expanded = false, onPress }: {
+export function ScopePill({ icon, label, status, accessibilityLabel, expanded = false, disabled = false, onPress }: {
   icon: ReactNode;
   label: string;
   /** Optional state text after the label (the computer's degraded link); it never shrinks. */
@@ -20,6 +20,8 @@ export function ScopePill({ icon, label, status, accessibilityLabel, expanded = 
   /** Spoken name: role, current value and what the tap does. */
   accessibilityLabel: string;
   expanded?: boolean;
+  /** The scope cannot change right now (an operation or a call is busy); the value stays readable. */
+  disabled?: boolean;
   onPress: () => void;
 }) {
   const { colors, uiStyles, pressedFill } = useMobileTheme();
@@ -27,7 +29,8 @@ export function ScopePill({ icon, label, status, accessibilityLabel, expanded = 
     <PanelButton
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ expanded }}
+      accessibilityState={{ expanded, disabled }}
+      disabled={disabled}
       aria-expanded={expanded}
       variant="ghost"
       pressScale={1}
@@ -41,13 +44,14 @@ export function ScopePill({ icon, label, status, accessibilityLabel, expanded = 
         flexDirection: "row",
         alignItems: "center",
         gap: space.xs + 2,
-        height: metrics.chipHeight,
+        // A floor, not a fixed height: system text scaling grows the pill instead of clipping its name.
         minHeight: metrics.chipHeight,
         paddingStart: space.row,
         paddingEnd: space.sm,
-        paddingVertical: 0,
+        paddingVertical: space.xxs,
         borderRadius: radii.pill,
         backgroundColor: expanded ? pressedFill : colors.fill,
+        opacity: disabled ? opacity.disabled : 1,
         flexShrink: 1,
         flexWrap: "nowrap",
         // Bounded; on a narrow row it shrinks further and the value ellipsizes.

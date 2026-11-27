@@ -8,6 +8,6 @@ export default function ChatsRoute() {
   const { split } = useAdaptiveLayout();
   const machine = useActiveMachine();
   // Without a computer the list already owns the connect state; an overview beside it would repeat it.
-  if (!split || !machine) return <ActiveSessionsScreen overview />;
-  return <SplitView list={<ActiveSessionsScreen overview urgency />} detail={<TabletOverview />} />;
+  if (!split || !machine) return <ActiveSessionsScreen />;
+  return <SplitView list={<ActiveSessionsScreen urgency />} detail={<TabletOverview />} />;
 }

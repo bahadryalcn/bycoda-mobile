@@ -5,6 +5,7 @@ import {
   reviewSessionRow,
   sessionRowReviewMatches,
   sessionActionState,
+  sessionSummaryFromSnapshot,
 } from "./session-row-action-model";
 
 const summary: HostSessionSummary = {
@@ -153,4 +154,18 @@ describe("session row reviewed mutations", () => {
     ])
       expect(sessionRowReviewMatches(review(), "machine", "project", changed)).toBe(false);
   });
+});
+
+it("reviews the open session snapshot as the same summary row the list menu uses", () => {
+  const snapshot = {
+    projectId: "project", revision: 4, status: "running", runId: "run", updatedAt: 9, authorityGeneration: 2,
+    pinned: true, archived: false, unread: true, snoozedUntil: null, blockRevisions: { a: 1 },
+    session: { id: "session", title: "Open title", harness: "claude", model: "m", cwd: "/p", branch: "feat", worktreeCwd: "/w", blocks: [] },
+  } as unknown as HostSession;
+  const row = sessionSummaryFromSnapshot(snapshot);
+  expect(row).toMatchObject({ id: "session", projectId: "project", title: "Open title", harness: "claude", model: "m", cwd: "/p",
+    branch: "feat", worktreeCwd: "/w", revision: 4, status: "running", runId: "run", authorityGeneration: 2, pinned: true, unread: true });
+  expect(row).not.toHaveProperty("session");
+  expect(row).not.toHaveProperty("blockRevisions");
+  expect(sessionRowReviewMatches(reviewSessionRow("machine", "project", row), "machine", "project", row)).toBe(true);
 });

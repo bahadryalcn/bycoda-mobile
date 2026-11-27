@@ -74,13 +74,13 @@ class BycodaVoiceCompanionModule : Module() {
     AsyncFunction("beginPlaybackSession") Coroutine { -> beginSession(false) }
     // Reserve on main, open the microphone on a worker, commit on main. The last two steps are NonCancellable so a
     // canceled call can never leave an opened microphone behind: commit/abandon always close or adopt it.
-    AsyncFunction("startCapture") Coroutine { id: String, captureId: String ->
+    AsyncFunction("startCapture") Coroutine { id: String, captureId: String, batchBytes: Int? ->
       val service = VoiceCompanionRuntime.service ?: error("Voice session is unavailable.")
       val start = withContext(Dispatchers.Main) { service.prepareCapture(id, captureId) }
       withContext(NonCancellable) {
-        val opened = try { withContext(Dispatchers.IO) { service.openRecorder() } }
+        val opened = try { withContext(Dispatchers.IO) { service.openRecorder(start.duplex) } }
         catch (error: Exception) { withContext(Dispatchers.Main) { service.abandonCapture(start) }; throw error }
-        withContext(Dispatchers.Main) { service.commitCapture(start, opened) }
+        withContext(Dispatchers.Main) { service.commitCapture(start, opened, VoiceSessionPolicy.batchBytes(batchBytes)) }
       }
     }
     Function("stopCapture") { id: String, captureId: String -> main { VoiceCompanionRuntime.service?.stopCapture(id, expectedCapture = captureId) } }
@@ -92,12 +92,18 @@ class BycodaVoiceCompanionModule : Module() {
       withContext(Dispatchers.Main) { checkNotNull(VoiceCompanionRuntime.service).startPcm(id, playingId, sampleRate) }
     }
     AsyncFunction("appendPcm") Coroutine { id: String, playingId: String, audio: String ->
-      val stream = withContext(Dispatchers.Main) { checkNotNull(VoiceCompanionRuntime.service).pcmPlayback(id, playingId) }
+      val stream = withContext(Dispatchers.Main) { checkNotNull(VoiceCompanionRuntime.service).run { val stream = pcmPlayback(id, playingId); touchPlayback(playingId); stream } }
       withContext(Dispatchers.IO) { stream.append(audio) }
     }
     AsyncFunction("finishPcm") Coroutine { id: String, playingId: String ->
       val stream = withContext(Dispatchers.Main) { checkNotNull(VoiceCompanionRuntime.service).pcmPlayback(id, playingId) }
       withContext(Dispatchers.IO) { stream.drain() }
+    }
+    /** Milliseconds of a streamed reply the speaker has played (an underrun does not count); 0 when it is not live. */
+    Function("pcmPlayedMs") { id: String, playingId: String -> (VoiceCompanionRuntime.service?.pcmPlayedMs(id, playingId) ?: 0L).toDouble() }
+    /** Realtime full duplex, asked before the call first listens; resolves whether echo cancellation is active. */
+    AsyncFunction("setEchoCancellation") Coroutine { id: String, enabled: Boolean ->
+      withContext(Dispatchers.Main) { checkNotNull(VoiceCompanionRuntime.service) { "Voice session is unavailable." }.setEchoCancellation(id, enabled) }
     }
     Function("stopPlayback") { id: String, playingId: String -> main { VoiceCompanionRuntime.service?.stopPlayback(id, expectedPlayback = playingId) } }
     Function("endSession") { id: String -> main {

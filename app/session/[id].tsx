@@ -66,7 +66,6 @@ export default function SessionRoute() {
               <ScreenChromeProvider>
                 <View style={{ flex: 1, paddingTop: insets.top }}>
                   <ActiveSessionsScreen
-                    overview
                     urgency
                     shareConnectionFeedback
                     selectedSessionId={id}

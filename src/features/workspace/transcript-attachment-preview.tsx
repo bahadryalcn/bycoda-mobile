@@ -2,14 +2,10 @@ import { useState } from "react";
 import { View } from "react-native";
 import { Image } from "expo-image";
 import { useQuery } from "@tanstack/react-query";
-import File from "lucide-react-native/icons/file";
-import FileText from "lucide-react-native/icons/file-text";
-import ImageIcon from "lucide-react-native/icons/image";
-import Film from "lucide-react-native/icons/film";
 import Maximize from "lucide-react-native/icons/maximize-2";
 import { Attachment } from "panelui-native/components/attachment";
-import { Body, Button, ErrorText, IconButton, Loading } from "@/ui/primitives";
-import { ChatSummary } from "@/ui/chat-controls";
+import { Body, Button, ErrorText, IconButton } from "@/ui/primitives";
+import { FileChip, FileKindTile } from "@/ui/file-chip";
 import { confirmAction } from "@/ui/confirm";
 import { useCopy } from "@/ui/copy";
 import { loadSessionMedia } from "@/ui/media-loader";
@@ -20,13 +16,11 @@ import {
 } from "@/ui/media-inline-policy";
 import { useDataSaverActive } from "@/state/data-saver";
 import { useMobileTheme } from "@/ui/theme";
-import { space } from "@/ui/tokens";
+import { metrics, radii, space } from "@/ui/tokens";
 import { InlineVideo } from "@/ui/media-video";
 import { usePrivateMediaData } from "@/ui/use-private-media-data";
 import { useReaderContentAccess, useReaderRetry, useReaderScope } from "@/ui/use-reader-scope";
 import { appendToDraft } from "./draft-append";
-
-const THUMBNAIL = 96;
 
 export const sessionFileKey = (context: MessageContext, id: string) =>
   mediaQueryKey(context, ["session-file", context.machineId, context.sessionId, id]);
@@ -49,13 +43,23 @@ export function useSessionFile(
   return { query, data: usePrivateMediaData(queryKey, query) };
 }
 
-const icons = { image: ImageIcon, pdf: FileText, markdown: FileText, video: Film, file: File } as const;
+/** Starts a download at once when small; a large or unknown size asks first. */
+export function confirmDownload(copy: ReturnType<typeof useCopy>, file: { kind: AttachmentKind; name: string; size?: number }, start: () => void) {
+  if (!downloadNeedsConfirmation(file.kind, file.size)) return start();
+  const sizeLabel = file.size !== undefined ? formatAttachmentSize(file.size) : "";
+  confirmAction(
+    copy("Dosya indirilsin mi?", "Download this file?"),
+    copy("{p0} cihaza indirilecek. Büyük olabilir.", "{p0} will be downloaded to this device. It may be large.", { p0: [file.name, sizeLabel].filter(Boolean).join(" · ") }),
+    copy("İndir", "Download"), start, copy("Vazgeç", "Cancel"), "default",
+  );
+}
 
-/** Images up to 4 MB appear in the chat; other files wait for an explicit (confirmed when large) download. */
-export function AttachmentPreview({ id, name, size, mimeType, kind, context, onOpenFile, thumbnail }: {
+/**
+ * Received images up to 4 MB appear in the chat; other files wait for an explicit (confirmed when large)
+ * download. A user message's own images and files use the media grid and chips in transcript-attachments.
+ */
+export function AttachmentPreview({ id, name, size, mimeType, kind, context, onOpenFile }: {
   id: string; name: string; size?: number; mimeType?: string; kind: AttachmentKind; context: MessageContext; onOpenFile(): void;
-  /** Sent messages show images as small tiles like the composer; a tap or long press opens the viewer. */
-  thumbnail?: boolean;
 }) {
   const { colors } = useMobileTheme(), copy = useCopy();
   const dataSaver = useDataSaverActive();
@@ -66,17 +70,8 @@ export function AttachmentPreview({ id, name, size, mimeType, kind, context, onO
   const { query, data } = useSessionFile(scope, context, id, name, mimeType, plan === "inline" || requested);
   const content = useReaderContentAccess(scope, data ? JSON.stringify([data.uri, data.name]) : undefined, scope.available && !!data);
   const { retry, retryError } = useReaderRetry(scope, query);
-  const Icon = icons[kind];
   const sizeLabel = size !== undefined ? formatAttachmentSize(size) : "";
-  const download = () => {
-    const start = () => setRequested(true);
-    if (!downloadNeedsConfirmation(kind, size)) return start();
-    confirmAction(
-      copy("Dosya indirilsin mi?", "Download this file?"),
-      copy("{p0} cihaza indirilecek. Büyük olabilir.", "{p0} will be downloaded to this device. It may be large.", { p0: [name, sizeLabel].filter(Boolean).join(" · ") }),
-      copy("İndir", "Download"), start, copy("Vazgeç", "Cancel"), "default",
-    );
-  };
+  const download = () => confirmDownload(copy, { kind, name, size }, () => setRequested(true));
   if (data && content.access.allowed) {
     if (kind === "image" && imageFailed) return <View style={{ gap: space.xs }}>
       <Body numberOfLines={2}>{name}</Body>
@@ -91,18 +86,9 @@ export function AttachmentPreview({ id, name, size, mimeType, kind, context, onO
     const useAsReference = sessionId ? (file: { uri: string; name: string }) =>
       appendToDraft({ machineId: context.machineId, sessionId }, { file: { ...file, mimeType: data.mimeType || mimeType } }) : undefined;
     const viewerNode = viewer ? <MediaViewer uri={data.uri} name={name} visible context={context} onClose={() => setViewer(false)} onUseAsReference={useAsReference} /> : null;
-    if (kind === "image" && thumbnail) return (
-      <View>
-        <Attachment size="xs" orientation="vertical" className="h-24 w-24 border-0 p-0" accessibilityLabel={copy("Tam ekran aç: {p0}", "Open full screen: {p0}", { p0: name })} onPress={() => setViewer(true)} onLongPress={() => setViewer(true)}>
-          <Attachment.Media variant="image" className="h-24 w-24 rounded-xl">
-            <Image source={{ uri: data.uri }} accessibilityLabel={name} contentFit="contain" transition={0} onError={() => { if (content.check()) setImageFailed(true); }} style={{ width: THUMBNAIL, height: THUMBNAIL }} />
-          </Attachment.Media>
-        </Attachment>
-        {viewerNode}
-      </View>
-    );
     if (kind === "video") return <InlineVideo uri={data.uri} name={name} size={size} />;
-    if (kind !== "image") return <ChatSummary label={name} detail={[sizeLabel, copy("Aç", "Open")].filter(Boolean).join(" · ")} icon={<Icon size={16} color={colors.muted} />} onPress={() => { if (content.check()) onOpenFile(); }} />;
+    if (kind !== "image") return <FileChip name={name} detail={[sizeLabel, copy("Aç", "Open")].filter(Boolean).join(" · ")}
+      accessibilityLabel={copy("Dosyayı aç: {p0}", "Open file: {p0}", { p0: name })} onPress={() => { if (content.check()) onOpenFile(); }} />;
     return (
       <View style={{ gap: space.xs }}>
         <Attachment size="xs" orientation="vertical" className="w-full border-0 p-0" accessibilityLabel={copy("Tam ekran aç: {p0}", "Open full screen: {p0}", { p0: name })} onPress={() => setViewer(true)} onLongPress={() => setViewer(true)}>
@@ -121,8 +107,9 @@ export function AttachmentPreview({ id, name, size, mimeType, kind, context, onO
   const loading = query.isFetching && !query.error;
   return (
     <View style={{ gap: space.xs }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.sm }}>
-        <Icon size={16} color={colors.muted} />
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, paddingStart: space.xs, paddingEnd: space.sm,
+        minHeight: metrics.touchTarget, borderRadius: radii.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.panel }}>
+        <FileKindTile name={name} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Body style={{ fontWeight: "500" }}>{name}</Body>
           {sizeLabel ? <Body muted>{sizeLabel}</Body> : null}
@@ -131,7 +118,7 @@ export function AttachmentPreview({ id, name, size, mimeType, kind, context, onO
           : <Button tone="quiet" label={query.error ? copy("Yeniden dene", "Retry") : copy("İndir", "Download")} busy={loading}
             disabled={!scope.available || loading} onPress={query.error ? retryError : requested ? () => undefined : download} />}
       </View>
-      {loading ? <Loading /> : null}
+      {/* The busy Download button owns this read's spinner. */}
       <ErrorText error={query.error} />
     </View>
   );

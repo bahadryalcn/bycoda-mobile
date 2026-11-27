@@ -636,3 +636,52 @@ describe("device proof seed lifecycle", () => {
     expect(store.get("bycoda.remote.computer-a")).toBe(token);
   });
 });
+
+describe("preference writes do not block connections", () => {
+  const second = { ...machine, id: "computer-b", name: "Home", endpoint: "https://home.example", environmentId: "env-b" };
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    storage.getItem.mockResolvedValue(null);
+    storage.setItem.mockResolvedValue(undefined);
+    access.assertAppAccess.mockImplementation(() => undefined);
+    secrets.getItemAsync.mockResolvedValue(null);
+    secrets.setItemAsync.mockResolvedValue(undefined);
+    secrets.deleteItemAsync.mockResolvedValue(undefined);
+    useMachines.setState({ machines: [], projects: {}, activeId: null, selectedProjectId: null, language: "system",
+      hydrated: false, storageError: null, preferenceError: null, credentialRevisions: new Map() });
+    await useMachines.getState().hydrate();
+    await useMachines.getState().saveMachine({ ...machine, providers: ["cursor"] }, token);
+    await useMachines.getState().saveMachine({ ...second, providers: ["cursor"] }, replacement);
+  });
+  it("keeps a project, language or computer choice in memory and reports a retryable warning", async () => {
+    storage.setItem.mockRejectedValue(new Error("Disk full"));
+    useMachines.getState().selectProject("project-a");
+    useMachines.getState().setLanguage("tr");
+    useMachines.getState().selectMachine(machine.id);
+    await vi.waitFor(() => expect(useMachines.getState().preferenceError).toBeTruthy());
+    expect(useMachines.getState()).toMatchObject({ storageError: null, activeId: machine.id, language: "tr" });
+    // Connections stay available: the credential is still readable.
+    secrets.getItemAsync.mockResolvedValueOnce(token);
+    await expect(credentials.get(machine.id)).resolves.toBe(token);
+    storage.setItem.mockResolvedValue(undefined);
+    await useMachines.getState().retryPreferences();
+    expect(useMachines.getState().preferenceError).toBeNull();
+    expect(JSON.parse(storage.setItem.mock.lastCall![1] as string)).toMatchObject({ activeId: machine.id, language: "tr" });
+  });
+  it("edits a saved computer in place without making it the active computer", async () => {
+    expect(useMachines.getState().activeId).toBe(second.id);
+    await useMachines.getState().saveMachine({ ...machine, name: "Renamed", providers: ["cursor"] }, token, undefined, { activate: false });
+    expect(useMachines.getState().activeId).toBe(second.id);
+    expect(useMachines.getState().machines.map((saved) => saved.name)).toEqual(["Renamed", "Home"]);
+  });
+  it("applies a project choice made during a connection change once the change settles", async () => {
+    let release!: () => void;
+    secrets.setItemAsync.mockImplementationOnce(() => new Promise<void>((resolve) => { release = resolve; }));
+    const saving = useMachines.getState().saveMachine({ ...second, providers: ["cursor"] }, replacement);
+    useMachines.getState().selectProject("project-b");
+    expect(useMachines.getState().selectedProjectId).toBeNull();
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    release(); await saving;
+    await vi.waitFor(() => expect(useMachines.getState().selectedProjectId).toBe("project-b"));
+  });
+});

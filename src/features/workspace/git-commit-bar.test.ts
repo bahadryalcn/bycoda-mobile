@@ -1,7 +1,7 @@
 import { createElement as h, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
-import { GitCommitBar, GitCommitPanel } from "./git-changes";
+import { GitCommitBar } from "./git-changes";
 
 vi.mock("@/ui/disclosure-motion", () => ({ DisclosureChevron: () => null }));
 vi.mock("react-native", () => ({ View: ({ children }: { children: ReactNode }) => h("div", null, children) }));
@@ -80,18 +80,4 @@ it("keeps the Push action when there are local commits to send", () => {
   const html = render({ ...cleanIndex, ahead: 2, remote: "origin" }, "");
   expect(html).toContain("<button>Push (2)</button>");
   expect(html).not.toContain("↑");
-});
-
-it("opens the commit message field directly on a clean working folder", () => {
-  const html = renderToStaticMarkup(h(GitCommitPanel, {
-    index: {
-      ...cleanIndex,
-      behind: 0, additions: 0, deletions: 0,
-      head: null, upstream: null, defaultBranch: "main", aheadOfDefault: 0, headPushed: false,
-    },
-    message: "Draft for later", onMessageChange: vi.fn(), busy: false,
-    canRunWorkspace: true, fetching: false, onFetch: vi.fn(), onChoose: vi.fn(),
-  }));
-  expect(html).toContain('<textarea aria-label="Commit message">Draft for later</textarea>');
-  expect(html).not.toContain("<button>");
 });

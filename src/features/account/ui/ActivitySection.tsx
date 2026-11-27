@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
-import { ErrorNotice, NavigationGroup, Section, SettingIcon, Skeleton, Stack, ValueRow } from "@/ui/primitives";
+import { ErrorNotice, NavigationGroup, SettingIcon, Skeleton, Stack, ValueRow } from "@/ui/primitives";
+import { HintSection } from "@/ui/info-hint";
 import Calendar from "lucide-react-native/icons/calendar";
 import CalendarDays from "lucide-react-native/icons/calendar-days";
 import CalendarRange from "lucide-react-native/icons/calendar-range";
@@ -44,7 +45,10 @@ export function ActivitySection() {
     return hours ? copy("{p0} sa {p1} dk", "{p0}h {p1}m", { p0: hours, p1: rest }) : copy("{p0} dk", "{p0}m", { p0: rest });
   };
   return (
-    <Section title={copy("Aktif süre", "Active time")}>
+    <HintSection title={copy("Aktif süre", "Active time")} help={copy(
+      "bycoda masaüstü uygulamasını etkin olarak kullandığın dakikalar; tüm bilgisayarlarından toplanır ve her dakika bir kez sayılır.",
+      "Minutes you actively used the bycoda desktop app, combined across your computers; each minute counts once.",
+    )}>
       <Stack>
         {summary.data ? (
           <>
@@ -68,6 +72,6 @@ export function ActivitySection() {
           )
         )}
       </Stack>
-    </Section>
+    </HintSection>
   );
 }

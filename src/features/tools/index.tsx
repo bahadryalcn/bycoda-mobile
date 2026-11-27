@@ -1,5 +1,4 @@
 import { ProjectDirectoryFeedback } from "../workspace/project-directory-feedback";
-import { router } from "expo-router";
 import { useRef, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import type { HostProject } from "@/domain/types";
@@ -21,6 +20,7 @@ import { AccessCenter } from "./access-center";
 import { PrivateContentBoundary } from "@/ui/private-content";
 import { NoComputerGate } from "@/ui/no-computer";
 import { computerTools, isToolId, toolLabels } from "./tool-labels";
+import { goBack, leaveTo } from "@/ui/navigation";
 
 type SharedProjectProps = {
   /** The shared project selection (`useLocalProjectScope`); never a route-private project. */
@@ -58,8 +58,9 @@ function ComputerToolScreen({ tool, projectId, onSelectProject, scopeControl }: 
   if (!capabilities.some((capability) => machine.capabilities!.includes(capability))) return (
     <Screen title={title} scroll={false}>
       <View style={{ flex: 1 }}>
-        <Empty compact={false} illustration="permission" title={copy("Kullanılamıyor", "Unavailable")}
-          detail={copy("Bu bilgisayar bu aracı sunmuyor: bycoda eski olabilir veya araç bu sistemde yok.", "This computer doesn't offer this tool: bycoda may be outdated or the tool is unavailable here.")} />
+        <Empty compact={false} illustration="permission" title={copy("Bu bilgisayarda yok", "Not on this computer")}
+          detail={copy("Bu bilgisayar bu aracı sunmuyor: bycoda eski olabilir veya araç bu sistemde yok.", "This computer doesn't offer this tool: bycoda may be outdated or the tool is unavailable here.")}
+          action={{ label: copy("Geri dön", "Go back"), onPress: () => goBack("/manage") }} />
       </View>
     </Screen>
   );
@@ -86,7 +87,7 @@ function ProjectHostToolScreen({ tool, projectId, onSelectProject }: { tool: str
     <Screen title={copy("Araçlar", "Tools")} scroll={false}>
       <View style={{ flex: 1 }}>
         <Empty compact={false} illustration="search-empty" title={copy("Araç bulunamadı", "Tool not found")}
-          action={{ label: copy("Projelere dön", "Back to projects"), onPress: () => router.replace("/") }} />
+          action={{ label: copy("Projelere dön", "Back to projects"), onPress: () => leaveTo("/") }} />
       </View>
     </Screen>
   );
@@ -99,16 +100,16 @@ function ProjectHostToolScreen({ tool, projectId, onSelectProject }: { tool: str
             loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")} />
         )}
         {projects.directoryReady && machine?.capabilities && !supported ? <Empty compact={false} illustration="permission"
-          title={copy("Kullanılamıyor", "Unavailable")}
+          title={copy("Bu bilgisayarda yok", "Not on this computer")}
           detail={copy("Bu bilgisayar bu aracı sunmuyor: bycoda eski olabilir veya araç bu sistemde yok.", "This computer doesn't offer this tool: bycoda may be outdated or the tool is unavailable here.")}
-          action={{ label: copy("Projelere dön", "Back to projects"), onPress: () => router.replace("/") }} /> : null}
+          action={{ label: copy("Geri dön", "Go back"), onPress: () => goBack("/manage") }} /> : null}
         {projects.directoryReady && !visibleProject && !(machine?.capabilities && !supported) ? <Empty compact={false} illustration="no-projects" title={projectId
           ? copy("Bu bilgisayarda proje bulunamadı.", "Project not found on this computer.")
           : copy("Proje gerekli", "Project required")}
           action={canChooseProject ? {
             label: copy("Proje seçin", "Choose a project"),
             onPress: () => setChoosingProject(true),
-          } : { label: copy("Projelere dön", "Back to projects"), onPress: () => router.replace("/") }} /> : null}
+          } : { label: copy("Projelere dön", "Back to projects"), onPress: () => leaveTo("/") }} /> : null}
       </View></Screen> : null}
       {choosingProject && canChooseProject ? (
         <ProjectPicker visible onClose={() => setChoosingProject(false)} onSelect={(selected) => {

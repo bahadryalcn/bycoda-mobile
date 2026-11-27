@@ -78,11 +78,8 @@ export async function readProjectSummaries(
         };
       }
     } catch (error) {
-      if (
-        (error as { kind?: string })?.kind !== "unsupported" &&
-        !(error instanceof Error && /Unsupported host method/.test(error.message))
-      )
-        throw error;
+      // The transport classifies an unknown method as `unsupported`; its English text is not matched.
+      if ((error as { kind?: string })?.kind !== "unsupported") throw error;
     }
   }
   // One project the Host cannot read must not hide the other projects' sessions.

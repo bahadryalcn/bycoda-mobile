@@ -5,7 +5,7 @@ import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, wi
 import { ThinkingOrb, type ThinkingOrbState } from "panelui-native/components/thinking-orb";
 import { useMobileTheme } from "@/ui/theme";
 import { useReducedMotionPreference } from "@/ui/use-reduced-motion";
-import { useRouteFocus } from "@/ui/use-route-focus";
+import { useOwnerVisible } from "@/ui/use-owner-visible";
 import type { MobileColors } from "@/ui/tokens";
 import type { AssistantOrbState } from "./assistant-voice-presentation";
 
@@ -20,21 +20,25 @@ function assistantStageTones(state: AssistantOrbState, colors: MobileColors) {
 }
 
 /**
- * The PanelUI orb shape follows the call. A muted live call uses a slow rotation.
+ * The PanelUI orb shape follows the call. A muted live call uses a slow rotation. The idle orb (the
+ * assistant's home) and a stopped call hold still: no decorative loop runs while nothing happens. PanelUI redraws a moving orb at a fixed ~30fps (no rate prop), so the owner's
+ * visibility gate below is what keeps it from running behind the lock or in the background.
  */
 export function assistantStageOrb(state: AssistantOrbState): { shape: ThinkingOrbState; paused: boolean; speed: number } {
   if (state === "listening") return { shape: "listening", paused: false, speed: 1 };
   if (state === "muted") return { shape: "listening", paused: false, speed: 0.4 };
   if (state === "thinking") return { shape: "working", paused: false, speed: 1 };
   if (state === "speaking") return { shape: "composing", paused: false, speed: 1.15 };
+  if (state === "idle") return { shape: "listening", paused: true, speed: 0.25 };
   return { shape: "listening", paused: true, speed: 1 };
 }
 
 /** Smoothed microphone energy; speaking breathes on its own because playback has no meter. */
 function useStageEnergy(state: AssistantOrbState, level: number) {
   const reducedMotion = useReducedMotionPreference();
-  const focused = useRouteFocus();
-  const reduced = reducedMotion || !focused;
+  // A covered route, the lock and a backgrounded app all still the orb: its loop must not run unseen.
+  const visible = useOwnerVisible();
+  const reduced = reducedMotion || !visible;
   const energy = useSharedValue(0), breath = useSharedValue(0);
   const input = state === "listening" && Number.isFinite(level) ? Math.max(0, Math.min(1, level)) : 0;
   // The meter arrives as React state; ease each sample on the UI thread instead of re-rendering the stage.
@@ -80,15 +84,19 @@ export function AssistantVoiceBackdrop({ state }: { state: AssistantOrbState }) 
   </View>;
 }
 
-/** The call's centrepiece: PanelUI's dotted orb at full size, over a halo that follows the voice. */
-export function AssistantVoiceOrb({ state, level, size, label }: { state: AssistantOrbState; level: number; size: number; label: string }) {
+/**
+ * The call's centrepiece: PanelUI's dotted orb at full size, over a halo that follows the voice. Without
+ * a `label` it is decorative: the call screen's live status line already says the state.
+ */
+export function AssistantVoiceOrb({ state, level, size, label }: { state: AssistantOrbState; level: number; size: number; label?: string }) {
   const { colors } = useMobileTheme();
   const { energy, breath, reduced } = useStageEnergy(state, level);
   const gradient = useId().replace(/:/g, "");
   const tones = assistantStageTones(state, colors), orb = assistantStageOrb(state);
   const pulse = useAnimatedStyle(() => ({ transform: [{ scale: 1 + energy.value * 0.14 + breath.value * (state === "speaking" ? 0.04 : 0.015) }] }));
   const halo = useAnimatedStyle(() => ({ opacity: 0.55 + energy.value * 0.45 + breath.value * 0.2, transform: [{ scale: 1 + energy.value * 0.3 + breath.value * 0.06 }] }));
-  return <View accessible accessibilityRole="image" accessibilityLabel={label} style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+  return <View accessible={!!label} accessibilityRole={label ? "image" : undefined} accessibilityLabel={label}
+    importantForAccessibility={label ? "auto" : "no-hide-descendants"} accessibilityElementsHidden={!label} style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
     <Animated.View pointerEvents="none" style={[{ position: "absolute", width: size, height: size }, halo]}>
       <Svg width={size} height={size} viewBox="0 0 100 100">
         <Defs><RadialGradient id={gradient} cx="50%" cy="50%" r="50%">

@@ -52,7 +52,7 @@ function draftCommand(
   if (session.status === "running")
     throw new Error("A draft cannot be saved while the agent is running.");
   if (session.session.blocks.some((block) => block.draft))
-    throw new Error("This conversation already has a draft. Send or remove it first.");
+    throw new Error("This session already has a draft. Send or remove it first.");
   return {
     type: "draft",
     ...captureSessionAuthority(session),

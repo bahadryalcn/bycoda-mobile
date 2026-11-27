@@ -12,6 +12,8 @@ import {
   secretExpired,
   secretPollInterval,
   secretSignalDelay,
+  secretSignalSignature,
+  secretSignalWanted,
 } from "./secret-request-model";
 
 /** Only pending metadata enters query state; values stay inside the masked card. */
@@ -55,10 +57,13 @@ export function SessionSecretRequests({
   );
   // Reason: a session update (new tool call, answer elsewhere) is the push signal for the list;
   // the transcript's own stream or snapshot read already delivers it, so no extra polling.
+  // Streamed text frames do not change the session's signal signature, so they refresh the list
+  // only after a quiet window instead of on every frame.
   useEffect(() => {
     if (!enabled) return;
     const sessionHash = hashKey(hostKey(machineId, ["session", sessionId]));
     let last = 0;
+    let lastSignature: string | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const refresh = () => {
       timer = undefined;
@@ -75,6 +80,11 @@ export function SessionSecretRequests({
         timer
       )
         return;
+      const signature = secretSignalSignature(
+        event.query.state.data as Parameters<typeof secretSignalSignature>[0],
+      );
+      if (!secretSignalWanted(signature, lastSignature, last, Date.now())) return;
+      lastSignature = signature;
       const wait = secretSignalDelay(last, Date.now());
       if (wait === 0) refresh();
       else timer = setTimeout(refresh, wait);

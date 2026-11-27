@@ -35,6 +35,7 @@ import {
   quickPanelVisible,
   type QuickPanelAction,
 } from "./tablet-quick-panel-model";
+import { pushOnce } from "@/ui/navigation";
 
 const icons: Record<QuickPanelAction["icon"], (color: string) => ReactNode> = {
   plus: (color) => <Plus size={18} color={color} />,
@@ -92,7 +93,7 @@ export function TabletQuickPanel({ bottomInset }: { bottomInset: number }) {
     if (!isAppContentVisible()) return;
     if (action.kind === "palette") palette.open();
     else if (action.kind === "route") router.navigate(action.destination as Href);
-    else router.push(action.href as Href);
+    else pushOnce(action.href as Href);
   };
   const label = expanded ? copy("Hızlı eylemleri kapat", "Close quick actions") : copy("Hızlı eylemler", "Quick actions");
   return (

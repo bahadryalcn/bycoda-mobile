@@ -120,7 +120,8 @@ function AttentionInboxScreen() {
     ["inbox", projectId],
     "inbox.list",
     projectId ? { projectId } : {},
-    { interval: 6000, enabled: scopeCurrent },
+    // Focus and pull-to-refresh read at once; a watched list needs no faster background cadence.
+    { interval: 15_000, enabled: scopeCurrent },
   );
   const readable = scopeCurrent && query.isEnabled !== false && query.fetchStatus !== "paused" && !isInboxPrivateFailure(query.error);
   const data = readable ? query.data : undefined;

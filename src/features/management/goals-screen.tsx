@@ -1,4 +1,4 @@
-import { ManagementToolbar } from "./shared/collection-toolbar";
+import { useManagementToolbar } from "./shared/collection-toolbar";
 import { ManagementList } from "./shared/management-list";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "./shared/search";
@@ -89,7 +89,15 @@ export function GoalsScreen() {
     cancel.isPending ||
     remove.isPending ||
     replan.isPending;
-  const scoped = query.data?.filter((goal) => !projectId || goal.projectIds.includes(projectId));
+  // Until the project is known nothing is listed, so the page never shows another project's epics.
+  const scopePending = !projectId && !projects.directoryReady;
+  const listQuery = scopePending
+    ? ({ ...query, data: undefined, error: null, status: "pending", isPending: true, isLoading: true,
+        isSuccess: false, fetchStatus: "fetching" } as unknown as typeof query)
+    : query;
+  const scoped = scopePending
+    ? undefined
+    : query.data?.filter((goal) => !projectId || goal.projectIds.includes(projectId));
   const presentation = getQueryPresentation(query);
   const showCreateInHeader =
     !!scoped?.length && (presentation === "ready" || presentation === "stale-error");
@@ -134,11 +142,30 @@ export function GoalsScreen() {
     create.reset();
     dispatch({ type: "new", projectId: projectId ?? "" });
   };
+  const toolbar = useManagementToolbar({
+    search: <SearchField
+                placeholder={copy("Ara", "Search")}
+                ref={searchInput}
+                label={copy("Başlık veya epicte ara", "Search epic titles and outcomes")}
+                value={search}
+                onChangeText={setSearch}
+              />,
+    status: {
+              label: copy("Durum", "Status"),
+              value: filter,
+              unfilteredValue: "all",
+              options: filterOptions,
+              onChange: setFilter,
+              filterable: !!scoped?.length,
+            },
+  });
   const listState = (
     <QueryState
       size="region"
-      query={query}
+      query={listQuery}
       empty={visible?.length === 0}
+      noResults={{ searching: !!search.trim() && !!scoped?.length, filtered: filter !== "all" && !!scoped?.length,
+        onClearSearch: clearSearch, onClearFilters: () => setFilter("all") }}
       emptyTitle={
         (search.trim() || filter !== "all") && scoped?.length
           ? copy("Eşleşen sonuç yok", "No matching results")
@@ -170,12 +197,13 @@ export function GoalsScreen() {
     <ManagementList<HostGoal>
       title={copy("Epicler", "Epics")}
       scopeControl={<ProjectScopePill allowAll={false} projectId={projectId} onChange={setProjectId} />}
-      query={query}
+      query={listQuery}
       ListEmptyComponent={listState}
       data={visible ?? []}
       keyExtractor={(item) => item.id}
-      actions={
-        showCreateInHeader ? (
+      actions={<>
+        {toolbar.actions}
+        {showCreateInHeader ? (
           <IconButton
             label={copy("Yeni epic", "New epic")}
             disabled={!canCreate}
@@ -183,8 +211,8 @@ export function GoalsScreen() {
           >
             <Plus size={iconSize.action} strokeWidth={2} color={colors.accent} />
           </IconButton>
-        ) : undefined
-      }
+        ) : null}
+      </>}
       header={
         <>
           {!providers.length && (
@@ -196,25 +224,7 @@ export function GoalsScreen() {
               )}
             </>
           )}
-          <ManagementToolbar
-            search={
-              <SearchField
-                placeholder={copy("Ara", "Search")}
-                ref={searchInput}
-                label={copy("Başlık veya epicte ara", "Search epic titles and outcomes")}
-                value={search}
-                onChangeText={setSearch}
-              />
-            }
-            status={{
-              label: copy("Durum", "Status"),
-              value: filter,
-              unfilteredValue: "all",
-              options: filterOptions,
-              onChange: setFilter,
-              filterable: !!scoped?.length,
-            }}
-          />
+          {toolbar.sheet}
           {taskScope.enabled && (
             <QueryState query={taskQuery} loading="inline" compact shareConnectionFeedback />
           )}

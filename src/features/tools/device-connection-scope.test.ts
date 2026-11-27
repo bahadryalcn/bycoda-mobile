@@ -11,6 +11,7 @@ const f = vi.hoisted(() => ({ store: undefined as any, uuid: 0,
 vi.mock("@/ui/duotone-icon", () => ({ Server: () => null, Smartphone: () => null }));
 vi.mock("lucide-react-native/icons/wrench", () => ({ default: () => null }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
+vi.mock("@/state/data-saver", () => ({ useDataSaverActive: () => false }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => String(++f.uuid) }));
 vi.mock("@/state/machines", async () => {
   const { create } = await import("zustand");
@@ -20,6 +21,13 @@ vi.mock("@/state/machines", async () => {
 vi.mock("react-native", () => ({ View: ({ children }: { children?: unknown }) => children as never }));
 vi.mock("@/ui/overflow-menu", () => ({ ActionMenu: ({ actions }: any) => createElement("div", null, actions.map((a: any) => createElement("button", { key: a.key, disabled: a.disabled, onClick: a.onPress }, a.label))) }));
 vi.mock("lucide-react-native/icons/ellipsis", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/app-window", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/arrow-left", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/keyboard", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/layers", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/pause", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/play", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/rotate-cw", () => ({ default: () => null }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
 vi.mock("lucide-react-native/icons/smartphone", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/house", () => ({ default: () => null }));
@@ -28,7 +36,7 @@ vi.mock("@/ui/info-hint", () => ({ useInfoHint: () => ({ button: null, panel: nu
 vi.mock("@/ui/copy",() => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("@/ui/styles", () => ({ uiStyles: {} }));
-vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, colors: {}, space: {} }));
+vi.mock("@/ui/tokens", () => ({ iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, colors: {}, space: {}, gapIcon: 8 }));
 vi.mock("@/ui/issue-summary", () => ({ IssueSummary: () => null }));
 const device = { id: "device", name: "Device", platform: "android" as const, version: "16", physical: false, booted: true };
 vi.mock("@/state/queries", () => ({
@@ -53,7 +61,7 @@ vi.mock("@/ui/remote-frame", async () => {
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
   const Button = ({ label, onPress, disabled }: any) => { if (label === "Home") f.home = onPress; return createElement("button", { onClick: onPress, disabled }, label); };
-  return { ScopeLine: () => null, RowIcon: () => null, StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children), Body: Wrap, Row: Wrap, Stack: Wrap, Sheet: ({children,onClose,footer}:any)=>createElement("div",null,children,footer,createElement(Button,{label:"Close",onPress:onClose})), Disclosure: Wrap, NavigationGroup: Wrap,
+  return { ChoiceChip: () => null, StatusLine: () => null, ScopeLine: () => null, RowIcon: () => null, StatusRow: ({label,children}: import("react").PropsWithChildren<{label:string}>) => createElement("div", null, label, children), Body: Wrap, Row: Wrap, Stack: Wrap, Sheet: ({children,onClose,footer}:any)=>createElement("div",null,children,footer,createElement(Button,{label:"Close",onPress:onClose})), Disclosure: Wrap, NavigationGroup: Wrap,
     Badge: () => null, StatusText: () => null, StateView: ({ title, description }: any) => createElement("p", null, title, description), Notice: () => null, MutationState: () => null, QueryState: () => null, ErrorText: () => null, Loading: () => null,
     Button, IconButton: Button, NavigationRow: Button,
     FormActions: ({onSubmit,submitLabel}:any) => { f.confirm = onSubmit; return createElement(Button,{label:submitLabel,onPress:onSubmit}); },
@@ -99,7 +107,7 @@ it("rejects late boot completion after endpoint A/B/A",async()=>{
   await aba("endpoint");await act(async()=>f.finishBoot({...device,id:"late-device"}));expect(f.onDevice).not.toHaveBeenCalled();
 });
 it("retains viewer input for name churn and closes the old viewer for connection A/B/A",async()=>{
-  await render(createElement(DevicesScreen,{project:{id:"project",name:"Project",cwd:"/project"}as any}));await click("Device");await click("Text and apps");await act(async()=>f.editText("Retained device text"));
+  await render(createElement(DevicesScreen,{project:{id:"project",name:"Project",cwd:"/project"}as any}));await click("Device");await click("Type text");await act(async()=>f.editText("Retained device text"));
   const input=node.querySelector('input[aria-label="Text"]')!;
   const access=f.frameAccess;
   await act(async()=>{const machine=f.store.getState().machines[0];f.store.setState({machines:[{...machine,name:"Renamed"}]});});
@@ -116,7 +124,7 @@ it("keeps normal close animation access but revokes that retained portal lease o
 
 async function reviewPreview() {
   await render(createElement(DevicePreviewSheet,{projectId:"project",device,onClose:vi.fn()}));
-  await act(async()=>f.editUrl("exp://127.0.0.1:8081"));await click("Review changes");
+  await act(async()=>f.editUrl("exp://127.0.0.1:8081"));await click("Review preview");
 }
 it("rejects a preview confirmation before it can claim storage after endpoint A/B/A",async()=>{
   await reviewPreview();const old=f.confirm;await aba("endpoint",old);

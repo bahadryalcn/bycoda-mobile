@@ -11,6 +11,8 @@ import {
   NavigationGroup,
   ToggleField,
   SelectField,
+  SegmentedControl,
+  NavigationRow,
   Body,
   Button,
   ErrorNotice,
@@ -36,6 +38,10 @@ import { AgentFields } from "../shared/agent-fields";
 import { useEffectiveAgent } from "../shared/agent";
 import type { AutomationEditorProps } from "./types";
 import { sameAutomationConfiguration } from "./automation-feedback";
+import { useProjectList } from "../../workspace/use-project-directory";
+
+/** The project field's value for an automation that runs without a project. */
+const NO_PROJECT = "__no-project__";
 
 type SaveReview = {
   submitted: HostAutomationInput;
@@ -65,14 +71,23 @@ export function AutomationEditor({
     initial.updatedAt === undefined ? undefined : JSON.parse(JSON.stringify(initial)),
   );
   const [agentValid, setAgentValid] = useState(true);
+  const isNew = initial.updatedAt === undefined;
+  const projects = useProjectList();
+  // A new automation without a project must be an explicit choice, never a silent default.
+  const [projectChosen, setProjectChosen] = useState(!isNew || !!initial.projectId);
   const form = useFormDraft(initial);
   const draft = form.values;
+  const projectValid =
+    projectChosen &&
+    (!isNew ||
+      !draft.projectId ||
+      (projects.directoryReady && projects.isProjectVisible(draft.projectId)));
   const [minute, setMinute] = useState(String(initial.minute));
   const [limit, setLimit] = useState(String(initial.maxRunsPerDay));
   const [gap, setGap] = useState(
     String(initial.trigger?.kind === "continuous" ? initial.trigger.minimumGapMinutes : 5),
   );
-  const { requestClose } = useSheetGuard({
+  const { requestClose, requestCloseThen } = useSheetGuard({
     dirty:
       !!review ||
       form.dirty ||
@@ -101,6 +116,7 @@ export function AutomationEditor({
     (review
       ? review.phase === "retry"
       : agentValid &&
+        projectValid &&
         !!draft.name.trim() &&
         !!draft.prompt.trim() &&
         !!normalized.model.trim() &&
@@ -192,7 +208,9 @@ export function AutomationEditor({
   const update = (patch: Partial<HostAutomationInput>) => {
     if (!formLocked) form.patch(patch);
   };
-  const blockedReason = !draft.name.trim()
+  const blockedReason = !projectValid
+    ? copy("Bir proje seçin.", "Choose a project.")
+    : !draft.name.trim()
     ? copy("Bir ad girin.", "Enter a name.")
     : !draft.prompt.trim()
       ? copy("Otomasyonun ne yapacağını yazın.", "Describe what the automation should do.")
@@ -211,6 +229,32 @@ export function AutomationEditor({
             : undefined;
   return (
     <Stack>
+      {isNew ? (
+        <SelectField
+          label={copy("Proje", "Project")}
+          value={projectChosen ? draft.projectId || NO_PROJECT : ""}
+          placeholder={copy("Proje seçin", "Choose a project")}
+          options={[
+            ...(projects.data ?? []).map((project) => ({ value: project.id, label: project.name })),
+            {
+              value: NO_PROJECT,
+              label: copy("Projesiz", "No project"),
+              detail: copy("Asistanın alanında çalışır.", "Runs in the assistant's space."),
+            },
+          ]}
+          disabled={formLocked || !projects.directoryReady}
+          onChange={(value) => {
+            if (formLocked) return;
+            if (value === NO_PROJECT) {
+              setProjectChosen(true);
+              update({ projectId: "" });
+            } else if (projects.isProjectVisible(value)) {
+              setProjectChosen(true);
+              update({ projectId: value });
+            }
+          }}
+        />
+      ) : null}
       <Field
         editable={!formLocked}
         label={copy("Ad", "Name")}
@@ -225,27 +269,26 @@ export function AutomationEditor({
         multiline
       />
       {draft.template?.kind === "project-scan" ? (
-        <>
-          <Body muted>
-            {copy(
-              "Proje taraması talimatları Steward tanımından gelir.",
-              "Project scan instructions come from the Steward definition.",
-            )}
-          </Body>
-          <Button
+        <NavigationGroup>
+          <NavigationRow
             label={copy("Proje taramasını düzenle", "Edit project scan")}
+            detail={copy(
+              "Talimatlar proje sorumlusundan gelir.",
+              "Instructions come from the project steward.",
+            )}
             disabled={formLocked}
-            onPress={() => router.navigate("/manage/stewards")}
+            onPress={() => requestCloseThen(() => router.navigate("/manage/stewards"))}
           />
-        </>
+        </NavigationGroup>
       ) : null}
       <AgentFields
         disabled={formLocked}
         value={draft}
         projectId={draft.projectId}
+        routingRole="automation"
         onChange={(agent) => update(agent)}
       />
-      <SelectField
+      <SegmentedControl
         label={copy("Tetikleyici", "Trigger")}
         value={draft.trigger?.kind ?? "scheduled"}
         disabled={formLocked}
@@ -265,11 +308,6 @@ export function AutomationEditor({
           })
         }
       />
-      {!draft.projectId ? (
-        <Body muted>
-          {copy("Bu otomasyon Room içinde çalışır.", "This automation runs in Room.")}
-        </Body>
-      ) : null}
       {draft.trigger?.kind === "continuous" ? (
         <IntegerTextStepper
           label={copy("En az bekleme (dakika)", "Minimum gap (minutes)")}
@@ -306,8 +344,30 @@ export function AutomationEditor({
             onChange={update}
             disabled={formLocked}
           />
+          <SchedulePreview
+            disabled={formLocked}
+            valid={draft.scheduleKind === "hourly" ? minuteValid : timeValid}
+            schedule={{
+              scheduleKind: draft.scheduleKind,
+              time: draft.time,
+              minute: Number(minute),
+              dayOfWeek: draft.dayOfWeek,
+            }}
+          />
         </>
       ) : null}
+      <NavigationGroup>
+        <ToggleField
+          disabled={formLocked}
+          label={copy("Etkin", "Enabled")}
+          detail={copy(
+            "Otomasyon tetiklendiğinde çalışır.",
+            "Run when this automation is triggered.",
+          )}
+          value={draft.enabled}
+          onChange={(enabled) => update({ enabled })}
+        />
+      </NavigationGroup>
       <Disclosure
         label={copy("Gelişmiş", "Advanced")}
         feedback={
@@ -340,31 +400,6 @@ export function AutomationEditor({
           value={limit}
           onChangeText={setLimit}
         />
-
-        <NavigationGroup>
-          <ToggleField
-            disabled={formLocked}
-            label={copy("Etkin", "Enabled")}
-            detail={copy(
-              "Otomasyon tetiklendiğinde çalışır.",
-              "Run when this automation is triggered.",
-            )}
-            value={draft.enabled}
-            onChange={(enabled) => update({ enabled })}
-          />
-        </NavigationGroup>
-        {(draft.trigger?.kind ?? "scheduled") === "scheduled" ? (
-          <SchedulePreview
-            disabled={formLocked}
-            valid={draft.scheduleKind === "hourly" ? minuteValid : timeValid}
-            schedule={{
-              scheduleKind: draft.scheduleKind,
-              time: draft.time,
-              minute: Number(minute),
-              dayOfWeek: draft.dayOfWeek,
-            }}
-          />
-        ) : null}
       </Disclosure>
 
       <FormActions
@@ -376,7 +411,7 @@ export function AutomationEditor({
                 message={
                   review.phase === "retry"
                     ? copy(
-                        "Taslak henüz bilgisayarda görünmüyor. Yeniden kaydedebilirsin.",
+                        "Taslak henüz bilgisayarda görünmüyor. Yeniden kaydedebilirsiniz.",
                         "The draft is not visible on the computer yet. You can save again.",
                       )
                     : review.phase === "different"
@@ -390,7 +425,7 @@ export function AutomationEditor({
                             "The automation is no longer available.",
                           )
                         : copy(
-                            "İşlem uygulanmış olabilir. Yeniden denemeden önce sonucu kontrol et.",
+                            "İşlem uygulanmış olabilir. Yeniden denemeden önce sonucu kontrol edin.",
                             "The action may have been applied. Check the result before trying again.",
                           )
                 }
@@ -413,7 +448,7 @@ export function AutomationEditor({
             </>
           )
         }
-        submitLabel={save.isPending ? copy("Kaydediliyor…", "Saving…") : copy("Kaydet", "Save")}
+        submitLabel={copy("Kaydet", "Save")}
         busy={save.isPending}
         disabled={!canSave}
         onSubmit={submit}

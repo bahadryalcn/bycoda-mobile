@@ -128,3 +128,17 @@ it("starts an explicitly reviewed request without joining the retired connection
   expect(onFirst).not.toHaveBeenCalled();
   expect(onSecond).toHaveBeenCalledExactlyOnceWith("second-session");
 });
+
+it("sends the first turn with a caller's stable command ID so a resend replays the same create", async () => {
+  fixture.dispatch.mockResolvedValue({ sessionId: "new-session" });
+  const onCreated = vi.fn();
+  const firstTurn = { type: "send" as const, commandId: "turn-1", sessionId: "" as const, text: "Fix the build" };
+  await act(async () => {
+    await expect(latest.create(onCreated, { commandId: "create-1", firstTurn })).resolves.toBe(true);
+  });
+  expect(fixture.dispatch).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ type: "create", projectId: "project", firstTurn }),
+    { commandId: "create-1" },
+  );
+  expect(onCreated).toHaveBeenCalledExactlyOnceWith("new-session");
+});

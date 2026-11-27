@@ -30,7 +30,7 @@ export function relativeTime(value: number | undefined, copy: CopyFn, now = Date
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return copy("{p0} sa", "{p0} h", { p0: hours });
   const days = Math.floor(hours / 24);
-  if (days < 7) return copy("{p0} g", "{p0} d", { p0: days });
+  if (days < 7) return copy("{p0} gün", "{p0} d", { p0: days });
   return shortDate(value, now);
 }
 
@@ -50,15 +50,15 @@ export function sessionStatus(
     case "retrying":
       return { label: copy("Yeniden deneniyor", "Retrying"), color: colors.warning };
     case "interrupted":
-      return { label: copy("Durduruldu", "Interrupted"), color: colors.warning };
+      return { label: copy("Kesildi", "Interrupted"), color: colors.warning };
     case "input":
-      return { label: copy("Girdi gerekiyor", "Needs input"), color: colors.warning };
+      return { label: copy("Seni bekliyor", "Needs you"), color: colors.warning };
     case "working":
       return { label: copy("Çalışıyor", "Working"), color: colors.live };
     case "waiting":
       return { label: copy("Bekliyor", "Waiting"), color: colors.muted };
     case "done":
-      return { label: copy("Tamam", "Done"), color: colors.success };
+      return { label: copy("Bitti", "Done"), color: colors.success };
     default:
       if (session.pinned) return { label: copy("Sabit", "Pinned"), color: colors.muted };
       return { label: copy("Hazır", "Ready"), color: colors.muted };
@@ -126,12 +126,13 @@ export function useCommands(invalidate: readonly unknown[] = []) {
     },
   });
   const mutateAsync = useCallback(
-    (params: Record<string, unknown>) =>
+    // A caller that retries the same payload after a lost reply passes its own stable commandId.
+    (params: Record<string, unknown>, options?: { commandId?: string }) =>
       mutation.mutateAsync({
         client,
         machineId: machine?.id ?? null,
         params: { ...params },
-        commandId: Crypto.randomUUID(),
+        commandId: options?.commandId ?? Crypto.randomUUID(),
         invalidate: [...invalidate],
       }),
     [mutation.mutateAsync, client, machine?.id, invalidate],

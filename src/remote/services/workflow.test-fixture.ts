@@ -15,7 +15,7 @@ export const taskInput: HostTaskInput = {
   preflightRequirements: [{ kind: "source", id: "repository", required: true }],
   workflowId: "workflow",
   workflowVersion: 1,
-  crewDefinitionId: "crew",
+  executor: { kind: "crew", crewDefinitionId: "crew" },
   crewRunId: "crew-run",
   crewScopes: ["source"],
   crewReviewFingerprint: "crew-fingerprint",
@@ -74,7 +74,6 @@ export const persistedTask: HostTask = {
   },
   evaluation: { accepted: true, reviewMinutes: 2, corrections: 0, recordedAt: 2 },
   budgetUsage: {
-    historyComplete: true,
     agentMinutes: 1,
     attempts: 1,
     completedRuns: 1,
@@ -87,7 +86,6 @@ export const persistedTask: HostTask = {
     estimatedCostUsd: null,
     measuredAt: 2,
   },
-  budgetStop: "limit",
   preflight: {
     checkedAt: 1,
     state: "ready",
@@ -109,11 +107,9 @@ export const persistedTask: HostTask = {
   retryFeedback: "Owner feedback",
   repairAttempts: 1,
   reviewFailureCount: 1,
-  awaitingOwnerRestart: false,
   blockedTakeover: { at: 1, previousSessionId: "previous-session", blocker: "Reviewed" },
   repairNote: "Repaired",
   checkFailureFingerprint: "failure-fingerprint",
-  repairStop: { reason: "external", message: "Owner review" },
   attemptHistory: [
     {
       attempt: 1,
@@ -206,7 +202,6 @@ export const persistedTask: HostTask = {
   cleanupError: "Retained",
   cleanupRetryAfter: 3,
   cleanupArchives: ["archive"],
-  needsInput: false,
 };
 
 export const automation: HostAutomation = {

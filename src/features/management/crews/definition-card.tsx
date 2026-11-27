@@ -1,11 +1,10 @@
 import type { CrewDefinition, SavedCrewAgent } from "@/remote/contracts/crews";
-import { useMachines } from "@/state/machines";
+import { useActiveMachine, useMachines } from "@/state/machines";
 import type { useHostMutation } from "@/state/queries";
 import Copy from "lucide-react-native/icons/copy";
 import Pencil from "lucide-react-native/icons/pencil";
 import Trash2 from "lucide-react-native/icons/trash-2";
 import { useCopy } from "@/ui/copy";
-import { confirmAction } from "@/ui/confirm";
 import Play from "lucide-react-native/icons/play";
 import { IconButton, MutationState, StatusText } from "@/ui/primitives";
 import { useMobileTheme } from "@/ui/theme";
@@ -15,6 +14,8 @@ import { useMenuGlyph } from "../shared/record-bits";
 import { crewAccent } from "./identity-model";
 import { MemberAvatars } from "./member-avatars";
 import { MemberLines } from "./member-lines";
+import { iconSize } from "@/ui/tokens";
+import { RecordConfirmationSheet, useRecordConfirmation } from "../shared/use-record-confirmation";
 
 /** A saved crew: member marks, scope, start-work command and its secondary actions. */
 export function CrewDefinitionCard({
@@ -50,11 +51,18 @@ export function CrewDefinitionCard({
   const copy = useCopy();
   const { colors } = useMobileTheme();
   const glyph = useMenuGlyph();
-  return (
+  const machine = useActiveMachine();
+  // A crew that changes while the sheet is open is reported, never deleted unseen.
+  const { confirm, review } = useRecordConfirmation(
+    { id: value.id, title: value.name, status: value.projectId ?? "", updatedAt: value.updatedAt },
+    machine?.name || copy("Bağlı bilgisayar", "Connected computer"),
+    busy || editorOpen,
+  );
+  return (<>
     <RecordCard
       title={value.name}
       status={
-        value.projectId ? undefined : <StatusText label={copy("Bilgisayar geneli", "Host-wide")} />
+        value.projectId ? undefined : <StatusText label={copy("Bilgisayar geneli", "Computer-wide")} />
       }
       metadata={copy("{p0} üye", "{p0} members", { p0: value.agents.length })}
       details={<MemberLines agents={value.agents} roleLabel={roleLabel} library={library} />}
@@ -72,7 +80,7 @@ export function CrewDefinitionCard({
           disabled={!executionSupported || busy || editorOpen}
           onPress={() => onStart(value)}
         >
-          <Play size={18} color={colors.accent} />
+          <Play size={iconSize.action} color={colors.accent} />
         </IconButton>
       }
       actions={{
@@ -100,11 +108,11 @@ export function CrewDefinitionCard({
             destructive: true,
             disabled: !deleteSupported || busy || editorOpen,
             onPress: () =>
-              confirmAction(
+              confirm(
                 copy("Ekibi sil", "Delete crew"),
                 copy(
-                  "Kayıtlı ekip tanımı silinir. Host devam eden çalışma veya görevler kullanıyorsa işlemi engeller.",
-                  "The saved crew definition will be deleted. The host blocks deletion while active work or tasks still use it.",
+                  "Kayıtlı ekip silinir. Ekibi kullanan çalışma veya görev varsa bilgisayar silmeyi engeller.",
+                  "The saved crew will be deleted. The computer blocks deletion while work or tasks still use it.",
                 ),
                 copy("Sil", "Delete"),
                 () => {
@@ -122,5 +130,6 @@ export function CrewDefinitionCard({
     >
       {remove.variables?.definitionId === value.id ? <MutationState mutation={remove} /> : null}
     </RecordCard>
-  );
+    <RecordConfirmationSheet review={review} />
+  </>);
 }

@@ -188,12 +188,12 @@ export function validateOrganizationChange(
       !change.sessionIds.every(knownSession) ||
       (change.parentId !== undefined && !knownFolder(change.parentId)))
   )
-    throw new Error("Select conversations and a valid parent folder");
+    throw new Error("Select sessions and a valid parent folder");
   if (
     change.kind === "sessionMove" &&
     (!knownSession(change.sessionId) || (change.folderId !== null && !knownFolder(change.folderId)))
   )
-    throw new Error("Select a conversation and destination");
+    throw new Error("Select a session and destination");
   if (
     change.kind === "projectGroup" &&
     change.groupId !== null &&
@@ -223,7 +223,7 @@ export function validateOrganizationChange(
     ["sessionOrder", "folderSessions"].includes(String(change.kind)) &&
     (!stringIds(change.sessionIds) || !change.sessionIds.every(knownSession))
   )
-    throw new Error("Conversation order contains an unavailable item");
+    throw new Error("Session order contains an unavailable item");
   if (
     change.kind === "folderOrder" &&
     (!stringIds(change.folderIds) || !change.folderIds.every(knownFolder))

@@ -5,12 +5,13 @@ export type FileActionMutation = Pick<
   "isPending" | "error" | "mutateAsync"
 >;
 export type FileOperation = "rename_path" | "copy_path" | "move_path";
-export type FileActionDraft = { operation: FileOperation; name: string; destination: string };
+export type FileActionDraft = { name: string; destination: string };
 export type FileActionsProps = {
   root: string;
   projectId: string;
   entry: HostFileEntry;
   onClose: () => void;
-  onCompleted: () => void;
+  /** Runs after success with a sentence naming the file and what happened to it. */
+  onCompleted: (summary: string) => void;
   action: FileActionMutation;
 };

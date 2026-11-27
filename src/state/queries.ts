@@ -11,6 +11,7 @@ import {
 import { HostTransport } from "../remote/transport";
 import { credentials, isMachinePending, useActiveMachine, useMachines } from "./machines";
 import { assertAppAccess, useSecurity } from "./security";
+import { contentRetained } from "./app-resume";
 import {
   assertProviderPermission,
   isScopePermitted,
@@ -38,13 +39,10 @@ export { hostKey } from "./host-request";
 export function useHostReadActive() {
   const privateAccess = usePrivateContentAccess();
   const focused = useIsFocused();
-  // A transient iOS "inactive" keeps reads running only while the app lock is off; with the lock on,
-  // inactive still suspends access, so reads stay gated.
-  const available = useSecurity(
-    (state) =>
-      state.status === "unlocked" &&
-      (state.appState === "active" || (state.appState === "inactive" && !state.enabled)),
-  );
+  // A share sheet, picker, permission prompt, screenshot or shade (iOS "inactive", Android "background")
+  // must not park session transcripts, close open sheets or hide reader scopes: see app-resume.ts.
+  // While away nothing polls (React Query is unfocused) and the lock still suspends access itself.
+  const available = useSecurity((state) => contentRetained(state, process.env.EXPO_OS !== "web"));
   return focused && available && privateAccess.allowed && privateAccess.check();
 }
 
@@ -193,15 +191,19 @@ export function useHostQuery<T>(
     retryDelay: transientRetryDelay,
     // Hosts can be reachable on a LAN without internet connectivity.
     networkMode: "always",
+    // Numeric and computed intervals alike stop on a lasting failure (access, unsupported) and
+    // slow to 10 s while the computer is unreachable.
     refetchInterval:
-      typeof interval === "function"
-        ? (query) =>
-          query.state.status === "error"
-            ? isTransientConnectionError(query.state.error)
-              ? 10_000
-              : false
-            : interval(query.state.data)
-        : (interval ?? false),
+      interval === undefined
+        ? false
+        : (query) =>
+            query.state.status === "error"
+              ? isTransientConnectionError(query.state.error)
+                ? 10_000
+                : false
+              : typeof interval === "function"
+                ? interval(query.state.data)
+                : interval,
     refetchIntervalInBackground: false,
   });
   const kind = (query.error as { kind?: string } | null)?.kind;

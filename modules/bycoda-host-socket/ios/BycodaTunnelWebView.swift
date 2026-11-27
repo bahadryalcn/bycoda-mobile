@@ -34,6 +34,7 @@ final class BycodaTunnelWebView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   private var appliedSaver: Bool?
   private var rulesReady = false
   private var rulesEpoch = 0
+  private var lastProcessReload: Date?
 
   private static let dataSaverRules = #"[{"trigger":{"url-filter":".*","resource-type":["image","media"]},"action":{"type":"block"}}]"#
   private static let externalSchemes: Set<String> = ["http", "https", "mailto", "tel"]
@@ -188,7 +189,20 @@ final class BycodaTunnelWebView: ExpoView, WKNavigationDelegate, WKUIDelegate {
 
   func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { emitError(error) }
   func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { emitError(error) }
-  func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { webView.reload() }
+  /**
+   * WebKit kills heavy dev-server pages under memory pressure. One automatic reload per window
+   * recovers a single kill; a page that keeps dying shows the failed state (like Android) and the
+   * manual Reload button instead of looping reload, kill, reload over the tunnel.
+   */
+  func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+    let now = Date()
+    if window != nil, lastProcessReload.map({ now.timeIntervalSince($0) >= 30 }) ?? true {
+      lastProcessReload = now
+      webView.reload()
+      return
+    }
+    onLoadError(["code": "render_process_gone", "description": "The page process stopped."])
+  }
 
   func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
     if let url = navigationAction.request.url {

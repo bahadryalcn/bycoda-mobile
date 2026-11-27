@@ -53,7 +53,7 @@ export function GoalSettingsEditor({ initial, onClose, accessDenied }: { initial
     </Section>
     <Section title={copy("Sınırlar", "Limits")}>
       <LimitPresets label={copy("Eşzamanlı görev sınırı", "Concurrent task limit")} customLabel={copy("Özel", "Custom")} unit={copy("görev", "tasks")}
-        error={concurrencyValid ? undefined : copy("Sıfır veya pozitif bir güvenli tam sayı girin.", "Enter zero or a positive safe integer.")}
+        error={concurrencyValid ? undefined : copy("0 veya daha büyük bir sayı girin.", "Enter 0 or a larger number.")}
         values={["0", "1", "2", "3", "5", "10"]} format={(count) => count === "0" ? copy("Bilgisayar sınırı", "Computer limit") : count}
         value={concurrency} onChange={setConcurrency} disabled={!supported || save.isPending} />
       <MinuteLimitField label={copy("Çalışma süresi sınırı", "Run time limit")}

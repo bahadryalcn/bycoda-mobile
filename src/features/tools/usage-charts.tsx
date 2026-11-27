@@ -10,6 +10,8 @@ import { useCopy } from "@/ui/copy";
 import { useMobileTheme } from "@/ui/theme";
 import { radii, space } from "@/ui/tokens";
 import { compactTokens, type ProviderUsage } from "./usage-breakdown";
+import { numberFormat } from "../../../../src/shared/i18n/numberFormat";
+import { useLocale } from "@/i18n";
 
 /** Usage headline: one PanelUI KPI per figure, wrapping to a second row on a narrow phone. */
 /** A donut is drawn for two to this many providers; more than that becomes bars. */
@@ -35,6 +37,7 @@ export function UsageKpis({ items }: { items: { title: string; value: string }[]
  */
 export function ProviderShare({ rows }: { rows: ProviderUsage[] }) {
   const copy = useCopy();
+  const locale = useLocale();
   const { colors } = useMobileTheme();
   const palette = [
     colors.accent,
@@ -72,7 +75,7 @@ export function ProviderShare({ rows }: { rows: ProviderUsage[] }) {
           >
             <PieChart.Center
               defaultLabel={copy("Toplam", "Total")}
-              formatValue={(value) => compactTokens(value)}
+              formatValue={(value) => compactTokens(value, locale)}
             />
           </PieChart>
         </View>
@@ -117,8 +120,8 @@ export function ProviderShare({ rows }: { rows: ProviderUsage[] }) {
                     row.tokens === null
                       ? "—"
                       : fraction === null
-                        ? compactTokens(row.tokens)
-                        : `${compactTokens(row.tokens)} · ${Math.round(fraction * 100)}%`
+                        ? compactTokens(row.tokens, locale)
+                        : `${compactTokens(row.tokens, locale)} · ${numberFormat(locale, { style: "percent", maximumFractionDigits: 0 }).format(fraction)}`
                   }
                 />
               </View>

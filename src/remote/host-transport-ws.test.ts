@@ -175,16 +175,6 @@ const savedSteward: HostSteward = {
   lastSessionId: "session",
   lastProposed: 0,
   declined: ["normalized title"],
-  run: {
-    startedAt: 0,
-    workspaceId: "workspace",
-    activityId: "activity",
-    sessionId: "session",
-    runId: "turn",
-    worktreeCwd: "/checkout",
-    branch: "steward/branch",
-    error: "Retained run error",
-  },
   createdAt: 0,
   updatedAt: 1,
 };
@@ -979,6 +969,16 @@ describe("existing mobile facade to native WS consumer", () => {
     expect(f.fetcher).not.toHaveBeenCalled();
     expect(f.credential).not.toHaveBeenCalled();
   });
+  it("lets a socket long-poll outlive its own wait instead of the default deadline", async () => {
+    const p = provider(),
+      f = transport();
+    vi.mocked(p.consumer.request).mockResolvedValueOnce({ kind: "unchanged", revision: 1 } as never);
+    await f.client
+      .request("sessions.sync", { sessionId: "session-a", revision: 1, waitMs: 20_000 })
+      .catch(() => undefined);
+    const options = vi.mocked(p.consumer.request).mock.calls[0]?.[2] as { timeoutMs?: number } | undefined;
+    expect(options?.timeoutMs).toBeGreaterThan(20_000);
+  });
   it("enforces the caller's deadline while bootstrap acquisition is still outstanding", async () => {
     vi.useFakeTimers();
     const p = provider(),
@@ -1040,11 +1040,11 @@ describe("existing mobile facade to native WS consumer", () => {
     expect(p.runtime.acquire).not.toHaveBeenCalled();
     expect(f.credential).toHaveBeenCalledTimes(1);
   });
-  it("fails explicitly when a capable cohort lacks its native provider", async () => {
+  it("fails as a transient, unsent network error when a capable cohort lacks its native provider", async () => {
     const f = transport();
     await expect(
       f.client.request("sessions.list", { projectId: "project-a" }),
-    ).rejects.toMatchObject({ kind: "unsupported", uncertain: false });
+    ).rejects.toMatchObject({ kind: "network", uncertain: false });
     expect(f.fetcher).not.toHaveBeenCalled();
     expect(f.credential).not.toHaveBeenCalled();
   });

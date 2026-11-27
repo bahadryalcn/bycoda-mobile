@@ -4,6 +4,7 @@ import NotebookPen from "lucide-react-native/icons/notebook-pen";
 import Pencil from "lucide-react-native/icons/pencil";
 import TextSelect from "lucide-react-native/icons/text-select";
 import Share2 from "lucide-react-native/icons/share-2";
+import Trash2 from "lucide-react-native/icons/trash-2";
 import { useMobileTheme } from "@/ui/theme";
 import { useRef, type PropsWithChildren } from "react";
 import { findNodeHandle, View, type HostInstance } from "react-native";
@@ -20,7 +21,7 @@ function Feedback({ error, notice, children }: PropsWithChildren<{ error?: unkno
 
 const glyph = (G: typeof Copy) => <RowIcon glyph={G} />;
 
-export function TranscriptActions(props: TranscriptActionsProps & { onRewind?: () => void; role?: "user" | "assistant" | "activity" }) {
+export function TranscriptActions(props: TranscriptActionsProps & { onRewind?: () => void; onRemove?: () => void; role?: "user" | "assistant" | "activity" }) {
   useMobileTheme(); const copy = useCopy(), actions = useTranscriptActions(props), anchor = useRef<HostInstance>(null);
   const { note } = actions;
   if (actions.selecting && actions.opening.context?.sessionId) return <SelectedText text={actions.opening.text} role={props.role}
@@ -41,6 +42,7 @@ export function TranscriptActions(props: TranscriptActionsProps & { onRewind?: (
         </Feedback>
         {note.status === "uncertain" ? <Feedback error={note.checkError}><NavigationRow intent="command" label={copy("Notun kaydını kontrol et", "Check saved note")} disabled={actions.checkDisabled} busy={actions.pending === "check"} onPress={actions.check} /></Feedback> : null}
       </View> : null}
+      {props.onRemove ? <NavigationRow intent="command" tone="danger" icon={<RowIcon glyph={Trash2} tone="danger" />} label={copy("Kaldır", "Remove")} disabled={actions.disabled} onPress={() => { actions.close(); props.onRemove?.(); }} /> : null}
       {props.reportable ? <Feedback error={actions.reportError}><NavigationRow intent="navigate" icon={glyph(Flag)} label={copy("İçerik şikâyet et", "Report content")} disabled={actions.disabled} onPress={actions.report} /></Feedback> : null}
     </NavigationGroup>
   </Sheet>;

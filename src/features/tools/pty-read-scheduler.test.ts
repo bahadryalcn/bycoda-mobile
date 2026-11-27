@@ -33,3 +33,39 @@ it("backs off an idle terminal and never overlaps a read or restarts after stop"
   blocked.stop(); finish({ output: false, hasMore: true }); await vi.advanceTimersByTimeAsync(500);
   expect(read).toHaveBeenCalledTimes(1);
 });
+it("spaces ACK-driven reads for steady small output, while input and paged bursts read at once", async () => {
+  vi.useFakeTimers(); let waiting = false; let hasMore = false;
+  const read = vi.fn(async () => { waiting = true; return { output: true, hasMore }; });
+  const scheduler = new PtyReadScheduler(() => !waiting, read);
+  scheduler.wake(); await vi.advanceTimersByTimeAsync(0);
+  expect(read).toHaveBeenCalledTimes(1);
+  // A spinner chunk is ACKed right away: the next read waits for the ACK spacing.
+  waiting = false; scheduler.wakeAfterAck(); await vi.advanceTimersByTimeAsync(0);
+  expect(read).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(150);
+  expect(read).toHaveBeenCalledTimes(2);
+  // Input never waits behind the spacing.
+  waiting = false; scheduler.wakeAfterAck(); scheduler.wake(); await vi.advanceTimersByTimeAsync(0);
+  expect(read).toHaveBeenCalledTimes(3);
+  // A paged burst keeps draining on each ACK.
+  hasMore = true; waiting = false; scheduler.wake(); await vi.advanceTimersByTimeAsync(0);
+  expect(read).toHaveBeenCalledTimes(4);
+  waiting = false; scheduler.wakeAfterAck(); await vi.advanceTimersByTimeAsync(0);
+  expect(read).toHaveBeenCalledTimes(5);
+  scheduler.stop();
+});
+it("reads a long-idle terminal less often until input wakes it", async () => {
+  vi.useFakeTimers();
+  const idle = vi.fn(async () => ({ output: false, hasMore: false }));
+  const scheduler = new PtyReadScheduler(() => true, idle);
+  scheduler.wake(); await vi.advanceTimersByTimeAsync(60_000);
+  const count = idle.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(20_000);
+  expect(idle.mock.calls.length - count).toBeLessThanOrEqual(4);
+  scheduler.wake(); await vi.advanceTimersByTimeAsync(0);
+  const woke = idle.mock.calls.length;
+  // Input restarts the short backoff: the next empty read follows 400 ms later, not 5 s.
+  await vi.advanceTimersByTimeAsync(400);
+  expect(idle.mock.calls.length).toBe(woke + 1);
+  scheduler.stop();
+});

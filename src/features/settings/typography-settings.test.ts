@@ -48,13 +48,13 @@ const slider = (label: string) => state.sliders.find((s) => s.label === label)!;
 
 it("exposes text size and line spacing as sliders over the contract ranges", () => {
   render();
-  expect(slider("Text size")).toMatchObject({ min: 0.85, max: 1.3, step: 0.05, value: 1 });
+  expect(slider("App text size")).toMatchObject({ min: 0.85, max: 1.3, step: 0.05, value: 1 });
   expect(slider("Line spacing")).toMatchObject({ min: 1, max: 1.5, step: 0.05, value: 1 });
-  expect(slider("Text size").formatValue(1.15)).toBe("115%");
+  expect(slider("App text size").formatValue(1.15)).toBe("115%");
 });
 it("persists one field per commit", () => {
   render();
-  slider("Text size").onCommit(1.2);
+  slider("App text size").onCommit(1.2);
   expect(state.setTypography).toHaveBeenLastCalledWith({ scale: 1.2 });
   slider("Line spacing").onCommit(1.3);
   expect(state.setTypography).toHaveBeenLastCalledWith({ lineSpacing: 1.3 });

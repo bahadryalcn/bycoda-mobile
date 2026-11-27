@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("expo-crypto", () => ({ randomUUID: () => "inbox-request-fixture" }));
 
 import { RemoteHostError } from "@/remote/transport";
-import { isInboxWriteUncertain, runInboxJob, type InboxRpcClient } from "./provider-jobs";
+import { inboxReceiptPollDelay, isInboxWriteUncertain, runInboxJob, type InboxRpcClient } from "./provider-jobs";
 import type { InboxJobRequest } from "./provider-protocol";
 
 const comment: InboxJobRequest<"comment"> = {
@@ -46,6 +46,25 @@ describe("durable provider inbox RPC adapter", () => {
       await failure;
       expect(request.mock.calls.map(call => call[0])).toEqual(["inbox.provider.request", "inbox.provider.result"]);
     }
+  });
+  it("checks a pending receipt soon after acceptance and settles at one check a second", async () => {
+    expect([0, 1, 2, 3, 4, 7, 8, 30].map(inboxReceiptPollDelay)).toEqual([400, 600, 800, 1000, 1000, 1000, 2000, 2000]);
+    vi.useFakeTimers();
+    const { client, request } = fixture();
+    request.mockResolvedValueOnce({ id: "job", state: "queued" }).mockResolvedValueOnce({ id: "job", state: "completed", result: { items: [] } });
+    const pending = runInboxJob(client, { action: "list", input: { projectId: "project-a", query: { assignedToMe: false, state: "open", search: "" } } });
+    await vi.advanceTimersByTimeAsync(400);
+    await expect(pending).resolves.toEqual({ items: [] });
+    expect(request.mock.calls.map(call => call[0])).toEqual(["inbox.provider.request", "inbox.provider.result"]);
+  });
+  it("reports a read the desktop never answers instead of waiting the write deadline", async () => {
+    vi.useFakeTimers();
+    const { client, request } = fixture();
+    request.mockResolvedValue({ id: "job", state: "running" });
+    const pending = runInboxJob(client, { action: "checks", input: { item: comment.input.item } });
+    const failure = expect(pending).rejects.toMatchObject({ uncertain: false, message: expect.stringContaining("did not answer in time") });
+    await vi.advanceTimersByTimeAsync(62_000);
+    await failure;
   });
   it("uses a previously persisted attempt ID without changing existing callers and marks known failed receipts terminal", async () => {
     const { client, request } = fixture();

@@ -27,3 +27,12 @@ export function dotLayout(width: number, height: number): Dot[] {
   }
   return dots;
 }
+
+/** Breathing phases. Dots share one animated opacity per phase, so a frame runs a handful of mappers, not one per dot. */
+export const DOT_PHASES = 6;
+
+/** The breathing phase a dot belongs to; its seed scatters neighbours across phases. */
+export function dotPhase(seed: number) {
+  const turn = (((seed * 50) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  return Math.min(DOT_PHASES - 1, Math.floor((turn / (Math.PI * 2)) * DOT_PHASES));
+}

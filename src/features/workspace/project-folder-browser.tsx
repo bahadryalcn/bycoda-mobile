@@ -2,17 +2,17 @@ import type { TextInputInstance } from "react-native";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "@/ui/search-matching";
 import { useMobileTheme } from "@/ui/theme";
-import { router } from "expo-router";
 import { useMemo, useRef, useState } from "react";
 import { View } from "react-native";
-import { BusyIndicator } from "@/ui/busy-indicator";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
+import GitBranch from "lucide-react-native/icons/git-branch";
+import TextCursorInput from "lucide-react-native/icons/text-cursor-input";
 import { useHostQuery } from "@/state/queries";
 import { useCopy } from "@/ui/copy";
 import {
+  ActionMenu,
   Body,
   Button,
-  Disclosure,
   IconButton,
   IdentifierField,
   MutationState,
@@ -24,12 +24,13 @@ import {
   SelectField,
   Sheet,
 } from "@/ui/primitives";
-import { space } from "@/ui/tokens";
+import { iconSize, space } from "@/ui/tokens";
 import { ProjectIcon } from "@/ui/project-icon";
 import { GroupedListRow } from "./shared";
 import { queryOwnsRegion } from "./query-region";
 import type { ProjectDirectories } from "./projects-screen-types";
 import { CloneRepositorySheet } from "./clone-repository";
+import { pushOnce } from "@/ui/navigation";
 
 type Location = { value: string; label: string; detail?: string };
 const pathKey = (path: string) => {
@@ -57,6 +58,7 @@ export function ProjectFolderBrowser({
   const [manualTarget, setManualTarget] = useState<string>();
   const [search, setSearch] = useState("");
   const [cloning, setCloning] = useState(false);
+  const [enteringPath, setEnteringPath] = useState(false);
   const searchRef = useRef<TextInputInstance>(null);
   // Drives and home stay listed while another folder loads (its query data is briefly empty).
   const [rootsSource, setRootsSource] = useState<ProjectDirectories>();
@@ -100,7 +102,9 @@ export function ProjectFolderBrowser({
     <QueryState
       query={folders}
       empty={!!folders.data && !entries.length}
-      emptyIllustration={search ? "search-empty" : "inbox-empty"}
+      noResults={{ compact: true, searching: !!search, title: copy("Aramana uyan klasör yok.", "No folders match your search."),
+        onClearSearch: () => { setSearch(""); searchRef.current?.focus(); } }}
+      emptyIllustration={search ? "search-empty" : undefined}
       emptyAction={
         search
           ? {
@@ -115,7 +119,7 @@ export function ProjectFolderBrowser({
       onManageConnections={() => {
         if (mutation.isPending) return;
         onClose();
-        router.push("/machines");
+        pushOnce("/machines");
       }}
       emptyTitle={
         search
@@ -139,7 +143,7 @@ export function ProjectFolderBrowser({
         <View style={{ gap: space.sm }}>
           <MutationState mutation={mutation} />
           <Button
-            label={copy("Bu klasörü aç", "Open this folder")}
+            label={copy("Bu klasörü proje olarak ekle", "Add this folder as a project")}
             tone="primary"
             fullWidth
             disabled={!current || folders.isFetching || folders.isPending || !!folders.error}
@@ -181,24 +185,24 @@ export function ProjectFolderBrowser({
                   if (folders.data?.parent) navigate(folders.data.parent);
                 }}
               >
-                <ArrowUp size={18} color={colors.muted} />
+                <ArrowUp size={iconSize.action} color={colors.muted} />
               </IconButton>
               <Body mono selectable style={[uiStyles.grow, uiStyles.caption]}>
                 {current ?? path ?? copy("Bir klasör seç", "Choose a folder")}
               </Body>
-              {folders.isFetching && folders.data ? (
-                <BusyIndicator size="sm" color={colors.accent} />
-              ) : null}
-            </Row>
-            <View style={{ gap: space.xs }}>
-              <Button
-                label={copy("Depoyu klonla", "Clone repository")}
-                tone="quiet"
-                density="compact"
-                disabled={!current || !!folders.error || mutation.isPending}
-                onPress={() => setCloning(true)}
+              {/* Less frequent ways in share one menu on the path row instead of two more rows. */}
+              <ActionMenu
+                label={copy("Klasör seçenekleri", "Folder options")}
+                actions={[
+                  { key: "path", label: copy("Yol gir", "Enter path"), icon: <TextCursorInput />,
+                    disabled: mutation.isPending || enteringPath, onPress: () => setEnteringPath(true) },
+                  { key: "clone", label: copy("Depoyu klonla", "Clone repository"), icon: <GitBranch />, opens: true,
+                    disabled: !current || !!folders.error || mutation.isPending, onPress: () => setCloning(true) },
+                ]}
               />
-              <Disclosure label={copy("Yol gir", "Enter path")}>
+            </Row>
+            {enteringPath ? (
+              <View style={{ gap: space.xs }}>
                 <IdentifierField
                   label={copy("Klasör yolu", "Folder path")}
                   value={manual}
@@ -220,8 +224,8 @@ export function ProjectFolderBrowser({
                     navigate(target);
                   }}
                 />
-              </Disclosure>
-            </View>
+              </View>
+            ) : null}
             {(folders.data?.entries.length ?? 0) > 12 || search.length > 0 ? (
               <SearchField
                 ref={searchRef}

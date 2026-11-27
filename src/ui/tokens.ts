@@ -38,6 +38,8 @@ export const darkColors = {
   /** Full-screen media viewer: always a black stage with light controls, in both themes. */
   viewer: "#000000",
   viewerText: "#FFFFFF",
+  /** Filled circle behind a viewer control (Close) on the black stage. */
+  viewerControl: "#FFFFFF29",
   /**
    * Voice call stage light: soft glows behind the call orb, one pair per call state (listening,
    * thinking, speaking). Decorative only, never text, borders or status.
@@ -87,6 +89,7 @@ export const lightColors: MobileColors = {
   glass: "#FFFFFFF5",
   viewer: "#000000",
   viewerText: "#FFFFFF",
+  viewerControl: "#FFFFFF29",
   voiceListen: "#3D86FF",
   voiceListenGlow: "#39C2F2",
   voiceThink: "#9468F7",
@@ -211,6 +214,8 @@ export const fontSize = {
   input: 16,
   title: 16,
   heading: 18,
+  /** Screen title in the content (`uiStyles.pageTitle`). */
+  pageTitle: 22,
   hero: 24,
   display: 28,
 };
@@ -227,15 +232,17 @@ export const lineHeight = {
   input: 21,
   title: 21,
   heading: 24,
+  pageTitle: 28,
   hero: 30,
   display: 34,
+  /** Monospace code lines: caption size with reading leading. */
+  code: 18,
 };
 /** Visible sizes are compact; hit areas stay touchTarget (>= 48) via hitSlop or padding. */
 export const metrics = {
   controlHeight: 40,
   compactControlHeight: 32,
   inputHeight: 48,
-  selectionHeight: 40,
   iconTarget: 48,
   touchTarget: 48,
   visualControl: 32,
@@ -247,8 +254,6 @@ export const metrics = {
   sectionHeaderHeight: 32,
   /** Leading slot of every list row: glyphs, provider marks and avatars centre in it so labels align. */
   rowLeading: 32,
-  /** Minimum width of a count pill so one- and two-digit counts share a shape. */
-  countPill: 22,
   /** Guide line that joins grouped rows to their group header. */
   groupGuide: 2,
   toolRowHeight: 28,
@@ -261,12 +266,6 @@ export const metrics = {
   /** Detached tablet sheet card width. */
   sheetCardWidth: 600,
   entryWidth: 520,
-  /** Floating dock capsule height (touch target plus padding). */
-  tabBarHeight: 56,
-  /** Round action beside the dock, and the gap/margins around the dock. */
-  dockActionSize: 56,
-  dockGap: 8,
-  dockMargin: 10,
   /** Tablet navigation rail width (icon with label below); also a labeled dock destination slot. */
   tabletRailWidth: 88,
   /** Dock capsule cap on tablets and landscape large phones. */
@@ -275,9 +274,9 @@ export const metrics = {
 /**
  * Icon sizes by role. One size per role on every screen: `inline` sits in a text line (scope line,
  * meta), `status` leads a status/notice line, `row` is a list row's leading glyph, `action` is a
- * header or toolbar icon button, `back` is the navigation chevron.
+ * header or toolbar icon button, `back` is the navigation chevron, `check` is the selected mark.
  */
-export const iconSize = { inline: 14, status: 16, row: 20, action: 20, back: 24 };
+export const iconSize = { inline: 14, status: 16, row: 20, action: 20, back: 24, check: 16 };
 
 /** Widest a scope pill (computer, project) grows; long names end in an ellipsis instead of wrapping. */
 export const SCOPE_PILL_MAX_WIDTH = 240;
@@ -295,6 +294,24 @@ export const hitSlopFor = (visual: number) => {
   return { top: side, bottom: side, left: side, right: side };
 };
 export const opacity = { disabled: 0.45, pressed: 0.72 };
+
+/** Brand inks of the provider logos that keep their own colours (GitLab, Jira); never text or status. */
+export const providerBrandColors = { gitlab: ["#E24329", "#FC6D26", "#FCA326"], jira: "#2684FF" } as const;
+/**
+ * The 16 ANSI terminal colours (black, red, green, yellow, blue, magenta, cyan, white, then their
+ * bright variants) per mode, readable on `panel`/`background`. Terminal output only; 256-colour and
+ * truecolor values arrive as literal RGB from the program.
+ */
+export const terminalAnsiPalettes = {
+  dark: [
+    "#4B4B53", "#EF7777", "#9BD777", "#E8C775", "#83ABED", "#D89EE9", "#8AD7DF", "#DEDEDE",
+    "#888888", "#FF9898", "#B9EB98", "#F9E09E", "#A3C1FF", "#F0B7FA", "#A9EEF2", "#FFFFFF",
+  ],
+  light: [
+    "#17171A", "#C62828", "#2E7D32", "#8D6E00", "#1E5BC6", "#8E3AA8", "#0E7C86", "#52525B",
+    "#71717A", "#D32F2F", "#388E3C", "#9A7B00", "#2B6CD8", "#A347C0", "#138A94", "#17171A",
+  ],
+} as const satisfies Record<MobileThemeMode, readonly string[]>;
 export const monoFont = process.env.EXPO_OS === "ios" ? "Menlo" : "monospace";
 
 /** Web inputs inherit the same system face as native text; native keeps its OS default. */

@@ -8,7 +8,7 @@ import { useState, type ComponentType } from "react";
 import { ProjectPicker } from "../workspace/project-picker";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import { useActiveMachine, useMachines } from "@/state/machines";
-import { Empty, NavigationGroup, NavigationRow, RowIcon, Section } from "@/ui/primitives";
+import { NavigationGroup, NavigationRow, NoResults, RowIcon, Section } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { managementSections, type ManagementSection } from "./sections";
 
@@ -21,6 +21,8 @@ type Tool = {
   icon: ComponentType<{ size?: number; strokeWidth?: number; color?: string }>;
   projectView?: "sessions" | "files" | "git";
   hostTool?: HostTool;
+  /** A computer tool without a host tool route still needs this capability. */
+  capability?: string;
   managementSection?: ManagementSection;
   /** Only a project's tools sheet lists it; the Tools tab reaches it from the project screen. */
   projectSheetOnly?: boolean;
@@ -47,8 +49,8 @@ const tools: readonly Tool[] = [
   { id: "devices", label: toolLabels.devices, icon: Smartphone, hostTool: "devices" },
   { id: "usage", label: toolLabels.usage, icon: ChartColumn, hostTool: "usage" },
   { id: "diagnostics", label: toolLabels.diagnostics, icon: Activity, hostTool: "diagnostics" },
-  { id: "providers", label: toolLabels.providers, icon: Plug },
-  { id: "access", label: toolLabels.access, icon: KeyRound },
+  { id: "providers", label: toolLabels.providers, icon: Plug, capability: "providers.center.read" },
+  { id: "access", label: toolLabels.access, icon: KeyRound, capability: "host.access.read" },
 ];
 
 const hostCapabilities = { servers: "dev.servers", devices: "device.host", browser: "browser.shared", terminals: "terminals.v1", diagnostics: "resources.diagnostics", usage: "usage.sessions.read" } as const;
@@ -72,7 +74,9 @@ const groups: readonly { title: CopyPair; ids: readonly string[] }[] = [
 const isComputerTool = (tool: Tool) => !!tool.hostTool && computerTools.has(tool.hostTool);
 /** A tool the computer does not offer; capabilities not yet known count as offered. */
 function isUnsupported(tool: Tool, capabilities: readonly string[] | undefined) {
-  if (!tool.hostTool || !capabilities) return false;
+  if (!capabilities) return false;
+  if (tool.capability) return !capabilities.includes(tool.capability);
+  if (!tool.hostTool) return false;
   const accepted = computerCapabilities[tool.hostTool] ?? [hostCapabilities[tool.hostTool]];
   return !accepted.some((capability) => capabilities.includes(capability));
 }
@@ -81,6 +85,7 @@ const needsProject = (tool: Tool) =>
 
 export function ToolDirectory({
   projectId,
+  fallback = false,
   query = "",
   onNavigate,
   onProjectView,
@@ -88,6 +93,8 @@ export function ToolDirectory({
 }: {
   /** null is All projects. undefined means the selected project could not be verified. */
   projectId: string | null | undefined;
+  /** `projectId` is the page's stand-in while the shared selection is still All projects. */
+  fallback?: boolean;
   query?: string;
   onNavigate?: (navigate: () => void) => void;
   onProjectView?: (view: "sessions" | "files" | "git") => void;
@@ -106,7 +113,10 @@ export function ToolDirectory({
     const group = groups.find((group) => group.ids.includes(tool.id));
     return matchesSearch([copy(...tool.label), group ? copy(...group.title) : ""].join(" "), query, locale);
   });
-  const open = (tool: Tool, targetProjectId = projectId) => {
+  const open = (tool: Tool, picked?: string) => {
+    const targetProjectId = picked ?? projectId;
+    // Only a project the person picks becomes the shared selection; a stand-in keeps All projects.
+    const keepsAll = !picked && fallback;
     if (!machine || !connection.isCurrent() || useMachines.getState().activeId !== machine.id) return;
     const unsupported = isUnsupported(tool, machine.capabilities);
     if ((!unsupported && needsProject(tool) && !targetProjectId) || (tool.managementSection && targetProjectId === undefined)) {
@@ -121,7 +131,9 @@ export function ToolDirectory({
     }
     const navigate = () => {
       if (!connection.isCurrent() || useMachines.getState().activeId !== machine.id) return;
-      if (targetProjectId) useMachines.getState().selectProject(targetProjectId);
+      if (targetProjectId && !keepsAll) useMachines.getState().selectProject(targetProjectId);
+      // Pages that accept All projects open with All; the others use their own stand-in.
+      const linkedProjectId = keepsAll ? undefined : targetProjectId;
       if (tool.projectView && targetProjectId)
         router.navigate({
           pathname: "/project/[id]",
@@ -133,11 +145,11 @@ export function ToolDirectory({
         section: tool.managementSection,
         machineId: machine.id,
         environmentId: machine.environmentId,
-        projectFilter: targetProjectId ? "project" : "all",
-        ...(targetProjectId ? { projectId: targetProjectId } : {}),
+        projectFilter: linkedProjectId ? "project" : "all",
+        ...(linkedProjectId ? { projectId: linkedProjectId } : {}),
       } });
       else if (tool.id === "pull-requests")
-        router.navigate({ pathname: "/pull-requests", params: { machineId: machine.id, ...(targetProjectId ? { projectId: targetProjectId } : {}) } } as Href);
+        router.navigate({ pathname: "/pull-requests", params: { machineId: machine.id, ...(linkedProjectId ? { projectId: linkedProjectId } : {}) } } as Href);
       else if (tool.id === "sessions") router.navigate("/(tabs)/chats" as Href);
       else if (tool.id === "providers") router.navigate({ pathname: "/tools/[tool]", params: { tool: "providers", machineId: machine.id } } as Href);
       else if (tool.id === "access") router.navigate({ pathname: "/tools/[tool]", params: { tool: "access", machineId: machine.id } } as Href);
@@ -156,8 +168,8 @@ export function ToolDirectory({
         setPendingTool(null);
         open(tool, project.id);
       }} /> : null}
-      {!visible.length ? <Empty compact title={copy("Aramana uyan araç yok.", "No tools match your search.")}
-        action={onClearSearch ? { label: copy("Aramayı temizle", "Clear search"), onPress: onClearSearch } : undefined} /> : null}
+      {!visible.length ? <NoResults searching title={copy("Aramana uyan araç yok.", "No tools match your search.")}
+        onClearSearch={onClearSearch} compact={!!onProjectView} /> : null}
       {rendered.map((group) => (
         <Section key={group.title[1]} title={copy(...group.title)}>
           <NavigationGroup>
@@ -170,8 +182,8 @@ export function ToolDirectory({
                 <NavigationRow
                   key={tool.id}
                   label={copy(...tool.label)}
-                  detail={unsupported ? copy("Güncelleme gerekiyor", "Update needed")
-                    : asksForProject ? copy("Proje seç", "Choose a project") : undefined}
+                  detail={unsupported ? copy("Bu bilgisayarda yok", "Not on this computer")
+                    : asksForProject ? copy("Proje seçin", "Choose a project") : undefined}
                   icon={<RowIcon glyph={Icon} />}
                   onPress={() => open(tool)}
                 />

@@ -1,4 +1,7 @@
-import type { MessageNode } from "./message-model";
+import { messageNodeText, type MessageNode } from "./message-model";
+import { markdownTarget } from "./message-inline";
+import { linkIconKind } from "./message-link-kind";
+import { FILE_CHIP_ICON_SLOT, fileChipText, FILE_CHIP_END } from "./message-file-ref";
 import type { SelectableRun } from "../../modules/bycoda-text-selection/src/types";
 
 /** The four in-place selection actions, in menu order (desktop's selection toolbar intent). */
@@ -35,7 +38,15 @@ export type SelectionSource = { text: string; runs: SelectableRun[] };
  */
 export function selectionSource(
   nodes: readonly MessageNode[],
-  options: { compactMedia: boolean; mentions: boolean; codeSize: number },
+  options: {
+    compactMedia: boolean;
+    mentions: boolean;
+    codeSize: number;
+    /** File references render as chips (icon slot, short name, location); see `InlineFileChip`. */
+    fileChips?: boolean;
+    /** Inline code the renderer shows as a file chip (same predicate as `MessageContent`). */
+    codeFile?: (text: string) => string | null;
+  },
 ): SelectionSource | null {
   let text = "";
   const runs: SelectableRun[] = [];
@@ -44,6 +55,13 @@ export function selectionSource(
     const start = text.length;
     text += value;
     if (Object.keys(style).length) runs.push({ start, end: text.length, ...style });
+  };
+  const chip = (label: string, target: string, style: Style) => {
+    const { name, location } = fileChipText(label, target);
+    append(FILE_CHIP_ICON_SLOT, style);
+    append(name, { ...style, weight: "500" });
+    if (location) append(` · ${location}`, style);
+    append(FILE_CHIP_END, style);
   };
   const walk = (entries: readonly MessageNode[], style: Style): boolean => {
     for (const node of entries) {
@@ -58,7 +76,24 @@ export function selectionSource(
       }
       // Links and other containers keep the surrounding font; only their color differs.
       if (node.type === "text" && options.mentions && hasMention(node.text)) {
-        for (const part of mentionParts(node.text)) append(typeof part === "string" ? part : `@${part.path}`, style);
+        for (const part of mentionParts(node.text))
+          if (typeof part === "string") append(part, style);
+          else if (options.fileChips) chip(part.path, part.path, style);
+          else append(`@${part.path}`, style);
+        continue;
+      }
+      if (options.fileChips && node.type === "link") {
+        const target = markdownTarget(node.attrs.href || "");
+        if (target.kind === "file") {
+          chip(messageNodeText(node), target.context, style);
+          continue;
+        }
+      }
+      // A web, local-server or conversation link leads with a one-em icon (see `LinkIcon`).
+      if (node.type === "link" && linkIconKind(node.attrs.href || "")) append(FILE_CHIP_ICON_SLOT, style);
+      const codeFile = node.type === "code_inline" ? options.codeFile?.(node.text) : null;
+      if (codeFile) {
+        chip(node.text, codeFile, style);
         continue;
       }
       const next: Style =

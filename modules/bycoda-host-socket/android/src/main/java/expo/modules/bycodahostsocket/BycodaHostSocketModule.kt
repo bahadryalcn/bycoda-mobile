@@ -14,6 +14,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withContext
 import okhttp3.*
 import okio.ByteString
+import okio.utf8Size
 import java.io.ByteArrayInputStream
 import java.net.URI
 import java.security.KeyStore
@@ -103,7 +104,17 @@ internal object HostTls {
 
 class BycodaHostSocketModule : Module() {
   private data class VoiceScope(val sessionId: String, val threadId: String, val projectId: String?)
-  private data class Credential(val binding: HostBinding, val digest: ByteArray, val voice: VoiceScope? = null)
+  private data class Credential(val binding: HostBinding, val digest: ByteArray, val voice: VoiceScope? = null) {
+    /**
+     * Built on the first bulk read and closed with the credential, so the chunks of a transfer reuse one warm TLS
+     * connection instead of a new trust stack and handshake per 64 KiB. Guarded by the module lock.
+     */
+    var bulkClient: OkHttpClient? = null
+    /** Bearer and proof seed per bulk transfer, read and checked against [digest] at its first chunk. Guarded by the module lock. */
+    val bulkTransfers = object : LinkedHashMap<String, Pair<String, ByteArray?>>() {
+      override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<String, ByteArray?>>?) = size > 4
+    }
+  }
   private class Connection(val id: String, val generation: Double, val credential: Credential, val client: OkHttpClient, val opening: CompletableDeferred<Unit>) {
     var socket: WebSocket? = null
     var opened = false
@@ -133,7 +144,8 @@ class BycodaHostSocketModule : Module() {
     require(Regex("[A-Za-z0-9-]{1,80}").matches(binding.machineId))
     require(Regex("[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}").matches(binding.environmentId))
     require(HostTls.safe(binding.credentialGeneration) && HostTls.safe(binding.accessEpoch))
-    HostTls.client(binding).dispatcher.executorService.shutdown()
+    // Builds the pinned trust stack only to validate it; no call runs, so no dispatcher pool is created or needs shutting down.
+    HostTls.client(binding)
   }
   private suspend fun secret(binding: HostBinding): String {
     val value = secureStore().bycodaHostReadNative("bycoda.remote.${binding.machineId}") ?: throw error("credential_missing")
@@ -169,12 +181,24 @@ class BycodaHostSocketModule : Module() {
   private fun invalidate(machineId: String? = null, preserveVoice: Boolean = false) {
     synchronized(lock) {
       lifecycleEpoch++
+      val removed = credentials.values.filter { (machineId == null || it.binding.machineId == machineId) && !(preserveVoice && voiceCurrent(it.voice)) }
       credentials.entries.removeAll { (machineId == null || it.value.binding.machineId == machineId) && !(preserveVoice && voiceCurrent(it.value.voice)) }
       connections.values.toList().filter { (machineId == null || it.credential.binding.machineId == machineId) && !(preserveVoice && voiceCurrent(it.credential.voice)) }.forEach { finish(it, "credentials_invalidated", true) }
       bulkCalls.entries.toList().filter { machineId == null || it.value == machineId }.forEach { it.key.cancel() }
+      removed.forEach { closeBulk(it) }
       tunnels.values.toList().filter { machineId == null || it.machineId == machineId }.forEach { it.stop("credentials_invalidated") }
     }
   }
+  /** Caller holds the lock. Drops the cached bearer and seed and closes the warm bulk connection of a removed credential. */
+  private fun closeBulk(credential: Credential) {
+    credential.bulkTransfers.clear()
+    val client = credential.bulkClient ?: return
+    credential.bulkClient = null
+    client.dispatcher.cancelAll(); client.connectionPool.evictAll()
+  }
+  /** Idle bulk connections live shorter than the Host's 1 s keep-alive, so a reused one is never already half-closed. */
+  private fun newBulkClient(binding: HostBinding): OkHttpClient =
+    HostTls.client(binding).newBuilder().connectionPool(ConnectionPool(2, 500, TimeUnit.MILLISECONDS)).build()
   private suspend fun startTunnel(input: TunnelInput): Map<String, Any> {
     if (!TunnelWebViewSupport.supported()) throw error("tunnel_unsupported")
     val t = input.target
@@ -246,7 +270,8 @@ class BycodaHostSocketModule : Module() {
           }
         }
         override fun onMessage(ws: WebSocket, text: String) {
-          val bytes = text.toByteArray(Charsets.UTF_8).size
+          // Counted without copying the frame: a long agent stream otherwise allocates every frame twice.
+          val bytes = text.utf8Size().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
           synchronized(lock) {
             if (!current(connection)) return
             if (connection.credential.voice != null) {
@@ -271,7 +296,8 @@ class BycodaHostSocketModule : Module() {
       })
       connection.opening.await()
     }
-  private val voiceListener: (Map<String, Any?>) -> Unit = { synchronized(lock) {
+  // A session only ends or is revoked alongside an "ended"/"state" event, so the 300 ms microphone batches never take the socket lock.
+  private val voiceListener: (Map<String, Any?>) -> Unit = { event -> if (event["type"] != "pcm") synchronized(lock) {
     credentials.entries.removeAll { it.value.voice != null && !voiceCurrent(it.value.voice) }
     connections.values.toList().filter { it.credential.voice != null && !voiceCurrent(it.credential.voice) }.forEach { finish(it, "voice_revoked", true) }
   } }
@@ -364,17 +390,27 @@ class BycodaHostSocketModule : Module() {
       require(descriptor.kind == "bulk" && descriptor.environmentId == credential.binding.environmentId && Regex("[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}").matches(descriptor.transferId) && !descriptor.transferId.contains('/'))
       require(HostTls.safe(descriptor.totalBytes) && descriptor.totalBytes <= 33554432 && HostTls.safe(descriptor.chunkBytes) && descriptor.chunkBytes in 1.0..65536.0 && HostTls.safe(descriptor.expiresAt) && descriptor.expiresAt > System.currentTimeMillis())
       require(Regex("[a-f0-9]{64}").matches(descriptor.sha256) && HostTls.safe(offset) && offset < descriptor.totalBytes)
-      val value = secret(credential.binding)
-      if (!MessageDigest.isEqual(credential.digest, digest(value))) { invalidate(credential.binding.machineId); throw error("credential_rotated") }
-      val client = HostTls.client(credential.binding)
+      // The keystore reads and the rotation check run once per transfer (its first chunk, or again after any failed chunk),
+      // not once per 64 KiB; storing, replacing or deleting the credential removes the handle and these cached values.
+      val transfer = synchronized(lock) { credential.bulkTransfers[descriptor.transferId] } ?: run {
+        val read = secret(credential.binding)
+        if (!MessageDigest.isEqual(credential.digest, digest(read))) { invalidate(credential.binding.machineId); throw error("credential_rotated") }
+        read to proofSeed(credential.binding)
+      }
+      val (value, seed) = transfer
+      val built = if (synchronized(lock) { credential.bulkClient } == null) newBulkClient(credential.binding) else null
       val endpoint = URI(credential.binding.endpoint)
       val url = HttpUrl.Builder().scheme("https").host(endpoint.host).port(if (endpoint.port < 0) 443 else endpoint.port).addPathSegment("ws-bulk").addPathSegment(descriptor.transferId).addQueryParameter("offset", offset.toLong().toString()).build()
-      val call = client.newCall(Request.Builder().url(url).header("Authorization", "Bearer $value")
-        .apply { deviceProof(proofSeed(credential.binding), credential.binding, value, url.encodedPath)?.let { header(DeviceProof.HEADER, it) } }.build())
-      val epoch = synchronized(lock) {
+      val request = Request.Builder().url(url).header("Authorization", "Bearer $value")
+        .apply { deviceProof(seed, credential.binding, value, url.encodedPath)?.let { header(DeviceProof.HEADER, it) } }.build()
+      val (call, epoch) = synchronized(lock) {
         if (!foreground || !accessAllowed || credential.binding.accessEpoch != accessEpoch || credentials[handle] !== credential || bulkCalls.size >= 2) throw error("bulk_unavailable")
-        bulkCalls[call] = credential.binding.machineId; lifecycleEpoch
+        val client = credential.bulkClient ?: built!!.also { credential.bulkClient = it }
+        val next = client.newCall(request)
+        bulkCalls[next] = credential.binding.machineId
+        next to lifecycleEpoch
       }
+      var completed = false
       try {
         withContext(Dispatchers.IO) {
           call.execute().use { response ->
@@ -383,12 +419,18 @@ class BycodaHostSocketModule : Module() {
             val bytes = source.readByteArray(minOf(descriptor.chunkBytes.toLong(), descriptor.totalBytes.toLong() - offset.toLong()))
             if (!source.exhausted()) throw error("bulk_oversized")
             synchronized(lock) { if (!foreground || !accessAllowed || lifecycleEpoch != epoch || credentials[handle] !== credential) throw error("access_changed") }
+            completed = true
             mapOf("dataBase64" to Base64.encodeToString(bytes, Base64.NO_WRAP))
           }
         }
       } finally {
-        synchronized(lock) { bulkCalls.remove(call) }
-        client.dispatcher.cancelAll(); client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown()
+        synchronized(lock) {
+          bulkCalls.remove(call)
+          val more = offset.toLong() + descriptor.chunkBytes.toLong() < descriptor.totalBytes.toLong()
+          // Only a transfer whose last chunk succeeded and that has more to read keeps its values; a failure re-reads and re-checks.
+          if (completed && more && credentials[handle] === credential) credential.bulkTransfers[descriptor.transferId] = transfer
+          else credential.bulkTransfers.remove(descriptor.transferId)
+        }
       }
     }
     OnActivityEntersBackground { synchronized(lock) { foreground = false; accessAllowed = false; invalidate(preserveVoice = true) } }

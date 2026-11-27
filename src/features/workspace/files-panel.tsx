@@ -3,23 +3,23 @@ import type { ProjectFilesProps, FileContentSearch, CreateFileDraft } from "./fi
 import { useCallback, useEffect, useMemo, useReducer, useState, type ReactNode } from "react";
 import { useIsFocused } from "expo-router/react-navigation";
 import { ScrollView, Text, View } from "react-native";
-import { useBackHandler } from "panelui-native/hooks/use-back-handler";
+import { useScreenBackHandler } from "@/ui/screen-back-handler";
 import Folder from "lucide-react-native/icons/folder";
 import File from "lucide-react-native/icons/file";
 import FileText from "lucide-react-native/icons/file-text";
 import Plus from "lucide-react-native/icons/plus";
 import MoreHorizontal from "lucide-react-native/icons/ellipsis";
-import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Home from "lucide-react-native/icons/house";
 import { ScrollFade } from "panelui-native/components/scroll-fade";
 import { useFormDraft } from "@/state/form-draft";
 import { useHostMutation, useHostQuery } from "@/state/queries";
 import {
-  ActionMenu,
   Body,
   Button,
+  SectionHeader,
   SegmentedControl,
+  ToggleField,
   IdentifierField,
   IconButton,
   MutationState,
@@ -31,11 +31,10 @@ import {
   ScreenList,
   SearchField,
   Sheet,
-  StateView,
 } from "@/ui/primitives";
 import { queryOwnsRegion } from "./query-region";
-import { space } from "@/ui/tokens";
-import { SearchToolbar } from "@/ui/search-field";
+import { iconSize, space } from "@/ui/tokens";
+import { useCollapsibleSearch } from "@/ui/search-field";
 import { useCopy } from "@/ui/copy";
 import { haptic } from "@/ui/motion";
 import type { FileEntry } from "./wire";
@@ -86,6 +85,10 @@ export function ProjectFiles({
   const creating = state.view.kind === "create";
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState(defaultFileListOptions);
+  // Success text names the file and what happened to it ("notes.md created").
+  const [createdName, setCreatedName] = useState("");
+  const [actionSummary, setActionSummary] = useState("");
+  const ignoredLabel = copy("Git tarafından yok sayılıyor", "Ignored by Git");
   useEffect(() => {
     const timer = setTimeout(() => setQuery(search.trim()), 250);
     return () => clearTimeout(timer);
@@ -94,7 +97,7 @@ export function ProjectFiles({
     ["files", projectId, cwd, path, query],
     query ? "files.search" : "files.list",
     { projectId, cwd, ...(query ? { query } : { path }) },
-    { enabled: !searchContent, keepPrevious: true },
+    { enabled: !searchContent || !query, keepPrevious: true },
   );
   // While the next folder loads, the previous rows stay in place (dimmed, inert) instead of
   // the list collapsing into a skeleton and jumping back.
@@ -119,7 +122,8 @@ export function ProjectFiles({
     dispatch({ type: "navigate", path: nextPath });
   }, []);
   const entries = useMemo(() => visibleFileEntries(list.data ?? [], options), [list.data, options]);
-  const rows: FileRow[] = searchContent
+  const showMatches = searchContent && !!query;
+  const rows: FileRow[] = showMatches
     ? (content.data?.matches ?? []).map((match, index) => ({
         key: match.relative + ":" + match.line + ":" + index,
         match,
@@ -130,7 +134,7 @@ export function ProjectFiles({
     if (search) dispatch({ type: "search", value: "" });
     else navigate(fileParentPath(path));
   };
-  useBackHandler(focused && state.view.kind === "browse" && (!!path || !!search), browseBack);
+  useScreenBackHandler(focused && state.view.kind === "browse" && (!!path || !!search), browseBack);
   // A folder level or a search lends its name to the project header, whose one back goes up a level.
   useProjectSubpage(state.view.kind !== "browse" ? null : search ? copy("Arama", "Search") : path ? path.split("/").filter(Boolean).at(-1) ?? null : null, browseBack);
   // The browser stays mounted under an open file so Back returns to the same scroll position.
@@ -151,26 +155,21 @@ export function ProjectFiles({
       />
     ) : null;
   const crumbs = path.split("/").filter(Boolean);
-  const activeQuery = searchContent ? content : list;
-  const activeOptions =
-    searchContent ||
-    !options.showHidden ||
-    !options.showIgnored ||
-    options.order !== defaultFileListOptions.order;
+  const activeQuery = showMatches ? content : list;
+  // The search type is how the field searches, not a filter on the list, so it never lights the filter icon.
+  const appliedFilters =
+    Number(!options.showHidden) + Number(!options.showIgnored) + Number(options.order !== defaultFileListOptions.order);
   const visibilityFiltered = !options.showHidden || !options.showIgnored;
-  const awaitingContentSearch = searchContent && !query;
-  const emptyFiltered = !searchContent && visibilityFiltered;
-  const regionOwned = awaitingContentSearch || queryOwnsRegion(activeQuery, !rows.length);
+  const emptyFiltered = !showMatches && visibilityFiltered;
+  const regionOwned = queryOwnsRegion(activeQuery, !rows.length);
   const clearSearch = () => { setQuery(""); dispatch({ type: "search", value: "" }); };
-  const regionState = awaitingContentSearch ? (
-    <StateView
-      illustration="search-empty"
-      title={copy("Dosya içeriğinde ara", "Search file contents")}
-      description={copy("Eşleşmeleri görmek için bir arama yaz.", "Enter a search to see matching lines.")}
-    />
-  ) : (
+  const regionState = (
     <QueryState
       query={activeQuery}
+      noResults={{ searching: !!query, filtered: emptyFiltered,
+        title: copy("Aramana uyan dosya yok.", "No files match your search."),
+        filtersTitle: copy("Filtrelere uyan dosya yok.", "No files match the filters."),
+        onClearSearch: clearSearch, onClearFilters: () => setOptions(defaultFileListOptions) }}
       empty={
         !rows.length
           ? emptyFiltered
@@ -180,11 +179,50 @@ export function ProjectFiles({
               : copy("Bu klasörde dosya yok.", "No files in this folder.")
           : undefined
       }
-      emptyIllustration={query || emptyFiltered ? "search-empty" : "inbox-empty"}
+      emptyIllustration={query || emptyFiltered ? "search-empty" : undefined}
       emptyAction={query ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch }
         : emptyFiltered ? { label: copy("Sıfırla", "Reset"), onPress: () => setOptions(defaultFileListOptions) }
         : undefined}
     />
+  );
+  const fileSearch = useCollapsibleSearch(
+    <SearchField
+      label={searchContent ? copy("Dosya içeriğinde ara", "Search file contents") : copy("Dosya ara", "Search files")}
+      value={search}
+      maxLength={200}
+      onChangeText={(value) => {
+        if (!value.trim()) setQuery("");
+        dispatch({ type: "search", value });
+      }}
+      placeholder={searchContent ? copy("Dosya içeriğinde ara", "Search file contents") : copy("Ad veya dosya yolu", "Name or file path")}
+    />,
+    {
+      activeFilters: appliedFilters,
+      onResetFilters: () => {
+        setOptions(defaultFileListOptions);
+        dispatch({ type: "search-mode", mode: "names" });
+      },
+      filters: <>
+        {/* How the field searches sits right under it; the folder stays listed until a query is typed. */}
+        <SegmentedControl hideLabel label={copy("Arama türü", "Search type")} value={state.searchMode}
+          options={[
+            { value: "names", label: copy("Ad", "Name") },
+            { value: "content", label: copy("İçerik", "Content") },
+          ]}
+          onChange={(mode) => dispatch({ type: "search-mode", mode })} />
+        <SectionHeader title={copy("Görünüm", "View")} />
+        <ToggleField label={copy("Gizli dosyaları göster", "Show hidden files")} value={options.showHidden} disabled={showMatches}
+          onChange={(showHidden) => setOptions((current) => ({ ...current, showHidden }))} />
+        <ToggleField label={copy("Git tarafından yok sayılanları göster", "Show Git-ignored files")} value={options.showIgnored} disabled={showMatches}
+          onChange={(showIgnored) => setOptions((current) => ({ ...current, showIgnored }))} />
+        <SegmentedControl label={copy("Sıralama", "Sort by")} value={options.order} disabled={showMatches}
+          options={[
+            { value: "ascending", label: copy("Ada göre A → Z", "Name A → Z") },
+            { value: "descending", label: copy("Ada göre Z → A", "Name Z → A") },
+          ]}
+          onChange={(order) => setOptions((current) => ({ ...current, order }))} />
+      </>,
+    },
   );
   return (
     <>
@@ -203,7 +241,7 @@ export function ProjectFiles({
         keyExtractor={(row) => row.key}
         contentContainerStyle={{ gap: 0 }}
         ListEmptyComponent={regionOwned ? regionState : undefined}
-        query={searchContent && !query ? undefined : activeQuery}
+        query={activeQuery}
         header={
           <View style={{ gap: space.sm, paddingBottom: space.sm }}>
             <Row style={{ flexWrap: "nowrap" }}>
@@ -211,6 +249,8 @@ export function ProjectFiles({
               <ScrollFade edges="both" size={24} color={colors.background} style={uiStyles.grow}>
               <ScrollView
                 horizontal
+                alwaysBounceHorizontal={false}
+                overScrollMode="never"
                 showsHorizontalScrollIndicator={false}
                 style={uiStyles.grow}
                 contentContainerStyle={{ alignItems: "center", gap: space.xs }}
@@ -228,6 +268,8 @@ export function ProjectFiles({
                 ))}
               </ScrollView>
               </ScrollFade>
+              {fileSearch.trigger}
+              {fileSearch.filterTrigger}
               <IconButton
                 label={copy("Yeni dosya / klasör", "New file / folder")}
                 tone="default"
@@ -237,127 +279,26 @@ export function ProjectFiles({
                   dispatch({ type: "view", view: { kind: "create" } });
                 }}
               >
-                <Plus size={20} strokeWidth={2.4} color={colors.accent} />
+                <Plus size={iconSize.action} strokeWidth={2.4} color={colors.accent} />
               </IconButton>
             </Row>
-            <SearchToolbar
-              search={
-                <SearchField
-                  label={
-                    searchContent
-                      ? copy("Dosya içeriğinde ara", "Search file contents")
-                      : copy("Dosya ara", "Search files")
-                  }
-                  value={search}
-                  maxLength={200}
-                  onChangeText={(value) => {
-                    if (!value.trim()) setQuery("");
-                    dispatch({ type: "search", value });
-                  }}
-                  placeholder={
-                    searchContent
-                      ? copy("Dosya içeriğinde ara", "Search file contents")
-                      : copy("Ad veya dosya yolu", "Name or file path")
-                  }
-                />
-              }
-              actions={
-                <ActionMenu
-                  label={copy("Dosya seçenekleri", "File options")}
-                  active={activeOptions}
-                  trigger={
-                    <SlidersHorizontal
-                      size={21}
-                      strokeWidth={2}
-                      color={activeOptions ? colors.accent : colors.muted}
-                    />
-                  }
-                  actions={[
-                    {
-                      key: "hidden",
-                      label: copy("Gizli dosyaları göster", "Show hidden files"),
-                      selected: options.showHidden,
-                      disabled: searchContent,
-                      onPress: () =>
-                        setOptions((current) => ({
-                          ...current,
-                          showHidden: !current.showHidden,
-                        })),
-                    },
-                    {
-                      key: "ignored",
-                      label: copy(
-                        "Git tarafından yok sayılanları göster",
-                        "Show Git-ignored files",
-                      ),
-                      selected: options.showIgnored,
-                      disabled: searchContent,
-                      onPress: () =>
-                        setOptions((current) => ({
-                          ...current,
-                          showIgnored: !current.showIgnored,
-                        })),
-                    },
-                    {
-                      key: "ascending",
-                      label: copy("Ada göre A → Z", "Name A → Z"),
-                      selected: options.order === "ascending",
-                      disabled: searchContent,
-                      onPress: () =>
-                        setOptions((current) => ({ ...current, order: "ascending" })),
-                    },
-                    {
-                      key: "descending",
-                      label: copy("Ada göre Z → A", "Name Z → A"),
-                      selected: options.order === "descending",
-                      disabled: searchContent,
-                      onPress: () =>
-                        setOptions((current) => ({ ...current, order: "descending" })),
-                    },
-                    {
-                      // Pull-to-refresh is a gesture; assistive technology needs this equivalent.
-                      key: "refresh",
-                      label: copy("Yenile", "Refresh"),
-                      disabled: activeQuery.isFetching || (searchContent && !query),
-                      onPress: () => {
-                        void activeQuery.refetch();
-                      },
-                    },
-                    {
-                      key: "reset",
-                      label: copy("Sıfırla", "Reset"),
-                      disabled: !activeOptions,
-                      onPress: () => {
-                        setOptions(defaultFileListOptions);
-                        dispatch({ type: "search-mode", mode: "names" });
-                      },
-                    },
-                  ]}
-                />
-              }
-            />
-            <SegmentedControl hideLabel label={copy("Arama türü", "Search type")} value={state.searchMode}
-              options={[
-                { value: "names", label: copy("Ad", "Name") },
-                { value: "content", label: copy("İçerik", "Content") },
-              ]}
-              onChange={(mode) => dispatch({ type: "search-mode", mode })} />
+            {fileSearch.sheet}
             {!creating ? (
               <MutationState
                 mutation={create}
-                success={copy("Dosya veya klasör oluşturuldu.", "File or folder created.")}
+                success={copy("{p0} oluşturuldu.", "{p0} created.", { p0: createdName })}
               />
             ) : null}
             {!actions ? (
               <MutationState
                 mutation={fileAction}
-                success={copy("Dosya işlemi tamamlandı.", "File action completed.")}
+                success={actionSummary || undefined}
               />
             ) : null}
           </View>
         }
         footer={
-          searchContent && content.data?.truncated ? (
+          showMatches && content.data?.truncated ? (
             <Body muted>
               {copy(
                 "Sonuçlar sınırlandı. Daha belirli bir arama kullan.",
@@ -410,25 +351,25 @@ export function ProjectFiles({
                       query
                         ? fileParentPath(entry.path) || undefined
                         : entry.ignored
-                          ? copy("Git tarafından izlenmiyor", "Ignored by Git")
+                          ? ignoredLabel
                           : undefined
                     }
                     detailLines={query ? 2 : 1}
-                    metadata={query && entry.ignored ? copy("Git tarafından izlenmiyor", "Ignored by Git") : undefined}
+                    metadata={query && entry.ignored ? ignoredLabel : undefined}
                     accessibilityLabel={[entry.name, query ? entry.path : undefined,
-                      entry.ignored ? copy("Git tarafından izlenmiyor", "Ignored by Git") : undefined].filter(Boolean).join(". ")}
+                      entry.ignored ? ignoredLabel : undefined].filter(Boolean).join(". ")}
                     onPress={() => (entry.isDir ? navigate(entry.path) : openFile(entry.path))}
                   />
                 </View>
                 {root ? (
                   <IconButton
-                    label={entry.name + " " + copy("işlemleri", "actions")}
+                    label={copy("{p0} seçenekleri", "{p0} options", { p0: entry.name })}
                     onPress={() => {
                       fileAction.reset();
                       dispatch({ type: "view", view: { kind: "actions", entry } });
                     }}
                   >
-                    <MoreHorizontal size={18} color={colors.muted} />
+                    <MoreHorizontal size={iconSize.action} color={colors.muted} />
                   </IconButton>
                 ) : null}
               </Row>
@@ -447,6 +388,7 @@ export function ProjectFiles({
               .mutateAsync({ projectId, cwd, parent: path, name, isDir })
               .then(() => {
                 haptic.success();
+                setCreatedName(name);
                 dispatch({ type: "completed", view: state.view });
               })
               .catch(() => {});
@@ -461,7 +403,10 @@ export function ProjectFiles({
           entry={actions}
           action={fileAction}
           onClose={browse}
-          onCompleted={() => dispatch({ type: "completed", view: state.view })}
+          onCompleted={(summary) => {
+            setActionSummary(summary);
+            dispatch({ type: "completed", view: state.view });
+          }}
         />
       ) : null}
     </>

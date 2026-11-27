@@ -25,7 +25,9 @@ export function CallControl({ label, accessibilityLabel, selected, danger, disab
 }>) {
   const { colors, uiStyles } = useMobileTheme(), reduced = useReducedMotionPreference();
   const fill = danger ? colors.danger : selected ? colors.text : colors.glass;
-  return <View style={{ alignItems: "center", gap: space.xs, minWidth: CALL_CONTROL_SIZE, opacity: disabled ? opacity.disabled : 1 }}>
+  // Each control takes an equal slot of the dock row, so its label has the slot's width instead of the
+  // icon's and a row of four never wraps or clips a label on a narrow phone.
+  return <View style={{ flex: 1, maxWidth: 112, alignItems: "center", gap: space.xs, minWidth: CALL_CONTROL_SIZE, opacity: disabled ? opacity.disabled : 1 }}>
     <PanelButton
       variant="ghost"
       size="icon"
@@ -43,6 +45,6 @@ export function CallControl({ label, accessibilityLabel, selected, danger, disab
         backgroundColor: fill, borderWidth: danger || selected ? 0 : StyleSheet.hairlineWidth, borderColor: colors.border,
       }}
     />
-    <Body style={[uiStyles.caption, { color: colors.text, textAlign: "center", maxWidth: CALL_CONTROL_SIZE + space.xl }]} importantForAccessibility="no" accessibilityElementsHidden>{label}</Body>
+    <Body style={[uiStyles.caption, { color: colors.text, textAlign: "center", alignSelf: "stretch" }]} importantForAccessibility="no" accessibilityElementsHidden>{label}</Body>
   </View>;
 }

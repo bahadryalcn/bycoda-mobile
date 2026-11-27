@@ -4,12 +4,15 @@ import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { FileActions } from "./file-actions";
 const state = vi.hoisted(() => ({
-  operation: undefined as undefined | ((value: string) => void),
+  actions: [] as { key: string; onPress: () => void }[],
   submit: undefined as undefined | (() => void),
   size: "",
-  buttons: {} as Record<string, () => void>,
   mutate: vi.fn(async () => undefined),
 }));
+vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/copy", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/folder-input", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
 vi.mock("react-native", () => ({
   View: ({ children }: PropsWithChildren) =>
     createElement("div", null, children),
@@ -22,6 +25,12 @@ vi.mock("./shared", () => ({
   workspaceStyles: {},
   useProjectRefresh: () => vi.fn(),
 }));
+vi.mock("@/ui/overflow-menu", () => ({
+  ActionList: ({ actions }: { actions: typeof state.actions }) => {
+    state.actions = actions;
+    return null;
+  },
+}));
 vi.mock("@/ui/primitives", () => ({
   Sheet: ({ children, size }: PropsWithChildren<{ size: string }>) => {
     state.size = size;
@@ -32,14 +41,6 @@ vi.mock("@/ui/primitives", () => ({
     numberOfLines,
   }: PropsWithChildren<{ numberOfLines?: number }>) =>
     createElement("span", { "data-lines": numberOfLines }, children),
-  SegmentedControl: ({ onChange }: { onChange: typeof state.operation }) => {
-    state.operation = onChange;
-    return null;
-  },
-  Button: ({ label, onPress }: { label: string; onPress: () => void }) => {
-    state.buttons[label] = onPress;
-    return null;
-  },
   IdentifierField: () => null,
   ErrorNotice: () => null,
   FormActions: ({ onSubmit }: { onSubmit: () => void }) => {
@@ -47,7 +48,7 @@ vi.mock("@/ui/primitives", () => ({
     return null;
   },
 }));
-it("keeps the complete target and same owner while switching to compact deletion; only explicit submit dispatches", async () => {
+it("opens deletion as its own step from the action list; only explicit submit dispatches", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const container = document.createElement("div");
   const root = createRoot(container);
@@ -63,8 +64,9 @@ it("keeps the complete target and same owner while switching to compact deletion
   } as Parameters<typeof FileActions>[0];
   try {
     await act(async () => root.render(createElement(FileActions, props)));
-    expect(state.size).toBe("form");
-    await act(async () => state.buttons.Delete!());
+    expect(state.size).toBe("compact");
+    expect(state.actions.map((action) => action.key)).toEqual(["rename", "copy", "move", "delete"]);
+    await act(async () => state.actions.find((action) => action.key === "delete")!.onPress());
     expect(state.size).toBe("compact");
     expect(container.textContent).toContain("/host/project/with/a/long/target/path/nested/file.ts");
     expect(container.querySelector("[data-lines]")).toBeNull();
@@ -75,7 +77,7 @@ it("keeps the complete target and same owner while switching to compact deletion
       command: "delete_path",
       args: { path: "/host/project/with/a/long/target/path/nested/file.ts" },
     });
-    expect(completed).toHaveBeenCalledOnce();
+    expect(completed).toHaveBeenCalledExactlyOnceWith("Deleted {p0}.");
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

@@ -47,6 +47,7 @@ export type AssistantMobileRequest =
   | { op: "threads.messages"; threadId: string; limit: number; before?: number; beforeId?: string }
   | { op: "presence.set"; state: OwnerPresence }
   | { op: "pauseAll" }
+  | { op: "resumeAll" }
   | { op: "notifications.targets" }
   | { op: "profile.update"; expectedVersion: number; patch: AssistantProfilePatch }
   | { op: "threads.sendIdentity" }
@@ -176,6 +177,11 @@ export class AssistantMobileClient {
   /** Stops Room work after explicit owner confirmation; transport never retries writes. */
   async pauseAll(): Promise<void> {
     const response = await this.call({ op: "pauseAll" });
+    if (response.ok !== true) throw new AssistantMobileError("response");
+  }
+  /** Lifts the pause after explicit owner action; stopped jobs stay stopped. */
+  async resumeAll(): Promise<void> {
+    const response = await this.call({ op: "resumeAll" });
     if (response.ok !== true) throw new AssistantMobileError("response");
   }
   /** Owner-readable, sanitized destinations from this captured Host only. */

@@ -103,3 +103,22 @@ export function sessionActionState(session: Pick<HostSessionSummary, "status" | 
     canStop: session.status === "running" && !!session.runId,
   } as const;
 }
+
+/** The open session's snapshot as the summary row the shared session actions review. */
+export function sessionSummaryFromSnapshot(snapshot: HostSession): HostSessionSummary {
+  const { session, blockRevisions: _blocks, desktop: _desktop, ...rest } = snapshot as HostSession & { desktop?: unknown };
+  return {
+    ...rest,
+    id: session.id,
+    title: session.title,
+    harness: session.harness as HostSessionSummary["harness"],
+    model: session.model,
+    cwd: session.cwd,
+    runtimeMode: session.runtimeMode,
+    providerSessionId: session.providerSessionId,
+    branch: session.branch,
+    workspaceId: session.workspaceId,
+    workspaceRevision: session.workspaceRevision,
+    worktreeCwd: session.worktreeCwd,
+  };
+}

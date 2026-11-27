@@ -47,7 +47,7 @@ afterEach(() => { act(() => root?.unmount()); root = undefined; fixture.writes.m
 it("places invalid goal limits beside each field without changing the draft or sending", () => {
   const initial = { id: "goal", title: "İstanbul review", status: "running", maxRunningTasks: -1, maxRunMinutes: -1, isolate: true } as HostGoal;
   render(h(GoalSettingsEditor, { initial, onClose: vi.fn() }));
-  expect(container.querySelector('[data-field="Concurrent task limit"] [role="alert"]')?.textContent).toBe("Enter zero or a positive safe integer.");
+  expect(container.querySelector('[data-field="Concurrent task limit"] [role="alert"]')?.textContent).toBe("Enter 0 or a larger number.");
   expect(container.querySelector('[data-field="Run time limit"] [role="alert"]')?.textContent).toBe("Enter minutes from 0 to 10080.");
   expect(initial.maxRunningTasks).toBe(-1); expect(initial.maxRunMinutes).toBe(-1); expect(fixture.writes).not.toHaveBeenCalled();
 });

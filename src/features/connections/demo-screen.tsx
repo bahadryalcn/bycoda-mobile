@@ -7,6 +7,7 @@ import { OnboardingShell } from "@/ui/onboarding-shell";
 import { useMobileTheme } from "@/ui/theme";
 import { useCopy } from "@/ui/copy";
 import { space } from "@/ui/tokens";
+import { goBack } from "@/ui/navigation";
 
 const TourSample = lazy(() =>
   import("@/ui/component-gallery-chat").then((module) => ({ default: module.TourSampleSheet })),
@@ -23,7 +24,7 @@ export function DemoScreen() {
   const [gallery, setGallery] = useState(false);
   const sheetOpen = sample || gallery;
   const galleryTitle = copy("Bileşen galerisi", "Component gallery");
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
+  const close = () => goBack("/");
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
@@ -55,7 +56,7 @@ export function DemoScreen() {
         <View style={{ gap: space.xs }}>
           <Button label={copy("Bilgisayarına bağlan", "Connect your computer")} tone="primary" fullWidth
             onPress={() => router.replace({ pathname: "/machines", params: { start: "scan" } })} />
-          <Button label={copy("Örnek AI oturumunu aç", "Open the example AI session")} tone="quiet" fullWidth
+          <Button label={copy("Örnek oturumu aç", "Open the example session")} tone="quiet" fullWidth
             onPress={() => setSample(true)} />
           {/* Development only: the gallery stays out of the sample so the dev build shows what users see. */}
           {__DEV__ ? <Button label={galleryTitle} tone="quiet" fullWidth onPress={() => setGallery(true)} /> : null}
@@ -64,7 +65,7 @@ export function DemoScreen() {
       {sample ? (
         <Suspense
           fallback={
-            <Sheet visible title={copy("Kişisel web sitesi", "Personal website")} onClose={() => setSample(false)}>
+            <Sheet visible title={copy("Örnek oturum", "Example session")} onClose={() => setSample(false)}>
               <Skeleton variant="content" />
             </Sheet>
           }

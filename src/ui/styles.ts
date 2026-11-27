@@ -51,8 +51,8 @@ export const uiStyles = createThemedStyles(() => ({
     fontWeight: "700",
     letterSpacing: -0.4,
   },
-  /** Screen title: 22/28, left-aligned, no large-title collapse. */
-  pageTitle: { color: colors.text, fontSize: 22, lineHeight: 28, fontWeight: "700", letterSpacing: -0.3 },
+  /** Screen title: 22/28, left-aligned, no large-title collapse. Hoisted into the native top row it is `title` 16/21. */
+  pageTitle: { color: colors.text, fontSize: fontSize.pageTitle, lineHeight: lineHeight.pageTitle, fontWeight: "700", letterSpacing: -0.3 },
   stack: { gap: space.md },
   row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.row, minWidth: 0, maxWidth: "100%" },
   grow: { flex: 1, minWidth: 0 },
@@ -60,7 +60,7 @@ export const uiStyles = createThemedStyles(() => ({
   message: { color: colors.text, fontSize: fontSize.body, lineHeight: lineHeight.message },
   muted: { color: colors.muted, fontSize: fontSize.body, lineHeight: lineHeight.body },
   mutedTone: { color: colors.muted },
-  mono: { color: colors.text, fontSize: fontSize.caption, lineHeight: 18, fontFamily: monoFont },
+  mono: { color: colors.text, fontSize: fontSize.caption, lineHeight: lineHeight.code, fontFamily: monoFont },
   title: {
     color: colors.text,
     fontSize: fontSize.title,
@@ -234,10 +234,10 @@ export const uiStyles = createThemedStyles(() => ({
   noticeRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space.sm, rowGap: 0 },
   noticeMessage: { flexDirection: "row", alignItems: "flex-start", gap: space.row,
     flexGrow: 1, flexShrink: 1, minWidth: 0 },
-  noticeText: { color: colors.text, fontSize: fontSize.control, lineHeight: 20, fontWeight: "500" },
+  noticeText: { color: colors.text, fontSize: fontSize.control, lineHeight: lineHeight.control, fontWeight: "500" },
   /** Invisible unclamped copy of a notice message, measured to decide whether "Details" is needed. */
   noticeMeasure: { position: "absolute", top: 0, left: 0, right: 0, opacity: 0, pointerEvents: "none" },
-  /** One-line status: no fill or border, 24 pt at default text; the action reaches 48 dp through hitSlop. */
+  /** One-line status: no fill or border, 24 pt at default text; its TextAction reaches 48 dp through hitSlop. */
   statusLine: { flexDirection: "row", alignItems: "center", gap: space.xs + 2, minHeight: 24 },
   statusLineText: { flexShrink: 1, fontSize: fontSize.small, lineHeight: lineHeight.small, fontWeight: "500" },
   statusLineAction: { fontSize: fontSize.small, lineHeight: lineHeight.small, fontWeight: "600" },
@@ -248,7 +248,7 @@ export const uiStyles = createThemedStyles(() => ({
   stateColumn: { width: "100%", maxWidth: 320, alignItems: "center", gap: space.sm },
   stateTitle: { color: colors.text, fontSize: fontSize.heading, lineHeight: lineHeight.heading, fontWeight: "600",
     letterSpacing: -0.2, textAlign: "center" },
-  stateDescription: { color: colors.muted, fontSize: fontSize.control, lineHeight: 20, textAlign: "center" },
+  stateDescription: { color: colors.muted, fontSize: fontSize.control, lineHeight: lineHeight.control, textAlign: "center" },
   /** Centered like the column above it: "stretch" with a max width pinned the capped box to the start edge. */
   stateActions: { alignSelf: "center", alignItems: "center", gap: space.xs, marginTop: space.md },
   /** First-run, unpaired and empty art keep their breathing room. */

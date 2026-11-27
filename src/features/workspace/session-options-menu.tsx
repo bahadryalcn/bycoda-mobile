@@ -2,8 +2,6 @@ import { useState, type ComponentType, type ReactNode } from "react";
 import { View } from "react-native";
 import MessageCircleQuestion from "lucide-react-native/icons/message-circle-question";
 import { SideChatSheet } from "@/features/side-chat/side-chat-sheet";
-import Archive from "lucide-react-native/icons/archive";
-import ArchiveRestore from "lucide-react-native/icons/archive-restore";
 import ArrowRightLeft from "lucide-react-native/icons/arrow-right-left";
 import Bot from "lucide-react-native/icons/bot";
 import ClipboardCheck from "lucide-react-native/icons/clipboard-check";
@@ -14,11 +12,8 @@ import Globe from "lucide-react-native/icons/globe";
 import Import from "lucide-react-native/icons/import";
 import KeyRound from "lucide-react-native/icons/key-round";
 import ListChecks from "lucide-react-native/icons/list-checks";
-import Pin from "lucide-react-native/icons/pin";
-import PinOff from "lucide-react-native/icons/pin-off";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import NotebookPen from "lucide-react-native/icons/notebook-pen";
-import Settings2 from "lucide-react-native/icons/settings-2";
 import Search from "lucide-react-native/icons/search";
 import Server from "lucide-react-native/icons/server";
 import Sparkles from "lucide-react-native/icons/sparkles";
@@ -40,10 +35,7 @@ import { SessionArtifacts } from "./session-artifacts";
 export type SessionOptionsActions = {
   find: () => void;
   toggleDetails: () => void;
-  settings: () => void;
   model: () => void;
-  pin: () => void;
-  archive: () => void;
   review: () => void;
   notes: () => void;
   handoff: () => void;
@@ -64,7 +56,8 @@ type IconComponent = ComponentType<{ size?: number; strokeWidth?: number; color?
 /**
  * Session options, ordered by frequency in one list of about ten rows. Agent and Project open their
  * own short lists, so rare tools stay one step away without a wall of rows. Refresh lives in the
- * header's offline status, its only useful moment.
+ * header's offline status, its only useful moment. The session record actions (rename, pin, settle,
+ * read state, snooze, move, copy, details, archive, stop, delete) follow as the list row's menu.
  */
 export function SessionOptionsMenu({
   visible,
@@ -74,8 +67,7 @@ export function SessionOptionsMenu({
   blocked,
   running,
   detailed,
-  pinned,
-  archived,
+  sessionActions,
   modelDetail,
   actions,
   onClose,
@@ -87,8 +79,8 @@ export function SessionOptionsMenu({
   blocked: boolean;
   running: boolean;
   detailed: boolean;
-  pinned?: boolean;
-  archived?: boolean;
+  /** The shared session actions list (same owner and order as the session row menu). */
+  sessionActions?: ReactNode;
   /** The current model, shown on the Model and access row. */
   modelDetail?: string;
   actions: SessionOptionsActions;
@@ -114,7 +106,6 @@ export function SessionOptionsMenu({
     ? copy("Oturum çalışırken kullanılamaz.", "Unavailable while the session is running.")
     : undefined;
   const showNotes = !!projectId && hasSession;
-  const updatable = hasSession && !!projectId;
   return (
     <>
       <SideChatSheet visible={sideOpen} sessionId={sessionId} onClose={() => setSideOpen(false)} />
@@ -134,24 +125,6 @@ export function SessionOptionsMenu({
               disabled={blocked}
               onPress={go(actions.model)}
             />
-          ) : null}
-          {updatable ? (
-            <>
-              <NavigationRow
-                intent="command"
-                icon={icon(pinned ? PinOff : Pin)}
-                label={pinned ? copy("Sabitlemeyi kaldır", "Unpin") : copy("Sabitle", "Pin")}
-                disabled={blocked}
-                onPress={go(actions.pin)}
-              />
-              <NavigationRow
-                intent="command"
-                icon={icon(archived ? ArchiveRestore : Archive)}
-                label={archived ? copy("Arşivden çıkar", "Unarchive") : copy("Arşivle", "Archive")}
-                disabled={blocked}
-                onPress={go(actions.archive)}
-              />
-            </>
           ) : null}
           {showNotes ? (
             <NavigationRow
@@ -177,11 +150,6 @@ export function SessionOptionsMenu({
             disabled={blocked}
             onPress={go(actions.review)}
           />
-          <NavigationRow
-            icon={icon(Settings2)}
-            label={copy("Oturum ayarları", "Session settings")}
-            onPress={go(actions.settings)}
-          />
           {hasSession ? (
             <NavigationRow icon={icon(Bot)} label={copy("Ajan", "Agent")} onPress={open("agent")} />
           ) : null}
@@ -189,6 +157,7 @@ export function SessionOptionsMenu({
             <NavigationRow icon={icon(Folder)} label={copy("Proje", "Project")} onPress={open("project")} />
           ) : null}
         </NavigationGroup>
+        {sessionActions ? <View style={{ marginTop: space.sm }}>{sessionActions}</View> : null}
       </Sheet>
       <Sheet visible={section === "agent"} title={copy("Ajan", "Agent")} size="compact" onClose={() => setSection(null)}>
         <NavigationGroup>
@@ -215,7 +184,7 @@ export function SessionOptionsMenu({
           {projectId ? (
             <NavigationRow
               icon={icon(Import)}
-              label={copy("Konuşma geçmişini içe aktar", "Import conversation history")}
+              label={copy("Oturum geçmişini içe aktar", "Import session history")}
               disabled={blocked}
               onPress={fromSection(actions.importHistory)}
             />
@@ -279,8 +248,9 @@ export function SessionOptionsMenu({
             {hasSession ? (
               <NavigationGroup>
                 <NavigationRow
+                  intent="command"
                   icon={icon(Trash2, "danger")}
-                  label={copy("Çalışma ağacı kaldırma", "Worktree removal")}
+                  label={copy("Çalışma ağacını kaldır", "Remove worktree")}
                   tone="danger"
                   disabled={blocked}
                   onPress={fromSection(actions.worktreeRemoval)}

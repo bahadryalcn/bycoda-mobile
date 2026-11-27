@@ -1,13 +1,11 @@
 import type { TextInputInstance } from "react-native";
 import { useLocale } from "@/i18n";
 import { matchesSearch } from "@/ui/search-matching";
-import { router } from "expo-router";
 import {
   RowIcon,
   StatusText,
   Body,
   Button,
-  ConfirmationCard,
   Disclosure,
   FieldError,
   IdentifierField,
@@ -20,10 +18,12 @@ import {
 import { useMemo, useRef, useState } from "react";
 import GitBranch from "lucide-react-native/icons/git-branch";
 import { useCopy } from "@/ui/copy";
+import { confirmAction } from "@/ui/confirm";
 import { GroupedListRow } from "./shared";
 import { useGitBranches } from "./git-queries";
 import { branchNameProblem } from "./git-branch-name";
 import type { GitBranchesPanelProps } from "./git-types";
+import { pushOnce } from "@/ui/navigation";
 
 export function GitBranchesPanel({
   scope,
@@ -39,7 +39,6 @@ export function GitBranchesPanel({
   const locale = useLocale();
   const branches = useGitBranches(scope);
   const [search, setSearch] = useState("");
-  const [confirmingCreate, setConfirmingCreate] = useState(false);
   const problem = branchNameProblem(name);
   const searchRef = useRef<TextInputInstance>(null);
   const rows = useMemo(
@@ -90,7 +89,17 @@ export function GitBranchesPanel({
             label={copy("Yeni dal oluştur", "Create branch")}
             disabled={!!problem}
             busy={creating}
-            onPress={() => setConfirmingCreate(true)}
+            onPress={() => {
+              if (problem || creating) return;
+              confirmAction(
+                copy("Yeni dal oluştur", "Create branch"),
+                copy("\"{p0}\" dalı oluşturulup bu dala geçilsin mi?", "Create \"{p0}\" and switch to it?", { p0: name.trim() }),
+                copy("Dalı oluştur", "Create branch"),
+                onCreate,
+                copy("Vazgeç", "Cancel"),
+                "default",
+              );
+            }}
           />
           {problem && name.trim() ? (
             <FieldError
@@ -112,32 +121,6 @@ export function GitBranchesPanel({
         </>
       }
     >
-      {confirmingCreate && !problem ? (
-        <Sheet
-          visible
-          size="compact"
-          title={copy("Yeni dal oluştur", "Create branch")}
-          dismissible={!creating}
-          onClose={() => setConfirmingCreate(false)}
-        >
-          <ConfirmationCard
-            tone="default"
-            message={copy(
-              "\"{p0}\" dalı oluşturulup bu dala geçilsin mi?",
-              "Create \"{p0}\" and switch to it?",
-              { p0: name.trim() },
-            )}
-            cancelLabel={copy("Vazgeç", "Cancel")}
-            onCancel={() => setConfirmingCreate(false)}
-            confirmLabel={copy("Dalı oluştur", "Create branch")}
-            busy={creating}
-            onConfirm={() => {
-              setConfirmingCreate(false);
-              onCreate();
-            }}
-          />
-        </Sheet>
-      ) : null}
       <ScreenList
         grouped
         data={rows}
@@ -154,21 +137,20 @@ export function GitBranchesPanel({
               onChangeText={setSearch}
             />
             <QueryState query={branches} empty={!rows.length}
+              noResults={{ compact: true, searching: !!search.trim(), title: copy("Aramana uyan dal yok.", "No branches match your search."), onClearSearch: () => { setSearch(""); searchRef.current?.focus(); } }}
               emptyTitle={search.trim() ? copy("Aramana uyan dal yok.", "No branches match your search.") : copy("Dal bulunamadı.", "No branches found.")}
               emptyAction={search.trim() ? { label: copy("Aramayı temizle", "Clear search"), onPress: () => { setSearch(""); searchRef.current?.focus(); } } : undefined}
               onManageConnections={() => {
                 if (creating) return;
                 onClose();
-                router.push("/machines");
+                pushOnce("/machines");
               }} />
-            <Disclosure label={copy("Dal değiştirme hakkında", "About switching branches")}>
-              <Body muted>
-                {copy(
-                  "Bilgisayardaki proje, oturumlar durduğunda ve değişiklikler kaydedildiğinde dal değiştirebilir.",
-                  "Your computer can switch branches when sessions are idle and the working tree is clean.",
-                )}
-              </Body>
-            </Disclosure>
+            <Body muted>
+              {copy(
+                "Bilgisayardaki proje, oturumlar durduğunda ve değişiklikler kaydedildiğinde dal değiştirebilir.",
+                "Your computer can switch branches when sessions are idle and the working tree is clean.",
+              )}
+            </Body>
           </>
         }
         renderItem={({ item, index }) => (

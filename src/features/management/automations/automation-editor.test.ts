@@ -21,6 +21,9 @@ vi.mock("../shared/agent", () => ({ useEffectiveAgent: (value: unknown) => value
 vi.mock("../shared/agent-fields", () => ({ AgentFields: () => null }));
 vi.mock("../shared/schedule-fields", () => ({ ScheduleFields: () => null }));
 vi.mock("./schedule-preview", () => ({ SchedulePreview: () => null }));
+vi.mock("../../workspace/use-project-directory", () => ({
+  useProjectList: () => ({ data: [], directoryReady: true, isProjectVisible: () => true }),
+}));
 vi.mock("@/ui/number-field", async () => ({
   NumberField: (await import("@/ui/primitives")).Field,
 }));
@@ -37,6 +40,8 @@ vi.mock("@/ui/primitives", () => {
     MutationState: () => null,
     ToggleField: () => null,
     SelectField: () => null,
+    SegmentedControl: () => null,
+    NavigationRow: () => null,
     Button: ({ label, onPress }: { label: string; onPress(): void }) => createElement("button", { onClick: onPress }, label),
     Notice: ({ message, children }: PropsWithChildren<{ message: string }>) => createElement("div", null, message, children),
     ErrorNotice: () => null,
@@ -154,7 +159,7 @@ it("checks an unconfirmed save without resending and closes only when the saved 
       initial: draft, save: { isPending: true } as AutomationEditorProps["save"],
       busy: true, onClose, readSaved: fixture.check,
     })));
-    expect(fixture.submit).toMatchObject({ submitLabel: "Saving…", busy: true, disabled: true });
+    expect(fixture.submit).toMatchObject({ submitLabel: "Save", busy: true, disabled: true });
     await act(async () => root.render(createElement(AutomationEditor, {
       initial: draft, save: { isPending: false, mutateAsync: fixture.mutate, reset } as unknown as AutomationEditorProps["save"],
       busy: false, onClose, readSaved: fixture.check,

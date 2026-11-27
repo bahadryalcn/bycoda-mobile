@@ -5,6 +5,7 @@ import { Notice } from "@/ui/primitives";
 import { OnboardingShell } from "@/ui/onboarding-shell";
 import { useCopy } from "@/ui/copy";
 import { space } from "@/ui/tokens";
+import { openSupportMail } from "../../settings/support-mail";
 import type { LegalDocumentId } from "../../legal/legal-document";
 import { LegalDocumentSheet } from "../../legal/legal-reader";
 import { SignInPanel, type SignInStep } from "./SignInPanel";
@@ -28,7 +29,9 @@ export function AccountWelcome({ unavailable = false }: { unavailable?: boolean 
       <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ gap: space.md }}>
         {unavailable
-          ? <Notice tone="warning" message={copy("Bu sürümde hesap girişi ayarlanmamış. Devam etmek için giriş desteği olan bir sürüm kullan.", "Account sign-in is not configured in this build. Use a build with sign-in enabled to continue.")} />
+          ? <Notice tone="warning"
+              message={copy("Giriş şu an kullanılamıyor. Uygulamayı güncelle veya destek ekibine yaz.", "Sign-in is not available right now. Update the app or contact support.")}
+              action={{ label: copy("Destekle iletişime geç", "Contact support"), onPress: () => openSupportMail(copy, "bycoda sign-in") }} />
           : <SignInPanel onStepChange={setStep} />}
       </ScrollView>
       <LegalLinks onOpen={setDocument} />

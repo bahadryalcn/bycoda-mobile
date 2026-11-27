@@ -14,6 +14,11 @@ object DeviceProof {
   const val HEADER = "DPoP"
   private const val ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
   private val random = SecureRandom()
+  /** The signer and `jwk.x` of the last seed: key setup costs two pure-Java scalar multiplications, a proof needs one signature. */
+  private class Key(val seed: ByteArray, val signer: Ed25519Sign, val x: String)
+  @Volatile private var key: Key? = null
+  private fun key(seed: ByteArray): Key = key?.takeIf { it.seed.contentEquals(seed) }
+    ?: Key(seed.copyOf(), Ed25519Sign(seed), base64url(Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey)).also { key = it }
 
   fun seedKey(machineId: String) = "bycoda.remote.proof.$machineId"
 
@@ -66,8 +71,9 @@ object DeviceProof {
   fun sign(seed: ByteArray, token: String, method: String, path: String, environmentId: String, jti: String? = null, iat: Long = System.currentTimeMillis() / 1000): String? {
     if (seed.size != 32) return null
     return try {
-      val signer = Ed25519Sign(seed)
-      val x = base64url(Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey)
+      val cached = key(seed)
+      val signer = cached.signer
+      val x = cached.x
       val id = jti ?: base64url(ByteArray(16).also { random.nextBytes(it) })
       val ath = base64url(MessageDigest.getInstance("SHA-256").digest(token.toByteArray(Charsets.UTF_8)))
       val header = "{\"typ\":\"dpop+jwt\",\"alg\":\"EdDSA\",\"jwk\":{\"kty\":\"OKP\",\"crv\":\"Ed25519\",\"x\":\"$x\"}}"

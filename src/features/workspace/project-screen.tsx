@@ -6,7 +6,6 @@ import { rememberOpenedProject } from "@/state/project-directory-preferences";
 import { useConnectionScope, type ConnectionScope } from "@/state/connection-scope";
 import { ScrollView, Text, View } from "react-native";
 import MoreHorizontal from "lucide-react-native/icons/ellipsis";
-import Archive from "lucide-react-native/icons/archive";
 import Info from "lucide-react-native/icons/info";
 import FolderTree from "lucide-react-native/icons/folder-tree";
 import Plus from "lucide-react-native/icons/plus";
@@ -29,14 +28,18 @@ import {
   Button,
   SearchField,
   Sheet,
-  SelectField,
   MutationState,
+  NavigationGroup,
+  NavigationRow,
+  RowIcon,
   Notice,
   PressableCard,
   QueryState,
   Screen,
 } from "@/ui/primitives";
-import { metrics, space } from "@/ui/tokens";
+import { iconSize, metrics, space } from "@/ui/tokens";
+import { ScopePill } from "@/ui/scope-pill";
+import { ScopePills } from "@/ui/scope-line";
 import { useCopy } from "@/ui/copy";
 import { ProjectSessions } from "./sessions-panel";
 import { ProjectFiles } from "./files-panel";
@@ -56,12 +59,13 @@ import { NoComputerState } from "@/ui/no-computer";
 import { WorktreeCreate } from "./worktree-create";
 import { SubmoduleView } from "./submodule-view";
 import { PrivateContentAccessProvider, PrivateContentBoundary } from "@/ui/private-content";
+import { goBack, leaveTo, pushOnce } from "@/ui/navigation";
 
 function ProjectTitle({ name, appearance, onPress }: { name: string; appearance?: Parameters<typeof ProjectIcon>[0]["appearance"]; onPress: () => void }) {
   const { uiStyles } = useMobileTheme();
   const copy = useCopy();
   return <PressableCard label={`${name}. ${copy("Proje ayrıntıları", "Project details")}`} onPress={onPress}
-    style={{ flexDirection: "row", alignItems: "center", gap: space.xs, minWidth: 0, flexShrink: 1, minHeight: 0, paddingVertical: 0, paddingHorizontal: 0, marginHorizontal: 0 }}>
+    style={{ flexDirection: "row", alignItems: "center", gap: space.xs, minWidth: 0, flexShrink: 1, minHeight: metrics.touchTarget, paddingVertical: 0, paddingHorizontal: 0, marginHorizontal: 0 }}>
     <ProjectIcon appearance={appearance} size={20} />
     <Text accessibilityRole="header" numberOfLines={1} style={[uiStyles.title, { flexShrink: 1 }]}>{name}</Text>
   </PressableCard>;
@@ -139,7 +143,7 @@ function ProjectWorkspace({
     void changeAction.run(async () => {
       const assertProject = () => {
         if (!projectIsCurrent())
-          throw new Error("The selected project is no longer available.");
+          throw new Error(copy("Seçilen proje artık kullanılamıyor.", "The selected project is no longer available."));
       };
       assertProject();
       await beforeChange.current?.();
@@ -152,10 +156,10 @@ function ProjectWorkspace({
     ["worktrees", id],
     "git.worktrees",
     { projectId: id },
-    { enabled: !!visibleProject && (segment !== "sessions" || createWorktreeOpen || worktreeOpen), queryFn: async (client, signal) => {
-      if (!projects.isProjectVisible(id)) throw new Error("The selected project is no longer available.");
+    { enabled: !!visibleProject, queryFn: async (client, signal) => {
+      if (!projects.isProjectVisible(id)) throw new Error(copy("Seçilen proje artık kullanılamıyor.", "The selected project is no longer available."));
       const value = await client.request<ProjectWorktrees>("git.worktrees", { projectId: id }, { signal });
-      if (!projects.isProjectVisible(id)) throw new Error("The selected project is no longer available.");
+      if (!projects.isProjectVisible(id)) throw new Error(copy("Seçilen proje artık kullanılamıyor.", "The selected project is no longer available."));
       return value;
     } },
   );
@@ -173,9 +177,13 @@ function ProjectWorkspace({
         detail: tree.path,
       })),
   ];
+  const canCreateWorktree = !!machine?.capabilities?.includes("git.worktreeCreate");
+  // Every tab acts on the selected working folder (new sessions open there too), so its pill shows on each.
   const canPickWorktree =
-    segment !== "sessions" &&
-    (!!cwd || machine?.capabilities?.includes("git.worktreeCreate") || (worktrees.data?.worktrees ?? []).some((tree) => !tree.missing && !tree.isMain));
+    !!cwd || canCreateWorktree || (worktrees.data?.worktrees ?? []).some((tree) => !tree.missing && !tree.isMain);
+  const worktreeLabel = cwd
+    ? worktreeOptions.find((option) => option.value === cwd)?.label ?? cwd.split(/[\\/]/).filter(Boolean).at(-1) ?? cwd
+    : copy("Ana proje klasörü", "Main project folder");
   const projectFeedback = (
     <>
       <ProjectDirectoryFeedback query={projects.error ? { ...projects, data: undefined } : projects} readiness={projects.readiness}
@@ -183,13 +191,14 @@ function ProjectWorkspace({
         loadingLabel={copy("Proje doğrulanıyor…", "Verifying project…")}
         empty={projects.directoryReady
           ? copy("Bu bilgisayarda proje bulunamadı.", "Project not found on this computer.")
-          : undefined} />
-      <Button
+          : undefined}
+        emptyAction={{ label: copy("Projelere dön", "Back to projects"), onPress: () => leaveTo("/") }} />
+      {!projects.directoryReady ? <Button
         label={copy("Projelere dön", "Back to projects")}
         tone="quiet"
         density="compact"
-        onPress={() => router.replace("/")}
-      />
+        onPress={() => leaveTo("/")}
+      /> : null}
     </>
   );
   const canUseProject = () => !!machine && projectIsCurrent() && !changingWorkspace;
@@ -213,23 +222,19 @@ function ProjectWorkspace({
     }, value);
   };
   const menuSections = (sessionControls?: ProjectSessionControls): ProjectMenuSection[] => project ? [
-    { key: "view", title: copy("Liste", "List"), items: [
-      sessionControls ? { key: "archive", label: sessionControls.archived ? copy("Etkin oturumlar", "Active sessions") : copy("Arşiv", "Archive"),
-        icon: <Archive size={18} color={colors.muted} />, selected: sessionControls.archived, onPress: sessionControls.toggleArchived } : false,
-    ] },
     { key: "project", title: copy("Proje", "Project"), items: [
-      machine ? { key: "pull-requests", label: copy("Pull request’ler", "Pull requests"), icon: <GitPullRequest size={18} color={colors.muted} />,
-        onPress: () => { if (canUseProject()) router.push(`/pull-requests?projectId=${encodeURIComponent(id)}&machineId=${encodeURIComponent(machine.id)}` as Href); } } : false,
+      machine ? { key: "pull-requests", label: copy("Pull request’ler", "Pull requests"), icon: <RowIcon glyph={GitPullRequest} />,
+        onPress: () => { if (canUseProject()) pushOnce(`/pull-requests?projectId=${encodeURIComponent(id)}&machineId=${encodeURIComponent(machine.id)}` as Href); } } : false,
       { key: "details", label: copy("Proje ayrıntıları", "Project details"),
-        icon: <Info size={18} color={colors.muted} />, onPress: () => openPanel("details") },
-      { key: "tools", label: copy("Proje araçları", "Project tools"), icon: <Grid2x2 size={18} color={colors.muted} />,
+        icon: <RowIcon glyph={Info} />, onPress: () => openPanel("details") },
+      { key: "tools", label: copy("Proje araçları", "Project tools"), icon: <RowIcon glyph={Grid2x2} />,
         disabled: changingWorkspace, onPress: () => openPanel("tools") },
-      { key: "submodules", label: copy("Başlatılmış submodule’ler", "Initialized submodules"), icon: <GitBranch size={18} color={colors.muted} />,
+      { key: "submodules", label: copy("Alt depolar (submodule)", "Submodules"), icon: <RowIcon glyph={GitBranch} />,
         disabled: changingWorkspace, onPress: () => openPanel("submodules") },
     ] },
     { key: "folder", title: copy("Çalışma klasörü", "Working folder"), items: [
-      canPickWorktree ? { key: "worktree", label: cwd ? copy("Çalışma ağacı", "Worktree") : copy("Ana proje klasörü", "Main project folder"),
-        detail: cwd ?? project.cwd, icon: <FolderTree size={18} color={colors.muted} />,
+      canPickWorktree ? { key: "worktree", label: worktreeLabel,
+        detail: cwd ?? project.cwd, icon: <RowIcon glyph={FolderTree} />,
         disabled: changingWorkspace || worktrees.isPending, onPress: () => openPanel("worktree") } : false,
     ] },
   ] : [];
@@ -237,14 +242,16 @@ function ProjectWorkspace({
     if (!project || !machine) return content;
     const headerActions = <PrivateContentAccessProvider value={{ allowed: !!visibleProject, check: canUseProject }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
+      {sessionControls?.searchTrigger}
+      {sessionControls?.filterTrigger}
       <IconButton label={copy("Proje seçenekleri", "Project options")} expanded={menuOpen}
         onPress={() => openPanel("menu")}>
-        <MoreHorizontal size={20} color={cwd || sessionControls?.archived ? colors.accent : colors.muted} />
+        <MoreHorizontal size={iconSize.action} color={colors.muted} />
       </IconButton>
       {sessionControls?.showCreateInHeader ? (
         <IconButton label={copy("Yeni oturum", "New session")} tone="default"
           disabled={sessionControls.createDisabled} onPress={sessionControls.create}>
-          <Plus size={20} strokeWidth={2} color={colors.accent} />
+          <Plus size={iconSize.action} strokeWidth={2} color={colors.accent} />
         </IconButton>
       ) : null}
       </View>
@@ -254,10 +261,20 @@ function ProjectWorkspace({
         // An open sub-page (history, a diff, a file, a folder level) lends this one header its title and back.
         headerTitle: subpage ? undefined : () => <ProjectTitle name={visibleProject?.name || copy("Proje", "Project")} appearance={visibleProject?.appearance} onPress={() => openPanel("details")} />,
         headerRight: nativeTitle && !!visibleProject && !subpage ? () => headerActions : undefined,
-        ...stackBackOptions(<HeaderBackButton onPress={subpage ? subpage.back : () => router.back()} />) }} />
+        ...stackBackOptions(<HeaderBackButton onPress={subpage ? subpage.back : () => goBack("/")} />) }} />
       <WorkspaceFrame toolbar={<>
         {!nativeTitle ? <ScreenHeading context={<ProjectTitle name={project.name} appearance={project.appearance} onPress={() => openPanel("details")} />} actions={headerActions} /> : null}
-        <MachineConnectionStatus />
+        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm, minWidth: 0 }}>
+          <ScopePills scope={{ computer: machine.name }} />
+          {canPickWorktree ? <ScopePill
+            icon={<FolderTree size={iconSize.inline} strokeWidth={2} color={cwd ? colors.accent : colors.muted} style={{ flexShrink: 0 }} />}
+            label={worktreeLabel}
+            accessibilityLabel={`${copy("Çalışma klasörü", "Working folder")}: ${worktreeLabel}. ${copy("Çalışma klasörünü değiştir", "Change working folder")}`}
+            expanded={worktreeOpen}
+            onPress={() => openPanel("worktree")}
+          /> : null}
+          <MachineConnectionStatus />
+        </View>
         {!subpage ? (
           <ProjectSegments
             label={copy("Proje görünümü", "Project view")}
@@ -348,20 +365,34 @@ function ProjectWorkspace({
             onClose={() => closePanel("worktree")}
           >
             <QueryState query={worktrees} loading="inline" />
-            <SelectField
-              label={copy("Çalışma klasörü", "Working folder")}
-              value={cwd ?? ""}
-              disabled={changingWorkspace || worktrees.isPending}
-              options={worktreeOptions}
-              onChange={selectWorktree}
-            />
+            <NavigationGroup>
+              {worktreeOptions.map((option) => (
+                <NavigationRow
+                  key={option.value || "main"}
+                  label={option.label}
+                  detail={option.detail}
+                  detailEllipsizeMode="middle"
+                  icon={<RowIcon glyph={option.value ? GitBranch : FolderTree} />}
+                  selected={(cwd ?? "") === option.value}
+                  intent="select"
+                  busy={changingWorkspace && requestedWorktree === option.value}
+                  disabled={changingWorkspace || worktrees.isPending}
+                  onPress={() => { if ((cwd ?? "") === option.value) closePanel("worktree"); else selectWorktree(option.value); }}
+                />
+              ))}
+              {canCreateWorktree ? <NavigationRow
+                label={copy("Çalışma ağacı oluştur", "Create worktree")}
+                icon={<RowIcon glyph={Plus} />}
+                intent="command"
+                disabled={changingWorkspace}
+                onPress={() => openPanel("create-worktree")}
+              /> : null}
+            </NavigationGroup>
             {changeAction.error instanceof DraftWriteError && requestedWorktree !== null
               ? <Notice tone="warning"
                   message={copy("Taslak kaydedilemedi. Düzenlemelerin açık.", "Couldn’t save the draft. Your edits are still open.")}
                   onRetry={() => selectWorktree(requestedWorktree)} />
               : <MutationState mutation={changeAction} pending={copy("Taslak kaydediliyor…", "Saving draft…")} />}
-            <Button tone="quiet" label={copy("Çalışma ağacı oluştur", "Create worktree")} disabled={changingWorkspace || !machine.capabilities?.includes("git.worktreeCreate")}
-              onPress={() => openPanel("create-worktree")} />
           </Sheet>
           <WorktreeCreate key={`worktree-create:${panelKey}`} scope={{ machineId: machine.id, projectId: id, ...(cwd ? { cwd } : {}) }} visible={createWorktreeOpen} blocked={changingWorkspace}
             beforeChange={async () => { await beforeChange.current?.(); }}

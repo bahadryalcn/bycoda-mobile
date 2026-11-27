@@ -17,15 +17,16 @@ import { useSecurity } from "../state/security";
 import { ensureDeviceProofBinding } from "../state/proof-binding";
 import { proofRefusalOf } from "../remote/device-proof";
 import type { HostDescriptor } from "../remote/types";
-import { radii, space } from "./tokens";
-import { Body, Button, NavigationGroup, NavigationRow, Sheet } from "./primitives";
-import { IconTile } from "./icon-tile";
+import { iconSize, radii, space } from "./tokens";
+import { Body, Button, NavigationGroup, NavigationRow, RowIcon, Sheet } from "./primitives";
 import HardDrive from "lucide-react-native/icons/hard-drive";
 import { ConnectionFeedback } from "../features/connections/connection-feedback";
 import { selectedComputerFirst } from "../features/connections/saved-computer-order";
 import { useSwitchComputer } from "../features/connections/use-switch-computer";
+import { storageErrorText } from "../features/connections/storage-error-copy";
+import { RetryConnectionRow } from "../features/connections/active-computer-status";
 import { useCopy } from "./copy";
-import { CONNECTED_WINDOW_MS, connectionPhase } from "./connection-presentation";
+import { CONNECTED_WINDOW_MS, connectionPhase, settleConnectionPhase, type ConnectionBlipMemory, type ConnectionPhase } from "./connection-presentation";
 import { connectionNeedsPairing, connectionReason } from "./connection-reason";
 import { Menu } from "panelui-native/components/menu";
 import { BusyIndicator as Spinner } from "./busy-indicator";
@@ -33,7 +34,7 @@ import { decorativeSvgProps } from "./accessibility";
 import { remoteErrorKind } from "./error-message";
 import { machineSuccessStore } from "./machine-success-store";
 import { READ_RETRY_GRACE_MS, refetchRecoveredReads } from "../state/query-retry";
-import { hostRecoveringSince, recordActiveHostDisconnected, useHostRuntimeStartupFailed, useHostRuntimeState } from "../state/host-runtime-state";
+import { hostRecoveringSince, recordActiveHostDisconnected, useHostForegroundGeneration, useHostRuntimeStartupFailed, useHostRuntimeState } from "../state/host-runtime-state";
 
 const PROBE_STALL_MS = 5_000;
 
@@ -63,6 +64,26 @@ function useRerenderAt(at: number | null) {
   }, [at]);
 }
 
+/** Per computer, shared by every status consumer so a pill mounted mid-blip agrees with the rest. */
+const blipMemory = new Map<string, ConnectionBlipMemory>();
+let blipGeneration: number | null = null;
+
+/** A short blip after a proven connection keeps reading as connected until it outlasts the grace. */
+function useSettledConnectionPhase(raw: ConnectionPhase, machineId: string | undefined): ConnectionPhase {
+  const generation = useHostForegroundGeneration();
+  // A return to the foreground restarts the grace: the socket reconnects before it can be proven.
+  if (blipGeneration !== generation) {
+    blipGeneration = generation;
+    for (const [id, memory] of blipMemory) if (memory.connected) blipMemory.set(id, { connected: true, blipSince: null });
+  }
+  const settled = machineId
+    ? settleConnectionPhase(raw, blipMemory.get(machineId) ?? { connected: false, blipSince: null }, Date.now())
+    : null;
+  if (machineId && settled) blipMemory.set(machineId, settled.memory);
+  useRerenderAt(settled?.holdUntil ?? null);
+  return settled?.phase ?? raw;
+}
+
 /** Connection state for the active computer; mounting it also keeps the descriptor fresh. */
 export function useMachineStatus() {
   const { colors, semanticColors } = useMobileTheme();
@@ -87,11 +108,15 @@ export function useMachineStatus() {
     successStore.getSnapshot,
     successStore.getSnapshot,
   );
+  // The live socket state is the primary signal; the describe poll only covers computers without one.
+  const runtime = useHostRuntimeState(machine?.id);
+  // A ready socket already proves the link (and pushes changes): the signed describe poll would only
+  // cost battery. It still runs once on mount and resumes whenever the socket is not ready.
   const health = useHostQuery<HostDescriptor>(
     ["connection"],
     "environment.describe",
     {},
-    { interval: 30_000 },
+    { interval: () => (runtime === "ready" ? false : 30_000) },
   );
   const refresh = useMachines((s) => s.refreshDescriptor);
   // The descriptor is persisted connection metadata, rather than an editable copy of query data.
@@ -106,8 +131,6 @@ export function useMachineStatus() {
   }, [machine?.id, health.isSuccess, health.data, refresh, client]);
   // A probe still in flight after PROBE_STALL_MS means the link is unproven now, not when the probe finally fails.
   const probeStalled = useProbeStalled(health.isFetching);
-  // The live socket state is the primary signal; the describe poll only covers computers without one.
-  const runtime = useHostRuntimeState(machine?.id);
   // Recent success only counts for CONNECTED_WINDOW_MS; re-render when that window closes so the pill cannot stay green.
   const now = Date.now();
   const connectedUntil = successAt + CONNECTED_WINDOW_MS;
@@ -116,7 +139,7 @@ export function useMachineStatus() {
   const quietUntil = recoveringSince === null ? null : recoveringSince + READ_RETRY_GRACE_MS;
   // A live socket can stay in backoff without another state change; end the quiet window on time.
   useRerenderAt(runtime === "backoff" && quietUntil !== null && now < quietUntil ? quietUntil : null);
-  const phase = connectionPhase({
+  const livePhase = connectionPhase({
     paired: !!machine,
     networkConnected: network.isConnected,
     unlocked,
@@ -132,6 +155,8 @@ export function useMachineStatus() {
     runtime,
     recoveringSince,
   });
+  // What the person sees: brief reconnects and timeouts heal quietly behind "connected".
+  const phase = useSettledConnectionPhase(livePhase, machine?.id);
   const statuses = {
     unpaired: copy("Bilgisayar bağla", "Connect a computer"),
     offline: copy("Ağ bağlantısı yok", "No network connection"),
@@ -164,7 +189,7 @@ export function useMachineStatus() {
           : phase === "permission" || phase === "access" || phase === "locked" || phase === "storage" || phase === "startup-failed"
             ? semanticColors.warning.text
             : colors.muted;
-  return { machine, copy, health, successAt, unlocked, phase, status, statusColor, storageError, reason, needsPairing };
+  return { machine, copy, health, successAt, unlocked, phase, livePhase, status, statusColor, storageError, reason, needsPairing };
 }
 
 /** Headless owner of the periodic connection check while the tab shell is mounted. */
@@ -200,7 +225,11 @@ export function MachineConnectionStatus() {
 /** Page title with a compact computer pill: one 48dp-tall row, no stacked subtitle. */
 
 /** `accessory` (the shared project scope) follows the computer selector in the same wrapping row. */
-export function MachinePill({ heading, subtitle, accessory }: { heading?: string; subtitle?: string; accessory?: ReactNode } = {}) {
+export function MachinePill({ heading, subtitle, accessory, disabled = false }: {
+  heading?: string; subtitle?: string; accessory?: ReactNode;
+  /** The computer cannot change right now (a new session is being created on it); its status stays readable. */
+  disabled?: boolean;
+} = {}) {
   const { colors, uiStyles } = useMobileTheme();
   const { machine, copy, health, successAt, unlocked, phase, status, statusColor, storageError, reason, needsPairing } = useMachineStatus();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -229,8 +258,8 @@ export function MachinePill({ heading, subtitle, accessory }: { heading?: string
       active ? copy("Seçili", "Selected") : copy("Bu bilgisayara geç", "Switch to this computer"),
       active ? reason : undefined].filter(Boolean).join(". ");
   const degraded = phase !== "unpaired" && phase !== "connected" && phase !== "checking" && unlocked;
-  const pillStatus = phase === "startup-failed" ? copy("Hata", "Error")
-    : phase === "offline" ? copy("Çevrimdışı", "Offline") : status;
+  // "Offline" is reserved for a computer; the phone's own missing network uses the page wording.
+  const pillStatus = phase === "startup-failed" ? copy("Hata", "Error") : status;
   const StatusIcon = phase === "offline" || phase === "disconnected" ? WifiOff : CircleAlert;
   // The shared scope pill: the project pill beside it has the same shape, label and chevron.
   const pill = (
@@ -239,17 +268,20 @@ export function MachinePill({ heading, subtitle, accessory }: { heading?: string
               .filter(Boolean)
               .join(". ")}
             expanded={menuOpen && unlocked}
+            disabled={disabled}
             onPress={() => {
-              if (process.env.EXPO_OS !== "web") setMenuOpen(unlocked);
+              if (process.env.EXPO_OS !== "web" && !disabled) setMenuOpen(unlocked);
             }}
             label={name}
             status={degraded ? (
-              <Text numberOfLines={1} style={[uiStyles.caption, { color: statusColor, flexShrink: 0 }]}>
+              // The status may shrink too, so a long status never pushes the computer name out of the pill.
+              <Text numberOfLines={1} style={[uiStyles.caption, { color: statusColor, flexShrink: 1, maxWidth: "60%" }]}>
                 {pillStatus}
               </Text>
             ) : undefined}
             icon={machine ? (
-              health.isFetching && !successAt ? (
+              // Checking always spins, so connected and checking never differ by dot color alone.
+              phase === "checking" || (health.isFetching && !successAt) ? (
                 <Spinner size="sm" color={statusColor} />
               ) : degraded ? (
                 // A glyph plus the status text, so the state never rests on color alone.
@@ -280,7 +312,7 @@ export function MachinePill({ heading, subtitle, accessory }: { heading?: string
         >
           {storageError ? <Menu.Item key="storage-recovery" onPress={() => { closeMenu(); router.navigate("/machines"); }} className="gap-ui-sm">
             <View style={{ flex: 1, gap: space.xs }}>
-              <Body>{storageError}</Body>
+              <Body>{storageErrorText(storageError, copy)}</Body>
               <Body>{copy("Depolamayı kurtar", "Recover saved connections")}</Body>
             </View>
           </Menu.Item> : null}
@@ -350,23 +382,26 @@ export function MachinePill({ heading, subtitle, accessory }: { heading?: string
                 <NavigationRow
                   intent="navigate"
                   tone="warning"
-                  icon={<IconTile><HardDrive size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
+                  icon={<HardDrive size={iconSize.row} strokeWidth={1.8} color={colors.muted} />}
                   label={copy("Depolamayı kurtar", "Recover saved connections")}
-                  detail={storageError}
+                  detail={storageErrorText(storageError, copy)}
                   detailLines={0}
                   onPress={() => { closeMenu(); router.navigate("/machines"); }}
                 />
               ) : null}
               {orderedComputers.map((saved) => {
                 const active = saved.id === machine?.id;
+                // Same row as the Computers screen: plain row icon, one status line, and the address
+                // only when two saved computers share a name.
+                const sameName = machines.filter((other) => other.name.trim().toLowerCase() === saved.name.trim().toLowerCase()).length > 1;
                 return <NavigationRow
                   key={saved.id}
                   intent="command"
                   selected={active}
                   disabled={switcher.busy}
-                  icon={<IconTile><Laptop size={18} strokeWidth={2} color={active ? statusColor : colors.muted} /></IconTile>}
+                  icon={<RowIcon glyph={Laptop} />}
                   label={saved.name}
-                  detail={saved.endpoint}
+                  detail={sameName ? saved.endpoint : undefined}
                   metadata={active ? activeConnection : undefined}
                   detailLines={0}
                   metadataLines={0}
@@ -375,12 +410,11 @@ export function MachinePill({ heading, subtitle, accessory }: { heading?: string
                   onPress={() => selectComputer(saved.id)}
                 />;
               })}
-              {machine && health.error && !needsPairing && phase !== "startup-failed" ? (
-                <NavigationRow
-                  intent="command"
-                  icon={<IconTile><RefreshCw size={18} strokeWidth={2} color={colors.muted} /></IconTile>}
-                  label={copy("Bağlantıyı yeniden dene", "Retry connection")}
-                  onPress={() => { closeMenu(); void health.refetch(); }}
+              {/* The Computers screen's recovery row: scan again when pairing is needed, otherwise retry. */}
+              {machine ? (
+                <RetryConnectionRow
+                  onPair={() => { closeMenu(); router.navigate({ pathname: "/machines", params: { start: "scan" } }); }}
+                  onRetry={closeMenu}
                 />
               ) : null}
             </NavigationGroup>

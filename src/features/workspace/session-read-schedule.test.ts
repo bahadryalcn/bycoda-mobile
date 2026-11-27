@@ -15,6 +15,7 @@ it("keeps long-poll ownership after a wait or a real change and delays transient
   policy.observe({ revision: 2 }, { revision: 3 }, 20, 20_000, 0);
   policy.observe({ revision: 3 }, { revision: 3 }, 20_000, 20_000, 20_000);
   expect(policy.delay(false, false, 20_000)).toBe(25);
+  expect(policy.delay(true, false, 20_000)).toBe(250);
   expect(policy.delay(false, true, 20_000)).toBe(7_500);
 });
 it("shares compatibility state across observers but resets when connection identity changes", () => {

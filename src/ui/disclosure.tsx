@@ -5,7 +5,8 @@ import { View } from "react-native";
 import { Body } from "./typography";
 import { metrics, space, type SemanticTone } from "./tokens";
 import { disclosureAccessibleLabel } from "./disclosure-label";
-import ChevronDown from "lucide-react-native/icons/chevron-down";
+import { DisclosureChevron } from "./disclosure-motion";
+import { useInNavigationGroup } from "./navigation-group-context";
 
 export function Disclosure({
   label,
@@ -18,6 +19,8 @@ export function Disclosure({
   const { colors, semanticColors, uiStyles } = useMobileTheme();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [visited, setVisited] = useState(defaultExpanded);
+  // In a NavigationGroup the trigger takes the rows' inset so its label aligns with theirs.
+  const grouped = useInNavigationGroup();
   return (
     <Collapsible variant="ghost" open={expanded} onOpenChange={(next) => { setVisited(true); setExpanded(next); }}>
       <Collapsible.Trigger
@@ -29,10 +32,11 @@ export function Disclosure({
           alignItems: "center",
           gap: space.sm,
           paddingVertical: space.sm,
+          ...(grouped ? { paddingHorizontal: space.sm, marginHorizontal: -space.sm } : {}),
         }}
       >
         <View style={[uiStyles.grow, { gap: space.xxs }]}>
-          <Body style={[uiStyles.buttonLabel, { fontWeight: "500" }, tone && { color: semanticColors[tone].text }]}>
+          <Body style={[uiStyles.label, tone && { color: semanticColors[tone].text }]}>
             {label}
           </Body>
           {detail && !expanded ? (
@@ -41,7 +45,7 @@ export function Disclosure({
             </Body>
           ) : null}
         </View>
-        <Collapsible.Indicator><ChevronDown size={16} color={colors.muted} /></Collapsible.Indicator>
+        <DisclosureChevron axis="down" expanded={expanded} color={colors.muted} />
       </Collapsible.Trigger>
       <Collapsible.Content className="pb-0">
         {visited ? <View style={{ gap: space.md, paddingTop: space.sm, paddingBottom: space.lg }}>{children}</View> : null}

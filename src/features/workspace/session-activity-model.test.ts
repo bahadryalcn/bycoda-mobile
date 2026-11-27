@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import type { Block } from "@/domain/types";
 import type { ChildSessionEntry } from "./subagent-sessions-model";
-import { activityStateLabel, agentCountText, countAgents, deriveSessionActivity, sessionAgentEntries } from "./session-activity-model";
+import { activityBarLabel, activityStateLabel, agentCountText, countAgents, deriveSessionActivity, sessionAgentEntries } from "./session-activity-model";
 
 const copy = (_tr: string, en: string, v?: Record<string, string | number>) => en.replace(/\{(p\d+)\}/g, (_, k) => String(v?.[k]));
 const user = { id: "u", role: "user", text: "go", startedAt: 1000 } as Block;
@@ -64,4 +64,25 @@ it("presents finished-parent rows with the same interrupted state as their count
 
 it("rejects an invalid start time", () => {
   expect(deriveSessionActivity({ blocks: [{ ...user, startedAt: NaN }], live: true }).startedAt).toBeUndefined();
+});
+
+it("leaves plain working to the transcript but keeps waiting, needs-input and done in the bar", () => {
+  const copy = (_tr: string, en: string, values?: Record<string, string | number>) =>
+    en.replace(/\{(p\d+)\}/g, (_: string, key: string) => String(values?.[key]));
+  const base = { counts: { total: 0, queued: 0, running: 0, done: 0, failed: 0, stopped: 0, interrupted: 0 }, waitingOn: { agents: 0, tasks: 0 } };
+  expect(activityBarLabel({ ...base, state: "working" }, copy)).toBe("");
+  expect(activityBarLabel({ ...base, state: "needs-input" }, copy)).toBe("Needs you");
+  expect(activityBarLabel({ ...base, state: "waiting", waitingOn: { agents: 1, tasks: 0 } }, copy)).toBe("Waiting for 1 agent");
+  expect(activityBarLabel({ ...base, state: "done" }, copy)).toBe("Done");
+});
+
+it("counts an older turn's unfinished run as interrupted while a later turn works", () => {
+  const blocks = [
+    { id: "u1", role: "user", text: "first" } as Block, agent("old", "running"),
+    { id: "u2", role: "user", text: "second" } as Block, agent("now", "running"),
+  ];
+  expect(sessionAgentEntries(blocks, [], true).map((entry) => [entry.id, entry.state])).toEqual([["now", "running"], ["old", "interrupted"]]);
+  expect(countAgents(blocks, [], true)).toMatchObject({ running: 1, interrupted: 1 });
+  // Without an owner turn in the page every run is the latest turn's.
+  expect(countAgents([agent("solo", "running")], [], true).running).toBe(1);
 });

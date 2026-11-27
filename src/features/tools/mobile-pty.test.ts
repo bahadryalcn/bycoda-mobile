@@ -26,6 +26,8 @@ const f = vi.hoisted(() => ({
   attachOutput: vi.fn(),
   showToast: vi.fn(),
   packet:null as null|((packet:Record<string,unknown>)=>void),
+  clipboard: "",
+  exitCode: undefined as number | undefined,
 }));
 vi.mock("./mobile-pty-attach", () => ({ attachTerminalOutput: f.attachOutput }));
 vi.mock("@/state/device-network", () => ({ deviceIsOffline: () => f.offline, useDeviceOffline: () => f.offline }));
@@ -57,16 +59,27 @@ vi.mock("react-native-reanimated", () => ({
   useAnimatedStyle: () => ({}),
 }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
-vi.mock("@/ui/tokens", () => ({ darkColors: {}, iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, metrics: { touchTarget: 48 }, space: { xs: 4, sm: 6, lg: 16, screen: 16 } }));
+vi.mock("@/ui/tokens", () => ({ darkColors: {}, iconSize: { inline: 14, status: 16, row: 20, action: 20, back: 24 }, metrics: { touchTarget: 48 }, radii: { pill: 999 }, space: { xs: 4, sm: 6, lg: 16, screen: 16, xl: 20 },
+  terminalAnsiPalettes: { dark: Array.from({ length: 16 }, () => "#888888"), light: Array.from({ length: 16 }, () => "#888888") } }));
+vi.mock("panelui-native/components/scroll-fade", () => ({ ScrollFade: ({ children }: PropsWithChildren) => children }));
 vi.mock("@/ui/use-clipboard-feedback", () => ({ useClipboardFeedback: () => ({ copy: vi.fn(), error: null }) }));
-vi.mock("./terminal-header-controls", () => ({ TerminalStatusDot: () => null, TerminalCopyButton: () => null }));
+vi.mock("./terminal-header-controls", () => ({ TerminalStatusDot: () => null, TerminalCopyButton: () => null,
+  TerminalPill: ({ terminal, onPress }: { terminal: { name: string }; onPress: () => void }) => createElement("button", { onClick: onPress }, `Terminal: ${terminal.name}`),
+  TerminalPickerSheet: ({ visible, terminals, onSelect }: { visible: boolean; terminals: { id: string; name: string }[]; onSelect: (id: string) => void }) => visible
+    ? createElement("div", null, terminals.map((entry) => createElement("button", { key: entry.id, onClick: () => onSelect(entry.id) }, entry.name))) : null }));
+vi.mock("lucide-react-native/icons/square", () => ({ default: () => null }));
 vi.mock("./terminal-output-view", () => ({ TerminalOutputView: () => null }));
-vi.mock("lucide-react-native/icons/keyboard", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/search", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/chevron-up", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/chevron-down", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/chevron-left", () => ({ default: () => null }));
-vi.mock("lucide-react-native/icons/chevron-right", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/arrow-up", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/arrow-down", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/arrow-left", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/arrow-right", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/clipboard-paste", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/keyboard", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/keyboard-off", () => ({ default: () => null }));
+vi.mock("expo-clipboard", () => ({ getStringAsync: async () => f.clipboard }));
+vi.mock("@/ui/confirm", () => ({ confirmAction: (_t: string, _d: string, _l: string, action: () => void) => action() }));
+vi.mock("@/ui/toast", () => ({ showToast: () => undefined }));
 vi.mock("expo-crypto", () => ({
   randomUUID: () => "operation",
   CryptoDigestAlgorithm: { SHA256: "SHA256" },
@@ -141,6 +154,12 @@ vi.mock("@/state/queries", () => ({
           expiresAt: Date.now() + 30000,
         };
       }
+      if (method === "terminals.pty.desktop.read") {
+        const after = params.after as number;
+        return { terminalId: params.terminalId, epoch: params.epoch, after, next: after, oldest: 0, end: after,
+          dataBase64: "", state: f.exitCode === undefined ? "running" : "exited", exitCode: f.exitCode ?? null, gap: false, hasMore: false };
+      }
+      if (method === "terminals.pty.desktop.write") return { accepted: true, inputSequence: params.inputSequence };
       if (method === "terminals.pty.desktop.close" || method === "terminals.pty.desktop.status") return f.closeConfirmed ? { closed: true } : { state: "unknown" };
       if (method === "terminals.pty.desktop.attach")
         return { terminal: f.terminals.find(terminal => terminal.terminalId === params.terminalId),
@@ -264,6 +283,8 @@ afterEach(async () => {
   f.hideKeyboard.mockClear();
   f.attachOutput.mockReset();
   f.showToast.mockClear();
+  f.clipboard = "";
+  f.exitCode = undefined;
   props.onClose.mockClear();
 });
 
@@ -376,15 +397,17 @@ it("puts Terminal actions in the shared screen layer and Back leaves without clo
   expect(f.calls.map((call) => call.method)).toEqual(["terminals.pty.desktop.create"]);
 });
 
-it("keeps all seven terminal keys reachable in a scrolling row with reserved touch targets", async () => {
+it("uses the shared terminal key bar with reserved touch targets", async () => {
   f.keyboardVisible = true;
   await mount();
   await click("New interactive terminal");
   const row = container.querySelector('[aria-label="Terminal keys"][data-horizontal="true"]');
-  expect(Number(row?.getAttribute("data-fading-edge"))).toBeGreaterThan(0);
   const keys = Array.from(row?.querySelectorAll("button") ?? []);
-  expect(keys.map((key) => key.textContent)).toEqual(["Esc", "Tab", "Ctrl-C", "Arrow left", "Arrow down", "Arrow up", "Arrow right"]);
+  expect(keys.map((key) => key.textContent)).toEqual(["↑", "↓", "←", "→", "esc", "CTRL", "ALT", "tab", "CLEAR", "~", "|", "/", "-"]);
   expect(keys.every((key) => key.dataset.touchTarget === "true")).toBe(true);
+  const labels = Array.from(container.querySelectorAll("button")).map((button) => button.textContent);
+  expect(labels).toContain("Paste from clipboard");
+  expect(labels.filter((label) => label === "Hide keyboard")).toHaveLength(1);
 });
 
 it("switches to the reviewed PTY tab without closing or writing to either terminal", async () => {
@@ -395,23 +418,41 @@ it("switches to the reviewed PTY tab without closing or writing to either termin
   }];
   await mount();
   await click("New interactive terminal");
+  await click("Terminal: Mobile terminal");
   await click("Other");
   expect(f.calls.map(call => call.method)).toEqual(["terminals.pty.desktop.create", "terminals.pty.desktop.attach"]);
   expect(f.calls[1].params).toMatchObject({ terminalId: "other-terminal", epoch: "other-epoch", after: 0, freshRenderer: true });
   expect(container.querySelector("[data-viewport]")).not.toBeNull();
 });
 
-it("keeps the keyboard toggle in the fixed terminal header while Gboard is open", async () => {
+it("hides the keyboard from the key bar without leaving the terminal", async () => {
   f.keyboardVisible = true;
   await mount();
   await click("New interactive terminal");
-  const buttons = Array.from(container.querySelectorAll("button"));
-  const hide = buttons.find((button) => button.textContent === "Hide keyboard");
-  expect(hide?.dataset.touchTarget).toBe("true");
-  expect(hide?.parentElement?.textContent).toContain("Close terminal");
   await click("Hide keyboard");
   expect(f.hideKeyboard).toHaveBeenCalledOnce();
   expect(props.onClose).not.toHaveBeenCalled();
+});
+
+it("sends key-bar keys, sticky modifiers and paste through the ordered PTY input", async () => {
+  await mount();
+  await click("New interactive terminal");
+  await act(async () => f.packet?.({ type: "ready", cols: 80, rows: 24 }));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+  const written = () => f.calls.filter((call) => call.method === "terminals.pty.desktop.write")
+    .map((call) => Buffer.from(String(call.params.dataBase64), "base64").toString("utf8"));
+  await click("↑");
+  await click("CTRL");
+  await act(async () => f.packet?.({ type: "input", dataBase64: Buffer.from("c").toString("base64") }));
+  await click("esc");
+  await click("ALT");
+  await click("←");
+  await click("CLEAR");
+  await click("~");
+  f.clipboard = "ls -la";
+  await click("Paste from clipboard");
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+  expect(written()).toEqual(["\x1b[A", "\x03", "\x1b", "\x1b[1;3D", "\x0c", "~", "ls -la"]);
 });
 
 it("keeps Attach output in Terminal actions and protects the draft from a duplicate tap", async () => {
@@ -528,14 +569,14 @@ it("reopened unknown creation refuses status after the same machine was re-paire
   await act(async () => root.render(createElement(MobilePty, props)));
   expect(
     [...container.querySelectorAll("button")].find(
-      (button) => button.textContent === "Check creation status",
+      (button) => button.textContent === "Check status",
     )?.disabled,
   ).toBe(true);
   expect(f.calls).toHaveLength(1);
 });
 it("a second renderer-ready event latches screen loss and disables protocol input",async()=>{
  await mount();await click("New interactive terminal");await act(async()=>{f.packet?.({type:"ready",cols:80,rows:24});f.packet?.({type:"ready",cols:80,rows:24});});
- expect([...container.querySelectorAll("button")].find(button=>button.textContent==="Ctrl-C")?.disabled).toBe(true);expect(f.calls.every(call=>call.method!=="terminals.pty.desktop.write")).toBe(true);
+ expect([...container.querySelectorAll("button")].find(button=>button.textContent==="Send Ctrl+C")?.disabled).toBe(true);expect(f.calls.every(call=>call.method!=="terminals.pty.desktop.write")).toBe(true);
 });
 it("shows a loading state over the terminal until the renderer is ready", async () => {
   await mount();
@@ -544,4 +585,16 @@ it("shows a loading state over the terminal until the renderer is ready", async 
   expect(container.textContent).not.toContain("Real PTY requires");
   await act(async () => f.packet?.({ type: "ready", cols: 80, rows: 24 }));
   expect(container.textContent).not.toContain("Opening terminal…");
+});
+
+it("shows a shell that ended as a state line, not as a failed terminal action", async () => {
+  await mount();
+  await click("New interactive terminal");
+  f.exitCode = 0;
+  await act(async () => f.packet?.({ type: "ready", cols: 80, rows: 24 }));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+  expect(container.textContent).toContain("Closed. Exit code:");
+  expect(container.textContent).not.toContain("Resume");
+  expect(container.textContent).not.toContain("Error details");
+  expect(container.textContent).not.toContain("PTY process exited");
 });

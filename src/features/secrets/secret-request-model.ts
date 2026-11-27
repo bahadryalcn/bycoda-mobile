@@ -64,6 +64,59 @@ export const secretPollInterval = (failures: number, errorKind: string | undefin
 export const secretSignalDelay = (lastAt: number, now: number) =>
   Math.max(0, lastAt + SECRET_SIGNAL_MIN_MS - now);
 
+/**
+ * Session frames whose signature did not change (streamed text, tool output) still refresh
+ * the list, but at most this often: a request registered just after its tool block appeared
+ * is then seen within this window instead of the slower fallback poll.
+ */
+export const SECRET_SIGNAL_QUIET_MS = 10_000;
+
+type SecretSignalSession = {
+  status?: string;
+  runId?: string;
+  session?: {
+    pendingQuestion?: unknown;
+    blocks?: readonly {
+      id: string;
+      role: string;
+      tool?: { status?: string };
+      approval?: { decided?: string };
+    }[];
+  };
+};
+
+/**
+ * Cheap fingerprint of the parts of a session that can create or resolve a secret request:
+ * run state, a pending question, the block count and the newest non-text block's state.
+ * Streamed assistant/reasoning text does not change it.
+ */
+export function secretSignalSignature(snapshot: SecretSignalSession | null | undefined): string {
+  if (!snapshot) return "";
+  const blocks = snapshot.session?.blocks ?? [];
+  let marker = "";
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
+    const block = blocks[index]!;
+    if (block.role === "assistant" || block.role === "reasoning") continue;
+    marker = `${block.id}:${block.tool?.status ?? ""}:${block.approval?.decided ?? ""}`;
+    break;
+  }
+  return [
+    snapshot.status ?? "",
+    snapshot.runId ?? "",
+    snapshot.session?.pendingQuestion ? 1 : 0,
+    blocks.length,
+    marker,
+  ].join("|");
+}
+
+/** Whether a session frame should refresh the pending list. */
+export const secretSignalWanted = (
+  signature: string,
+  lastSignature: string | undefined,
+  lastAt: number,
+  now: number,
+) => signature !== lastSignature || now - lastAt >= SECRET_SIGNAL_QUIET_MS;
+
 /** Time until the earliest deadline among the requests, or null when none is pending. */
 export function nextSecretExpiryDelay(
   requests: readonly Pick<SecretRequest, "deadline">[],

@@ -4,9 +4,13 @@ import { MobileHostWsConnection, HostWsError, type HostWsRequestOptions } from "
 export type AssistantVoiceScope = { sessionId: string; threadId: string; projectId?: string };
 const voiceMethods = new Set(["environment.describe", "voice.local.start", "voice.local.transcribe", "voice.cloud.transcribe", "voice.local.release", "voice.local.speak", "voice.local.speechNext", "voice.local.keepAlive"]);
 /** Background authority is one native microphone session and one reviewed Room thread. */
+/** The call's computer-side realtime voice: lease-bound audio and replies. */
+const realtimeMethods = new Set(["voice.realtime.audio", "voice.realtime.next", "voice.realtime.interrupt", "voice.realtime.text", "voice.realtime.end"]);
 export function allowsVoiceRequest(scope: AssistantVoiceScope, method: string, params: Record<string, unknown>) {
-  if (voiceMethods.has(method)) return true;
-  if (method === "projects.directory") return Object.keys(params).length === 0;
+  if (voiceMethods.has(method) || realtimeMethods.has(method)) return true;
+  if (method === "projects.directory" || method === "voice.call.settings.get") return Object.keys(params).length === 0;
+  // The realtime voice may speak only for the call's captured Room.
+  if (method === "voice.realtime.start") return params.threadId === scope.threadId;
   if (method !== "assistant.request") return false;
   if (params.op === "threads.sendIdentity") return !Object.hasOwn(params, "threadId");
   return ["threads.send", "threads.sendStatus", "threads.messages"].includes(String(params.op)) && params.threadId === scope.threadId;

@@ -9,6 +9,7 @@ import { TAB_ROUTES } from "./keyboard-model";
 import { CommandPalette } from "./command-palette";
 import { ShortcutsSheet } from "./shortcuts-sheet";
 import { KeyboardContext, useCommandPalette } from "./keyboard-context";
+import { openNewChat } from "../workspace/new-chat-navigation";
 export { useCommandPalette } from "./keyboard-context";
 
 /** Mount inside the existing account, consent and security gates. */
@@ -31,13 +32,17 @@ export function KeyboardScreen({ children }: PropsWithChildren) {
   useKeyCommand({ key: "f", primary: true, title: copy("Ara", "Search"), enabled }, palette.open);
   useKeyCommand({ key: ",", primary: true, title: copy("Ayarlar", "Settings"), enabled }, () => navigate(TAB_ROUTES[4]));
   useKeyCommand({ key: "/", primary: true, title: copy("Klavye kısayolları", "Keyboard shortcuts"), enabled }, () => setShortcuts(true));
-  useKeyCommand({ key: "n", primary: true, title: copy("Yeni oturum", "New session"), enabled }, () => navigate("/sessions?new=1"));
+  useKeyCommand({ key: "n", primary: true, title: copy("Yeni oturum", "New session"), enabled }, () => {
+    if (!isAppContentVisible()) return;
+    palette.close();
+    openNewChat();
+  });
   useKeyCommand({ key: "[", primary: true, title: copy("Geri", "Back"), enabled }, () => {
     if (palette.visible) palette.close(); else if (router.canGoBack()) router.back();
   });
   // Stable hook order; fixed five destination shortcuts are independent of tab visibility/order.
   useKeyCommand({ key: "1", primary: true, title: copy("Projeler", "Projects"), enabled }, () => navigate(TAB_ROUTES[0]));
-  useKeyCommand({ key: "2", primary: true, title: copy("Sohbetler", "Chats"), enabled }, () => navigate(TAB_ROUTES[1]));
+  useKeyCommand({ key: "2", primary: true, title: copy("Oturumlar", "Sessions"), enabled }, () => navigate(TAB_ROUTES[1]));
   useKeyCommand({ key: "3", primary: true, title: copy("Gelen kutusu", "Inbox"), enabled }, () => navigate(TAB_ROUTES[2]));
   useKeyCommand({ key: "4", primary: true, title: copy("Yönet", "Manage"), enabled }, () => navigate(TAB_ROUTES[3]));
   useKeyCommand({ key: "5", primary: true, title: copy("Ayarlar", "Settings"), enabled }, () => navigate(TAB_ROUTES[4]));

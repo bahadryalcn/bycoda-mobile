@@ -55,7 +55,9 @@ internal class TunnelSession(
   private val pool = Executors.newCachedThreadPool { r -> Thread(r, "bycoda-tunnel").apply { isDaemon = true } }
   private val tunnelClient: OkHttpClient = client.newBuilder()
     .dispatcher(Dispatcher().apply { maxRequests = 64; maxRequestsPerHost = TunnelRules.MAX_CONNECTIONS })
-    .readTimeout(0, TimeUnit.SECONDS).build()
+    // Up to 32 pipes would each ping on their own 25 s schedule and keep the radio awake while a preview is open; a dead
+    // Host is already noticed by the RPC socket, and the browser drops its idle connections itself.
+    .readTimeout(0, TimeUnit.SECONDS).pingInterval(60, TimeUnit.SECONDS).build()
 
   fun start() {
     TunnelRegistry.add(this)

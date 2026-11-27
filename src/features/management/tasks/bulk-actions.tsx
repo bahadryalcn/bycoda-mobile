@@ -35,8 +35,9 @@ export type TaskBulkSelection = {
  * checkable rows, and a bottom action bar offers Start, Retry, Stop and Delete for the selected
  * count. Run, retry and result reporting are unchanged; destructive actions are confirmed.
  *
- * Returns the header entry (with the applied-filter context), the run feedback, the row
- * selection and the bar; the list owns where each is placed.
+ * Returns the header entry (the "Select" command for the page heading's actions, beside search,
+ * filter and create), the run feedback, the row selection and the bar; the list owns where each
+ * is placed. A single command never gets a row of its own.
  */
 export function useTaskBulkActions({
   tasks,
@@ -103,7 +104,7 @@ export function useTaskBulkActions({
     delete: copy("Sil", "Delete"),
     start: copy("Başlat", "Start"),
     stop: copy("Durdur", "Stop"),
-    retry: copy("Tekrar dene", "Retry"),
+    retry: copy("Yeniden dene", "Retry"),
   };
   const refreshResults = async () => {
     try {
@@ -160,17 +161,30 @@ export function useTaskBulkActions({
       if (!requested.length || !requested.every((id) => visibleIds.has(id))) return;
       void run(operation, retry).catch(setActionError);
     };
-    if (operation === "delete" || operation === "stop")
+    const count = retry ? retryIds.size : selected.length;
+    if (operation === "delete")
       confirmAction(
-        labels[operation],
+        copy("{p0} görevi sil", "Delete {p0} tasks", { p0: count }),
         copy(
-          "Yalnız seçilen görevler işlenecek. Aktif görevler ve birleştirilmemiş kod silinmez.",
-          "Only selected tasks are affected. Active tasks and unmerged code are protected from deletion.",
+          "Yalnız seçilen görevler silinir. Aktif görevler ve birleştirilmemiş kod korunur.",
+          "Only the selected tasks are deleted. Active tasks and unmerged code are kept.",
         ),
-        labels[operation],
+        labels.delete,
         approve,
         copy("Vazgeç", "Cancel"),
-        operation === "delete" ? "destructive" : "default",
+        "destructive",
+      );
+    else if (operation === "stop")
+      confirmAction(
+        copy("{p0} görevi durdur", "Stop {p0} tasks", { p0: count }),
+        copy(
+          "Seçilen görevlerin çalışması durur, çalışma dosyaları korunur.",
+          "Work on the selected tasks stops; their work files are kept.",
+        ),
+        labels.stop,
+        approve,
+        copy("Vazgeç", "Cancel"),
+        "default",
       );
     else approve();
   };
@@ -219,7 +233,7 @@ export function useTaskBulkActions({
       ) : null}
       {retryIds.size ? (
         <Button
-          label={copy("Başarısızları tekrar dene", "Retry failed tasks")}
+          label={copy("Başarısızları yeniden dene", "Retry failed tasks")}
           disabled={busy || refreshing || disabled || !tasks.some((task) => retryIds.has(task.id))}
           onPress={() => request(action, true)}
         />
@@ -227,21 +241,21 @@ export function useTaskBulkActions({
     </>
   );
   const locked = busy || refreshing || disabled;
-  const entry = tasks.length ? (
-    <Row style={{ justifyContent: "space-between", alignItems: "center" }}>
-      {context ?? <View />}
-      {!selecting ? (
+  const entry = (
+    <>
+      {context}
+      {tasks.length && !selecting ? (
         <Button
           label={copy("Seç", "Select")}
           accessibilityLabel={copy("Görevleri seç", "Select tasks")}
           tone="quiet"
-          flush
+          reserveTouchTarget
           disabled={locked}
           onPress={enter}
         />
       ) : null}
-    </Row>
-  ) : context;
+    </>
+  );
   const count = selected.length;
   const bar = selecting ? (
     <View

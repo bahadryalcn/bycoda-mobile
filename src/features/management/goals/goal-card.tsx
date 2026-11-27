@@ -9,7 +9,7 @@ import Pencil from "lucide-react-native/icons/pencil";
 import Square from "lucide-react-native/icons/square";
 import Trash2 from "lucide-react-native/icons/trash-2";
 import { View } from "react-native";
-import { space } from "@/ui/tokens";
+import { space, iconSize } from "@/ui/tokens";
 import { Body, Button, IconButton, MutationState, Row } from "@/ui/primitives";
 import { joinMeta, RecordTrailing, useMenuGlyph, useRelativeTime } from "../shared/record-bits";
 import { useCopy } from "@/ui/copy";
@@ -46,8 +46,8 @@ export function GoalCard({
   const stop = () => confirm(
     copy("Epici durdur", "Cancel epic"),
     copy(
-      "Hedef ve devam eden görevleri durdurulacak; çalışma dosyaları korunacak.",
-      "The goal and its active tasks will stop; work files will be retained.",
+      "Epic ve devam eden görevleri durdurulacak; çalışma dosyaları korunacak.",
+      "The epic and its active tasks will stop; work files will be retained.",
     ),
     copy("Durdur", "Stop"),
     () => cancel.mutate({ goalId: goal.id }),
@@ -81,15 +81,15 @@ export function GoalCard({
     },
     canDelete && {
       key: "delete", icon: glyph(Trash2, true),
-      label: copy("Kaydı sil", "Delete record"),
+      label: copy("Epici sil", "Delete epic"),
       destructive: true,
       disabled: busy,
       onPress: () =>
         confirm(
           copy("Epici sil", "Delete epic"),
           copy(
-            "Hedef kaydı silinecek; görevler korunacak.",
-            "The goal record will be deleted; tasks will be retained.",
+            "Epic kaydı silinecek; görevler korunacak.",
+            "The epic record will be deleted; tasks will be retained.",
           ),
           copy("Sil", "Delete"),
           () => remove.mutate({ goalId: goal.id, withTasks: false }),
@@ -116,10 +116,10 @@ export function GoalCard({
       defaultExpanded={goal.status === "awaiting-approval"}
       menu={<RecordTrailing>
         {goal.plannerSessionId ? <IconButton label={copy("Planlayıcı oturumu", "Planner session")} onPress={openPlanner}>
-          <MessageSquare size={18} color={colors.accent} />
+          <MessageSquare size={iconSize.action} color={colors.accent} />
         </IconButton> : null}
         {active ? <IconButton label={copy("Epici durdur", "Cancel epic")} tone="danger" busy={cancelling} disabled={busy} onPress={stop}>
-          <Square size={18} color={colors.danger} />
+          <Square size={iconSize.action} color={colors.danger} />
         </IconButton> : null}
       </RecordTrailing>}
       actions={{ label: copy("Epic işlemleri", "Epic actions"),
@@ -149,7 +149,8 @@ export function GoalCard({
         <Body>{goal.prompt}</Body>
         {repeatsScope ? null : <Body muted style={uiStyles.caption}>
           {goal.projectIds
-            .map((id) => projects.find((project) => project.id === id)?.name ?? id)
+            .map((id) => projects.find((project) => project.id === id)?.name)
+            .filter(Boolean)
             .join(" · ")}
         </Body>}
         {tasks?.length ? <View style={{ gap: space.xs }}>
@@ -164,8 +165,16 @@ export function GoalCard({
             id: task.key,
             title: task.title,
             description: taskInstructionsSummary(task.prompt),
-            metadata: [repeatsScope ? "" : task.project, task.dependsOn.length
-              ? `${copy("Bağımlılıklar", "Depends on")}: ${task.dependsOn.join(", ")}` : ""].filter(Boolean).join(" · "),
+            metadata: [
+              repeatsScope
+                ? ""
+                : projects.find((project) => project.id === task.projectId || project.cwd === task.project)?.name,
+              task.dependsOn.length
+                ? `${copy("Bağımlılıklar", "Depends on")}: ${task.dependsOn
+                    .map((key) => goal.plan?.tasks.find((step) => step.key === key)?.title ?? key)
+                    .join(", ")}`
+                : "",
+            ].filter(Boolean).join(" · "),
           }))} />
         </View> : null}
       </>}

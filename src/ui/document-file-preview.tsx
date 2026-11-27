@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useLocale } from "@/i18n";
 import { useHostClient } from "@/state/queries";
-import { Body, CodePanel, CodeText, Disclosure, Empty, ErrorText, FormActions, Loading, NavigationRow, ScreenList, SearchField, Sheet } from "./primitives";
+import { Body, CodePanel, CodeText, Disclosure, Empty, ErrorText, FormActions, Loading, NavigationRow, NoResults, ScreenList, SearchField, Sheet } from "./primitives";
 import { space } from "./tokens";
 import { useCopy } from "./copy";
 import { RECORD_ACCESS_UNAVAILABLE } from "./record-access-copy";
@@ -101,7 +101,7 @@ function ScopedFilePreviewBody({ path, context, onClose }: ScopedFilePreviewProp
           value={content.access.allowed ? search : ""} editable={content.access.allowed && !currentChild} onChangeText={changeSearch} /></View>
         <PrivateContentAccessProvider value={content.access}><ScopedDirectoryList {...position.listProps} context={context} data={rows}
           header={<View style={{ gap: space.sm }}>{status}{content.access.allowed ? <ReaderContext context={context} path={resolved} /> : null}</View>} onOpenFile={openChild}
-          ListEmptyComponent={content.access.allowed && query.isSuccess ? <Empty compact={false} illustration={searchKey ? "search-empty" : "inbox-empty"} title={searchKey ? copy("Eşleşen sonuç yok", "No matching results") : copy("Klasör boş", "Folder is empty")}
+          ListEmptyComponent={content.access.allowed && query.isSuccess && searchKey ? <NoResults searching onClearSearch={clearSearch} /> : content.access.allowed && query.isSuccess ? <Empty compact={false} illustration={searchKey ? "search-empty" : "inbox-empty"} title={searchKey ? copy("Eşleşen sonuç yok", "No matching results") : copy("Klasör boş", "Folder is empty")}
             action={searchKey ? { label: copy("Aramayı temizle", "Clear search"), onPress: clearSearch } : undefined} /> : undefined} />
         </PrivateContentAccessProvider>
       </View> : <>{status}{data !== undefined ? <PrivateContentAccessProvider value={content.access}><ScopedTextContent path={resolved} text={data} context={context} line={line} onOpenFile={openChild} /></PrivateContentAccessProvider> : null}</>}

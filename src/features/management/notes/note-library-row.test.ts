@@ -23,11 +23,6 @@ vi.mock("lucide-react-native/icons/trash-2", () => ({ default: () => null }));
 vi.mock("./note-summary-row", () => ({
   NoteSummaryRow: ({ trailing }: { trailing: PropsWithChildren["children"] }) => h("div", null, trailing),
 }));
-vi.mock("@/ui/swipe-actions", () => ({
-  SwipeActions: ({ actions, children, disabled }: PropsWithChildren<{ actions: SwipeRowAction[]; disabled: boolean }>) =>
-    h("div", null, children, ...actions.map((action) =>
-      h("button", { key: action.key, "data-action": action.key === "delete" ? "swipe" : `swipe-${action.key}`, disabled, onClick: action.onPress }, action.label))),
-}));
 vi.mock("@/ui/primitives", () => ({
   Body: ({ children }: PropsWithChildren) => h("p", null, children),
   Stack: ({ children }: PropsWithChildren) => h("div", null, children),
@@ -76,7 +71,7 @@ function row() {
   return { render, onDelete, button, click };
 }
 
-it.each(["swipe", "menu"])("requires explicit confirmation after selecting delete through %s", (action) => {
+it.each(["menu"])("requires explicit confirmation after selecting delete through %s", (action) => {
   const { onDelete, button, click } = row();
   click(action);
   expect(onDelete).not.toHaveBeenCalled();
@@ -86,7 +81,7 @@ it.each(["swipe", "menu"])("requires explicit confirmation after selecting delet
   expect(onDelete).toHaveBeenCalledExactlyOnceWith("note-1", 2);
 });
 
-it.each(["swipe-copy", "menu-copy"])("copies the note through %s and reports the result", (action) => {
+it.each(["menu-copy"])("copies the note through %s and reports the result", (action) => {
   const { render, click } = row();
   click(action);
   expect(fixture.clipboard.copy).toHaveBeenCalledOnce();
@@ -106,7 +101,7 @@ it("offers copy without delete on a computer that cannot delete notes", () => {
 
 it("rejects confirmation after its reviewed revision changes", () => {
   const { render, onDelete, click } = row();
-  click("swipe");
+  click("menu");
   render({ note: { ...note, updatedAt: 3 } });
   click("confirm");
   expect(onDelete).not.toHaveBeenCalled();
@@ -120,6 +115,5 @@ it("retires the confirmation and disables both entry points when private access 
   render();
   expect(button("confirm")).toBeNull();
   expect(button("menu")).toBeNull();
-  expect(button("swipe")?.disabled).toBe(true);
   expect(onDelete).not.toHaveBeenCalled();
 });

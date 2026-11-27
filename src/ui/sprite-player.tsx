@@ -1,23 +1,13 @@
 import { useEffect, useState } from "react";
-import { AppState, Image, StyleSheet, View } from "react-native";
+import { Image, StyleSheet, View } from "react-native";
 import type { ImageSourcePropType } from "react-native";
+import { useOwnerVisible } from "./use-owner-visible";
 
 /** Hand-drawn frames; `sequence` lists the frame indices played at `fps`, and frame 0 is the rest pose. */
 export type SpriteLoop = { frames: ImageSourcePropType[]; sequence: number[]; fps: number };
 
 /** `range(3)` is `[0, 1, 2]`; the order of a loop that plays every frame once. */
 export const range = (count: number) => Array.from({ length: count }, (_, index) => index);
-
-/** False while the app is backgrounded, so a loop does not tick for a screen nobody can see. */
-function useForeground() {
-  const [foreground, setForeground] = useState(AppState.currentState !== "background");
-  useEffect(() => {
-    // Backgrounded apps stop drawing; pausing the clock keeps the loop from resuming mid-step on return.
-    const subscription = AppState.addEventListener("change", (state) => setForeground(state !== "background"));
-    return () => subscription.remove();
-  }, []);
-  return foreground;
-}
 
 /** The frame to draw for a step of the loop; a step outside it (or no loop) rests on frame 0, never on nothing. */
 export function shownFrame(sequence: number[] | undefined, step: number): number {
@@ -26,11 +16,12 @@ export function shownFrame(sequence: number[] | undefined, step: number): number
 }
 
 /**
- * The frame index to show right now. Runs the loop from its first step while `playing` (and the app is in the
- * foreground) and rests on the first step otherwise.
+ * The frame index to show right now. Runs the loop from its first step while `playing` and the owner can see it
+ * (focused route, app in front, not hidden behind the lock) and rests on the first step otherwise, so a hidden tab
+ * or a stacked screen does not keep a timer ticking.
  */
 export function useSpriteFrame(loop: Pick<SpriteLoop, "sequence" | "fps"> | null, playing: boolean): number {
-  const foreground = useForeground();
+  const foreground = useOwnerVisible();
   const [step, setStep] = useState(0);
   const sequence = loop?.sequence;
   const steps = sequence?.length ?? 0;

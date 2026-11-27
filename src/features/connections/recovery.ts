@@ -18,6 +18,12 @@ export class ConnectionRecoveryError extends Error {
   }
 }
 
+/** Another connection change (for example an automatic route switch) is still running. */
+export class ConnectionBusyError extends ConnectionRecoveryError {}
+
+/** How long a selection waits for a running connection change before asking to try again. */
+const SETTLE_WAIT_MS = 5_000;
+
 /** A failed draft write keeps the mounted workspace available for retry. */
 export async function reloadSavedConnections(
   actions: DraftAccess & {
@@ -41,12 +47,25 @@ export async function selectSavedComputer(
     getState(): SelectionState;
     selectMachine(id: string): void;
     onSelected(): void;
+    /** Settles when running connection changes finish; without it a running change rejects the selection. */
+    settled?(): Promise<void>;
   },
 ): Promise<void> {
   actions.assertAccess();
   await actions.flushDrafts();
   actions.assertAccess();
-  const current = actions.getState();
+  let current = actions.getState();
+  if (current.connectionPending && actions.settled && current.hydrated && !current.storageError) {
+    // A short background change (route switch, descriptor refresh) finishes on its own; wait for it.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      actions.settled(),
+      new Promise<void>((resolve) => { timer = setTimeout(resolve, SETTLE_WAIT_MS); }),
+    ]).finally(() => clearTimeout(timer));
+    actions.assertAccess();
+    current = actions.getState();
+    if (current.hydrated && !current.storageError && current.connectionPending) throw new ConnectionBusyError();
+  }
   if (
     !current.hydrated ||
     current.storageError ||
@@ -70,13 +89,17 @@ export async function selectSavedComputer(
 
 export class ConnectionRemovalError extends ConnectionRecoveryError {}
 
+/**
+ * The reviewed computer is still saved: same entry and same computer identity. Its route (address and
+ * local-network key) may change underneath the review, e.g. an automatic switch between the local
+ * network and Tailscale; that is still the computer the owner chose to remove.
+ */
 export function matchesSavedComputer(review: ReviewedMachine, state: {
   hydrated: boolean; storageError: string | null; connectionPending: boolean;
   machines: readonly ReviewedMachine[];
 }): boolean {
-  return state.hydrated && !state.storageError && !state.connectionPending &&
-    state.machines.some(machine => machine.id === review.id && machine.endpoint === review.endpoint &&
-      machine.environmentId === review.environmentId && machine.lanKey === review.lanKey);
+  return state.hydrated && !state.storageError &&
+    state.machines.some(machine => machine.id === review.id && machine.environmentId === review.environmentId);
 }
 
 /** The store rechecks this exact identity inside its serialized credential mutation. */
@@ -85,14 +108,18 @@ export async function removeSavedComputer(review: ReviewedMachine, actions: Draf
   reviewValid(): boolean;
   remove(id: string, expected: ReviewedMachine): Promise<void>;
 }): Promise<void> {
-  const expected: ReviewedMachine = { id: review.id, endpoint: review.endpoint, environmentId: review.environmentId, lanKey: review.lanKey };
-  const check = () => {
+  const reviewed: ReviewedMachine = { id: review.id, endpoint: review.endpoint, environmentId: review.environmentId, lanKey: review.lanKey };
+  const check = (): ReviewedMachine => {
     actions.assertAccess();
-    if (!actions.reviewValid() || !matchesSavedComputer(expected, actions.getState()))
+    const state = actions.getState();
+    if (!actions.reviewValid() || state.connectionPending || !matchesSavedComputer(reviewed, state))
       throw new ConnectionRemovalError();
+    // The route current at submit is the one removed; the store rejects any change after this point.
+    const current = state.machines.find((machine) => machine.id === reviewed.id)!;
+    return { id: current.id, endpoint: current.endpoint, environmentId: current.environmentId, lanKey: current.lanKey };
   };
   check();
   await actions.flushDrafts();
-  check();
+  const expected = check();
   await actions.remove(expected.id, expected);
 }

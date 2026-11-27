@@ -59,8 +59,6 @@ it("keeps the legal reader and its section toolbar inside the frame that owns th
 });
 
 it("gives the raw ScrollView and FlatList call sites in non-scrolling screens landscape gutters", () => {
-  expect(read("features/workspace/project-preferences-tab.tsx")).toContain("paddingLeft: content.left, paddingRight: content.right");
-  expect(read("features/workspace/project-preferences-tab.tsx")).not.toContain("padding: space.screen");
   const project = read("features/workspace/project-screen.tsx");
   expect(project).not.toContain("padding: space.screen");
   expect(project.match(/paddingLeft: gutter\.left, paddingRight: gutter\.right/g)).toHaveLength(2);

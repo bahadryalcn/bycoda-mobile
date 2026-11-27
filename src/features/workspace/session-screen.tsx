@@ -5,12 +5,13 @@ import { SessionProjectRecovery } from "./session-project-recovery";
 import { ProjectDirectoryFeedback } from "./project-directory-feedback";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { router, useFocusEffect } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { setViewingSession } from "../push/push-viewing";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useActiveMachine } from "@/state/machines";
 import { Empty, QueryState, Screen } from "@/ui/primitives";
+import { NoComputerState } from "@/ui/no-computer";
 import { PrivateContentBoundary } from "@/ui/private-content";
 import { hostKey } from "@/state/queries";
 import { metrics, space } from "@/ui/tokens";
@@ -21,24 +22,35 @@ import { openSessionSeen } from "./session-done-store";
 import { ComposerTransferProvider } from "./composer-transfer";
 import { SessionKeyboardFrame } from "./session-keyboard-frame";
 import { useSessionSnapshot } from "./session-queries";
-import { SessionSettings } from "./session-settings";
-import { openModelSheet } from "./composer-model-sheet";
 import { SessionToolbar } from "./session-toolbar";
 import { SessionLoopbackBrowser } from "./session-loopback-browser";
 import { SessionTranscript } from "./session-transcript";
 import { SectionErrorBoundary } from "@/ui/error-boundary";
 import { SessionHeader } from "./session-header";
+import { SessionStatusClusterProvider } from "./session-status-cluster-context";
 import { SessionListSheet } from "./session-list-sheet";
-import { SessionParentBar } from "./session-parent-bar";
-import { sessionHeaderStatus } from "./session-header-model";
+import { SessionAgentRunsProvider } from "./session-agent-runs";
+import { floatingHeaderEstimate, sessionHeaderStatus } from "./session-header-model";
 import type { TranscriptView } from "./transcript-model";
 import { UncertainCommand, useCommands } from "./shared";
 import type { SessionScope, SessionScreenProps, SessionWorkspaceProps } from "./session-types";
 import { useProjectList } from "./use-project-directory";
 import { sessionPrivacy } from "./session-privacy-model";
-import type { HostSession } from "./wire";
+import type { CommandReceipt, HostSession } from "./wire";
+import {
+  acceptedStop,
+  failedStop,
+  sentStop,
+  STOP_RECHECK_MS,
+  stopDeadline,
+  stopPhase,
+  stopUnconfirmedMessage,
+  type StopRequest,
+} from "./composer-send-presentation";
+import { showToast } from "@/ui/toast";
 import { sessionIntent } from "@/domain/session-authority";
 import { TranscriptScrollPosition } from "./transcript-scroll";
+import { goBack, leaveTo } from "@/ui/navigation";
 
 export function SessionScreen({ id, projectId, targetTurnId, layout = "phone" }: SessionScreenProps) {
   const machine = useActiveMachine();
@@ -53,17 +65,18 @@ export function SessionScreen({ id, projectId, targetTurnId, layout = "phone" }:
     }, [environmentId, id]),
   );
   if (!machine) {
+    // The route hides the native header, so this state keeps the session header's Back and title.
     return (
-      <Screen>
-        <Empty
-          compact={false}
-          illustration="connect-computer"
-          title={copy("Bilgisayara bağlan", "Connect to a computer")}
-          action={{
-            label: copy("Bilgisayar bağla", "Connect a computer"),
-            onPress: () => router.push("/machines"),
-          }}
-        />
+      <Screen scroll={false} contentOwnsBottomInset>
+        <SessionHeader showBack={layout !== "split"} title={copy("Oturum", "Session")} tone="muted" />
+        <View style={{ flex: 1, justifyContent: "center" }}>
+          <NoComputerState
+            description={copy(
+              "Oturumlarını görmek ve başlatmak için bilgisayarını bağla.",
+              "Connect your computer to see and start sessions.",
+            )}
+          />
+        </View>
       </Screen>
     );
   }
@@ -173,15 +186,82 @@ function SessionWorkspace({
   }
   if (snapshot.parked) retained.current = undefined;
   const session = visible ? snapshot.data : retained.current;
-  useSessionViewed(machineId, snapshot.data, visible, canRead);
+  useSessionViewed(machineId, snapshot.data, visible, canRead, snapshot.streaming);
   const projectId = privacy.projectId ?? session?.projectId;
   const command = useCommands(["session", id, projectId]);
-  const [settings, setSettings] = useState(false);
+  // Stop has its own command path: a send or another command in flight never holds the session's Stop.
+  const stopCommand = useCommands(["session", id, projectId]);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [transcriptView, setTranscriptView] = useState<TranscriptView>("messages");
-  const blocked = !visible || command.isPending || command.error instanceof UncertainCommand;
+  // Measured by the floating header itself; the estimate covers the first frame only.
+  const [headerHeight, setHeaderHeight] = useState(() => floatingHeaderEstimate(insets.top));
+  // A cancel whose reply was lost shows its status check, but never holds Stop: another cancel for
+  // the same run is harmless on the Host, so Stop stays pressable.
+  const stopUncertain = stopCommand.error instanceof UncertainCommand;
+  const blocked =
+    !visible ||
+    command.isPending ||
+    stopCommand.isPending ||
+    command.error instanceof UncertainCommand ||
+    stopUncertain;
+  // The one owner of Stop state: the composer and the retry notice both read it. "Stopping" shows
+  // from dispatch until the snapshot shows the run ending or a bound passes, and never claims a stop.
+  const [stopRequest, setStopRequest] = useState<StopRequest | null>(null);
+  const stopRequestNow = useRef<StopRequest | null>(null);
+  const updateStop = useCallback((next: (request: StopRequest | null) => StopRequest | null) => {
+    stopRequestNow.current = next(stopRequestNow.current);
+    setStopRequest(stopRequestNow.current);
+  }, []);
+  const [stopClock, setStopClock] = useState(0);
+  const stopState = stopPhase(stopRequest, session, Math.max(stopClock, Date.now()));
+  const stopping = stopState === "sending" || stopState === "settling";
+  // Read through refs so a re-render during the wait never restarts its timers.
+  const stopPorts = useRef({ refetch: snapshot.refetch, copy });
+  stopPorts.current = { refetch: snapshot.refetch, copy };
+  const stopNotified = useRef(0);
+  useEffect(() => {
+    if (!stopRequest) return;
+    if (stopState === "idle") {
+      // The snapshot left this run: nothing is being waited for any more.
+      updateStop((request) => (request === stopRequest ? null : request));
+      return;
+    }
+    if (stopState === "unconfirmed") {
+      // A bound passed with the run still going: say so once and leave Stop pressable.
+      if (stopNotified.current !== stopRequest.attempt) {
+        stopNotified.current = stopRequest.attempt;
+        showToast({ tone: "danger", message: stopUnconfirmedMessage(stopRequest, stopPorts.current.copy) });
+      }
+      return;
+    }
+    // Judge the bound on a fresh snapshot, so a run that just ended is not reported as still going.
+    // The re-read is itself bounded: offline it may never settle, and the spinner must still end.
+    let recheck: ReturnType<typeof setTimeout> | undefined;
+    const timer = setTimeout(() => {
+      const settle = () => setStopClock(Date.now());
+      recheck = setTimeout(settle, STOP_RECHECK_MS);
+      void Promise.resolve()
+        .then(() => stopPorts.current.refetch())
+        .catch(() => {})
+        .then(() => {
+          clearTimeout(recheck);
+          settle();
+        });
+    }, Math.max(0, (stopDeadline(stopRequest) ?? 0) - Date.now()));
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(recheck);
+    };
+  }, [stopRequest, stopState, updateStop]);
   const sendCommand = command.mutateAsync;
+  const sendStop = stopCommand.mutateAsync;
+  const resetCommand = command.reset;
+  const resetStop = stopCommand.reset;
+  const stopFlight = useRef<Promise<CommandReceipt> | undefined>(undefined);
+  const stopAttempts = useRef(0);
+  // Only the latest dispatch on a lane clears that lane's settled state.
+  const dispatches = useRef({ command: 0, stop: 0 });
   const dispatch = useCallback(
     async (params: Record<string, unknown>) => {
       const state = cache.getQueryState(key);
@@ -196,10 +276,37 @@ function SessionWorkspace({
         throw new Error("The session project is no longer available.");
       if (!session) throw new Error("The displayed session is unavailable.");
       const intent = sessionIntent(session, params);
-      const receipt = await sendCommand(intent);
+      const stop = params.type === "cancel";
+      // The composer and the transcript share one in-flight Stop while its reply is still awaited.
+      // Past that bound a new tap sends a new cancel: a repeat for the same run is harmless.
+      if (stop && stopFlight.current && stopPhase(stopRequestNow.current, session, Date.now()) === "sending")
+        return stopFlight.current;
+      const lane = stop ? "stop" : "command";
+      const sequence = ++dispatches.current[lane];
+      const runId = stop && typeof params.runId === "string" ? params.runId : undefined;
+      const attempt = runId ? ++stopAttempts.current : 0;
+      if (runId) updateStop(() => sentStop(runId, attempt, Date.now()));
+      const flight = (stop ? sendStop : sendCommand)(intent);
+      if (stop) stopFlight.current = flight;
+      let receipt: CommandReceipt;
+      try {
+        receipt = await flight;
+      } catch (cause) {
+        // Only this attempt's own failure clears the request; a replaced attempt changes nothing.
+        if (runId) updateStop((request) => failedStop(request, attempt));
+        throw cause;
+      } finally {
+        if (stopFlight.current === flight) stopFlight.current = undefined;
+      }
+      if (runId) updateStop((request) => acceptedStop(request, attempt, Date.now()));
+      // An accepted command needs no visible receipt: it clears here, after the awaited mutation,
+      // whether or not the transcript is mounted. Errors stay for CommandError.
+      if (dispatches.current[lane] === sequence) (stop ? resetStop : resetCommand)();
+      // The mutation's success already invalidated this session's snapshot; anything else re-reads now.
+      if (intent.sessionId !== id) void snapshot.refetch();
       return receipt;
     },
-    [sendCommand, cache, machineId, id, privacy.projectId, canRead, session],
+    [sendCommand, sendStop, resetCommand, resetStop, updateStop, cache, machineId, id, privacy.projectId, canRead, session, snapshot.refetch],
   );
 
   const projectName = projects.data?.find((project) => project.id === projectId)?.name;
@@ -220,8 +327,16 @@ function SessionWorkspace({
     const result = await snapshot.refetch();
     if (result.error) throw result.error;
   };
+  // A deleted open session returns to where it was opened from, or to the sessions list.
+  const leaveDeleted = () => {
+    goBack("/sessions");
+  };
   const receiptHandled = () => {
     command.reset();
+    refresh();
+  };
+  const stopReceiptHandled = () => {
+    stopCommand.reset();
     refresh();
   };
 
@@ -231,7 +346,8 @@ function SessionWorkspace({
     projects.isProjectVisible(projectMismatch.actualProjectId)
   )
     return (
-      <Screen>
+      <Screen scroll={false} contentOwnsBottomInset>
+        <SessionHeader showBack={layout !== "split"} title={copy("Oturum", "Session")} tone="muted" />
         <SessionProjectRecovery
           error={projectMismatch}
           machineId={machineId}
@@ -244,7 +360,11 @@ function SessionWorkspace({
   return (
     <ComposerTransferProvider scope={scope}>
       <Screen scroll={false} contentOwnsBottomInset>
+        {/* The conversation scrolls under the floating header; every region below reserves its
+            measured height (the transcript as list padding, the other states as top padding). */}
+        <View style={{ flex: 1, minHeight: 0 }}>
         <SessionHeader
+          onFloatingHeight={setHeaderHeight}
           showBack={layout !== "split"}
           onShowSessions={layout === "tablet" ? () => setSessionsOpen(true) : undefined}
           title={
@@ -252,7 +372,8 @@ function SessionWorkspace({
               ? session.session.title || copy("Yeni oturum", "New session")
               : copy("Oturum", "Session")
           }
-          context={visible ? (projectName ?? machineName) : undefined}
+          // Which computer and project this session runs on, read-only, like the scope pills elsewhere.
+          context={visible ? [machineName, projectName].filter(Boolean).join(" · ") || undefined : undefined}
           provider={visible ? session?.session.harness : undefined}
           status={layout === "split" && !visible ? undefined : headerStatus.label}
           tone={headerStatus.tone}
@@ -271,13 +392,15 @@ function SessionWorkspace({
                   <SessionToolbar
                     scope={scope}
                     projectId={projectId}
-                    contextLabel={[machineName, projectName ?? projectId]
+                    contextLabel={[machineName, projectName]
                       .filter(Boolean)
                       .join(" · ")}
                     query={{ ...snapshot, data: session }}
                     command={command}
                     blocked={blocked}
-                    onSettings={() => setSettings(true)}
+                    projectName={projectName}
+                    canRead={canRead}
+                    onDeleted={leaveDeleted}
                     onRefresh={refresh}
                     onCommand={dispatch}
                     onFind={() => setFindOpen(true)}
@@ -290,9 +413,8 @@ function SessionWorkspace({
           }
         />
         {layout === "tablet" && sessionsOpen ? <SessionListSheet visible onClose={() => setSessionsOpen(false)} machineId={machineId} selectedSessionId={id} /> : null}
-        {visible ? <SessionParentBar session={session} machineId={machineId} /> : null}
         {!visible ? (
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, paddingTop: headerHeight }}>
             {!projects.directoryReady ? (
               <ProjectDirectoryFeedback
                 query={projects.error ? { ...projects, data: undefined } : projects}
@@ -322,7 +444,7 @@ function SessionWorkspace({
                 )}
                 action={{
                   label: copy("Oturumlar", "Sessions"),
-                  onPress: () => router.push("/sessions"),
+                  onPress: () => leaveTo("/sessions"),
                 }}
               />
             ) : (
@@ -331,12 +453,12 @@ function SessionWorkspace({
                 illustration="locked"
                 title={copy("Proje doğrulanmalı", "Verify the project first")}
                 detail={copy(
-                  "Projesini doğrulamak için bu oturumu oturum listesinden açın.",
+                  "Projesini doğrulamak için bu oturumu oturum listesinden aç.",
                   "Open this session from the session list to verify its project.",
                 )}
                 action={{
                   label: copy("Oturumlar", "Sessions"),
-                  onPress: () => router.push("/sessions"),
+                  onPress: () => leaveTo("/sessions"),
                 }}
               />
             )}
@@ -344,16 +466,20 @@ function SessionWorkspace({
         ) : null}
         <PrivateContentBoundary visible={visible} isAllowed={canRead}>
           <SessionLoopbackBrowser scope={scope} projectId={projectId}>
+          {/* One owner for the subagents both the transcript and the composer strip show. */}
+          <SessionAgentRunsProvider session={session} scope={scope} disabled={blocked} onCommand={dispatch}>
+          <SessionStatusClusterProvider>
           <SessionKeyboardFrame
             composer={
               <SessionComposer
                 scope={scope}
                 session={session}
                 blocked={blocked}
+                stopBlocked={!visible}
+                stopping={stopping}
                 busy={command.isPending}
                 onCommand={dispatch}
                 outsidePressRef={dismissComposerSuggestions}
-                onOpenSettings={() => setSettings(true)}
               />
             }
             style={{
@@ -366,7 +492,7 @@ function SessionWorkspace({
             }}
           >
             {visible && needsRepair ? (
-              <View style={{ flex: 1 }}>
+              <View style={{ flex: 1, paddingTop: headerHeight }}>
                 <QueryState query={snapshot} />
               </View>
             ) : transcriptOpened.current ? (
@@ -376,6 +502,7 @@ function SessionWorkspace({
                 <SectionErrorBoundary scope="session-transcript">
                 <SessionTranscript
                   targetTurnId={targetTurnId}
+                  topInset={headerHeight}
                   findOpen={findOpen}
                   onFindOpenChange={setFindOpen}
                   navigation={navigation.current}
@@ -384,27 +511,22 @@ function SessionWorkspace({
                   session={session}
                   blocked={blocked}
                   command={command}
+                  stopping={stopping}
+                  stopError={stopUncertain ? stopCommand.error : null}
                   onCommand={dispatch}
                   onReceiptHandled={receiptHandled}
+                  onStopReceiptHandled={stopReceiptHandled}
                   onRefresh={refreshNow}
                 />
                 </SectionErrorBoundary>
               </View>
             ) : null}
           </SessionKeyboardFrame>
+          </SessionStatusClusterProvider>
+          </SessionAgentRunsProvider>
           </SessionLoopbackBrowser>
-          {settings && session && projectId ? (
-            <SessionSettings
-              onClose={() => setSettings(false)}
-              value={session}
-              projectId={projectId}
-              disabled={blocked}
-              onCommand={dispatch}
-              onUpdated={refresh}
-              onOpenModel={() => openModelSheet(scope.machineId, scope.sessionId)}
-            />
-          ) : null}
         </PrivateContentBoundary>
+        </View>
       </Screen>
     </ComposerTransferProvider>
   );

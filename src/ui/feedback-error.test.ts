@@ -95,7 +95,8 @@ describe("shared feedback error rendering", () => {
     const error = new Error("Branch review/ui already exists.");
     const refetch = vi.fn();
     const query = renderQuery({ query: { error, status: "error", refetch } });
-    expect(query?.props.description).toBe(error.message);
+    // An uncatalogued English detail stays below the translated summary.
+    expect(query?.props.description).toBe(`İşlem tamamlanamadı.\n\n${error.message}`);
     expect(query?.props.illustration).toBeUndefined();
     query?.props.action.onPress();
     expect(refetch).toHaveBeenCalledOnce();
@@ -114,7 +115,7 @@ describe("shared feedback error rendering", () => {
     const error = Object.assign(new Error("Name is not allowed."), { kind: "auth" });
     const query = renderQuery({ query: { error, status: "error", refetch: vi.fn() } });
     expect(query?.props.action.label).toBe("Yeniden dene");
-    expect(query?.props.description).toBe(error.message);
+    expect(query?.props.description).toBe(`İşlem tamamlanamadı.\n\n${error.message}`);
   });
 
   it("renders no alert without an error", () => {
