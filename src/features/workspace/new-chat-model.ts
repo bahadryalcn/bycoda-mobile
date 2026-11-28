@@ -2,17 +2,13 @@ import { lastUsedProject } from "./recent-projects";
 import type { RuntimeMode } from "./creation-selection";
 import { composerCrewHandles } from "./composer-crew-delivery";
 import { ACCESS_MODES } from "./composer-access-model";
+import type { NewChatAttachmentReference } from "./new-chat-attachments";
 
 /** Route of the empty new-session screen. It sits beside `/session/[id]`; a static segment wins. */
 export const NEW_CHAT_ROUTE_ID = "new";
 
-/**
- * The one saved new-session draft on this phone. It is not keyed by computer or project, so the
- * words survive switching either in the hero (and Back or process death); a successful create
- * clears it. The JSON-shaped suffix keeps it out of the per-session `<machine>:<session>` keys
- * the draft presence report reads, while "delete saved drafts" still covers it.
- */
-export const NEW_CHAT_DRAFT_KEY = `bycoda.mobile.draft.v1:${JSON.stringify(["new-chat"])}`;
+// The key lives beside the new-session attachment owners so attachment custody can read it.
+export { NEW_CHAT_DRAFT_KEY } from "./new-chat-attachments";
 
 /** A prompt link's text goes into the draft only when the owner has not typed anything yet. */
 export function seededNewChatText(current: string, prompt: string | undefined): string | undefined {
@@ -113,6 +109,8 @@ export type NewChatPayload = {
   runtimeMode: RuntimeMode;
   text: string;
   firstTurn: boolean;
+  /** Staged attachment IDs, in order; a changed set is a different first turn. */
+  attachments?: readonly string[];
 };
 
 /** Order-independent identity of everything the Host would receive. */
@@ -129,6 +127,7 @@ export function newChatAttemptKey(payload: NewChatPayload) {
     payload.runtimeMode,
     payload.text,
     payload.firstTurn,
+    payload.attachments ?? [],
   ]);
 }
 
@@ -141,14 +140,28 @@ export function newChatAttempt(previous: NewChatAttempt | undefined, key: string
   return previous && previous.key === key ? previous : { key, createId: makeId(), turnId: makeId() };
 }
 
-/** The prompt as the Host's nested first turn; it inherits the new session's ID. */
-export function newChatFirstTurn(text: string, commandId: string) {
-  return { type: "send" as const, commandId, sessionId: "" as const, text };
+/**
+ * The prompt as the Host's nested first turn; it inherits the new session's ID. Uploaded
+ * attachments travel with it, so the session and its first message with files are one command.
+ */
+export function newChatFirstTurn(text: string, commandId: string, attachments: readonly NewChatAttachmentReference[] = []) {
+  return {
+    type: "send" as const,
+    commandId,
+    sessionId: "" as const,
+    text,
+    ...(attachments.length ? { attachments: [...attachments] } : {}),
+  };
 }
 
-/** Sends need words, a project, a resolved model and no create in flight or awaiting recovery. */
+/**
+ * Sends need words or attachments (as an open session's composer), a project, a resolved model
+ * and no create or upload in flight or awaiting recovery.
+ */
 export function newChatSendState({
   text,
+  attachments = 0,
+  uploading = false,
   project,
   canStart,
   locked,
@@ -156,6 +169,10 @@ export function newChatSendState({
   sessionOnly,
 }: {
   text: string;
+  /** Staged attachments the first turn would carry. */
+  attachments?: number;
+  /** Attachments are being picked or uploaded. */
+  uploading?: boolean;
   project: boolean;
   canStart: boolean;
   locked: boolean;
@@ -163,11 +180,11 @@ export function newChatSendState({
   /** Set only when the create carries the text as its first turn. */
   sessionOnly?: NewChatSessionOnly;
 }): { enabled: boolean; reason?: "empty" | "project" | "model" | "busy" | "offline" | NewChatSessionOnly } {
-  if (locked) return { enabled: false, reason: "busy" };
+  if (locked || uploading) return { enabled: false, reason: "busy" };
   if (!connected) return { enabled: false, reason: "offline" };
   if (!project) return { enabled: false, reason: "project" };
-  if (!text.trim()) return { enabled: false, reason: "empty" };
-  if (sessionOnly) return { enabled: false, reason: sessionOnly };
+  if (!text.trim() && !attachments) return { enabled: false, reason: "empty" };
+  if (sessionOnly && text.trim()) return { enabled: false, reason: sessionOnly };
   if (!canStart) return { enabled: false, reason: "model" };
   return { enabled: true };
 }

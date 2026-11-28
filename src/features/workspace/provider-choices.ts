@@ -64,12 +64,8 @@ export function providerChoices(
   defaultAccountLabel: string,
 ): ProviderChoice[] {
   return providers.flatMap((provider): ProviderChoice[] => {
-    const offered = provider === "claude" || provider === "codex" ? accounts?.[provider] : undefined;
-    const list = offered?.filter((account) =>
-      account.status === undefined || account.status === "ready" ||
-      (account.status === "unknown" && (account.isDefault === true ||
-        (account.id === DEFAULT_ACCOUNT_ID && !offered.some((entry) => entry.isDefault))))
-    ) ?? [];
+    const offered = offeredAccounts(provider, accounts);
+    const list = offered?.filter((account) => usableAccount(account, offered)) ?? [];
     const name = providerName(provider);
     if (list.length === 0) {
       if (offered) return [];
@@ -95,6 +91,49 @@ export function providerChoices(
       };
     });
   });
+}
+
+type CatalogAccount = NonNullable<NonNullable<HostModelCatalog["accounts"]>["claude"]>[number];
+
+/** The accounts the Host lists for a provider whose logins mobile can choose (Claude/Codex profiles). */
+function offeredAccounts(provider: RemoteProvider, accounts: HostModelCatalog["accounts"]) {
+  return provider === "claude" || provider === "codex" ? accounts?.[provider] : undefined;
+}
+
+/** Ready accounts, plus the default login while its state is unknown. */
+function usableAccount(account: CatalogAccount, offered: readonly CatalogAccount[]): boolean {
+  return account.status === undefined || account.status === "ready" ||
+    (account.status === "unknown" && (account.isDefault === true ||
+      (account.id === DEFAULT_ACCOUNT_ID && !offered.some((entry) => entry.isDefault))));
+}
+
+/** An account the Host lists but cannot use now; pickers show it disabled with the reason. */
+export type UnavailableProviderChoice = ProviderChoice & { status: "signed-out" | "disabled" };
+
+/**
+ * Signed-out and disabled accounts of the offered providers. They never become choices (and never
+ * a new session's default); they only explain why an account is missing from the choices.
+ */
+export function unavailableProviderChoices(
+  providers: readonly RemoteProvider[],
+  accounts: HostModelCatalog["accounts"],
+  defaultAccountLabel: string,
+): UnavailableProviderChoice[] {
+  return providers.flatMap((provider) =>
+    (offeredAccounts(provider, accounts) ?? []).flatMap((account): UnavailableProviderChoice[] => {
+      if (account.status !== "signed-out" && account.status !== "disabled") return [];
+      const isDefault = account.id === DEFAULT_ACCOUNT_ID;
+      return [{
+        key: choiceKey(provider, account.id),
+        provider,
+        ...(isDefault ? {} : { accountId: account.id }),
+        label: accountName(account, defaultAccountLabel),
+        detail: providerName(provider),
+        ...(account.color ? { color: account.color } : {}),
+        status: account.status,
+      }];
+    }),
+  );
 }
 
 /** The choice for a saved provider/account pair; falls back to the provider's first choice. */

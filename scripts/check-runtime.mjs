@@ -78,6 +78,15 @@ const pureContracts = new Set([
   "features/crews/model/memberAvatarTraits",
   "features/crews/model/memberAvatarArt",
   "features/sessions/model/conversationRewind",
+  // Inline visual validation and theme sheet are pure (a JSON fallback theme only); the phone draws
+  // the source in its sandboxed preview, never with desktop runtime.
+  "features/sessions/model/inlineVisual",
+  // Failed-turn retry: which user block a turn belongs to (type import only) and the pure
+  // classification of a provider error text.
+  "features/sessions/model/executionTurn",
+  "features/sessions/model/sessionErrorPresentation",
+  // The grants capability name and the grant type; constants only.
+  "shared/model/sessionApprovalGrant",
   "features/skills/model/cliCommandCatalog",
   "features/source-control/model/selectiveStage",
   "features/notes/noteContext",

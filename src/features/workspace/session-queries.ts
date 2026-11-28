@@ -11,9 +11,11 @@ import { sessionReadSchedule, unsupportedSessionWait } from "./session-read-sche
 import { pruneInactiveSessionCache } from "./session-cache";
 import { retainSessionAuthority } from "@/domain/session-authority";
 import { watchSessionStream } from "@/remote/session-sync";
+import { keepLoadedHistory } from "./session-history-merge";
 import { isTransientConnectionError } from "@/state/query-retry";
 import type { MobileStreamSubscription } from "@/remote/host-transport";
 import { SessionProjectMismatch, foldSessionProject } from "@/remote/session-project";
+import { inlineVisualSource } from "../../../../src/features/sessions/model/inlineVisual";
 
 export function useSessionSnapshot(
   scope: SessionScope,
@@ -102,7 +104,12 @@ export function useSessionSnapshot(
       apply: async (snapshot, assertCurrent) => {
         current();
         assertCurrent();
-        let value = snapshot;
+        let value = await keepLoadedHistory(snapshot, cache.getQueryData<HostSession>(key), async (known) => {
+          const merged = await readSession(client, scope.sessionId, known, { signal: controller.signal });
+          return foldSessionProject(merged, options.projectId!, liveOptions.current.projectAliases);
+        });
+        current();
+        assertCurrent();
         const wanted =
           liveOptions.current.restoreBefore?.() ??
           cache.getQueryData<HostSession>(key)?.history?.before;
@@ -367,6 +374,28 @@ export function useSessionBlock({
         )
           cache.removeQueries({ queryKey: stale.queryKey, exact: true });
       return block;
+    },
+  });
+}
+
+/**
+ * A stored inline visual's source (`sessions.inlineVisual`). Stored visuals are content-addressed and
+ * immutable, so one read per id is kept; the reply is validated like the desktop's before drawing.
+ */
+export function useInlineVisualSource(scope: SessionScope, id: string | undefined) {
+  const client = useHostClient();
+  const active = useHostReadActive();
+  return useQuery({
+    queryKey: hostKey(scope.machineId, ["inline-visual", scope.sessionId, id]),
+    enabled: !!client && active && !!id,
+    staleTime: Infinity,
+    gcTime: BLOCK_GC_MS,
+    queryFn: async ({ signal }) => {
+      const source = inlineVisualSource(
+        await client!.request<unknown>("sessions.inlineVisual", { sessionId: scope.sessionId, id }, { signal }),
+      );
+      if (!source) throw new Error("The visual could not be read.");
+      return source;
     },
   });
 }

@@ -68,7 +68,8 @@ export type ComposerSuggestion = {
   path?: string;
   keywords?: string;
   unavailable?: string;
-  action?: "scope" | "side-question";
+  /** `new-session`, `resume` and `move-to-folder` open their mobile destination instead of inserting text. */
+  action?: "scope" | "side-question" | "new-session" | "resume" | "move-to-folder";
   template?: string;
 };
 

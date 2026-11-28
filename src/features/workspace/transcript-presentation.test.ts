@@ -24,4 +24,7 @@ it("retains completed row identities and never joins old text while the tail cha
   expect(after[0]).toBe(before[0]); expect(after[1]).toBe(before[1]);
   expect(completeResponseText([block("u", "user"), block("a", "assistant", "first"), block("tool", "tool"), block("b", "assistant", "second"), block("next", "user"), block("c", "assistant")], "b")).toBe("first\n\nsecond");
   expect(completeResponseText(blocks, "u1")).toBeUndefined();
+  // A block the Host sent as a preview makes the joined response incomplete.
+  const preview = { ...block("p", "assistant", "cut"), remoteContent: { digest: "d" } } as (typeof blocks)[number];
+  expect(completeResponseText([block("u", "user"), block("a", "assistant", "first"), preview], "a")).toBeUndefined();
 });

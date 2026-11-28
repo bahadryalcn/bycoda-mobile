@@ -1,41 +1,39 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useWindowDimensions, View } from "react-native";
+import ChevronDown from "lucide-react-native/icons/chevron-down";
+import FileIcon from "lucide-react-native/icons/file";
 import FolderTree from "lucide-react-native/icons/folder-tree";
 import GitBranch from "lucide-react-native/icons/git-branch";
-import Lock from "lucide-react-native/icons/lock";
-import Pencil from "lucide-react-native/icons/pencil";
+import ImageIcon from "lucide-react-native/icons/image";
 import Plus from "lucide-react-native/icons/plus";
-import Shield from "lucide-react-native/icons/shield";
 import ShieldAlert from "lucide-react-native/icons/shield-alert";
-import Sparkles from "lucide-react-native/icons/sparkles";
 import { carryCrossDelegation } from "../../../../src/shared/model/host-contracts/delegation";
 import type { HostModelCatalog } from "@/domain/types";
 import { useActiveMachine } from "@/state/machines";
 import { useHostQuery } from "@/state/queries";
 import { ChatToolbarAction } from "@/ui/chat-controls";
 import { useCopy } from "@/ui/copy";
-import { NavigationGroup, NavigationRow, QueryState, RowIcon, Sheet } from "@/ui/primitives";
+import { Body, NavigationGroup, NavigationRow, PressableArea, QueryState, RowIcon, Sheet } from "@/ui/primitives";
 import { ProviderAccountMark } from "@/ui/agent-avatar";
-import { ScopePill } from "@/ui/scope-pill";
 import { useMobileTheme } from "@/ui/theme";
-import { space } from "@/ui/tokens";
-import { accessModeLabel } from "./composer-access";
-import { ACCESS_MODES } from "./composer-access-model";
+import { metrics, space } from "@/ui/tokens";
+import { ComposerAccessField, accessModeLabel } from "./composer-access";
 import type { RuntimeMode } from "./creation-selection";
 import { ModelPicker } from "./model-picker";
 import { settingsSummary } from "./model-picker-model";
 import type { ProviderChoice } from "./provider-choices";
+import type { RecentModel } from "./recent-models";
 import type { ProjectWorktrees } from "./project-screen-types";
 import { settingLabels } from "./setting-labels";
 import { newChatCheckoutAvailable } from "./new-chat-model";
 import type { AgentModel } from "../../../../src/features/sessions/model/models";
 import { WorktreeCreate } from "./worktree-create";
 
-const accessGlyph = { supervised: Lock, "auto-accept-edits": Pencil, auto: Sparkles, "full-access": Shield } as const;
-
 /**
  * The model slot of the new-session composer: the same toolbar chip and grouped model picker as an
  * open session, editing the draft directly (nothing is saved until the first message creates it).
+ * Access sits in the same sheet ("Model and access"), as on an open session; agents without
+ * access modes (`fx`) pass no `access`.
  */
 export function NewChatModelChip({
   iconOnly,
@@ -47,11 +45,13 @@ export function NewChatModelChip({
   models,
   model,
   settings,
+  access,
   disabled,
   onRetry,
   onChooseProvider,
   onChooseModel,
   onChange,
+  recents,
 }: {
   iconOnly: boolean;
   ready: boolean;
@@ -63,14 +63,23 @@ export function NewChatModelChip({
   models: readonly AgentModel[];
   model: string;
   settings: Record<string, string>;
+  /** The access mode the create sends; omitted where the chosen agent has none. */
+  access?: {
+    value: RuntimeMode;
+    unavailable: Partial<Record<RuntimeMode, string>>;
+    onChange: (mode: RuntimeMode) => void;
+  };
   disabled: boolean;
   onRetry: () => void;
   onChooseProvider: (choice: ProviderChoice) => void;
   onChooseModel: (choice: ProviderChoice, model: string, settings: Record<string, string>) => void;
   onChange: (model: string, settings: Record<string, string>) => void;
+  /** Models recently used on this computer, offered as one-tap rows in the picker. */
+  recents?: readonly RecentModel[];
 }) {
   const copy = useCopy();
   const { fontScale } = useWindowDimensions();
+  const { colors } = useMobileTheme();
   const [open, setOpen] = useState(false);
   if (!ready || catalogState) {
     const label = catalogState === "error"
@@ -96,19 +105,41 @@ export function NewChatModelChip({
   const name = selected?.name ?? (model || copy("Model seç…", "Select model…"));
   const summary = settingsSummary(selected, settings, settingLabels(copy));
   const shown = summary ? `${name} · ${summary}` : name;
+  const title = access ? copy("Model ve erişim", "Model and access") : copy("Model", "Model");
+  const spoken = [
+    [shown, choice?.label].filter(Boolean).join(", "),
+    access ? `${copy("Erişim", "Access")}: ${accessModeLabel(access.value, copy)}` : "",
+  ].filter(Boolean).join(". ");
+  // Full access is the one mode that stays visible on the chip, as on an open session.
+  const fullAccess = access?.value === "full-access";
   return (
     <>
       <ChatToolbarAction
         label={fontScale >= 1.35 ? name : shown}
         hideLabel={iconOnly}
         reserveTouchTarget
-        accessibilityLabel={`${copy("Model", "Model")}: ${[shown, choice?.label].filter(Boolean).join(", ")}`}
+        accessibilityLabel={`${title}: ${spoken}`}
         disabled={disabled}
         onPress={() => setOpen(true)}
       >
-        {choice ? <ProviderAccountMark provider={choice.provider} color={choice.color} size={16} /> : null}
+        {choice || fullAccess ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.xxs }}>
+            {choice ? <ProviderAccountMark provider={choice.provider} color={choice.color} size={16} /> : null}
+            {fullAccess ? <ShieldAlert size={14} strokeWidth={2.2} color={colors.warning} /> : null}
+          </View>
+        ) : null}
       </ChatToolbarAction>
       <ModelPicker
+        title={title}
+        extra={access ? (
+          <ComposerAccessField
+            value={access.value}
+            saved={access.value}
+            unavailable={access.unavailable}
+            disabled={disabled}
+            onChange={access.onChange}
+          />
+        ) : undefined}
         visible={open}
         onClose={() => setOpen(false)}
         catalog={catalog}
@@ -119,6 +150,8 @@ export function NewChatModelChip({
         settings={settings}
         sparseSettings
         disabled={disabled}
+        recents={recents}
+        accountUsage
         onChooseProvider={onChooseProvider}
         onChooseModel={onChooseModel}
         onChange={onChange}
@@ -132,72 +165,6 @@ export function carriedSettings(previous: Record<string, string>, changedProvide
   return changedProvider ? carryCrossDelegation(previous, {}) : previous;
 }
 
-/** Access (permission mode) as a scope chip; the sheet lists the same four modes as the session's model sheet. */
-export function NewChatAccessChip({
-  value,
-  unavailable,
-  disabled,
-  onChange,
-}: {
-  value: RuntimeMode;
-  unavailable: Partial<Record<RuntimeMode, string>>;
-  disabled: boolean;
-  onChange: (mode: RuntimeMode) => void;
-}) {
-  const copy = useCopy();
-  const { colors } = useMobileTheme();
-  const [open, setOpen] = useState(false);
-  const label = accessModeLabel(value, copy);
-  const hint = (mode: RuntimeMode) =>
-    mode === "supervised"
-      ? copy("Komutlardan ve dosya değişikliklerinden önce sorar.", "Ask before commands and file changes.")
-      : mode === "auto-accept-edits"
-        ? copy("Düzenlemeleri otomatik onaylar, diğer işlemlerden önce sorar.", "Auto-approve edits, ask before other actions.")
-        : mode === "auto"
-          ? copy("Bir AI inceleyici işlemleri onaylayabilir veya reddedebilir.", "An AI reviewer can approve or deny actions.")
-          : copy(
-              "Ajan komutları ve düzenlemeleri onay beklemeden uygulayabilir.",
-              "The agent may run commands and edits without waiting for approval.",
-            );
-  const Glyph = value === "full-access" ? ShieldAlert : accessGlyph[value];
-  return (
-    <>
-      <ScopePill
-        icon={<Glyph size={14} strokeWidth={2} color={value === "full-access" ? colors.warning : colors.muted} />}
-        label={label}
-        accessibilityLabel={`${copy("Erişim", "Access")}: ${label}. ${copy("Erişimi değiştir", "Change access")}`}
-        expanded={open}
-        disabled={disabled}
-        onPress={() => setOpen(true)}
-      />
-      <Sheet visible={open} title={copy("Erişim", "Access")} size="compact" onClose={() => setOpen(false)}>
-        <NavigationGroup>
-          {ACCESS_MODES.map((mode) => {
-            const refused = mode !== value ? unavailable[mode] : undefined;
-            return (
-              <NavigationRow
-                key={mode}
-                intent="select"
-                selected={mode === value}
-                disabled={disabled || !!refused}
-                icon={<RowIcon glyph={accessGlyph[mode]} />}
-                label={accessModeLabel(mode, copy)}
-                detail={refused ?? hint(mode)}
-                detailLines={0}
-                detailSelectable={false}
-                onPress={() => {
-                  if (!refused) onChange(mode);
-                  setOpen(false);
-                }}
-              />
-            );
-          })}
-        </NavigationGroup>
-      </Sheet>
-    </>
-  );
-}
-
 /** Label of the folder a new session opens in: the worktree's branch, else the main project folder. */
 export function checkoutLabel(cwd: string | undefined, trees: ProjectWorktrees | undefined, copy: ReturnType<typeof useCopy>) {
   if (!cwd) return copy("Ana proje klasörü", "Main project folder");
@@ -207,9 +174,10 @@ export function checkoutLabel(cwd: string | undefined, trees: ProjectWorktrees |
 
 /**
  * Where the session works: the main project folder, an existing worktree or a new one. The same
- * "Working folder" choice as the project screen; it only appears where the project can offer one.
+ * "Working folder" choice as the project screen, as one quiet row of the hero under the project;
+ * it only appears where the project can offer one.
  */
-export function NewChatCheckoutChip({
+export function NewChatCheckoutRow({
   machineId,
   project,
   cwd,
@@ -240,14 +208,31 @@ export function NewChatCheckoutChip({
   ];
   return (
     <>
-      <ScopePill
-        icon={cwd ? <GitBranch size={14} strokeWidth={2} color={colors.muted} /> : <FolderTree size={14} strokeWidth={2} color={colors.muted} />}
-        label={label}
-        accessibilityLabel={`${copy("Çalışma klasörü", "Working folder")}: ${label}. ${copy("Klasörü değiştir", "Change folder")}`}
+      <PressableArea
+        label={`${copy("Çalışma klasörü", "Working folder")}: ${label}. ${copy("Klasörü değiştir", "Change folder")}`}
         expanded={open}
         disabled={disabled}
         onPress={() => setOpen(true)}
-      />
+        style={{
+          minHeight: metrics.touchTarget,
+          maxWidth: "100%",
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: space.xs,
+          paddingHorizontal: space.sm,
+        }}
+      >
+        {cwd ? (
+          <GitBranch size={16} strokeWidth={2} color={colors.muted} style={{ flexShrink: 0 }} />
+        ) : (
+          <FolderTree size={16} strokeWidth={2} color={colors.muted} style={{ flexShrink: 0 }} />
+        )}
+        <Body muted selectable={false} style={{ flexShrink: 1, textAlign: "center" }}>
+          {label}
+        </Body>
+        <ChevronDown size={14} strokeWidth={2.4} color={colors.muted} style={{ flexShrink: 0 }} />
+      </PressableArea>
       <Sheet visible={open} title={copy("Çalışma klasörü", "Working folder")} size="compact" onClose={() => setOpen(false)}>
         <QueryState query={trees} loading="inline" />
         <NavigationGroup>
@@ -294,11 +279,37 @@ export function NewChatCheckoutChip({
   );
 }
 
-/** One wrapping row of the draft's options above the composer, aligned with the capsule. */
-export function NewChatOptionRow({ children }: { children: ReactNode }) {
+/**
+ * "Add to message" on a new session: photos and files. Templates and turn modes belong to an open
+ * session's composer, so they appear once the session exists.
+ */
+export function NewChatAttachSheet({
+  visible,
+  onClose,
+  onChoose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onChoose: (kind: "photo" | "document") => void;
+}) {
+  const copy = useCopy();
   return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm, paddingHorizontal: space.xs }}>
-      {children}
-    </View>
+    <Sheet visible={visible} title={copy("Mesaja ekle", "Add to message")} size="compact" onClose={onClose}>
+      <NavigationGroup>
+        <NavigationRow
+          label={copy("Fotoğraflar", "Photos")}
+          intent="command"
+          icon={<RowIcon glyph={ImageIcon} />}
+          onPress={() => onChoose("photo")}
+        />
+        <NavigationRow
+          label={copy("Dosyalar", "Files")}
+          intent="command"
+          icon={<RowIcon glyph={FileIcon} />}
+          onPress={() => onChoose("document")}
+        />
+      </NavigationGroup>
+    </Sheet>
   );
 }
+

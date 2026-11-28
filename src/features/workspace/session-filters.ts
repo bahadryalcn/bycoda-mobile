@@ -50,3 +50,25 @@ export function matchesSessionListFilters(session: FilterableSession, filters: S
       (session.lastActivityAt ?? session.updatedAt) < sessionTimeStart(filters.time, now)) return false;
   return true;
 }
+
+/** The quick status chips in the list header (also offered in the filter sheet). */
+export type SessionStatusFilter = "all" | "running" | "reply";
+
+export function matchesSessionStatus(session: Pick<HostSessionSummary, "status" | "needsInput">, status: SessionStatusFilter): boolean {
+  return status === "all" || (status === "reply" ? !!session.needsInput : session.status === "running");
+}
+
+/**
+ * The Sessions project filter applies only while the project is on this computer's list; a
+ * project that disappeared shows All projects instead of an empty page. Before the directory is
+ * proven the saved project is kept, so a slow load does not flash every project.
+ */
+export function effectiveSessionProject(projectId: string | null, projects: readonly { id: string }[], directoryReady: boolean): string | null {
+  if (!projectId) return null;
+  return !directoryReady || projects.some((project) => project.id === projectId) ? projectId : null;
+}
+
+/** The header row's reset mark appears once a project or status chip narrows the list. */
+export function sessionQuickFiltersActive(projectId: string | null, status: SessionStatusFilter, archived: boolean): boolean {
+  return !!projectId || (!archived && status !== "all");
+}

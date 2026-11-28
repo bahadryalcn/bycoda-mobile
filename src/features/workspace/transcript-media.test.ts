@@ -20,6 +20,9 @@ vi.mock("panelui-native/components/collapsible", () => ({
 vi.mock("lucide-react-native/icons/ellipsis", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/terminal", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/list-checks", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/git-branch", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/image", () => ({ default: () => null }));
+vi.mock("./transcript-inline-visual", () => ({ TranscriptInlineVisual: () => null }));
 vi.mock("lucide-react-native/icons/pencil", () => ({ default: () => null }));
 vi.mock("@/i18n", () => ({ useLocale: () => "en" }));
 vi.mock("@/ui/primitives", () => {
@@ -190,4 +193,27 @@ it("does not repeat generic text beside authoritative question answers", () => {
   const block = { id: "answer", role: "user", text: "duplicate answer", questionAnswers: [{ prompt: "Choose", answers: ["A"] }] } as unknown as Block;
   act(() => root!.render(h(TranscriptBlock, { block, scope: { machineId: "m", sessionId: "s" }, getRevision: () => undefined, disabled: false, onCommand: vi.fn() } as TranscriptBlockProps)));
   expect(container.textContent).not.toContain("duplicate answer");
+});
+
+it("sends a long saved draft's whole text, never its preview, and sends nothing when the read fails", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  root = createRoot(container);
+  const onCommand = vi.fn();
+  const block: Block = { id: "draft", role: "user", text: "cut…", draft: true, remoteContent: { revision: 1, bytes: 40_000 } };
+  const render = () => act(() => root!.render(h(TranscriptBlock, {
+    block, scope: { machineId: "m", sessionId: "s" }, getRevision: () => undefined, disabled: false, onCommand,
+  } as TranscriptBlockProps)));
+  const send = () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Send draft");
+  onCommand.mockResolvedValue(undefined);
+  detail.query = { refetch: detail.refetch };
+  detail.refetch.mockResolvedValueOnce({ data: undefined });
+  render();
+  await act(async () => send()!.click());
+  expect(detail.refetch).toHaveBeenCalledOnce();
+  expect(onCommand).not.toHaveBeenCalled();
+  detail.refetch.mockResolvedValueOnce({ data: { ...block, text: "whole draft", remoteContent: undefined } });
+  render();
+  await act(async () => send()!.click());
+  expect(onCommand).toHaveBeenCalledWith({ type: "send", sessionId: "s", text: "whole draft", draftBlockId: "draft" });
 });

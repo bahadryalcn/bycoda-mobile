@@ -100,10 +100,10 @@ it.each(["loading", "withdrawn"] as const)("never reads an unproven project when
     expect(fixture.navigate).toHaveBeenLastCalledWith(expect.objectContaining({
       params: expect.objectContaining({ section: "tasks", projectFilter: "project", projectId: "other-project" }),
     }));
-    // The Tools directory requires a project: All projects is never applied from its pill.
+    // The picked project becomes the shared selection; the Tools home shows no project pill of its own.
     await render();
-    await click("All projects");
     expect(fixture.selected).toBe("other-project");
+    expect(surface.textContent).not.toContain("All projects");
     // With the shared selection at All, a tool that accepts All opens with All and keeps the selection.
     fixture.selected = null;
     fixture.navigate.mockClear();
@@ -119,6 +119,44 @@ it.each(["loading", "withdrawn"] as const)("never reads an unproven project when
     fixture.directoryReady = true;
     fixture.projects = ["workspace-project", "other-project"];
     fixture.selected = "workspace-project";
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it("lists tools without a stand-in project: project tools ask, work tools open with All projects", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const surface = document.createElement("div");
+  const root = createRoot(surface);
+  const render = () => act(async () => root.render(h(ManagementHome)));
+  const click = (label: string) => act(async () => {
+    const button = Array.from(surface.querySelectorAll("button")).find((item) => item.textContent === label);
+    expect(button).toBeDefined();
+    button?.click();
+  });
+  fixture.selected = null;
+  fixture.navigate.mockClear();
+  fixture.selectProject.mockClear();
+  try {
+    await render();
+    expect(surface.textContent).not.toContain("All projects");
+    await click("Tasks");
+    expect(fixture.navigate).toHaveBeenLastCalledWith(expect.objectContaining({
+      params: expect.objectContaining({ section: "tasks", projectFilter: "all" }),
+    }));
+    expect(fixture.selectProject).not.toHaveBeenCalled();
+    fixture.navigate.mockClear();
+    // A project tool never opens on a project the person did not pick: the picker asks first.
+    await click("Terminals");
+    expect(fixture.navigate).not.toHaveBeenCalled();
+    await click("Choose another project");
+    expect(fixture.navigate).toHaveBeenLastCalledWith(expect.objectContaining({
+      pathname: "/tools/[tool]", params: expect.objectContaining({ tool: "terminals", projectId: "other-project" }),
+    }));
+    expect(fixture.selected).toBe("other-project");
+  } finally {
+    fixture.selected = "workspace-project";
+    fixture.selectProject.mockClear();
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
   }

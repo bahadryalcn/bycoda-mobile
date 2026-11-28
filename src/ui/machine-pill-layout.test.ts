@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { act, createElement, type PropsWithChildren } from "react";
+import { act, createElement, type FunctionComponent, type PropsWithChildren, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const LONG_NAME = "A-very-long-workstation-name-that-cannot-fit-in-a-narrow-pill";
-const state = vi.hoisted(() => ({ online: true, errorAt: 0, successAt: 99_000 }));
+const state = vi.hoisted(() => ({ online: true, errorAt: 0, successAt: 99_000, fontScale: 1 }));
 type StyleValue = Record<string, unknown> | StyleValue[] | undefined;
 const flatten = (style: StyleValue): Record<string, unknown> =>
   Array.isArray(style) ? Object.assign({}, ...style.map(flatten)) : { ...style };
@@ -63,7 +63,12 @@ vi.mock("panelui-native/components/menu", async () => {
   };
 });
 vi.mock("react-native", () => ({
-  View: ({ children }: PropsWithChildren) => createElement("div", null, children),
+  // Serialises the row layout the context-row regression asserts on.
+  View: ({ children, style }: PropsWithChildren<{ style?: StyleValue }>) => {
+    const flat = flatten(style);
+    return createElement("div", { "data-wrap": flat.flexWrap, "data-shrink": flat.flexShrink, "data-min": flat.minWidth, "data-self": flat.alignSelf }, children);
+  },
+  useWindowDimensions: () => ({ width: 360, height: 800, fontScale: state.fontScale }),
   // Serialises the layout props the regression asserts on; the real Text is native.
   Text: ({ children, numberOfLines, style }: PropsWithChildren<{ numberOfLines?: number; style?: StyleValue }>) =>
     createElement("span", { "data-lines": numberOfLines, "data-shrink": flatten(style).flexShrink, "data-color": flatten(style).color }, children),
@@ -99,11 +104,12 @@ vi.mock("../state/queries", () => ({
 import { MachinePill } from "./machine-bar";
 
 beforeEach(() => {
-  Object.assign(state, { online: true, errorAt: 0, successAt: 99_000 });
+  Object.assign(state, { online: true, errorAt: 0, successAt: 99_000, fontScale: 1 });
   vi.spyOn(Date, "now").mockReturnValue(100_000);
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 const render = () => renderToStaticMarkup(createElement(MachinePill));
+const PillWithAccessory = MachinePill as unknown as FunctionComponent<{ accessory?: ReactNode }>;
 
 it("keeps the status in its own bounded text beside a shrinking computer name", () => {
   state.errorAt = 99_500;
@@ -154,4 +160,26 @@ it.each(["android", "web"])("keeps both same-name addresses visible and accessib
   } finally {
     await act(async () => root.unmount());
   }
+});
+
+it("keeps the computer and project pills on one shrinking, non-wrapping context row", () => {
+  const html = renderToStaticMarkup(createElement(PillWithAccessory, { accessory: createElement("button", { "aria-label": "Project: ui-tests" }, "ui-tests") }));
+  // The row spans the page, never wraps at normal text, and each pill slot can shrink to fit.
+  expect(html).toMatch(/^<div data-wrap="nowrap" data-shrink="1" data-min="0" data-self="stretch">/);
+  expect(html.match(/<div data-shrink="1" data-min="0">/g)).toHaveLength(2);
+  expect(html.indexOf(LONG_NAME)).toBeLessThan(html.indexOf("ui-tests"));
+  // The full names stay in the spoken labels while the visible labels ellipsize.
+  expect(html).toContain(`aria-label="${LONG_NAME}. Connected. Choose computer"`);
+  expect(html).toContain('aria-label="Project: ui-tests"');
+});
+
+it("wraps the context row only from the large-text threshold", async () => {
+  const { contextRowWraps, LARGE_TEXT_SCALE } = await import("./machine-bar");
+  expect(LARGE_TEXT_SCALE).toBe(1.35);
+  expect(contextRowWraps(1.3)).toBe(false);
+  expect(contextRowWraps(1.35)).toBe(true);
+  state.fontScale = 1.5;
+  expect(renderToStaticMarkup(createElement(PillWithAccessory, { accessory: createElement("b", null, "p") }))).toMatch(/^<div data-wrap="wrap"/);
+  // Alone (a pushed page's scope row) the pill keeps its natural width at the row start.
+  expect(render()).toMatch(/^<div data-wrap="wrap" data-shrink="1" data-min="0" data-self="flex-start">/);
 });

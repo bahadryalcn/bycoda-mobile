@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
-import { ApprovalCommandRefused, captureApprovalCommand } from "@/domain/approval-command";
+import { ApprovalCommandRefused, canAllowForSession, captureApprovalCommand } from "@/domain/approval-command";
 import { RemoteHostError } from "@/remote/host-error";
 import { hostKey } from "@/state/queries";
+import { useActiveMachine } from "@/state/machines";
 import { Badge, StatusText, Body, Button, ErrorText } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { space } from "@/ui/tokens";
@@ -17,7 +18,7 @@ type Props = {
   disabled: boolean;
   onCommand: SessionCommand;
 };
-type Delivery = { status: "sending" | "accepted" | "unknown"; decision: "allow" | "deny" };
+type Delivery = { status: "sending" | "accepted" | "unknown"; decision: "allow" | "deny"; forSession?: true };
 // An unresolved occurrence stays held across navigation. A receipt alone is not a provider decision.
 const deliveries = new Map<string, Delivery>();
 
@@ -33,6 +34,9 @@ function ApprovalOwner({ approval, scope, runId, disabled, onCommand, identity }
   const [error, setError] = useState<unknown>(null);
   const sending = useRef(false);
   const cache = useQueryClient();
+  const machine = useActiveMachine();
+  // Desktop offers this only for a Host-scoped request on a Host with session grants.
+  const sessionGrant = machine?.id === scope.machineId && canAllowForSession(machine.capabilities, approval);
   const [checking, setChecking] = useState(false);
   const checkingRef = useRef(false);
   /** Reads the session again. A still-open approval may then be answered by hand; nothing is resent. */
@@ -63,11 +67,12 @@ function ApprovalOwner({ approval, scope, runId, disabled, onCommand, identity }
   useEffect(() => {
     if (approval.decided) deliveries.delete(identity);
   }, [approval.decided, identity]);
-  const decide = async (decision: "allow" | "deny") => {
+  const decide = async (decision: "allow" | "deny", forSession?: true) => {
     if (disabled || !runId || approval.decided || deliveries.has(identity) || sending.current) return;
-    const command = captureApprovalCommand(scope.sessionId, runId, approval, decision);
+    if (forSession && !sessionGrant) return;
+    const command = captureApprovalCommand(scope.sessionId, runId, approval, decision, forSession);
     const update = (status: Delivery["status"]) => {
-      const next = { status, decision };
+      const next: Delivery = { status, decision, ...(forSession ? { forSession } : {}) };
       deliveries.set(identity, next);
       setDelivery(next);
     };
@@ -94,7 +99,11 @@ function ApprovalOwner({ approval, scope, runId, disabled, onCommand, identity }
     <Body>{copy("Bu işlem için onayın gerekiyor.", "This action needs your approval.")}</Body>
     <View style={{ gap: space.sm }}>
       <Button label={copy("İzin ver", "Allow")} tone="primary" fullWidth reserveTouchTarget disabled={held}
-        busy={delivery?.status === "sending" && delivery.decision === "allow"} onPress={() => { void decide("allow"); }} />
+        busy={delivery?.status === "sending" && delivery.decision === "allow" && !delivery.forSession} onPress={() => { void decide("allow"); }} />
+      {sessionGrant ? <Button label={copy("Bu oturumda izin ver", "Allow for this session")}
+        accessibilityLabel={copy("Bu oturumda çalışma alanında dosya adı aramaya izin ver", "Allow workspace filename search for this session")}
+        fullWidth reserveTouchTarget disabled={held}
+        busy={delivery?.status === "sending" && !!delivery.forSession} onPress={() => { void decide("allow", true); }} /> : null}
       <Button label={copy("Reddet", "Deny")} tone="quiet" fullWidth reserveTouchTarget disabled={held}
         busy={delivery?.status === "sending" && delivery.decision === "deny"} onPress={() => { void decide("deny"); }} />
     </View>

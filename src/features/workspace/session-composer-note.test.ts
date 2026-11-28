@@ -8,6 +8,7 @@ import { emptyComposerDraft, type ComposerDraft } from "./composer-draft";
 import type { ComposerTransfer } from "./composer-transfer-model";
 vi.mock("../../../modules/bycoda-key-commands", () => ({ useKeyCommand: () => null }));
 vi.mock("expo-router/react-navigation", () => ({ useIsFocused: () => true }));
+vi.mock("./new-chat-navigation", () => ({ openNewChat: () => undefined }));
 vi.mock("@/features/keyboard/keyboard-preferences", () => ({
   useKeyboardPreferenceHydration: () => null,
   useKeyboardPreferences: (select: (state: unknown) => unknown) => select({ hydrated: true, enterSends: true }),

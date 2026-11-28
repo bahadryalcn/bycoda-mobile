@@ -38,16 +38,17 @@ export function activeSessionGoal(
 }
 
 /**
- * Which segments the floating cluster shows. The transcript's live row owns the turn clock while it
- * is on screen; the capsule's run segment takes over only once that row scrolls away (or is not
- * rendered), so one timer is ever visible. States the live row does not say (waiting on agents,
- * needs you, background, done) always show here, replacing the separate strip above the composer.
+ * Which segments the floating cluster shows. Like T3 Code, the transcript's live row owns the turn
+ * clock whenever it is rendered, so one timer is ever visible and scrolling never makes the capsule
+ * appear or vanish; the capsule says Working or Stopping only when no live row is rendered. States
+ * the live row does not say (waiting on agents, needs you, background, done) always show here.
  */
 export function clusterSegments(input: {
   activity: ActivityState;
   live: boolean;
   stopping: boolean;
-  liveRowOnScreen: boolean;
+  /** The transcript renders its live row (or a notice that stands in for it). */
+  liveRowShown: boolean;
   goal?: SessionGoal;
   agents?: AgentCounts;
   queue?: QueueSummary | null;
@@ -56,9 +57,9 @@ export function clusterSegments(input: {
 }): ClusterSegments {
   const status: ClusterStatus | undefined =
     input.live && input.stopping
-      ? input.liveRowOnScreen ? undefined : "stopping"
+      ? input.liveRowShown ? undefined : "stopping"
       : input.activity === "working"
-        ? input.liveRowOnScreen ? undefined : "working"
+        ? input.liveRowShown ? undefined : "working"
         : input.activity === "idle" ? undefined : input.activity;
   return {
     status,
@@ -99,29 +100,6 @@ export function transcriptBottomSpace(input: {
     padding: Math.max(input.edgeFade, band ? band + input.gap : 0, input.quickPanelClearance),
     clearance: Math.max(band, input.quickPanelClearance),
   };
-}
-
-/**
- * Whether at least half of the transcript's live row is readable, from distances measured against
- * the end of the list content. The row is hidden under the translucent header (`topInset`) and
- * under the floating cluster (`bottomClearance`) as much as off screen.
- */
-export function liveRowOnScreen(metrics: {
-  /** Pixels between the viewport's end and the content's end. */
-  distance: number;
-  viewport: number;
-  /** Pixels between the row's bottom edge and the content's end (footer below it plus list padding). */
-  rowFromEnd: number;
-  rowHeight: number;
-  topInset: number;
-  bottomClearance: number;
-}): boolean {
-  const { distance, viewport, rowFromEnd, rowHeight, topInset, bottomClearance } = metrics;
-  if (!(rowHeight > 0) || !(viewport > 0)) return false;
-  const visibleStart = distance + bottomClearance;
-  const visibleEnd = distance + viewport - topInset;
-  const overlap = Math.min(rowFromEnd + rowHeight, visibleEnd) - Math.max(rowFromEnd, visibleStart);
-  return overlap >= rowHeight / 2;
 }
 
 type Copy = (tr: string, en: string, values?: Record<string, string | number>) => string;

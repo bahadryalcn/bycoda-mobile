@@ -21,8 +21,13 @@ import { canRewindConversation } from "../../../../src/features/sessions/model/c
 import { composerCommand } from "./composer-delivery";
 import { appendToDraft } from "./draft-append";
 import { reviewRewind, rewindCommand, type RewindReview } from "./session-checkpoint-model";
+import { rewindAvailability } from "./rewind-availability";
+import type { Block } from "./wire";
 import { SessionCheckpointReview } from "./session-checkpoint-review";
 import { InterruptedTurnNotice, LiveTurnRow, ProviderRetryNotice } from "./turn-status-notices";
+import { FailureRecoveryContext } from "./failure-recovery";
+import { UsageLimitNotice } from "./usage-limit-notice";
+import { useTurnRecovery } from "./use-turn-recovery";
 import { providerName } from "./provider-choices";
 import { CommandError, UncertainCommand } from "./shared";
 import { useEarlierSession } from "./session-queries";
@@ -56,7 +61,7 @@ import {
 } from "./transcript-find-model";
 import { citedTurnEntry } from "./session-reference-target";
 import { SessionStatusCluster } from "./session-status-cluster";
-import { activeSessionGoal, clusterSegments, hasCapsule, liveRowOnScreen, transcriptBottomSpace } from "./session-status-cluster-model";
+import { activeSessionGoal, clusterSegments, hasCapsule, transcriptBottomSpace } from "./session-status-cluster-model";
 import { useRegisterStatusCluster, useStatusClusterQueue } from "./session-status-cluster-context";
 import { deriveSessionActivity } from "./session-activity-model";
 import { useJustFinished } from "./use-just-finished";
@@ -161,22 +166,6 @@ export function SessionTranscript({
     return (blocks ?? []).filter((block) => ids.has(block.id));
   }, [inspection?.ids, blocks]);
 
-  // Where the live row sits against the end of the list, so the floating cluster's clock shows only
-  // while that row's own clock is out of sight. Content growth and viewport changes move the row
-  // without a scroll event, so they re-measure too.
-  const scrollMetrics = useRef({ distance: 0, viewport: 0, offset: 0, content: 0 });
-  const rowMetrics = useRef({ footer: 0, rowBottom: 0, rowHeight: 0 });
-  const [rowSeen, setRowSeen] = useState<boolean | null>(null);
-  const clearanceRef = useRef({ top: 0, bottom: 0, padding: 0 });
-  const measureRowSeen = useCallback(() => {
-    const row = rowMetrics.current;
-    const { distance, viewport } = scrollMetrics.current;
-    const { top, bottom, padding } = clearanceRef.current;
-    const next = row.rowHeight > 0 && viewport > 0
-      ? liveRowOnScreen({ distance, viewport, rowHeight: row.rowHeight, rowFromEnd: padding + Math.max(0, row.footer - row.rowBottom), topInset: top, bottomClearance: bottom })
-      : row.rowHeight > 0 ? null : false;
-    setRowSeen((current) => (current === next ? current : next));
-  }, []);
   const applyScroll = useCallback((event: FollowEvent, offset?: number) => {
     if (!scrollPosition.current.apply(event, offset)) return;
     const next = scrollPosition.current.following;
@@ -186,34 +175,10 @@ export function SessionTranscript({
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const native = event.nativeEvent;
-      const distance = distanceFromEnd(native);
-      scrollMetrics.current = {
-        distance,
-        viewport: native.layoutMeasurement.height,
-        offset: native.contentOffset.y,
-        content: native.contentSize.height,
-      };
-      measureRowSeen();
-      applyScroll({ type: "scroll", distance }, native.contentOffset.y);
+      applyScroll({ type: "scroll", distance: distanceFromEnd(native) }, native.contentOffset.y);
     },
-    [applyScroll, measureRowSeen],
+    [applyScroll],
   );
-  // A following list is pinned to its end by the list itself, so its distance stays zero.
-  const remeasureDistance = useCallback(() => {
-    const value = scrollMetrics.current;
-    value.distance = scrollPosition.current.following
-      ? 0
-      : Math.max(0, value.content - value.viewport - value.offset);
-    measureRowSeen();
-  }, [measureRowSeen]);
-  const onContentSizeChange = useCallback((_width: number, height: number) => {
-    scrollMetrics.current.content = height;
-    remeasureDistance();
-  }, [remeasureDistance]);
-  const onListLayout = useCallback((event: LayoutChangeEvent) => {
-    scrollMetrics.current.viewport = event.nativeEvent.layout.height;
-    remeasureDistance();
-  }, [remeasureDistance]);
   const onScrollEndDrag = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const native = event.nativeEvent;
@@ -418,6 +383,11 @@ export function SessionTranscript({
       }),
     [],
   );
+  // A changed file of a settled turn opens its edits: one edit directly, several as the action list.
+  const onOpenChangedFile = useCallback<NonNullable<TranscriptRowProps["onOpenChangedFile"]>>(
+    (ids, author) => setInspection({ ids, selectedId: ids.length === 1 ? ids[0] : undefined, author }),
+    [],
+  );
   const matchingActivity = activeFind ? matchingTranscriptActivity(visibleBlocks, activeFind) : undefined;
   const matchingAgents = activeFind ? matchingTranscriptAgents(visibleBlocks, activeFind) : undefined;
   const focusRun = matchingAgents && activeFind ? { entryId: matchingAgents.id, blockId: activeFind.blockId } : undefined;
@@ -431,11 +401,17 @@ export function SessionTranscript({
   const harness = session?.session.harness;
   const machine = useActiveMachine();
   // Desktop's Edit from here uses the Host rewind behind its capability; the review sheet confirms.
-  const rewindAvailable = useMemo(() => {
-    if (!session || blocked || session.status === "running" || machine?.id !== scope.machineId) return false;
-    if (!machine.capabilities?.includes("sessions.rewind")) return false;
+  // An older computer or a running turn keeps the row visible with its reason.
+  const rewindState = useMemo(() => {
+    if (!session) return "none" as const;
     const user = session.session.blocks.findLast((block) => block.role === "user" && !block.draft && !block.internal);
-    return !!user && canRewindConversation(session.session, user.id);
+    return rewindAvailability({
+      blocked,
+      sameMachine: machine?.id === scope.machineId,
+      capabilities: machine?.capabilities,
+      running: session.status === "running",
+      rewindable: !!user && canRewindConversation(session.session, user.id),
+    });
   }, [session, blocked, machine, scope.machineId]);
   const [rewind, setRewind] = useState<RewindReview | null>(null);
   // Stop, Continue and Rewind failures are transient: a dismissible toast, not a footer line that lingers.
@@ -448,11 +424,11 @@ export function SessionTranscript({
   });
   const sessionRef = useRef(session);
   sessionRef.current = session;
-  const onRewind = useCallback((blockId: string) => {
+  const onRewind = useCallback((blockId: string, full?: Block) => {
     const current = sessionRef.current;
     if (!current) return;
     try {
-      setRewind(reviewRewind(current, blockId));
+      setRewind(reviewRewind(current, blockId, full));
     } catch (cause) {
       setActionError(cause);
     }
@@ -491,8 +467,9 @@ export function SessionTranscript({
     activity: activity.state,
     live: !!live,
     stopping,
-    // The provider-retry notice stands in for the live row: it already says the turn is still going.
-    liveRowOnScreen: retrying || (liveRowShown && (rowSeen ?? following)),
+    // Like T3 Code, the transcript's live row alone carries the turn clock; the capsule says the run
+    // state only when that row is not rendered. The provider-retry notice already says the turn is going.
+    liveRowShown: retrying || liveRowShown,
     goal: activeSessionGoal(session?.session),
     agents: agentRuns ? agentCounts : undefined,
     queue: queueSummary,
@@ -510,8 +487,6 @@ export function SessionTranscript({
     edgeFade: EDGE_FADE,
     quickPanelClearance,
   });
-  clearanceRef.current = { top: findOpen ? 0 : topInset, bottom: bottomClearance, padding: contentBottom };
-  useEffect(measureRowSeen, [measureRowSeen, topInset, findOpen, bottomClearance, contentBottom]);
   // A grown band while following would leave the newest line under the capsule; re-pin once the
   // new padding is laid out. A drag, momentum or navigation hold has already released following.
   const pinnedBottom = useRef(contentBottom);
@@ -543,12 +518,21 @@ export function SessionTranscript({
       setActionError(cause);
     }
   };
-  const activeEntryId = targetState === "ready" ? targetEntry?.id : activeFind?.entryId;
+  // The latest failed turn's Retry and the usage-limit actions, shown on that turn's failure card.
+  const { recovery, footerLimit } = useTurnRecovery({
+    session,
+    scope,
+    blocked,
+    queued: !!queueSummary,
+    onCommand,
+    onFailure: reportActionFailure,
+  });
+  const activeEntryId =targetState === "ready" ? targetEntry?.id : activeFind?.entryId;
   const renderItem = useCallback(
     ({ item }: { item: TranscriptEntry }) => (
       <TranscriptRow
-        canRewind={
-          rewindAvailable && item.kind === "message" && item.block.role === "user" && !item.block.draft
+        rewind={
+          item.kind === "message" && item.block.role === "user" && !item.block.draft ? rewindState : "none"
         }
         onRewind={onRewind}
         item={item}
@@ -565,6 +549,7 @@ export function SessionTranscript({
         disabled={blocked}
         onCommand={rowCommand}
         onInspect={onInspect}
+        onOpenChangedFile={onOpenChangedFile}
       />
     ),
     [
@@ -583,7 +568,8 @@ export function SessionTranscript({
       blocked,
       rowCommand,
       onInspect,
-      rewindAvailable,
+      onOpenChangedFile,
+      rewindState,
       onRewind,
     ],
   );
@@ -655,6 +641,7 @@ export function SessionTranscript({
       </View>
       {findOpen ? <MutationState mutation={earlier} /> : null}
       <ChatConversation style={{ flex: 1, minHeight: 0 }} collapsable={false}>
+        <FailureRecoveryContext.Provider value={recovery}>
         <LegendList<TranscriptEntry>
           ref={listRef}
           style={{ flex: 1, minHeight: 0 }}
@@ -678,8 +665,6 @@ export function SessionTranscript({
           contentContainerStyle={{ ...readableColumn, paddingTop: (findOpen ? 0 : topInset) + space.sm, paddingBottom: contentBottom }}
           scrollEventThrottle={16}
           onScroll={onScroll}
-          onContentSizeChange={onContentSizeChange}
-          onLayout={onListLayout}
           onScrollBeginDrag={onScrollBeginDrag}
           onScrollEndDrag={onScrollEndDrag}
           onMomentumScrollBegin={onMomentumScrollBegin}
@@ -713,13 +698,7 @@ export function SessionTranscript({
             </View>
           }
           ListFooterComponent={
-            <View
-              style={uiStyles.stack}
-              onLayout={(event) => {
-                rowMetrics.current.footer = event.nativeEvent.layout.height;
-                measureRowSeen();
-              }}
-            >
+            <View style={uiStyles.stack}>
               <OutboxTranscript scope={scope} blocked={blocked} blocks={blocks} />
               <SessionSecretRequests machineId={scope.machineId} sessionId={scope.sessionId} disabled={blocked} />
               {live && session?.session.retryMessage?.trim() ? (
@@ -732,20 +711,13 @@ export function SessionTranscript({
                   onRefresh={onRefresh}
                 />
               ) : liveRowShown ? (
-                <View
-                  onLayout={(event) => {
-                    const { y, height } = event.nativeEvent.layout;
-                    rowMetrics.current.rowBottom = y + height;
-                    rowMetrics.current.rowHeight = height;
-                    measureRowSeen();
-                  }}
-                >
-                  <LiveTurnRow startedAt={turnStartedAt} stopping={stopping} />
-                </View>
+                <LiveTurnRow startedAt={turnStartedAt} stopping={stopping} />
               ) : null}
               {continueOffered ? (
                 <InterruptedTurnNotice disabled={blocked} onContinue={continueTurn} />
               ) : null}
+              {/* A limit whose failure card is not in the list still offers its recovery here. */}
+              {footerLimit ? <UsageLimitNotice {...footerLimit} /> : null}
               {session?.runId ? (
                 <SessionQuestions
                   client={client ?? undefined}
@@ -774,6 +746,7 @@ export function SessionTranscript({
             </View>
           }
         />
+        </FailureRecoveryContext.Provider>
         {rewind && session ? (
           <SessionCheckpointReview
             value={{

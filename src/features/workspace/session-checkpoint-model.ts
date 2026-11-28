@@ -2,7 +2,8 @@ import type {
   CheckpointStatus,
   CheckpointFileDiff,
 } from "../../../../src/features/sessions/model/checkpoint-types";
-import type { HostSession } from "./wire";
+import type { Block, HostSession } from "./wire";
+import { fullContentBlock } from "./full-content-model";
 import { canRewindConversation } from "../../../../src/features/sessions/model/conversationRewind";
 import { captureSessionAuthority, type SessionAuthority } from "@/domain/session-authority";
 
@@ -55,23 +56,35 @@ export type RewindReview = {
   cwd: string;
   runId?: string;
 } & SessionAuthority;
-export function reviewRewind(value: HostSession, blockId: string): RewindReview {
+/**
+ * `full` is the message's whole block when the transcript holds only the Host's preview of it; the
+ * prompt that returns to the composer is never the cut preview.
+ */
+export function reviewRewind(value: HostSession, blockId: string, full?: Block): RewindReview {
+  const target = rewindTarget(value, blockId);
+  const message = fullContentBlock(value.session.blocks[target.index]!, full);
+  if (!message) throw new Error("Load the full message before editing from it.");
+  return { ...target.review, prompt: message.text };
+}
+function rewindTarget(value: HostSession, blockId: string) {
   if (value.status === "running" || !canRewindConversation(value.session, blockId))
     throw new Error("This session cannot be rewound at that message.");
   const index = value.session.blocks.findIndex((block) => block.id === blockId);
   return {
-    ...captureSessionAuthority(value),
-    sessionId: value.session.id,
-    revision: value.revision,
-    blockId,
-    affectedIds: value.session.blocks.slice(index).map((block) => block.id),
-    prompt: value.session.blocks[index]!.text,
-    cwd: value.session.worktreeCwd || value.session.cwd || "",
-    runId: value.runId,
+    index,
+    review: {
+      ...captureSessionAuthority(value),
+      sessionId: value.session.id,
+      revision: value.revision,
+      blockId,
+      affectedIds: value.session.blocks.slice(index).map((block) => block.id),
+      cwd: value.session.worktreeCwd || value.session.cwd || "",
+      runId: value.runId,
+    },
   };
 }
 export function rewindCommand(value: HostSession, review: RewindReview) {
-  const latest = reviewRewind(value, review.blockId);
+  const latest = rewindTarget(value, review.blockId).review;
   if (
     latest.sessionId !== review.sessionId ||
     latest.revision !== review.revision ||

@@ -21,6 +21,7 @@ import {
   quotaFailure,
   readLimitsReport,
   resetCountdown,
+  shortTime,
   wholePercent,
   type UsageLimitsReport,
 } from "./usage-limits-model";
@@ -43,17 +44,12 @@ function useMinuteNow() {
   return now;
 }
 
-/** Short wall time without seconds; the date only when it is not today. */
-export function shortTime(at: number, now: number, locale: string): string {
-  const date = new Date(at);
-  const sameDay = date.toDateString() === new Date(now).toDateString();
-  return date.toLocaleString(locale, sameDay
-    ? { hour: "2-digit", minute: "2-digit" }
-    : { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
-/** The Host quota report as presented (Host profile named or folded into its duplicate); one shared read. */
-export function useUsageLimitsReport() {
+/**
+ * The Host quota report as presented (Host profile named or folded into its duplicate); one shared
+ * read. `poll: false` reads the same cached report without adding a second two-minute poller
+ * (the model picker's account rows).
+ */
+export function useUsageLimitsReport({ poll = true }: { poll?: boolean } = {}) {
   const copy = useCopy();
   const machine = useActiveMachine();
   const supported =
@@ -64,7 +60,7 @@ export function useUsageLimitsReport() {
     {},
     {
       enabled: supported,
-      interval: 120_000,
+      ...(poll ? { interval: 120_000 } : {}),
       queryFn: async (client, signal) =>
         readLimitsReport(
           await client.request("usage.limits.read", {}, { signal }),

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { accountName, choiceKey, providerChoices, providerName, selectedChoice } from "./provider-choices";
+import { accountName, choiceKey, providerChoices, providerName, selectedChoice, unavailableProviderChoices } from "./provider-choices";
 
 const accounts = {
   claude: [
@@ -61,4 +61,20 @@ it("selects by provider and account, then falls back safely", () => {
   expect(selectedChoice(choices, "claude", "gone")?.key).toBe("claude:");
   expect(selectedChoice(choices, undefined, undefined)?.key).toBe("claude:");
   expect(choiceKey("claude", "default")).toBe("claude:");
+});
+
+it("lists signed-out and disabled accounts apart from the choices, which stay unchanged", () => {
+  const offered = { claude: [
+    { id: "default", label: "Host default", status: "signed-out" as const, color: "#111" },
+    { id: "work", label: "Work", status: "ready" as const },
+    { id: "off", label: "Off", status: "disabled" as const },
+    { id: "maybe", label: "Maybe", status: "unknown" as const },
+  ], codex: [{ id: "default", label: "Host default", status: "ready" as const }], grok: [{ id: "g", label: "G", status: "signed-out" as const }] };
+  expect(providerChoices(["claude", "codex", "grok"], offered, "Default").map((choice) => choice.key)).toEqual(["claude:work", "codex:", "grok:"]);
+  expect(unavailableProviderChoices(["claude", "codex", "grok"], offered, "Default")).toEqual([
+    { key: "claude:", provider: "claude", label: "Default", detail: "Claude", color: "#111", status: "signed-out" },
+    { key: "claude:off", provider: "claude", accountId: "off", label: "Off", detail: "Claude", status: "disabled" },
+  ]);
+  expect(unavailableProviderChoices(["codex"], offered, "Default")).toEqual([]);
+  expect(unavailableProviderChoices(["claude"], undefined, "Default")).toEqual([]);
 });

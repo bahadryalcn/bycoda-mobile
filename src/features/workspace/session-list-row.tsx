@@ -29,11 +29,12 @@ import { providerName } from "./provider-choices";
 import { sessionModelLabel } from "./catalog";
 import { observeSessionRuns, openSessionSeen, useUnseenDone } from "./session-done-store";
 import { sessionRowKind } from "./session-row-state";
+import { sessionRowLayout, type SessionListDensity } from "./session-list-row-density";
 
 
 const DEFAULT_BRANCHES: ReadonlySet<string> = new Set(["main", "master"]);
 
-/** One compact conversation identity; secondary actions open with a long press. */
+/** One session identity at the chosen density; secondary actions open with a long press. */
 export const SessionListRow = memo(function SessionListRow({
   machineId,
   projectId,
@@ -48,6 +49,7 @@ export const SessionListRow = memo(function SessionListRow({
   canRead,
   settled,
   snoozed = sessionIsSnoozed(session),
+  density = "standard",
   onPress,
 }: {
   machineId: string;
@@ -65,6 +67,8 @@ export const SessionListRow = memo(function SessionListRow({
   /** The Host marks this session settled (shown in the collapsed Settled group). */
   settled?: boolean;
   snoozed?: boolean;
+  /** Sessions tab view choice; other lists use the standard row. */
+  density?: SessionListDensity;
   /** Receives the session id so the parent can pass one stable callback to every row. */
   onPress: (sessionId: string, projectId: string) => void;
 }) {
@@ -80,6 +84,8 @@ export const SessionListRow = memo(function SessionListRow({
   const { fontScale } = useWindowDimensions();
   // Same threshold as the session header: slight enlargement keeps the one-line layout.
   const large = fontScale >= 1.35;
+  const layout = sessionRowLayout(density, large);
+  const metaLines = layout.wrapMeta ? undefined : 1;
   const title = sessionDisplayTitle(session.title, copy("Yeni oturum", "New session"));
   const running = session.status === "running";
   // Run transitions are observed where the row sees them; a finish while away turns Done.
@@ -111,13 +117,17 @@ export const SessionListRow = memo(function SessionListRow({
   // The usual default branch of a primary checkout repeats on every row; a worktree or any other
   // branch is worth showing.
   const branch = session.branch && (worktree || !DEFAULT_BRANCHES.has(session.branch)) ? session.branch : undefined;
-  const meta = [showProject ? undefined : folder, branch].filter(Boolean).join(" · ");
+  const meta = layout.meta ? [showProject ? undefined : folder, branch].filter(Boolean).join(" · ") : "";
+  const projectShown = layout.meta && !!showProject;
   const BranchIcon = worktree ? FolderTree : GitBranch;
-  const workItem = session.linkedWorkItem;
-  const workItemLabel = workItem
-    ? `${workItem.kind === "pr" ? copy("Pull request", "Pull request") : copy("Issue", "Issue")} #${workItem.number}`
+  const workItem = layout.workItem ? session.linkedWorkItem : undefined;
+  const linked = session.linkedWorkItem;
+  // The spoken label keeps every fact at every density; density only changes what is drawn.
+  const workItemLabel = linked
+    ? `${linked.kind === "pr" ? copy("Pull request", "Pull request") : copy("Issue", "Issue")} #${linked.number}`
     : undefined;
   const management = session.managedBy;
+  const modelLabel = session.model ? sessionModelLabel({ harness: session.harness, model: session.model }) : providerName(session.harness);
   const managedLabel =
     management?.assistant && management.detachedAt === undefined
       ? "supervisionId" in management
@@ -133,7 +143,7 @@ export const SessionListRow = memo(function SessionListRow({
     hasDraft ? draftLabel : undefined,
     session.pinned ? copy("Sabitlendi", "Pinned") : undefined,
     ancestors?.join(" / "),
-    session.model ? sessionModelLabel({ harness: session.harness, model: session.model }) : providerName(session.harness),
+    modelLabel,
     session.branch
       ? `${worktree ? copy("Çalışma ağacı", "Worktree") : copy("Dal", "Branch")}: ${session.branch}`
       : undefined,
@@ -164,15 +174,15 @@ export const SessionListRow = memo(function SessionListRow({
             }}
             onLongPress={openActions}
             style={{
-              minHeight: metrics.rowHeightSession,
+              minHeight: layout.minHeight,
               justifyContent: "center",
-              paddingVertical: space.row,
+              paddingVertical: density === "compact" ? space.sm : space.row,
               backgroundColor: selected ? colors.selected : undefined,
             }}
           >
             <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.row }}>
-              <View style={{ paddingTop: space.xxs, flexShrink: 0 }}>
-                <ProviderIcon provider={session.harness} size={20} />
+              <View style={{ paddingTop: space.xxs, flexShrink: 0, width: 20, alignItems: "center" }}>
+                <ProviderIcon provider={session.harness} size={layout.providerIconSize} />
                 {/* Unread marks the identity, so it never moves with a wrapping title. */}
                 {session.unread ? (
                   <View accessible={false} style={{
@@ -193,24 +203,24 @@ export const SessionListRow = memo(function SessionListRow({
                     ) : null}
                     <Body
                       selectable={false}
-                      numberOfLines={large ? undefined : 2}
+                      numberOfLines={layout.titleLines}
                       style={[uiStyles.label, { fontWeight: session.unread ? "700" : "600", flexShrink: 1 }]}
                     >
                       {title}
                     </Body>
                   </View>
-                  {large ? null : <View style={{ flexShrink: 0, paddingTop: space.xxs }}>{stamp}</View>}
+                  {layout.stampInline ? <View style={{ flexShrink: 0, paddingTop: space.xxs }}>{stamp}</View> : null}
                 </View>
-                {large ? <View style={{ flexDirection: "row" }}>{stamp}</View> : null}
-                {snoozed ? <Body muted style={uiStyles.caption}>{copy("Uyanma zamanı", "Wakes at")} · {dateStamp(session.snoozedUntil ?? undefined)}</Body> : null}
-                {showProject || meta || workItem || managedLabel ? (
+                {layout.stampInline ? null : <View style={{ flexDirection: "row" }}>{stamp}</View>}
+                {snoozed && layout.snooze ? <Body muted style={uiStyles.caption}>{copy("Uyanma zamanı", "Wakes at")} · {dateStamp(session.snoozedUntil ?? undefined)}</Body> : null}
+                {projectShown || meta || workItem || (layout.managed && managedLabel) || layout.model ? (
                   <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space.xs + 2, rowGap: space.xxs }}>
                     {/* The managed (assistant) mark is a type, so it sits with the meta, not by the time. */}
-                    {managedLabel ? <Bot {...decorativeSvgProps} size={12 * Math.min(fontScale, 1.6)} color={colors.info} /> : null}
-                    {showProject ? (
+                    {layout.managed && managedLabel ? <Bot {...decorativeSvgProps} size={12 * Math.min(fontScale, 1.6)} color={colors.info} /> : null}
+                    {projectShown ? (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 1, minWidth: 0, maxWidth: "100%" }}>
                         <ProjectIcon appearance={projectAppearance} size={14} box={16} />
-                        <Body selectable={false} muted numberOfLines={large ? undefined : 1} style={[uiStyles.caption, { flexShrink: 1 }]}>
+                        <Body selectable={false} muted numberOfLines={metaLines} style={[uiStyles.caption, { flexShrink: 1 }]}>
                           {projectName}
                         </Body>
                       </View>
@@ -220,7 +230,7 @@ export const SessionListRow = memo(function SessionListRow({
                         {branch ? (
                           <BranchIcon {...decorativeSvgProps} size={12 * Math.min(fontScale, 1.6)} color={colors.muted} />
                         ) : null}
-                        <Body selectable={false} muted numberOfLines={large ? undefined : 1} style={[uiStyles.caption, { flexShrink: 1 }]}>
+                        <Body selectable={false} muted numberOfLines={metaLines} style={[uiStyles.caption, { flexShrink: 1 }]}>
                           {meta}
                         </Body>
                       </View>
@@ -236,6 +246,11 @@ export const SessionListRow = memo(function SessionListRow({
                           {`#${workItem.number}`}
                         </Body>
                       </View>
+                    ) : null}
+                    {layout.model ? (
+                      <Body selectable={false} muted numberOfLines={metaLines} style={[uiStyles.caption, { flexShrink: 1 }]}>
+                        {modelLabel}
+                      </Body>
                     ) : null}
                   </View>
                 ) : null}

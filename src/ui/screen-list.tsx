@@ -9,6 +9,7 @@ import type { QueryLike } from "./query-presentation";
 import { usePullRefresh } from "./use-pull-refresh";
 import { ConnectionFeedbackScope } from "./connection-feedback-scope";
 import type { PageScope } from "./scope-line";
+import type { ScreenIdentity } from "./screen-chrome";
 
 export type ScreenListProps<T> = FlatListProps<T> & {
   title?: string;
@@ -17,6 +18,8 @@ export type ScreenListProps<T> = FlatListProps<T> & {
   scope?: PageScope;
   /** Lead the scope row with the switchable computer pill; defaults to true with an own `scopeControl`. */
   computerSwitch?: boolean;
+  /** Tab pages only: `title` drops the computer pill from the context row under the tab title. */
+  identity?: ScreenIdentity;
   /** Current task scope beside heading actions, including under a native title. */
   context?: ReactNode;
   /** The shared project scope control (`ProjectScopePill`): one compact pill in the page identity row. */
@@ -53,6 +56,7 @@ export function ScreenList<T>({
   context,
   scopeControl,
   computerSwitch,
+  identity,
   header,
   footer,
   query,
@@ -72,7 +76,7 @@ export function ScreenList<T>({
 }: ScreenListProps<T>) {
   const { colors, uiStyles } = useMobileTheme();
   const content = useScreenContentInsets();
-  const heading = useScreenHeading({ title, subtitle, scope, context, scopeControl, computerSwitch, actions, onBack });
+  const heading = useScreenHeading({ title, subtitle, scope, context, scopeControl, computerSwitch, identity, actions, onBack });
   const onRefresh = refresh ?? query?.refetch;
   const ownRefresh = usePullRefresh(refreshState ? undefined : onRefresh);
   const pullRefresh = refreshState ?? ownRefresh;

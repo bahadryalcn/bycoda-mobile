@@ -3,7 +3,7 @@ import {
   contentRetained,
   createAppLifecycleController,
   hostQueriesFocused,
-  LONG_AWAY_MS,
+  CONTENT_REFRESH_AWAY_MS,
 } from "./app-resume";
 
 function setup(initial: string | null = "active") {
@@ -56,19 +56,19 @@ describe("app lifecycle controller", () => {
     expect(effects.holdClocks).toHaveBeenCalledTimes(1);
     expect(effects.cancelReads).toHaveBeenCalledTimes(1);
     expect(effects.flushDrafts).toHaveBeenCalledTimes(1);
-    advance(LONG_AWAY_MS - 1);
+    advance(CONTENT_REFRESH_AWAY_MS - 1);
     expect(controller.appState("active")).toBe("brief-return");
     expect(effects.resumeClocks).toHaveBeenCalledTimes(1);
     expect(effects.expirePrivacy).not.toHaveBeenCalled();
     // The disarmed timer never fires later.
-    advance(LONG_AWAY_MS);
+    advance(CONTENT_REFRESH_AWAY_MS);
     expect(effects.expirePrivacy).not.toHaveBeenCalled();
   });
 
   it("expires privacy proof once after a long stay while JavaScript keeps running", () => {
     const { controller, effects, advance } = setup();
     controller.appState("background");
-    advance(LONG_AWAY_MS);
+    advance(CONTENT_REFRESH_AWAY_MS);
     expect(effects.expirePrivacy).toHaveBeenCalledTimes(1);
     expect(controller.appState("active")).toBe("long-return");
     expect(effects.expirePrivacy).toHaveBeenCalledTimes(1);
@@ -78,7 +78,7 @@ describe("app lifecycle controller", () => {
     const { controller, effects, advance } = setup();
     controller.appState("inactive");
     controller.appState("background");
-    advance(LONG_AWAY_MS + 5_000, false);
+    advance(CONTENT_REFRESH_AWAY_MS + 5_000, false);
     expect(effects.expirePrivacy).not.toHaveBeenCalled();
     controller.appState("inactive");
     expect(controller.appState("active")).toBe("long-return");
@@ -88,10 +88,10 @@ describe("app lifecycle controller", () => {
   it("measures the stay from the first background edge and starts over afterwards", () => {
     const { controller, effects, advance } = setup();
     controller.appState("background");
-    advance(20_000, false);
+    advance(CONTENT_REFRESH_AWAY_MS - 5_000, false);
     controller.appState("inactive");
     controller.appState("background");
-    advance(15_000, false);
+    advance(10_000, false);
     expect(controller.appState("active")).toBe("long-return");
     controller.appState("background");
     advance(1_000);
@@ -109,11 +109,23 @@ describe("app lifecycle controller", () => {
     expect(effects.expirePrivacy).not.toHaveBeenCalled();
   });
 
+  it("keeps the workspace through a quick switch to another app and reloads only after ten minutes", () => {
+    const { controller, effects, advance } = setup();
+    controller.appState("background");
+    advance(5 * 60_000, false);
+    expect(controller.appState("active")).toBe("brief-return");
+    expect(effects.expirePrivacy).not.toHaveBeenCalled();
+    controller.appState("background");
+    advance(10 * 60_000, false);
+    expect(controller.appState("active")).toBe("long-return");
+    expect(effects.expirePrivacy).toHaveBeenCalledTimes(1);
+  });
+
   it("dispose cancels the pending expiry", () => {
     const { controller, effects, advance } = setup();
     controller.appState("background");
     controller.dispose();
-    advance(LONG_AWAY_MS * 2);
+    advance(CONTENT_REFRESH_AWAY_MS * 2);
     expect(effects.expirePrivacy).not.toHaveBeenCalled();
   });
 });

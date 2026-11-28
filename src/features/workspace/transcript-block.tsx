@@ -5,6 +5,8 @@ import CopyIcon from "lucide-react-native/icons/copy";
 import Check from "lucide-react-native/icons/check";
 import Terminal from "lucide-react-native/icons/terminal";
 import ListChecks from "lucide-react-native/icons/list-checks";
+import GitBranch from "lucide-react-native/icons/git-branch";
+import ImageIcon from "lucide-react-native/icons/image";
 import { Badge, StatusText, Body, Button, NavigationRow, QueryState, Row, RowIcon, Sheet } from "@/ui/primitives";
 import { TextAction } from "@/ui/feedback";
 import { useClipboardFeedback } from "@/ui/use-clipboard-feedback";
@@ -23,6 +25,10 @@ import { errorMessage, friendlyProviderFailure } from "@/ui/error-message";
 import { showToast } from "@/ui/toast";
 import { UncertainCommand } from "./commands";
 import { useSessionBlock } from "./session-queries";
+import { fullContentBlock } from "./full-content-model";
+import { TranscriptInlineVisual } from "./transcript-inline-visual";
+import { pendingImageGeneration } from "./transcript-labels-model";
+import type { Block } from "./wire";
 import type { TranscriptBlockProps } from "./session-types";
 import { hasUserMessageAttachments, TranscriptAttachments, UserMediaColumn, UserMessageAttachments } from "./transcript-attachments";
 import { TranscriptStructured } from "./transcript-structured";
@@ -66,6 +72,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   continuation = false,
   showAuthor = false,
   onRewind,
+  rewindUnavailable,
   running = false,
 }: TranscriptBlockProps & {
   /** The turn's model; like desktop, its identity lives in the turn receipt, not above the reply. */
@@ -73,8 +80,10 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   continuation?: boolean;
   /** A crew or handoff reply names its agent in one compact line; single-agent replies stay bare. */
   showAuthor?: boolean;
-  /** Desktop's Edit from here: rewind the conversation to this user message. */
-  onRewind?: () => void;
+  /** Desktop's Edit from here: rewind the conversation to this user message, given its whole block. */
+  onRewind?: (full: Block) => void;
+  /** Edit from here exists for this message but cannot run now; the row stays visible with this reason. */
+  rewindUnavailable?: "update" | "running";
   /**
    * The session is running. Only draft rows receive it: a draft is sent once the turn is over. The
    * run id cannot say so, because the Host keeps the last run's id after the run settles.
@@ -100,6 +109,39 @@ export const TranscriptBlock = memo(function TranscriptBlock({
     enabled: readFullContent,
   });
   const value = detail.data ?? block;
+  // Send draft, Copy and the message options act on the words; a long block first reads its whole
+  // from the Host (the transcript holds a 32 KiB preview), and a failed read never falls back to it.
+  const [loadingFull, setLoadingFull] = useState<"options" | "copy" | "draft">();
+  const [copyRequested, setCopyRequested] = useState(false);
+  // A load can outlive the row (the owner scrolled on or left the session); its action is dropped.
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
+  const withFullContent = (action: "options" | "copy" | "draft", run: (full: Block) => void) => {
+    if (loadingFull) return;
+    const ready = fullContentBlock(block, detail.data);
+    if (ready) {
+      run(ready);
+      return;
+    }
+    setRequested(true);
+    setLoadingFull(action);
+    void detail.refetch().then((result) => {
+      if (!mounted.current) return;
+      setLoadingFull(undefined);
+      const full = fullContentBlock(block, result.data);
+      if (full) run(full);
+      else
+        showToast({
+          tone: "danger",
+          message: copy(
+            "Mesajın tamamı yüklenemedi; kısaltılmış önizleme kullanılmadı.",
+            "The full message could not be loaded, so its shortened preview was not used.",
+          ),
+          action: { label: copy("Yeniden dene", "Retry"), onPress: () => withFullContent(action, run) },
+        });
+    });
+  };
+  const openActions = () => withFullContent("options", () => setActions(true));
   const proposal = value.orchestration;
   const proposalKey = proposal ? JSON.stringify([
     scope.machineId, scope.sessionId, value.id, proposal.leadId, proposal.cwd, proposal.checkoutCwd,
@@ -164,7 +206,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   const failedCommand = foldable && isError && value.role === "tool" && toolKind(value) === "run"
     ? workSteps([value], copy)[0]?.code ?? label
     : undefined;
-  const canRewind = !!onRewind && !value.draft && !disabled;
+  const canRewind = (!!onRewind || !!rewindUnavailable) && !value.draft && !disabled;
   const canReport = value.role === "assistant" && !value.streaming && !!text.trim();
   const canAct =
     !value.streaming && (!!text.trim() || !!value.attachments?.length || !!value.image);
@@ -238,6 +280,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
         ) : null}
       </Sheet>
       {readFullContent ? <QueryState query={detail} loading="inline" compact /> : null}
+      {value.inlineVisual && activityDetail ? <TranscriptInlineVisual visual={value.inlineVisual} scope={scope} /> : null}
       {text && value.role === "tool" && !value.agentRun ? (
         <MessageCode code={text} output compact error={isError} allowPreview={false} context={context} readerTitle={inputBlock ? copy("Komut", "Command") : undefined} copyLabel={inputBlock ? copy("Komutu kopyala", "Copy command") : undefined} />
       ) : text && value.role === "user" && userDraftState(value) === "pending" ? (
@@ -344,15 +387,18 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   const draftFailed = (cause: unknown) => {
     if (!(cause instanceof UncertainCommand)) showToast({ tone: "danger", message: errorMessage(cause, copy) });
   };
-  const sendDraft = () => {
-    void onCommand({ type: "send", sessionId: scope.sessionId, text: value.text, draftBlockId: value.id }).catch(draftFailed);
-  };
+  // The Host runs the command's text, not the stored draft, so a long draft sends its whole text.
+  const sendDraft = () => withFullContent("draft", (full) => {
+    void onCommand({ type: "send", sessionId: scope.sessionId, text: full.text, draftBlockId: full.id }).catch(draftFailed);
+  });
   const removeDraft = () => {
     void onCommand({ type: "removeDraft", sessionId: scope.sessionId, draftBlockId: value.id }).catch(draftFailed);
   };
   const canSendDraft = !disabled && !running;
   const draftFooter =
-    draftState === "undelivered" ? (
+    loadingFull === "draft" ? (
+      <DraftCaption tone="neutral" label={copy("Mesajın tamamı yükleniyor…", "Loading the full message…")} actions={[]} />
+    ) : draftState === "undelivered" ? (
       <DraftCaption
         tone="danger"
         label={copy("Teslim edilemedi", "Not delivered")}
@@ -382,11 +428,38 @@ export const TranscriptBlock = memo(function TranscriptBlock({
     ) : null;
 
   if (turn.kind !== "message") return <UserTurnNotice turn={turn} context={context} />;
+  // Desktop's BranchOriginRow: where a branched session was cut from, in the owner's language.
+  if (!activityDetail && value.branchOrigin)
+    return (
+      <Row style={{ flexWrap: "nowrap", gap: space.sm, minHeight: 24 }}>
+        <GitBranch size={15} color={colors.muted} />
+        <Body muted style={[typography.metadata, uiStyles.grow]}>
+          {copy("{p0} oturumundan dallandı", "Branched from {p0}", { p0: value.branchOrigin.title })}
+        </Body>
+      </Row>
+    );
+  // Desktop's GeneratedImage before its image exists: generating, failed or stopped, never an attachment row.
+  const generation = activityDetail ? undefined : pendingImageGeneration(value);
+  if (generation === "running") return <ChatStreaming label={copy("Görsel oluşturuluyor…", "Generating image…")} state="composing" />;
+  if (generation)
+    return (
+      <Row style={{ flexWrap: "nowrap", gap: space.sm, minHeight: 24 }}>
+        <ImageIcon size={15} color={generation === "failed" ? semanticColors.danger.text : colors.muted} />
+        <StatusText
+          label={generation === "failed" ? copy("Görsel oluşturulamadı.", "Could not generate image.") : copy("Durduruldu", "Stopped")}
+          tone={generation === "failed" ? "danger" : "default"}
+          dot={false}
+        />
+      </Row>
+    );
   // MCP sign-in, provider and interruption notices are one compact line, never a "System" card.
   if (!activityDetail && (isCompactSystemNotice(value) || isOwnerStopNotice(value))) return <SystemNoticeRow block={value} />;
   return (
     <>
-      {foldable && (value.plan || value.taskList) ? (
+      {/* Like desktop, an agent-drawn visual is the result itself, never a "Tool action" row. */}
+      {value.inlineVisual && !activityDetail ? (
+        <TranscriptInlineVisual visual={value.inlineVisual} scope={scope} />
+      ) : foldable && (value.plan || value.taskList) ? (
         <ChatPlan
           title={label}
           status={status}
@@ -521,7 +594,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
                 {canAct ? (
                   <ChatAction
                     label={copy("Mesaj seçenekleri", "Message options")}
-                    onPress={() => setActions(true)}
+                    busy={loadingFull === "options"} onPress={openActions}
                   >
                     <Ellipsis size={16} color={colors.subtle} />
                   </ChatAction>
@@ -544,7 +617,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
             {contents}
             {(continuation || value.role === "assistant") && canAct ? (
               <Row style={{ justifyContent: "flex-end" }}>
-                <ChatAction label={copy("Mesaj seçenekleri", "Message options")} onPress={() => setActions(true)}>
+                <ChatAction label={copy("Mesaj seçenekleri", "Message options")} busy={loadingFull === "options"} onPress={openActions}>
                   <Ellipsis size={16} color={colors.subtle} />
                 </ChatAction>
               </Row>
@@ -560,11 +633,23 @@ export const TranscriptBlock = memo(function TranscriptBlock({
                   {formatMessageTime(value.startedAt, locale, copy)}
                 </Body>
               ) : null}
-              {canAct && text.trim() ? <UserCopyAction text={text} /> : null}
+              {canAct && text.trim() ? (
+                fullContentBlock(block, detail.data) ? (
+                  <UserCopyAction text={text} armed={copyRequested} onArmed={() => setCopyRequested(false)} />
+                ) : (
+                  <ChatAction
+                    label={copy("Mesajı kopyala", "Copy message")}
+                    busy={loadingFull === "copy"}
+                    onPress={() => withFullContent("copy", () => setCopyRequested(true))}
+                  >
+                    <CopyIcon size={15} color={colors.subtle} />
+                  </ChatAction>
+                )
+              ) : null}
               {canAct || canRewind || canRemovePending ? (
                 <ChatAction
                   label={copy("Mesaj seçenekleri", "Message options")}
-                  onPress={() => setActions(true)}
+                  busy={loadingFull === "options"} onPress={openActions}
                 >
                   <Ellipsis size={16} color={colors.subtle} />
                 </ChatAction>
@@ -604,7 +689,14 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           context={context}
           reportable={canReport}
           role={value.role === "user" ? "user" : value.role === "assistant" ? "assistant" : "activity"}
-          onRewind={canRewind ? onRewind : undefined}
+          onRewind={canRewind && onRewind ? () => withFullContent("options", onRewind) : undefined}
+          rewindReason={
+            canRewind && !onRewind && rewindUnavailable
+              ? rewindUnavailable === "update"
+                ? copy("Buradan düzenlemek için bilgisayarındaki bycoda'yı güncelle", "Update bycoda on your computer to edit from here")
+                : copy("Ajan bitirince buradan düzenleyebilirsin", "You can edit from here once the agent finishes")
+              : undefined
+          }
           onRemove={canRemovePending ? removeDraft : undefined}
           onClose={() => setActions(false)}
         />
@@ -661,10 +753,15 @@ function usePendingSettled(pending: boolean, since: number | undefined) {
  * The user bubble's meta row copy action: the exact typed text, with brief Copied feedback. The
  * clipboard feedback (and its security subscription) mounts on the first press, not per bubble.
  */
-function UserCopyAction({ text }: { text: string }) {
+function UserCopyAction({ text, armed: requested = false, onArmed }: { text: string; armed?: boolean; onArmed?: () => void }) {
   const copy = useCopy();
   const { colors } = useMobileTheme();
-  const [armed, setArmed] = useState(false);
+  // A press that first had to read the whole message arrives armed, so it copies once loaded; the
+  // request is consumed, so a later remount never copies again on its own.
+  const [armed, setArmed] = useState(requested);
+  useEffect(() => {
+    if (requested) onArmed?.();
+  }, []);
   if (armed) return <ArmedUserCopyAction text={text} />;
   return (
     <ChatAction label={copy("Mesajı kopyala", "Copy message")} onPress={() => setArmed(true)}>

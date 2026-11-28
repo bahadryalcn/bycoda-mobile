@@ -5,7 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 vi.mock("react-native", () => ({ View: ({ children }: PropsWithChildren) => h("div", null, children) }));
 vi.mock("@/ui/typography", () => ({ Body: ({ children }: PropsWithChildren) => h("p", null, children) }));
 vi.mock("@/ui/feedback", () => ({
-  StatusLine: ({ label, tone }: { label: string; tone: string }) => h("output", { "data-tone": tone }, label),
+  StatusLine: ({ label, tone, action }: { label: string; tone: string; action?: { label: string } }) =>
+    h("output", { "data-tone": tone }, label, action ? h("button", null, action.label) : null),
 }));
 vi.mock("@/ui/primitives", () => ({ Disclosure: ({ children }: PropsWithChildren) => h("details", null, children) }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
@@ -16,6 +17,7 @@ vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: { muted: "#888" 
 vi.mock("@/ui/chat-styles", () => ({ useChatTextStyles: () => ({ metadata: {} }) }));
 vi.mock("@/state/chat-appearance", () => ({ useChatAppearance: () => "default" }));
 import { SystemFailureCard, SystemNoticeRow, failureHeadline, isCompactSystemNotice, systemNoticeLine } from "./system-failure-card";
+import { FailureRecoveryContext, type FailureRecovery } from "./failure-recovery";
 
 const render = (text: string, repeat?: number) => renderToStaticMarkup(h(SystemFailureCard, { text, repeat }));
 
@@ -37,6 +39,26 @@ describe("system failure status line", () => {
     expect(html).toContain(">Provider crashed</output>");
     expect(html).toContain("<details>");
     expect(failureHeadline("\n  First\nSecond")).toBe("First");
+  });
+});
+
+describe("failed turn recovery on its card", () => {
+  const withRecovery = (recovery: FailureRecovery, id: string, text = "Provider crashed") =>
+    renderToStaticMarkup(h(FailureRecoveryContext.Provider, { value: recovery }, h(SystemFailureCard, { id, text })));
+  it("shows Retry only on the failure it belongs to", () => {
+    const recovery = { retry: { errorId: "e2", pending: false, onRetry: () => {} } };
+    expect(withRecovery(recovery, "e2")).toContain("<button>Retry</button>");
+    expect(withRecovery(recovery, "e1")).not.toContain("Retry");
+    expect(withRecovery({ retry: { ...recovery.retry, pending: true } }, "e2")).not.toContain("<button>");
+  });
+  it("draws the usage-limit notice in place of the line and keeps its Details", () => {
+    const html = withRecovery(
+      { usageLimit: { errorId: "e3", render: (details) => h("section", null, "limit notice", details) } },
+      "e3",
+      "You've hit your usage limit\nraw provider text",
+    );
+    expect(html).toContain("<section>limit notice<details>");
+    expect(html).not.toContain("<output");
   });
 });
 

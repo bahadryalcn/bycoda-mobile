@@ -1,7 +1,15 @@
 import { createContext, use, type ReactNode } from "react";
 
-/** `scopeControl` is the page's shared project scope; it joins the computer selector in one row. */
-export type HeaderIdentityProps = { title: string; subtitle?: string; scopeControl?: ReactNode };
+/**
+ * A tab's context row under its title: the computer selector (unless `showComputer` is false)
+ * followed by the page's shared project scope (`scopeControl`). The title and the page actions
+ * stay on the title row above, which `ScreenHeading` owns. Return null when there is nothing to
+ * show, so no empty row is left behind.
+ */
+export type HeaderIdentityProps = { title: string; subtitle?: string; scopeControl?: ReactNode; showComputer: boolean };
+
+/** `computer` (default) shows the tab's computer pill under the title; `title` shows only the title row and project scope. */
+export type ScreenIdentity = "computer" | "title";
 
 export const ScreenChrome = createContext<{
   nativeTitle: boolean;

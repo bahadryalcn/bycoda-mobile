@@ -8,6 +8,7 @@ import { catalogProviders, creationSettings } from "./catalog";
 import { resolveCreationSelection, type CreationDraft, type RuntimeMode } from "./creation-selection";
 import { providerChoices } from "./provider-choices";
 import { useCommands } from "./shared";
+import type { NewChatAttachmentReference } from "./new-chat-attachments";
 
 /**
  * Creates sessions in one project: the shared owner of the model catalog, the command and the
@@ -43,8 +44,11 @@ export function useCreateSession(
       runtimeMode?: RuntimeMode;
       /** A stable ID makes a retry of the same payload idempotent: the Host replays its receipt. */
       commandId?: string;
-      /** The first prompt, created atomically with the session (`sessions.createFirstTurn`). */
-      firstTurn?: { type: "send"; commandId: string; sessionId: ""; text: string };
+      /**
+       * The first prompt, created atomically with the session (`sessions.createFirstTurn`), with
+       * the attachments it already uploaded.
+       */
+      firstTurn?: { type: "send"; commandId: string; sessionId: ""; text: string; attachments?: NewChatAttachmentReference[] };
     } = {},
   ): Promise<boolean> => {
     if (!canStart || !machine || !connection.isCurrent()) return Promise.resolve(false);

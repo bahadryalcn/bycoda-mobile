@@ -16,6 +16,7 @@ import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import NotebookPen from "lucide-react-native/icons/notebook-pen";
 import Search from "lucide-react-native/icons/search";
 import Server from "lucide-react-native/icons/server";
+import ShieldCheck from "lucide-react-native/icons/shield-check";
 import Sparkles from "lucide-react-native/icons/sparkles";
 import SquareTerminal from "lucide-react-native/icons/square-terminal";
 import Trash2 from "lucide-react-native/icons/trash-2";
@@ -49,6 +50,8 @@ export type SessionOptionsActions = {
   preferences: () => void;
   providers: () => void;
   ssh: () => void;
+  /** Present only when the Host keeps session approvals for this session. */
+  approvalGrants?: () => void;
 };
 
 type IconComponent = ComponentType<{ size?: number; strokeWidth?: number; color?: string }>;
@@ -181,6 +184,14 @@ export function SessionOptionsMenu({
             disabled={blocked || running}
             onPress={fromSection(actions.secondOpinion)}
           />
+          {actions.approvalGrants ? (
+            <NavigationRow
+              icon={icon(ShieldCheck)}
+              label={copy("Oturum onayları", "Session approvals")}
+              disabled={blocked}
+              onPress={fromSection(actions.approvalGrants)}
+            />
+          ) : null}
           {projectId ? (
             <NavigationRow
               icon={icon(Import)}

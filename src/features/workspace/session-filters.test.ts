@@ -57,3 +57,30 @@ describe("session list filters", () => {
     expect(activeSessionFilterCount(filters({ hiddenProviders: ["a", "b"], managed: true, time: "today" }))).toBe(3);
   });
 });
+
+describe("session quick filters", () => {
+  it("matches the status chips", async () => {
+    const { matchesSessionStatus } = await import("./session-filters");
+    expect(matchesSessionStatus({ status: "idle" }, "all")).toBe(true);
+    expect(matchesSessionStatus({ status: "running" }, "running")).toBe(true);
+    expect(matchesSessionStatus({ status: "idle", needsInput: true }, "running")).toBe(false);
+    expect(matchesSessionStatus({ status: "idle", needsInput: true }, "reply")).toBe(true);
+    expect(matchesSessionStatus({ status: "running" }, "reply")).toBe(false);
+  });
+
+  it("keeps a saved project only while it is on the computer's list", async () => {
+    const { effectiveSessionProject } = await import("./session-filters");
+    expect(effectiveSessionProject(null, [{ id: "a" }], true)).toBeNull();
+    expect(effectiveSessionProject("a", [{ id: "a" }], true)).toBe("a");
+    expect(effectiveSessionProject("gone", [{ id: "a" }], true)).toBeNull();
+    expect(effectiveSessionProject("a", [], false)).toBe("a");
+  });
+
+  it("shows the reset mark for a project or status choice", async () => {
+    const { sessionQuickFiltersActive } = await import("./session-filters");
+    expect(sessionQuickFiltersActive(null, "all", false)).toBe(false);
+    expect(sessionQuickFiltersActive("a", "all", false)).toBe(true);
+    expect(sessionQuickFiltersActive(null, "reply", false)).toBe(true);
+    expect(sessionQuickFiltersActive(null, "reply", true)).toBe(false);
+  });
+});

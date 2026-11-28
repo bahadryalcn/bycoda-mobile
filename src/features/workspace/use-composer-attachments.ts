@@ -4,7 +4,7 @@ import type { useHostClient } from "@/state/queries";
 import { useMachines } from "@/state/machines";
 import { emptyComposerDraft, type ComposerDraft } from "./composer-draft";
 import { pickAttachments, removeStagedFile } from "./attachment-files";
-import { ATTACHMENT_COUNT, type StagedAttachment, type TransferState } from "./attachment-model";
+import { exceedsAttachmentCount, type StagedAttachment, type TransferState } from "./attachment-model";
 import { attachmentReleases, supportsAttachmentOwnership } from "./attachment-ownership";
 import { uploadAttachment } from "./attachment-transfer";
 import type { SessionScope } from "./session-types";
@@ -22,6 +22,7 @@ export function useComposerAttachments({
   submission,
   mounted,
   setLocalError,
+  counted,
 }: {
   scope: SessionScope;
   client: ReturnType<typeof useHostClient>;
@@ -29,6 +30,8 @@ export function useComposerAttachments({
   submission: RefObject<boolean>;
   mounted: RefObject<boolean>;
   setLocalError: (error: unknown) => void;
+  /** Which staged files count toward the limit; defaults to all of the draft's files. */
+  counted?: (file: StagedAttachment) => boolean;
 }) {
   const copy = useCopy();
   const { valueRef, setValue, persist } = draft;
@@ -56,7 +59,7 @@ export function useComposerAttachments({
         return;
       }
       const current = valueRef.current ?? emptyComposerDraft();
-      if (current.attachments.length + files.length > ATTACHMENT_COUNT) {
+      if (exceedsAttachmentCount(current.attachments, files.length, counted)) {
         files.forEach(removeStagedFile);
         throw new Error(
           copy("En fazla 20 dosya ekleyebilirsin.", "You can attach up to 20 files."),

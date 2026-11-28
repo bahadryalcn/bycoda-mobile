@@ -4,10 +4,8 @@ import { View } from "react-native";
 import { useCopy } from "@/ui/copy";
 import { Empty, SearchField, Screen, useCollapsibleSearch } from "@/ui/primitives";
 import { NoComputerGate } from "@/ui/no-computer";
-import { useActiveMachine } from "@/state/machines";
+import { useActiveMachine, useMachines } from "@/state/machines";
 import { useConnectionScope } from "@/state/connection-scope";
-import { ProjectScopePill } from "../workspace/project-scope-pill";
-import { useRequiredProjectScope } from "./shared/required-project-scope";
 import { TasksScreen } from "./tasks-screen";
 import { GoalsScreen } from "./goals-screen";
 import { CrewsScreen } from "./crews-screen";
@@ -23,22 +21,27 @@ import { goBack } from "@/ui/navigation";
 export function ManagementHome() {
   const copy = useCopy();
   const machine = useActiveMachine();
-  const { projectId: selectedProjectId, setProjectId, fallback } = useRequiredProjectScope();
+  // The tool list needs no project, so the page shows no project pill and never a stand-in project.
+  // A project the person chose elsewhere is still used once the computer's directory lists it;
+  // without one, project tools ask with their picker and work tools open with All projects.
+  const selectedProjectId = useMachines((state) => state.selectedProjectId);
   const projects = useProjectList();
   const [search, setSearch] = useState("");
   // The search icon trails the scope row; the open field takes the row below it.
   const toolSearch = useCollapsibleSearch(<SearchField label={copy("Araçlarda ara", "Search tools")} value={search} onChangeText={setSearch} />);
-  const projectId = selectedProjectId && (!projects.directoryReady || !projects.data?.some((project) => project.id === selectedProjectId))
-    ? undefined : selectedProjectId;
+  // Unverified while the directory loads (tools ask), withdrawn reads as All projects.
+  const projectId = !selectedProjectId ? null
+    : !projects.directoryReady ? undefined
+    : projects.data?.some((project) => project.id === selectedProjectId) ? selectedProjectId : null;
   return (
-    <Screen title={copy("Araçlar", "Tools")} scopeControl={machine ? <ProjectScopePill allowAll={false} projectId={selectedProjectId} onChange={setProjectId} /> : undefined}
-      actions={machine ? toolSearch.trigger : undefined} scroll={!!machine}>
+    // The machine pill stays in the tab's context row: computer tools (Usage, Diagnostics) act on it.
+    <Screen title={copy("Araçlar", "Tools")} actions={machine ? toolSearch.trigger : undefined} scroll={!!machine}>
       {!machine ? (
         <NoComputerGate description={copy("Görevler, ekipler, otomasyonlar ve geliştirme araçları bağlı bilgisayarda çalışır.", "Tasks, crews, automations and developer tools run on a connected computer.")} />
       ) : (
         <>
           {toolSearch.field}
-          <ToolDirectory projectId={projectId} fallback={fallback} query={search} onClearSearch={() => setSearch("")} />
+          <ToolDirectory projectId={projectId} query={search} onClearSearch={() => setSearch("")} />
         </>
       )}
     </Screen>

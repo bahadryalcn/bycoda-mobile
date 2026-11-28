@@ -21,7 +21,8 @@ function Feedback({ error, notice, children }: PropsWithChildren<{ error?: unkno
 
 const glyph = (G: typeof Copy) => <RowIcon glyph={G} />;
 
-export function TranscriptActions(props: TranscriptActionsProps & { onRewind?: () => void; onRemove?: () => void; role?: "user" | "assistant" | "activity" }) {
+/** `rewindReason` keeps Edit from here visible but disabled, saying what would make it available. */
+export function TranscriptActions(props: TranscriptActionsProps & { onRewind?: () => void; rewindReason?: string; onRemove?: () => void; role?: "user" | "assistant" | "activity" }) {
   useMobileTheme(); const copy = useCopy(), actions = useTranscriptActions(props), anchor = useRef<HostInstance>(null);
   const { note } = actions;
   if (actions.selecting && actions.opening.context?.sessionId) return <SelectedText text={actions.opening.text} role={props.role}
@@ -29,7 +30,8 @@ export function TranscriptActions(props: TranscriptActionsProps & { onRewind?: (
   return <Sheet visible title={copy("Mesaj seçenekleri", "Message options")} size="compact" dismissible={!actions.busy} onClose={actions.close}>
     {actions.changed ? <Notice tone="warning" message={copy("Seçim veya kaynak değişti. Devam etmeden önce bağlamı yeniden inceleyin.", "The selection or source changed. Review the context again before continuing.")} /> : null}
     <NavigationGroup>
-      {props.onRewind ? <NavigationRow intent="command" icon={glyph(Pencil)} label={copy("Buradan düzenle", "Edit from here")} disabled={actions.disabled} onPress={() => { actions.close(); props.onRewind?.(); }} /> : null}
+      {props.onRewind ? <NavigationRow intent="command" icon={glyph(Pencil)} label={copy("Buradan düzenle", "Edit from here")} disabled={actions.disabled} onPress={() => { actions.close(); props.onRewind?.(); }} />
+        : props.rewindReason ? <NavigationRow intent="command" icon={glyph(Pencil)} label={copy("Buradan düzenle", "Edit from here")} detail={props.rewindReason} detailLines={3} detailSelectable={false} disabled onPress={() => {}} /> : null}
       {actions.opening.context?.sessionId ? <NavigationRow intent="navigate" icon={glyph(TextSelect)} label={copy("Metin seç", "Select text")} disabled={actions.disabled} onPress={actions.select} /> : null}
       <Feedback error={actions.messageCopy.error}><NavigationRow intent="command" icon={glyph(Copy)} label={copy("Mesajı kopyala", "Copy message")} disabled={actions.disabled} busy={actions.messageCopy.inFlight} onPress={actions.messageCopy.copy} /></Feedback>
       {actions.hasResponse ? <Feedback error={actions.responseCopy.error}><NavigationRow intent="command" icon={glyph(Copy)} label={copy("Yanıtın tamamını kopyala", "Copy complete response")} disabled={actions.disabled} busy={actions.responseCopy.inFlight} onPress={actions.responseCopy.copy} /></Feedback> : null}

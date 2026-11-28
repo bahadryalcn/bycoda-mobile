@@ -108,6 +108,12 @@ and [Apple App Privacy details](https://developer.apple.com/app-store/app-privac
 | Pairing camera                          | Camera access reads a QR code when requested; the scanner does not save or upload camera frames. The decoded code establishes the selected host connection.            | Local camera processing alone is distinct from the connection data transmitted after scanning. Verify native permission and scanner behavior. |
 | Biometric/passcode unlock               | LocalAuthentication asks the operating system to authenticate; bycoda receives the result rather than biometric templates.                                             | On-device processing; verify that neither app code nor SDKs transmit biometric data.                                                          |
 | Privacy/support links                   | Opening email or an external site contacts the chosen service. Any report delivery added later introduces a separate data flow.                                        | User-initiated contact and any submitted report fields; document the actual recipient and retention.                                          |
+| Bycoda account (Clerk)                  | Sign-in with Apple, Google, GitHub or an email code through Clerk; the account service stores email, name, profile picture, sign-in methods and preferences.           | Contact info, identifiers; app functionality and account management.                                                                          |
+| Device registration and push            | Per device: name, OS and version, app version, release channel and, when notifications are enabled, an Expo push token (`/v1/devices/:id/push-token`); Expo delivers through APNs/FCM. | Device or other IDs; app functionality. Notifications carry generic text unless the user opts in to details.                                  |
+| Active time                             | Per-minute on/off usage recorded on the phone and uploaded as one record per device per day when signed in.                                                           | App activity / product interaction; app functionality.                                                                                        |
+| Diagnostics and feedback                | Consented, redacted diagnostic logs (`/v1/diagnostics/reports`) and feedback go to the account API; logs are kept 90 days.                                             | Crash/diagnostic data, user content in feedback; app functionality.                                                                           |
+| Microphone and speech                   | Dictation and voice calls send audio to the selected Host, which may forward it to OpenAI, Grok or OpenRouter; optional phone dictation uses on-device or OS speech recognition. | Audio data and user content; app functionality. Evaluate each configured provider.                                                            |
+| Saving images                           | Images from conversations can be saved to the photo library (add-only access).                                                                                         | On-device only; no collection.                                                                                                                |
 
 Apple requires explicit permission before relevant personal-data sharing,
 including third-party AI. A generic terms acknowledgement does not replace a
@@ -139,17 +145,28 @@ and [Google account deletion scope](https://support.google.com/googleplay/androi
 
 ## Native binary, permissions and assets
 
-- [ ] Preserve QR-only camera access. The source blocks microphone and shared
-      external-storage permissions; confirm the merged release manifest removes
-      them and the iOS binary has no microphone usage description.
+- [ ] Confirm the release requests only these permissions, each with a
+      specific purpose string (iOS strings are localized in `locales/*.json`):
+      camera for QR pairing (no camera audio), microphone for dictation and voice
+      calls, speech recognition for phone dictation, photo-library add for saving
+      images, photo picker for attachments, local network for Host connections,
+      Face ID for app lock, and notifications. Shared external-storage, media-read
+      and overlay permissions stay blocked; confirm the merged Android manifest.
+- [ ] iOS declares `UIBackgroundModes` `audio` so a started voice call continues
+      with the screen locked. Explain and demonstrate this in the review notes.
+      Android uses a microphone/media-playback foreground service for the same call.
+- [ ] Sign-in uses Clerk with Sign in with Apple (native on iOS), Google, GitHub
+      and an email code. Verify the Sign in with Apple entitlement and production
+      Clerk configuration in the release binary.
+- [ ] When notifications are enabled, the app registers an Expo push token with
+      the account service. Verify delivery with the release's push credentials.
 - [ ] Build with SDKs accepted by the stores. Google currently requires API 36
       or later for new mobile apps and updates; Apple requires the iOS/iPadOS 26 SDK
       or later. Recheck [Google target API requirements](https://support.google.com/googleplay/android-developer/answer/11926878)
       and [Apple SDK requirements](https://developer.apple.com/news/?id=ueeok6yw).
 - [ ] Resolve and inspect the release's Android manifest and iOS Info.plist.
-      Camera permission must explain QR pairing. The QR scanner needs no audio
-      recording; verify microphone permissions are absent. Face ID and local-network
-      usage descriptions must match the actual feature. See
+      Every usage description must match its actual feature; the QR scanner itself
+      records no audio. See
       [Expo Camera configuration](https://docs.expo.dev/versions/latest/sdk/camera/)
       and [Expo LocalAuthentication](https://docs.expo.dev/versions/latest/sdk/local-authentication/).
 - [ ] Verify denied camera permission, manual pairing fallback, backgrounding,
@@ -163,6 +180,30 @@ and [Google account deletion scope](https://support.google.com/googleplay/androi
       See [Apple third-party SDK requirements](https://developer.apple.com/support/third-party-SDK-requirements/).
 - [ ] Configure production signing, identifiers, version/build numbers and
       distribution credentials. Keep credentials outside the repository.
+
+## Open owner actions before submission
+
+These need accounts, consoles, hosting or decisions and cannot be completed in
+source:
+
+- [ ] Review access: a review sign-in that works without a private inbox and a
+      reachable Host with fictional data linked to it.
+- [ ] Content-report delivery: deploy the reporting endpoint (or route reports
+      through the account API) and set the moderation process.
+- [ ] Export compliance: answer the App Store Connect question, then set the
+      matching Info.plist value.
+- [ ] Update channel: decide the EAS Update channel or disable update checks for
+      locally built store binaries.
+- [ ] Build numbers: choose either EAS remote counters or `app.json` numbers and
+      align the release scripts.
+- [ ] Host the Apple App Site Association and `assetlinks.json` (Play App Signing
+      SHA-256) for `link.bycoda.codes`.
+- [ ] Upload APNs and FCM V1 push credentials to the Expo project.
+- [ ] Capture native screenshots from the release UI, including iPad 13".
+- [ ] Submit the Play foreground-service declaration (microphone and media
+      playback) with its video.
+- [ ] Complete App Store Connect App Privacy and Play Data Safety from the data-flow
+      table above.
 
 ## Reviewer access and listing
 

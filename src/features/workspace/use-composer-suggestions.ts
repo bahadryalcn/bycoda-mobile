@@ -4,6 +4,7 @@ import { insertTemplate } from "@/features/management/templates/template-model";
 import { emptyComposerDraft, type ComposerDraft } from "./composer-draft";
 import { composerTokenAt, moveSuggestionSelection, replaceComposerToken } from "./composer-tokens";
 import { useComposerCatalog, type ComposerSuggestion } from "./use-composer-catalog";
+import { isComposerNavigationAction, type ComposerNavigationAction } from "./composer-command-catalog";
 import type { useLocalDraft } from "./use-local-draft";
 import type { HostSession } from "./wire";
 
@@ -11,7 +12,7 @@ type Selection = { start: number; end: number };
 
 /** Owns the active token and applies a choice to the original draft and caret. */
 export function useComposerSuggestions({
-  session, prompt, selection, setSelection, setValue, focused, onSideQuestion,
+  session, prompt, selection, setSelection, setValue, focused, onSideQuestion, onNavigate,
 }: {
   session: HostSession | undefined;
   prompt: string;
@@ -20,6 +21,8 @@ export function useComposerSuggestions({
   setValue: ReturnType<typeof useLocalDraft<ComposerDraft>>["setValue"];
   focused: boolean;
   onSideQuestion: (question: string) => boolean;
+  /** Opens the phone's destination for /new, /resume or /add-to-folder; false keeps the draft as typed. */
+  onNavigate?: (action: ComposerNavigationAction) => boolean;
 }) {
   const [dismissed, setDismissed] = useState<string | null>(null);
   const detected = focused ? composerTokenAt(prompt, selection) : null;
@@ -43,6 +46,8 @@ export function useComposerSuggestions({
       const leading = !prompt.slice(0, token.start).trim();
       if (!leading || !onSideQuestion(prompt.slice(token.end).trimStart())) return;
     }
+    // Like desktop, a navigation command runs on selection and leaves the rest of the draft as it was.
+    if (isComposerNavigationAction(item.action) && !onNavigate?.(item.action)) return;
     setValue((current) => ({
       ...(current ?? emptyComposerDraft()),
       text: draft.text,
@@ -90,6 +95,10 @@ export function useComposerSuggestions({
 function valueForPick(prompt: string, token: NonNullable<ReturnType<typeof composerTokenAt>>, item: ComposerSuggestion) {
   if (item.template !== undefined) return insertTemplate(prompt, token, item.template);
   if (item.action === "side-question") return { text: "", selection: { start: 0, end: 0 } };
+  if (isComposerNavigationAction(item.action)) {
+    const text = prompt.slice(0, token.start) + prompt.slice(token.end).replace(/^ /, "");
+    return { text, selection: { start: token.start, end: token.start } };
+  }
   const { text, cursor } = replaceComposerToken(prompt, token, item.label, item.action !== "scope");
   return { text, selection: { start: cursor, end: cursor } };
 }

@@ -177,7 +177,7 @@ export function useComposerCatalog(session: HostSession | undefined, token: Comp
     if (source === "servers" && !hints.length)
       rows.push({ id: "servers-unavailable", name: copy("Sunucular", "Servers"), label: "", detail: `@${alias}:`, kind: "source", group: "sources", unavailable: desktopOnly });
   } else if (harness && (token.trigger === "/" || harness === "codex")) {
-    const builtin = token.trigger === "/" ? composerBuiltins(copy, harness, capabilities) : [];
+    const builtin = token.trigger === "/" ? composerBuiltins(copy, harness, capabilities, { project: !!projectId }) : [];
     rows.push(...builtin);
     const taken = new Set(builtin.map((item) => item.name));
     if (harness === "claude" || token.trigger === "$") queries.push(skills);

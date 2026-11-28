@@ -11,6 +11,8 @@ vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({
   refetchQueries: session.refetch,
 }) }));
 vi.mock("@/state/queries", () => ({ hostKey: (machineId: string, key: unknown[]) => [machineId, ...key] }));
+const machine = vi.hoisted(() => ({ id: "machine", capabilities: ["sessions.approvalOccurrence.v1"] as string[] }));
+vi.mock("@/state/machines", () => ({ useActiveMachine: () => machine }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/primitives", () => {
   const Wrap = ({ children }: PropsWithChildren) => createElement("div", null, children);
@@ -84,4 +86,19 @@ it("keeps known rejection actionable and respects external permission and missin
   props = { ...props, disabled: true }; await render(); expect(button("Deny").disabled).toBe(true);
   props = { ...props, disabled: false, runId: undefined }; await render(); expect(button("Deny").disabled).toBe(true);
   expect(container.textContent).toContain("Refresh the session to approve.");
+});
+
+it("offers Allow for this session only for a Host-scoped request on a Host with grants", async () => {
+  const occurrenceId = "12345678-1234-4123-8123-123456789abc";
+  props = { ...props, approval: { requestId: 7, occurrenceId, sessionApprovalScope: "claude:Glob:workspace-filename-search" } };
+  await render();
+  expect(button("Allow for this session")).toBeUndefined();
+  machine.capabilities = ["sessions.approvalOccurrence.v1", "sessions.approvalGrants.v1"];
+  props = { ...props, approval: { ...props.approval, requestId: 8 } };
+  await render();
+  await act(async () => button("Allow for this session").click());
+  expect(props.onCommand).toHaveBeenCalledExactlyOnceWith({ type: "approve", sessionId: "session", runId: "run", requestId: 8, approvalOccurrenceId: occurrenceId, decision: "allow", allowForSession: true });
+  expect(button("Allow").disabled).toBe(true);
+  expect(button("Deny").disabled).toBe(true);
+  machine.capabilities = ["sessions.approvalOccurrence.v1"];
 });

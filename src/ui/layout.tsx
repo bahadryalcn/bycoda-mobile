@@ -15,7 +15,7 @@ import { ScopePills, type PageScope } from "./scope-line";
 import { FormActionScrollOwner } from "./form-action-context";
 import { screenFooterLimits } from "./screen-footer-model";
 import { ConnectionFeedbackScope } from "./connection-feedback-scope";
-import { ScreenChrome, ScreenComputerControl, ScreenHeaderRow, ScreenScopeControl, useScreenChrome, type HeaderIdentityProps } from "./screen-chrome";
+import { ScreenChrome, ScreenComputerControl, ScreenHeaderRow, ScreenScopeControl, useScreenChrome, type HeaderIdentityProps, type ScreenIdentity } from "./screen-chrome";
 import { SheetGuardContext } from "./sheet-guard-context";
 import { ScreenFrameInsets, useScreenContentInsets } from "./screen-content-insets";
 import type { PropsWithChildren, ReactNode } from "react";
@@ -23,11 +23,11 @@ import type { ScreenProps, ContainerProps, CardProps, SectionProps, CodePanelPro
 
 // The chrome context lives in its own module so lightweight consumers can read it without this file's imports.
 export { useScreenChrome, useBottomInset } from "./screen-chrome";
-export type { HeaderIdentityProps } from "./screen-chrome";
+export type { HeaderIdentityProps, ScreenIdentity } from "./screen-chrome";
 export { useScreenContentInsets } from "./screen-content-insets";
 
 /** Suppressed native titles must not leave an empty padded content header behind. */
-export function useScreenHeading(props: { title?: string; subtitle?: string; scope?: PageScope; context?: ReactNode; scopeControl?: ReactNode; computerSwitch?: boolean; actions?: ReactNode; onBack?: () => void }) {
+export function useScreenHeading(props: { title?: string; subtitle?: string; scope?: PageScope; context?: ReactNode; scopeControl?: ReactNode; computerSwitch?: boolean; identity?: ScreenIdentity; actions?: ReactNode; onBack?: () => void }) {
   const chrome = useScreenChrome();
   const routeScopeControl = use(ScreenScopeControl);
   const computerControl = use(ScreenComputerControl);
@@ -65,14 +65,17 @@ export function ScreenChromeProvider({
 }
 
 /**
- * The one page-top pattern: title row (back + title, or the tab identity with the computer pill)
- * → one compact scope row → content. The scope row holds the scope pills (a read-only computer or
+ * The one page-top pattern: title row (back + title) → one compact scope row → content. A tab
+ * (`headerIdentity`) always puts its large title and the icon actions on the first row and the
+ * navigator's context row (computer pill, then the project pill) below it. The scope row holds the scope pills (a read-only computer or
  * project pill from `scope`, the shared project pill from `scopeControl` or the route's
  * `ScreenScopeControl`) then `context`, with the page's icon actions (refresh, search, filter,
  * more, add) trailing on the same row. Native title ownership never hides commands.
  */
-export function ScreenHeading({ title, subtitle, scope, context, scopeControl: ownScopeControl, computerSwitch, actions, onBack }: {
+export function ScreenHeading({ title, subtitle, scope, context, scopeControl: ownScopeControl, computerSwitch, identity = "computer", actions, onBack }: {
   title?: string; subtitle?: string; context?: ReactNode; actions?: ReactNode;
+  /** Tab pages only: `title` leaves the computer pill out of the context row under the title. */
+  identity?: ScreenIdentity;
   /** Lead the scope row with the switchable computer pill; defaults to true with an own `scopeControl`. */
   computerSwitch?: boolean;
   /** Shared project scope: beside the computer selector in a tab identity, else first in the context. */
@@ -145,6 +148,25 @@ export function ScreenHeading({ title, subtitle, scope, context, scopeControl: o
   }
   // Rotated, resized or larger text: hand the top row back to the stack before showing the rows below.
   const releaseHeader = hoisted && HeaderRow ? <HeaderRow identity={null} /> : null;
+  if (customIdentity) {
+    // Deterministic tab top: the title (and subtitle) with the icon actions on one row, then the
+    // navigator's single context row. The identity returns null when the row has nothing to show.
+    const contextRow = customIdentity({ title: title!, subtitle, scopeControl, showComputer: identity !== "title" });
+    return (
+      <PageHeader variant="page" align="start" className="bg-transparent" style={{ flexDirection: "column", alignItems: "stretch" }}>
+        <View style={uiStyles.pageHeading}>
+          {back ? <HeaderBackButton onPress={onBack!} /> : null}
+          <PageHeader.Content className="p-0 gap-0" style={[uiStyles.pageIdentity, { flexBasis: 120 * Math.max(1, fontScale) }]}>
+            <PageHeader.Title selectable style={uiStyles.pageTitle}>{title}</PageHeader.Title>
+            {subtitle ? <PageHeader.Description selectable style={uiStyles.caption}>{subtitle}</PageHeader.Description> : null}
+          </PageHeader.Content>
+          {accessory}
+          {actions || trailing ? <PageHeader.Actions className="p-0" style={uiStyles.pageActions}>{actions}{trailing}</PageHeader.Actions> : null}
+        </View>
+        {contextRow || context ? <View style={{ gap: space.sm, paddingBottom: space.xs }}>{contextRow}{context}</View> : null}
+      </PageHeader>
+    );
+  }
   if (!showTitle && !subtitle && !scoped && !switchComputer && !context && !scopeControl && !actions && !accessory && !back && !trailing) return null;
   // A custom identity row owns the project control; otherwise the scope row leads the content.
   const ownContext = (scopeControl && !customIdentity) || scoped || switchComputer
@@ -163,12 +185,8 @@ export function ScreenHeading({ title, subtitle, scope, context, scopeControl: o
         <PageHeader.Content className="p-0 gap-0" style={[uiStyles.pageIdentity, { flexBasis: 120 * Math.max(1, fontScale) },
           // A scope row alone (native title) shrinks instead of pushing the actions onto a new line.
           !showTitle && !subtitle && { minWidth: 0, flexBasis: 0, flexGrow: 1 }]}>
-          {customIdentity ? customIdentity({ title: title!, subtitle, scopeControl }) : (
-            <>
-              {showTitle ? <PageHeader.Title selectable style={uiStyles.pageTitle}>{title}</PageHeader.Title> : null}
-              {subtitle ? <PageHeader.Description selectable style={uiStyles.caption}>{subtitle}</PageHeader.Description> : null}
-            </>
-          )}
+          {showTitle ? <PageHeader.Title selectable style={uiStyles.pageTitle}>{title}</PageHeader.Title> : null}
+          {subtitle ? <PageHeader.Description selectable style={uiStyles.caption}>{subtitle}</PageHeader.Description> : null}
           {ownContext ? (showTitle || subtitle ? <View style={uiStyles.pageContext}>{ownContext}</View> : ownContext) : null}
         </PageHeader.Content>
       ) : null}
@@ -215,6 +233,7 @@ export function Screen({
   context,
   scopeControl,
   computerSwitch,
+  identity,
   scroll = true,
   query,
   refresh,
@@ -229,7 +248,7 @@ export function Screen({
   const insets = useSafeAreaInsets();
   const content = useScreenContentInsets();
   const chrome = use(ScreenChrome);
-  const heading = useScreenHeading({ title, subtitle, scope, context, scopeControl, computerSwitch, actions, onBack });
+  const heading = useScreenHeading({ title, subtitle, scope, context, scopeControl, computerSwitch, identity, actions, onBack });
   const keyboardVisible = useKeyboardState(state => state.isVisible);
   const { height, fontScale } = useWindowDimensions();
   const [frameHeight, measureFrame] = useScreenHeight(height);

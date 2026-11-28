@@ -1,5 +1,5 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import { router } from "expo-router";
 import { Sheet } from "@/ui/primitives";
@@ -21,6 +21,9 @@ import { MobilePty } from "../tools/mobile-pty";
 import { ProviderDesktop } from "../tools/provider-desktop";
 import { useHostQuery } from "@/state/queries";
 import { openModelSheet } from "./composer-model-sheet";
+import { SessionApprovalGrants, sessionGrantsAvailable } from "./session-approval-grants";
+import { useActiveMachine } from "@/state/machines";
+import { useSessionSheetRequest } from "./session-sheet-request";
 import { activeSessionModel } from "./catalog";
 import { useSessionActions } from "./session-actions";
 import { sessionSummaryFromSnapshot } from "./session-row-action-model";
@@ -65,10 +68,22 @@ export function SessionToolbar({
   const [worktreeRemoval, setWorktreeRemoval] = useState(false);
   const [sshWorkspace, setSshWorkspace] = useState(false);
   const [historyImport, setHistoryImport] = useState(false);
-  const [organization, setOrganization] = useState(false);
+  const [organization, setOrganization] = useState<false | "organize" | "moveToFolder">(false);
+  // The composer's /resume and /add-to-folder open these same sheets through one request.
+  const sheetRequest = useSessionSheetRequest((state) => state.request);
+  useEffect(() => {
+    if (!sheetRequest || !projectId) return;
+    const kind = useSessionSheetRequest.getState().consume(scope.machineId, scope.sessionId);
+    if (kind === "importHistory") setHistoryImport(true);
+    else if (kind === "moveToFolder") setOrganization("moveToFolder");
+  }, [sheetRequest, projectId, scope.machineId, scope.sessionId]);
   const [desktopPreferences, setDesktopPreferences] = useState(false);
   const [mobilePty, setMobilePty] = useState(false);
   const [providerDesktop, setProviderDesktop] = useState(false);
+  const [approvalGrants, setApprovalGrants] = useState(false);
+  const machine = useActiveMachine();
+  const grantsAvailable =
+    machine?.id === scope.machineId && sessionGrantsAvailable(session, machine.capabilities);
   const [contextual, setContextual] = useState<"handoff" | "secondOpinion" | null>(null);
   const [contextualCompact, setContextualCompact] = useState(false);
   // The open view reports compact sizing; every open starts from the default so a previous
@@ -100,13 +115,14 @@ export function SessionToolbar({
         secondOpinion: () => openContextual("secondOpinion"),
         importHistory: () => setHistoryImport(true),
         project: openProject,
-        organization: () => setOrganization(true),
+        organization: () => setOrganization("organize"),
         browser: () => setBrowser(true),
         worktreeRemoval: () => setWorktreeRemoval(true),
         terminal: () => setMobilePty(true),
         preferences: () => setDesktopPreferences(true),
         providers: () => setProviderDesktop(true),
         ssh: () => setSshWorkspace(true),
+        ...(grantsAvailable ? { approvalGrants: () => setApprovalGrants(true) } : {}),
       }}
     />
   );
@@ -145,6 +161,14 @@ export function SessionToolbar({
           {optionsMenu}
         </SessionRecordActions>
       ) : optionsMenu(null)}
+      {approvalGrants && grantsAvailable && session ? (
+        <SessionApprovalGrants
+          key={JSON.stringify([scope.machineId, scope.sessionId, session.authorityGeneration])}
+          session={session}
+          blocked={blocked}
+          onClose={() => setApprovalGrants(false)}
+        />
+      ) : null}
       {review && session ? (
         <SessionCheckpoints
           scope={scope}
@@ -214,9 +238,10 @@ export function SessionToolbar({
       ) : null}
       {organization && projectId ? (
         <ProjectOrganization
-          key={JSON.stringify([scope.machineId, projectId, scope.sessionId])}
+          key={JSON.stringify([scope.machineId, projectId, scope.sessionId, organization])}
           scope={scope}
           projectId={projectId}
+          initialEditor={organization === "moveToFolder" ? { kind: "sessionMove" } : undefined}
           onClose={() => setOrganization(false)}
         />
       ) : null}

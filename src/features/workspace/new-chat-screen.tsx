@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { Keyboard, ScrollView, View } from "react-native";
 import { router } from "expo-router";
 import { useIsFocused } from "expo-router/react-navigation";
 import * as Crypto from "expo-crypto";
@@ -14,6 +14,8 @@ import { useModelCatalog } from "@/state/model-catalog";
 import { rememberOpenedProject, useProjectDirectoryPreferences } from "@/state/project-directory-preferences";
 import { Body, Button, ErrorNotice, PressableArea, RowIcon, Screen } from "@/ui/primitives";
 import { ChatComposer } from "@/ui/chat-composer";
+import { ChatCircleAction } from "@/ui/chat-controls";
+import { showToast } from "@/ui/toast";
 import { MachinePill } from "@/ui/machine-bar";
 import { NoComputerState } from "@/ui/no-computer";
 import { ProjectIcon } from "@/ui/project-icon";
@@ -37,12 +39,12 @@ import type { CreationDraft, RuntimeMode } from "./creation-selection";
 import { insertDictation } from "./dictation-model";
 import { appendToDraft } from "./draft-append";
 import { lastCreationChoices, rememberedDraft, useLastCreationChoice, type LastCreationChoice } from "./last-creation-choice";
+import { recentModels, useRecentModels } from "./recent-models";
 import {
   NEW_CHAT_DRAFT_KEY,
   createNewChatSendGate,
   newChatAttempt,
   newChatAttemptKey,
-  newChatDraftWasSent,
   newChatFirstTurn,
   newChatRouteKey,
   newChatRuntimeMode,
@@ -54,7 +56,21 @@ import {
   type NewChatAttempt,
   type NewChatPick,
 } from "./new-chat-model";
-import { carriedSettings, NewChatAccessChip, NewChatCheckoutChip, NewChatModelChip, NewChatOptionRow } from "./new-chat-options";
+import { carriedSettings, NewChatAttachSheet, NewChatCheckoutRow, NewChatModelChip } from "./new-chat-options";
+import {
+  newChatAttachmentScope,
+  newChatAttachmentScopeKey,
+  newChatAttachmentsHere,
+  newChatAttachmentsSupported,
+  newChatDraftAfterSend,
+  NEW_CHAT_ATTACHMENT_SESSION,
+  type NewChatAttachmentReference,
+} from "./new-chat-attachments";
+import { uploadCancellable, type StagedAttachment } from "./attachment-model";
+import { isScopedStagedFile, removeStagedFile } from "./attachment-files";
+import { attachmentReleases } from "./attachment-ownership";
+import { ComposerAttachments } from "./composer-attachments";
+import { useComposerAttachments } from "./use-composer-attachments";
 import { ProjectDirectorySlot } from "./project-directory-feedback";
 import { ProjectFolderBrowser } from "./project-folder-browser";
 import { ProjectPicker } from "./project-picker";
@@ -80,9 +96,10 @@ export type NewChatRoute = { projectId?: string; machineId?: string; cwd?: strin
 const DICTATION_TARGET = "new-session-draft";
 
 /**
- * The empty new session: a centred "what should we build" hero whose project and computer are
- * switched in place, the draft's options above the normal composer, and the first message creating
- * the session (with that message as its first turn) before the route becomes `/session/[id]`.
+ * The empty new session: a centred "what should we build" hero whose project, working folder and
+ * computer are switched in place, the normal composer (model and access in its model sheet, photos
+ * and files behind +), and the first message creating the session (with that message and its
+ * attachments as its first turn) before the route becomes `/session/[id]`.
  * The typed draft lives here, above the computer-bound workspace, so switching computers keeps it;
  * it is saved on the phone, so Back or the app being closed keeps it too.
  */
@@ -130,15 +147,21 @@ function useNewChatDraft(prompt: string | undefined) {
     const text = seededNewChatText(valueRef.current?.text ?? "", seed);
     if (text !== undefined) setValue((current) => ({ ...(current ?? emptyComposerDraft()), text }));
   }, [ready, seed, setValue, valueRef]);
-  /** The create carried these words; the draft is cleared unless the owner changed it meanwhile. */
-  const clearSent = useCallback((sent: string) => {
-    if (!newChatDraftWasSent(valueRef.current?.text ?? "", sent)) return;
+  /**
+   * The create carried these words and files: delivered files leave the draft (and the phone), and
+   * the words are cleared unless the owner changed them meanwhile.
+   */
+  const clearSent = useCallback((sent: { text: string; attachments: readonly StagedAttachment[] }) => {
+    const current = valueRef.current;
+    const next = current ? newChatDraftAfterSend(current, { text: sent.text, attachmentIds: sent.attachments.map((file) => file.id) }) : undefined;
+    if (!next) return;
     try {
-      setValue(emptyComposerDraft());
+      setValue(next);
     } catch {
       return;
     }
-    void persist().catch(() => {});
+    // The staged copies go only once the draft no longer names them.
+    void persist().then(() => sent.attachments.forEach(removeStagedFile)).catch(() => {});
   }, [persist, setValue, valueRef]);
   const [retrying, setRetrying] = useState(false);
   const retry = () => {
@@ -146,14 +169,29 @@ function useNewChatDraft(prompt: string | undefined) {
     setRetrying(true);
     void (ready ? persist() : load()).catch(() => {}).finally(() => setRetrying(false));
   };
-  return { text: draft.value?.text ?? "", setText, ready, error, retrying, retry, clearSent };
+  return {
+    text: draft.value?.text ?? "",
+    attachments: draft.value?.attachments ?? NO_ATTACHMENTS,
+    setText,
+    ready,
+    error,
+    retrying,
+    retry,
+    clearSent,
+    // The shared attachment owner edits the same saved draft.
+    store: { valueRef, setValue, persist },
+  };
 }
+
+const NO_ATTACHMENTS: StagedAttachment[] = [];
 
 type Sent = {
   machineId: string;
   projectId: string;
   text: string;
   firstTurn: boolean;
+  /** Staged files the first turn carried; their claims are released once the session exists. */
+  attachments: StagedAttachment[];
   remember?: LastCreationChoice;
 };
 
@@ -221,6 +259,7 @@ function NewChatWorkspace({
   // Which model: the owner's pick on this computer, else the last one used here while it is offered.
   const catalogData = useModelCatalog(project?.id ?? "", !!project).data;
   const remembered = rememberedDraft(useLastCreationChoice(machine.id), catalogData);
+  const recents = useRecentModels(machine.id);
   const [choice, setChoice] = useState<{ machineId: string; draft: CreationDraft; settings: Record<string, string> }>();
   const mine = choice?.machineId === machine.id ? choice : undefined;
   const draft = mine?.draft ?? remembered ?? { model: "" };
@@ -263,8 +302,38 @@ function NewChatWorkspace({
   // A first turn is plain text; the session composer's own commands and crew delegations wait for
   // the open session. Without a first turn the words land in that composer, which resolves them.
   const sessionOnly = firstTurn ? newChatSessionOnlyInput(text) : undefined;
+
+  // Attachments: staged on the phone for this computer, uploaded on Send and carried by the first
+  // turn, so the session and its first message with files stay one idempotent create.
+  const attachSupported = newChatAttachmentsSupported(machine.capabilities);
+  const attachmentScope = useMemo(() => newChatAttachmentScope(machine.id), [machine.id]);
+  const attachmentScopeKey = newChatAttachmentScopeKey(machine.id);
+  const submission = useRef(false);
+  const [attachError, setAttachError] = useState<unknown>(null);
+  const [attachOpen, setAttachOpen] = useState(false);
+  // The phone-wide draft keeps other computers' files; only this computer's count toward the limit.
+  const stagedHere = useCallback((file: StagedAttachment) => newChatAttachmentsHere([file], (entry) => isScopedStagedFile(entry, attachmentScopeKey)).length === 1, [attachmentScopeKey]);
+  const uploads = useComposerAttachments({
+    scope: attachmentScope,
+    client,
+    draft: saved.store,
+    submission,
+    mounted,
+    setLocalError: setAttachError,
+    counted: stagedHere,
+  });
+  const staged = useMemo(
+    () => attachSupported ? newChatAttachmentsHere(saved.attachments, stagedHere) : NO_ATTACHMENTS,
+    [attachSupported, saved.attachments, stagedHere],
+  );
+  const attaching = uploads.uploading || uploads.picking;
+  // While files upload the create is already decided: its project, computer and model stay put.
+  const frozen = locked || uploads.uploading;
+
   const sendState = newChatSendState({
     text,
+    attachments: staged.length,
+    uploading: attaching,
     project: !!project,
     canStart,
     locked: locked || !saved.ready,
@@ -276,8 +345,22 @@ function NewChatWorkspace({
     attempt.current = undefined;
     // Older Hosts create without a first turn: the words wait in the new session's composer instead.
     if (!target.firstTurn) appendToDraft({ machineId: target.machineId, sessionId }, { text: target.text });
-    saved.clearSent(target.text);
-    if (target.remember) void lastCreationChoices.getState().remember(target.machineId, target.remember);
+    saved.clearSent(target);
+    if (target.attachments.length) {
+      // The session's first message now references the files, so the draft's claims can go.
+      const files = target.attachments.map((file) => uploads.claimedFiles.current.get(file.id) ?? file);
+      files.forEach((file) => uploads.claimedFiles.current.delete(file.id));
+      const owner = useMachines.getState().machines.find((entry) => entry.id === target.machineId);
+      if (owner)
+        void attachmentReleases
+          .stage({ machine: owner }, NEW_CHAT_ATTACHMENT_SESSION, files)
+          .then(() => (client && client.machine.id === target.machineId ? attachmentReleases.flush(client) : undefined))
+          .catch(() => {});
+    }
+    if (target.remember) {
+      void lastCreationChoices.getState().remember(target.machineId, target.remember);
+      void recentModels.getState().record(target.machineId, target.remember);
+    }
     void rememberOpenedProject(target.machineId, target.projectId).catch(() => {});
   };
   const opened = (target: Sent, sessionId: string) => {
@@ -295,7 +378,9 @@ function NewChatWorkspace({
     // again nor reset (and so detach) the command the first one is waiting for.
     if (!sendGate.claim()) return;
     command.reset();
+    setAttachError(null);
     const prompt = text.trim();
+    const files = staged;
     const payload = {
       machineId: machine.id,
       projectId: project.id,
@@ -307,6 +392,7 @@ function NewChatWorkspace({
       runtimeMode,
       text: prompt,
       firstTurn,
+      attachments: files.map((file) => file.id),
     };
     const next = newChatAttempt(attempt.current, newChatAttemptKey(payload), () => Crypto.randomUUID());
     attempt.current = next;
@@ -315,17 +401,40 @@ function NewChatWorkspace({
       projectId: project.id,
       text: prompt,
       firstTurn,
+      attachments: files,
       remember: selectedProvider && selectedModel
         ? { provider: selectedProvider, ...(selectedAccountId ? { accountId: selectedAccountId } : {}), model: selectedModel }
         : undefined,
     };
     sent.current = target;
-    void create((sessionId) => opened(target, sessionId), {
-      settings,
-      runtimeMode,
-      commandId: next.createId,
-      ...(firstTurn ? { firstTurn: newChatFirstTurn(prompt, next.turnId) } : {}),
-    }).finally(() => sendGate.release());
+    submission.current = true;
+    void (async () => {
+      // Uploads resume where they stopped, so "Send again" repeats them cheaply before the same create.
+      const references: NewChatAttachmentReference[] = [];
+      if (files.length) {
+        if (!client) return;
+        const controller = new AbortController();
+        uploads.begin(controller);
+        try {
+          for (const file of files) references.push(await uploads.upload(file, controller));
+        } catch {
+          // Each attachment card shows its own failure and retry; nothing was created.
+          return;
+        } finally {
+          uploads.end();
+        }
+        if (controller.signal.aborted || !mounted.current) return;
+      }
+      await create((sessionId) => opened(target, sessionId), {
+        settings,
+        runtimeMode,
+        commandId: next.createId,
+        ...(firstTurn ? { firstTurn: newChatFirstTurn(prompt, next.turnId, references) } : {}),
+      });
+    })().finally(() => {
+      submission.current = false;
+      sendGate.release();
+    });
   });
   // Resending after a lost reply reuses the same IDs; it waits for the lock to clear first.
   const [resending, setResending] = useState(false);
@@ -361,7 +470,7 @@ function NewChatWorkspace({
   const routeFocused = useIsFocused();
   const palette = useCommandPalette();
   const [inputFocused, setInputFocused] = useState(false);
-  const keyboardActive = routeFocused && inputFocused && !palette.visible && !pickerOpen && !adding;
+  const keyboardActive = routeFocused && inputFocused && !palette.visible && !pickerOpen && !adding && !attachOpen;
   const hardwareSend = () => send();
   useKeyCommand({ key: "Enter", primary: true, title: copy("Gönder", "Send"), enabled: keyboardActive, textInput: true }, hardwareSend);
   useKeyCommand({ key: "Enter", title: copy("Gönder", "Send"), enabled: keyboardActive && enterSends, textInput: true }, hardwareSend);
@@ -399,7 +508,7 @@ function NewChatWorkspace({
         ? `${copy("Proje", "Project")}: ${project.name}. ${copy("Proje seç", "Choose a project")}`
         : copy("Proje seç", "Choose a project")}
       expanded={pickerOpen}
-      disabled={locked}
+      disabled={frozen}
       onPress={() => setPickerOpen(true)}
       style={{
         minHeight: metrics.touchTarget,
@@ -431,26 +540,32 @@ function NewChatWorkspace({
     </PressableArea>
   );
 
-  const options = command.isPending ? (
-    <View style={{ minHeight: metrics.chipHeight, justifyContent: "center", paddingHorizontal: space.sm }} accessibilityLiveRegion="polite">
-      <SweepLabel active color={colors.muted} style={uiStyles.caption}>
-        {copy("Oturum başlatılıyor…", "Starting session…")}
-      </SweepLabel>
-    </View>
-  ) : project ? (
-    <NewChatOptionRow>
-      {selectedProvider !== "fx" ? (
-        <NewChatAccessChip value={runtimeMode} unavailable={unavailable} disabled={locked} onChange={setRuntimeMode} />
+  // Only the start's progress stays above the composer; the draft's options live in the hero
+  // (working folder) and in the model sheet (access).
+  // Uploading on Send can be cancelled like the session composer's upload; nothing is created then
+  // and each card keeps its retry.
+  const starting = command.isPending || uploads.uploading ? (
+    <View style={{ gap: space.xs }}>
+      <View style={{ minHeight: metrics.chipHeight, justifyContent: "center", paddingHorizontal: space.sm }} accessibilityLiveRegion="polite">
+        <SweepLabel active color={colors.muted} style={uiStyles.caption}>
+          {copy("Oturum başlatılıyor…", "Starting session…")}
+        </SweepLabel>
+      </View>
+      {uploadCancellable(uploads.uploading, uploads.transfers) ? (
+        <Button tone="quiet" density="compact" label={copy("Yüklemeyi iptal et", "Cancel upload")} onPress={uploads.cancel} />
       ) : null}
-      <NewChatCheckoutChip
-        machineId={machine.id}
-        project={project}
-        cwd={worktreeCwd}
-        disabled={locked}
-        onChange={(cwd) => setCheckout(cwd ? { machineId: machine.id, projectId: project.id, cwd } : undefined)}
-      />
-    </NewChatOptionRow>
+    </View>
   ) : null;
+  const checkoutRow = project && readable && ordered.length ? (
+    <NewChatCheckoutRow
+      machineId={machine.id}
+      project={project}
+      cwd={worktreeCwd}
+      disabled={frozen}
+      onChange={(cwd) => setCheckout(cwd ? { machineId: machine.id, projectId: project.id, cwd } : undefined)}
+    />
+  ) : null;
+  const composerBlocked = frozen || attaching || !saved.ready;
 
   const composer = (
     <View style={{ gap: space.sm }}>
@@ -501,7 +616,8 @@ function NewChatWorkspace({
           />
         </View>
       ) : null}
-      {options}
+      {attachError ? <ErrorNotice error={attachError} /> : null}
+      {starting}
       {sessionOnly && text.trim() ? (
         <Body muted style={uiStyles.caption} accessibilityLiveRegion="polite">
           {sessionOnly === "crew"
@@ -512,12 +628,44 @@ function NewChatWorkspace({
             : copy("Bu komut oturum açıldıktan sonra kullanılabilir.", "This command is available once the session has started.")}
         </Body>
       ) : null}
-      {/* Attachments stay with an open session (uploads belong to it), so there is no + here. */}
       <ChatComposer
         value={text}
         onValueChange={onTextChange}
-        disabled={locked || !saved.ready}
-        leading={null}
+        disabled={composerBlocked}
+        top={staged.length ? (
+          <ComposerAttachments
+            files={staged}
+            scope={attachmentScopeKey}
+            transfers={uploads.transfers}
+            disabled={composerBlocked}
+            onRetry={(file) => { void uploads.retry(file); }}
+            onRemove={uploads.remove}
+          />
+        ) : undefined}
+        leading={attachSupported ? (
+          <ChatCircleAction
+            label={copy("Mesaja ekle", "Add to message")}
+            disabled={composerBlocked}
+            busy={uploads.picking}
+            onPress={() => {
+              Keyboard.dismiss();
+              setAttachOpen(true);
+            }}
+          >
+            <Plus size={19} strokeWidth={2.2} color={colors.text} />
+          </ChatCircleAction>
+        ) : !composerBlocked ? (
+          // Like the blocked microphone: an older computer keeps the control dimmed and a tap says why.
+          <ChatCircleAction
+            label={copy("Dosya eklemek için bilgisayarındaki bycoda'yı güncelle", "Update bycoda on your computer to attach files")}
+            onPress={() => showToast({
+              tone: "info",
+              message: copy("Dosya eklemek için bilgisayarındaki bycoda'yı güncelle", "Update bycoda on your computer to attach files"),
+            })}
+          >
+            <Plus size={19} strokeWidth={2.2} color={colors.tertiary} />
+          </ChatCircleAction>
+        ) : null}
         model={project ? ({ iconOnly }) => (
           <NewChatModelChip
             iconOnly={iconOnly}
@@ -529,7 +677,10 @@ function NewChatWorkspace({
             models={models}
             model={selectedModel}
             settings={settings}
-            disabled={locked}
+            access={selectedProvider !== "fx"
+              ? { value: runtimeMode, unavailable, onChange: setRuntimeMode }
+              : undefined}
+            disabled={frozen}
             onRetry={() => { void catalog.refetch().catch(() => {}); }}
             onChooseProvider={(next) => {
               const changed = next.provider !== selectedProvider;
@@ -541,6 +692,7 @@ function NewChatWorkspace({
             onChooseModel={(next, model, nextSettings) =>
               pick({ draft: { provider: next.provider, accountId: next.accountId, model }, settings: nextSettings })}
             onChange={(model, nextSettings) => pick({ draft: { ...draft, model }, settings: nextSettings })}
+            recents={recents}
           />
         ) : undefined}
         field={{
@@ -560,7 +712,7 @@ function NewChatWorkspace({
             mode="send"
             alternate={null}
             disabled={!sendState.enabled}
-            busy={command.isPending}
+            busy={command.isPending || uploads.uploading}
             onSend={() => send()}
           />
         }
@@ -598,9 +750,13 @@ function NewChatWorkspace({
             >
               {heroTitle}
             </Body>
-            {projectControl}
+            {/* Project, then where in it the session works, then the computer. */}
+            <View style={{ alignItems: "center", alignSelf: "stretch" }}>
+              {projectControl}
+              {checkoutRow}
+            </View>
             <View style={{ flexDirection: "row", justifyContent: "center", maxWidth: "100%" }}>
-              <MachinePill disabled={locked} />
+              <MachinePill disabled={frozen} />
             </View>
           </View>
         </ScrollView>
@@ -619,6 +775,14 @@ function NewChatWorkspace({
         onSelect={(item) => {
           setPickerOpen(false);
           setPicked({ machineId: machine.id, id: item.id, cwd: item.cwd });
+        }}
+      />
+      <NewChatAttachSheet
+        visible={attachOpen}
+        onClose={() => setAttachOpen(false)}
+        onChoose={(kind) => {
+          setAttachOpen(false);
+          void uploads.choose(kind);
         }}
       />
       {adding ? <ProjectFolderBrowser onClose={() => setAdding(false)} mutation={openProject} onOpen={openFolder} /> : null}

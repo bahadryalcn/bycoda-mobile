@@ -1,6 +1,7 @@
 import { providerName } from "./provider-choices";
 export { accountName } from "./provider-choices";
 import type { RemoteProvider } from "./wire";
+import { effortVariant } from "./model-variants";
 
 /**
  * One grouping for every model list in the composer: the model picker and the subagent/advisor
@@ -17,10 +18,12 @@ export function providerRank(provider: string): number {
   return index < 0 ? PROVIDER_ORDER.length : index;
 }
 
-/** "Gemini 4 Hydrogen (High)" → family "Gemini 4 Hydrogen", variant "High". */
+/**
+ * "Gemini 4 Hydrogen (High)" → family "Gemini 4 Hydrogen", variant "High". Only an effort suffix
+ * is a variant: "Gemini Solo (Preview)" is the whole model name.
+ */
 export function modelVariant(name: string): { family: string; variant?: string } {
-  const match = /^(.*\S)\s*\(([^()]{1,24})\)$/.exec(name.trim());
-  return match ? { family: match[1]!, variant: match[2]!.trim() } : { family: name.trim() };
+  return effortVariant(name) ?? { family: name.trim() };
 }
 
 export type GroupableModel = {

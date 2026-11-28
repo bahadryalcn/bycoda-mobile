@@ -20,6 +20,27 @@ import { useFilteredListScrollMemory } from "./use-list-scroll-memory";
 import { matchesSearch, normalizeSearch } from "./search-matching";
 import { ReaderContext } from "./reader-context";
 import { useMobileTheme } from "./theme";
+import { MissingFileError, relocateMissingFile } from "./missing-file";
+
+/**
+ * Reads a referenced file; when the read fails, a reference to a file that is not where it points is
+ * looked up by name in the project (desktop's message file references), or reported as missing.
+ */
+async function readReference<T>(context: MessageContext, resolved: string, assertCurrent: () => void, signal: AbortSignal,
+  read: (target?: string) => Promise<T>): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    // Only a failure the Host answered can mean a missing file; transport and access failures stay as they are.
+    if (signal.aborted || (error as { kind?: unknown } | null)?.kind !== "host") throw error;
+    assertCurrent();
+    const moved = await relocateMissingFile(context, resolved, signal).catch(() => undefined);
+    assertCurrent();
+    if (moved === undefined) throw error;
+    if (moved === null) throw new MissingFileError();
+    return await read(moved);
+  }
+}
 
 type ScopedFilePreviewProps = { path: string; context: MessageContext; onClose(): void };
 
@@ -43,7 +64,8 @@ function ScopedFilePreviewBody({ path, context, onClose }: ScopedFilePreviewProp
       scope.assertCurrent(); if (!resolved) throw new Error("This file is outside this project.");
       const value = folder ? await context.client.request<HostFileEntry[]>("files.list", { projectId: context.projectId, cwd: context.cwd,
         path: resolved.slice(context.cwd.replace(/\\/g, "/").replace(/\/$/, "").length + 1) }, { signal })
-        : binary ? await loadProjectMedia(context, path, signal) : await context.client.request<string>("workspace.run", { command: "read_text_file", args: { path: resolved } }, { signal });
+        : binary ? await readReference(context, resolved, scope.assertCurrent, signal, (target) => loadProjectMedia(context, target ?? path, signal))
+        : await readReference(context, resolved, scope.assertCurrent, signal, (target) => context.client.request<string>("workspace.run", { command: "read_text_file", args: { path: target ?? resolved } }, { signal }));
       if (!folder && !binary) {
         if (typeof value !== "string") throw new Error("Invalid file contents.");
         if (value.includes("\0")) {
@@ -84,10 +106,14 @@ function ScopedFilePreviewBody({ path, context, onClose }: ScopedFilePreviewProp
   const position = useFilteredListScrollMemory<HostFileEntry>(searchKey, scope.available && directoryData !== undefined, rows.length, { suspended: !scope.available || directoryData === undefined });
   const selectedQuery = query, selectedRetry = useReaderRetry(scope, query);
   const close = () => scope.close(onClose);
+  const missing = selectedQuery.error instanceof MissingFileError;
+  // A reference to a file that is not on the computer says so once; the same read cannot succeed on retry.
   const footer = !scope.available || !resolved ? <FormActions tone="quiet" submitLabel={copy("Kapat", "Close")} onSubmit={close} />
+    : missing ? <FormActions submitLabel={copy("Kapat", "Close")} onSubmit={close}
+      feedback={<ErrorText error={selectedQuery.error} message={copy("Bu dosya bilgisayarda bulunamadı. Taşınmış veya silinmiş olabilir.", "This file was not found on the computer. It may have been moved or deleted.")} />} />
     : <FormActions submitLabel={selectedQuery.error ? copy("Yeniden dene", "Retry") : copy("Yenile", "Refresh")}
       tone={selectedQuery.error ? "primary" : "quiet"} onSubmit={selectedQuery.error ? selectedRetry.retryError : selectedRetry.retry}
-      feedback={selectedQuery.error ? <ErrorText error={selectedQuery.error} /> : undefined}
+      feedback={selectedQuery.error ? <ErrorText error={selectedQuery.error} read /> : undefined}
       busy={selectedQuery.isFetching} cancelLabel={copy("Kapat", "Close")} onCancel={close} allowCancelWhileBusy />;
   const status = !scope.ready || selectedQuery.isFetching && !selectedQuery.error ? <Loading /> : null;
   const unavailable = <Empty compact={false} illustration="unreachable" title={copy(...RECORD_ACCESS_UNAVAILABLE)} />;

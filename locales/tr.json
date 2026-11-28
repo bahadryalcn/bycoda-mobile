@@ -6,7 +6,7 @@
     "NSCameraUsageDescription": "Bycoda'nın bilgisayarınızdaki eşleştirme QR kodunu taramasına izin verin.",
     "NSFaceIDUsageDescription": "Bycoda bilgisayarlarınıza güvenle erişmek için Face ID kullanın.",
     "NSPhotoLibraryUsageDescription": "Mesajlarınıza fotoğraf eklemek için fotoğraflarınıza erişmesine izin verin.",
-    "NSPhotoLibraryAddUsageDescription": "Görselleri fotoğraflarınıza kaydetmek için izin verin.",
+    "NSPhotoLibraryAddUsageDescription": "Bycoda konuşmalarınızdaki görselleri fotoğraf arşivinize kaydedin.",
     "Localizable.strings": {
       "Active sessions": "Aktif oturumlar",
       "Needs attention": "Dikkat gerekiyor",

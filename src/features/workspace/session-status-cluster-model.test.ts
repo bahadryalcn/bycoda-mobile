@@ -4,7 +4,6 @@ import {
   clusterSegments,
   goalSegmentText,
   hasCapsule,
-  liveRowOnScreen,
   transcriptBottomSpace,
   type QueueSummary,
 } from "./session-status-cluster-model";
@@ -15,7 +14,7 @@ const base = {
   activity: "working" as const,
   live: true,
   stopping: false,
-  liveRowOnScreen: false,
+  liveRowShown: false,
   following: true,
   hasContent: true,
 };
@@ -23,15 +22,15 @@ const counts = { total: 2, queued: 0, running: 2, done: 0, failed: 0, stopped: 0
 const queue: QueueSummary = { text: "2 queued", label: "2 queued · Active", danger: false, open: () => {} };
 
 it("shows the run clock only while the transcript's live row is out of sight", () => {
-  expect(clusterSegments({ ...base, liveRowOnScreen: true }).status).toBeUndefined();
+  expect(clusterSegments({ ...base, liveRowShown: true }).status).toBeUndefined();
   expect(clusterSegments(base).status).toBe("working");
-  expect(clusterSegments({ ...base, stopping: true, liveRowOnScreen: true }).status).toBeUndefined();
+  expect(clusterSegments({ ...base, stopping: true, liveRowShown: true }).status).toBeUndefined();
   expect(clusterSegments({ ...base, stopping: true }).status).toBe("stopping");
 });
 
 it("always carries the states the live row does not say, and nothing when idle", () => {
   for (const activity of ["waiting", "needs-input", "background"] as const)
-    expect(clusterSegments({ ...base, activity, liveRowOnScreen: true }).status).toBe(activity);
+    expect(clusterSegments({ ...base, activity, liveRowShown: true }).status).toBe(activity);
   expect(clusterSegments({ ...base, activity: "done", live: false }).status).toBe("done");
   const idle = clusterSegments({ ...base, activity: "idle", live: false });
   expect(idle.status).toBeUndefined();
@@ -40,7 +39,7 @@ it("always carries the states the live row does not say, and nothing when idle",
 
 it("adds goal, agents and queue segments and the jump button only when scrolled up", () => {
   const goal = { provider: "codex" as const, providerSessionId: "p", objective: "Ship", status: "active" as const };
-  const segments = clusterSegments({ ...base, liveRowOnScreen: true, goal, agents: counts, queue, following: false });
+  const segments = clusterSegments({ ...base, liveRowShown: true, goal, agents: counts, queue, following: false });
   expect(segments).toMatchObject({ goal, agents: counts, queue, jump: true });
   expect(hasCapsule(segments)).toBe(true);
   expect(clusterSegments({ ...base, following: false, hasContent: false }).jump).toBe(false);
@@ -58,19 +57,6 @@ it("accepts only the displayed thread's unfinished provider goal", () => {
   expect(activeSessionGoal(undefined)).toBeUndefined();
   expect(goalSegmentText(goal as never, copy)).toBe("Pursuing goal · 15 h 5 min");
   expect(goalSegmentText({ ...goal, status: "paused", timeUsedSeconds: 30 } as never, copy)).toBe("Goal paused");
-});
-
-it("counts the live row as seen when at least half of it clears the header and the cluster", () => {
-  const at = { viewport: 600, rowFromEnd: 100, rowHeight: 32, topInset: 80, bottomClearance: 60 };
-  // At the end: the row sits 100–132 px above the content end, above the 60 px cluster.
-  expect(liveRowOnScreen({ ...at, distance: 0 })).toBe(true);
-  // Scrolled up so the row hides behind the cluster.
-  expect(liveRowOnScreen({ ...at, distance: 0, bottomClearance: 125 })).toBe(false);
-  // Scrolled far up: the row is below the viewport.
-  expect(liveRowOnScreen({ ...at, distance: 400 })).toBe(false);
-  // A short viewport: the row sits under the floating header.
-  expect(liveRowOnScreen({ ...at, distance: 0, viewport: 160 })).toBe(false);
-  expect(liveRowOnScreen({ ...at, distance: 0, rowHeight: 0 })).toBe(false);
 });
 
 it("reserves only the capsule, keeps the band through a live run and maxes with the tablet button", () => {

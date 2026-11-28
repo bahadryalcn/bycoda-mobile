@@ -71,7 +71,7 @@ describe("readable transcript", () => {
     );
     expect(source.map((item) => item.id)).toEqual(["u", "done", "reason", "a"]);
   });
-  it("shows running actions live and folds them into the turn's work row once they stop", () => {
+  it("keeps the live turn's actions in place and folds them into the work row once the turn settles", () => {
     const source = [
       block("old", "tool", { streaming: true }),
       block("u", "user"),
@@ -79,18 +79,32 @@ describe("readable transcript", () => {
       block("draft", "user", { draft: true }),
     ];
     const active = transcriptEntries(source, undefined, { view: "messages", running: true });
-    expect(active.map((entry) => entry.id)).toEqual(["work:old", "u", "activity:active", "draft"]);
+    expect(active.map((entry) => entry.id)).toEqual(["work:old", "u", "live:active", "draft"]);
     expect(
       transcriptEntries(source, undefined, { view: "messages", running: false }).map(
         (entry) => entry.id,
       ),
     ).toEqual(["work:old", "u", "work:active", "draft"]);
+    // A step that finishes mid-turn keeps its row: no vanishing row, no jump to the turn's top.
     source[2] = { ...source[2]!, streaming: true, tool: { status: "completed" } };
     expect(
       transcriptEntries(source, undefined, { view: "messages", running: true }).map(
         (entry) => entry.id,
       ),
-    ).toEqual(["work:old", "u", "work:active", "draft"]);
+    ).toEqual(["work:old", "u", "live:active", "draft"]);
+  });
+  it("groups the live turn's consecutive steps between its messages, in order", () => {
+    const entries = transcriptEntries([
+      block("u", "user"),
+      block("a1", "assistant", { text: "Looking" }),
+      block("t1", "tool", { tool: { status: "completed" } }),
+      block("t2", "tool", { tool: { status: "completed" } }),
+      block("a2", "assistant", { text: "Writing the report" }),
+      block("t3", "tool", { tool: { status: "in_progress" } }),
+    ], undefined, { view: "messages", running: true });
+    expect(entries.map((entry) => entry.id)).toEqual(["u", "a1", "live:t1", "a2", "live:t3"]);
+    const group = entries.find((entry) => entry.id === "live:t1");
+    expect(group?.kind === "activity" ? group.blocks.map((item) => item.id) : []).toEqual(["t1", "t2"]);
   });
   it("never calls a stopped action completed", () => {
     const stopped = block("stopped", "tool", { streaming: true, tool: { status: "stopped" } });
@@ -358,6 +372,17 @@ describe("turn chrome", () => {
     );
     expect(recorded.map((entry) => entry.id)).toEqual(["u1", "switch", "u2"]);
     expect(recorded.find((entry) => entry.id === "u2")?.modelChange).toBeUndefined();
+  });
+  it("drops a finished handoff the switch row above already names, like desktop", () => {
+    const switchRow = block("switch", "system", {
+      modelSwitch: { steps: [{ harness: "claude", model: "Opus", at: 1 }, { harness: "codex", model: "GPT", at: 2 }] },
+    });
+    const handoff = (to: "codex" | "claude", status: "ready" | "preparing" = "ready") =>
+      block("h", "handoff", { text: "Session so far…", handoff: { from: "claude", to, status } });
+    const ids = (blocks: Block[]) => transcriptEntries(blocks, undefined, { view: "messages", running: false }).map((entry) => entry.id);
+    expect(ids([block("u1", "user"), switchRow, handoff("codex"), block("u2", "user")])).toEqual(["u1", "switch", "u2"]);
+    expect(ids([block("u1", "user"), handoff("claude"), block("u2", "user")])).toEqual(["u1", "h", "u2"]);
+    expect(ids([block("u1", "user"), switchRow, handoff("codex", "preparing")])).toEqual(["u1", "switch", "h"]);
   });
   it("keeps the model change and earlier receipt when only the new turn is regrouped", () => {
     const presentation = new TranscriptPresentation();

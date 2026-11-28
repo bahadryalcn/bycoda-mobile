@@ -44,6 +44,7 @@ import { ProjectFolderBrowser } from "./project-folder-browser";
 import { ModelPickerField } from "./model-picker-field";
 import { selectedChoice } from "./provider-choices";
 import { rememberedDraft, lastCreationChoices, useLastCreationChoice } from "./last-creation-choice";
+import { recentModels, useRecentModels } from "./recent-models";
 import { useCreateSession } from "./use-create-session";
 import { useLatestCallback } from "./use-latest-callback";
 import { useProjectActivity } from "./use-project-activity";
@@ -375,6 +376,7 @@ function QuickStart({
   const [picked, setPicked] = useState<CreationDraft>();
   // Until the owner picks, start from the last model used on this computer if it is still offered.
   const remembered = rememberedDraft(useLastCreationChoice(machine?.id), useModelCatalog(project.id).data);
+  const recents = useRecentModels(machine?.id);
   const draft = picked ?? remembered ?? { model: "" };
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>("supervised");
@@ -403,7 +405,10 @@ function QuickStart({
       : undefined;
     const complete: typeof onCreated = (id) => {
       if (!active()) return;
-      if (remember) void lastCreationChoices.getState().remember(remember.machineId, remember.choice);
+      if (remember) {
+        void lastCreationChoices.getState().remember(remember.machineId, remember.choice);
+        void recentModels.getState().record(remember.machineId, remember.choice);
+      }
       onCreated(id);
     };
     receiptTarget.current = complete;
@@ -435,6 +440,8 @@ function QuickStart({
           settings={settings}
           sparseSettings
           disabled={locked}
+          recents={recents}
+          accountUsage
           onChooseProvider={(next) => {
             if (!active() || locked || submit.isPending()) return;
             const changedProvider = next.provider !== selectedProvider;

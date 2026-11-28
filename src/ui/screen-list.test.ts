@@ -11,7 +11,8 @@ vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ t
 vi.mock("./theme", () => ({ useMobileTheme: () => ({ mode: "dark", colors: {}, semanticColors: {}, uiStyles: {} }) }));
 vi.mock("./tokens", () => ({ colors: {}, space: {}, metrics: {} }));
 vi.mock("./styles", () => ({ uiStyles: {} }));
-vi.mock("./layout", () => ({ useScreenHeading: () => null, useScreenChrome: () => ({ bottomSafeArea: false }) }));
+const heading = vi.hoisted(() => ({ props: {} as Record<string, unknown> }));
+vi.mock("./layout", () => ({ useScreenHeading: (props: Record<string, unknown>) => { heading.props = props; return null; }, useScreenChrome: () => ({ bottomSafeArea: false }) }));
 import { ScreenList } from "./screen-list";
 let root: ReturnType<typeof createRoot> | undefined;
 afterEach(() => { act(() => root?.unmount()); root = undefined; vi.unstubAllGlobals(); });
@@ -58,4 +59,12 @@ it("passes a caller header through untouched when there is no screen chrome", ()
   const callerHeader = createElement("span", null, "Search");
   act(() => root!.render(createElement(ScreenList, { data: [], renderItem: () => null, ListHeaderComponent: callerHeader })));
   expect(fixture.props.ListHeaderComponent).toBe(callerHeader);
+});
+
+it("forwards the tab identity opt-out to the shared heading", () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  root = createRoot(document.createElement("div"));
+  act(() => root!.render(createElement(ScreenList, { data: [], renderItem: () => null, title: "Inbox", identity: "title" })));
+  expect(heading.props).toMatchObject({ title: "Inbox", identity: "title" });
+  expect(fixture.props).not.toHaveProperty("identity");
 });

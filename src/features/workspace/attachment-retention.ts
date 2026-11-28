@@ -1,6 +1,7 @@
 import { decodeComposerDraft } from "./composer-draft";
 import { decodeOutbox, outboxKey } from "../outbox/model/outbox";
 import { decodeQueuedMessageEdit } from "./composer-queue-edit";
+import { NEW_CHAT_ATTACHMENT_SESSION, NEW_CHAT_DRAFT_KEY, newChatAttachmentScopeKey, stagedInScope } from "./new-chat-attachments";
 import { decodeQuestionAttachments, questionAttachmentKey, questionDraftFiles, retainedQuestionFiles } from "./question-attachment-draft";
 
 type Storage = { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void> };
@@ -16,6 +17,16 @@ export async function retainedAttachmentFiles(storage: Storage, machineId: strin
   if (composer !== null) {
     if (!composer.startsWith("bycoda-composer-v2:\n")) throw new Error("Saved attachment draft ownership is unknown.");
     files.push(...decodeComposerDraft(composer).attachments);
+  }
+  // The new-session draft is phone-wide under its own key; it holds this computer's files beside
+  // files staged for other computers.
+  if (sessionId === NEW_CHAT_ATTACHMENT_SESSION) {
+    const fresh = await storage.getItem(NEW_CHAT_DRAFT_KEY);
+    if (fresh !== null) {
+      if (!fresh.startsWith("bycoda-composer-v2:\n")) throw new Error("Saved attachment draft ownership is unknown.");
+      const scope = newChatAttachmentScopeKey(machineId);
+      files.push(...decodeComposerDraft(fresh).attachments.filter((file) => stagedInScope(file, scope)));
+    }
   }
   const questions = decodeQuestionAttachments(await storage.getItem(questionAttachmentKey(machineId, sessionId)));
   files.push(...Object.values(questions.entries).flatMap(questionDraftFiles), ...retainedQuestionFiles(storage, machineId, sessionId));

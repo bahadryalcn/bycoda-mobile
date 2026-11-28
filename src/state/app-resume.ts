@@ -5,10 +5,17 @@
  * report `inactive` (iOS), `background` (Android pauses the activity for another one) or only a window
  * blur (Android overlays). None of these is a real stay away: the mounted workspace, its cached reads
  * and its project-visibility proof stay as they are, and the resumed socket refreshes stale reads
- * quietly. Only a stay in the background of at least `LONG_AWAY_MS` expires the privacy proof, so
- * private content is checked again before it shows.
+ * quietly, adding what changed to what is already on screen. Only a stay in the background of at
+ * least `CONTENT_REFRESH_AWAY_MS` expires the privacy proof, so content is checked and read again
+ * in full before it shows.
  */
+/** A stay away long enough to recheck the connection route and clear typed secrets. */
 export const LONG_AWAY_MS = 30_000;
+/**
+ * A stay away after which the workspace is read again in full. A shorter one keeps the lists on
+ * screen and only adds what changed, so a quick switch to another app never reloads everything.
+ */
+export const CONTENT_REFRESH_AWAY_MS = 10 * 60_000;
 
 export type AppLifecycleEffects = {
   /** Background reconnect time is no failed reconnect the user watched. */
@@ -66,7 +73,7 @@ export function createAppLifecycleController(
           expired = false;
           // Android may keep JavaScript running in the background: expire on time there. iOS
           // suspends it, so the return below checks the elapsed time as well.
-          timer = schedule(expire, LONG_AWAY_MS);
+          timer = schedule(expire, CONTENT_REFRESH_AWAY_MS);
         }
         return "background";
       }
@@ -81,7 +88,7 @@ export function createAppLifecycleController(
       const away = now() - leftAt;
       leftAt = undefined;
       disarm();
-      if (away < LONG_AWAY_MS && !expired) return "brief-return";
+      if (away < CONTENT_REFRESH_AWAY_MS && !expired) return "brief-return";
       expire();
       return "long-return";
     },

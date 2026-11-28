@@ -6,7 +6,7 @@
     "NSCameraUsageDescription": "允许 Bycoda 扫描电脑上的配对二维码。",
     "NSFaceIDUsageDescription": "使用 Face ID 安全访问你的 Bycoda 电脑。",
     "NSPhotoLibraryUsageDescription": "允许 Bycoda 访问照片，以便将照片附加到消息中。",
-    "NSPhotoLibraryAddUsageDescription": "允许将图片保存到照片。",
+    "NSPhotoLibraryAddUsageDescription": "将 Bycoda 对话中的图片保存到你的照片图库。",
     "Localizable.strings": {
       "Active sessions": "活跃会话",
       "Needs attention": "需要处理",

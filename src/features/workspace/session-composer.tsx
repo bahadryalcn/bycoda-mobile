@@ -39,7 +39,7 @@ import { ComposerAttachments } from "./composer-attachments";
 import { ComposerLinks } from "./composer-links";
 import { composerLinks } from "./attachment-presentation";
 import { removeStagedFile, stageBrowserCapture } from "./attachment-files";
-import { ATTACHMENT_COUNT, type StagedAttachment } from "./attachment-model";
+import { ATTACHMENT_COUNT, uploadCancellable, type StagedAttachment } from "./attachment-model";
 import {
   attachmentReleases,
   composerDraftKey,
@@ -83,6 +83,9 @@ import { ComposerNoteCard } from "./composer-note-card";
 import { ComposerContextRing, contextNeedsAttention } from "./composer-context-meter";
 import { composerContextReading } from "./composer-context";
 import { openModelSheet } from "./composer-model-sheet";
+import { openSessionSheet } from "./session-sheet-request";
+import { openNewChat } from "./new-chat-navigation";
+import type { ComposerNavigationAction } from "./composer-command-catalog";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useKeyCommand } from "../../../modules/bycoda-key-commands";
 import { useCommandPalette } from "@/features/keyboard/keyboard-context";
@@ -211,6 +214,20 @@ export function SessionComposer({
     setSideOpen(true);
     return true;
   };
+  // /new, /resume and /add-to-folder open the phone's own destinations, like desktop runs them.
+  const openCommandDestination = (action: ComposerNavigationAction) => {
+    if (!session) return false;
+    Keyboard.dismiss();
+    if (action === "new-session")
+      openNewChat({
+        machineId: scope.machineId,
+        ...(session.projectId ? { projectId: session.projectId } : {}),
+        ...(session.session.worktreeCwd ? { cwd: session.session.worktreeCwd } : {}),
+      });
+    else if (blocked) return false;
+    else openSessionSheet(scope.machineId, scope.sessionId, action === "resume" ? "importHistory" : "moveToFolder");
+    return true;
+  };
   const suggestions = useComposerSuggestions({
     session,
     prompt,
@@ -219,6 +236,7 @@ export function SessionComposer({
     setValue,
     focused: routeFocused && inputFocused && ready && !picker && !templatePicker && !draftDetailsOpen && !sideOpen,
     onSideQuestion: openSideQuestion,
+    onNavigate: openCommandDestination,
   });
   const { token } = suggestions;
   useLayoutEffect(() => {
@@ -988,9 +1006,7 @@ export function SessionComposer({
             queueSupported={queue.supported}
             desktopOwned={desktopOwned}
             missingRun={!session?.runId}
-            cancellable={
-              uploading && Object.values(transfers).some((state) => state.status === "uploading")
-            }
+            cancellable={uploadCancellable(uploading, transfers)}
             onCancelUpload={uploads.cancel}
             draftError={!!error}
             ready={ready}

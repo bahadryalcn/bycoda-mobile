@@ -61,9 +61,22 @@ describe("model groups", () => {
     ]);
   });
 
-  it("parses a trailing variant only", () => {
+  it("parses a trailing effort variant only", () => {
     expect(modelVariant("Gemini 4 Hydrogen (XHigh)")).toEqual({ family: "Gemini 4 Hydrogen", variant: "XHigh" });
     expect(modelVariant("Opus 5.5")).toEqual({ family: "Opus 5.5" });
+    // A release tag is part of the name, not an effort.
+    expect(modelVariant("Gemini Solo (Preview)")).toEqual({ family: "Gemini Solo (Preview)" });
+  });
+
+  it("does not fold models that share a name but differ by a non-effort tag", () => {
+    const rows = groupModels([
+      { provider: "antigravity", name: "Gemini 5 (Preview)" },
+      { provider: "antigravity", name: "Gemini 5 (Beta)" },
+    ]).flatMap((section) => section.rows);
+    expect(rows.map((row) => [row.family, row.label])).toEqual([
+      [undefined, "Gemini 5 (Preview)"],
+      [undefined, "Gemini 5 (Beta)"],
+    ]);
   });
 
   it("gives the subagent picker grouped options that keep full names and search across groups", () => {

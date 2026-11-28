@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { transcriptEntries } from "./transcript-model";
-import { applyToolVisibility } from "./transcript-visibility";
+import { applyToolVisibility, isToolRecord } from "./transcript-visibility";
 import type { Block } from "./wire";
 
 const block = (id: string, role: Block["role"], fields: Partial<Block> = {}): Block => ({ id, role, text: id, ...fields });
@@ -83,4 +83,13 @@ describe("fold durations", () => {
       expect(shown.at(-1)?.footerDuration).toBe(true);
     }
   });
+});
+
+it("never treats an agent-drawn visual as a hideable tool record", () => {
+  const visual = block("v", "tool", {
+    tool: { title: "conversation_visuals_render", status: "completed" },
+    inlineVisual: { version: 2, id: "a".repeat(64), title: "Chart", height: 240 },
+  } as Partial<Block>);
+  expect(isToolRecord(visual)).toBe(false);
+  expect(isToolRecord(block("t", "tool", { tool: { title: "Read", status: "completed" } } as Partial<Block>))).toBe(true);
 });

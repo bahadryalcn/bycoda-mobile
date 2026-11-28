@@ -4,12 +4,14 @@ import type { Block } from "./wire";
 
 /**
  * A tool call or reasoning record that is not an owner decision, plan, result card or attachment.
- * A subagent run is a result the owner follows, so tool visibility never hides it.
+ * A subagent run and a visual the agent drew are results the owner follows, so tool visibility
+ * never hides them.
  */
 export function isToolRecord(block: Block) {
   return (
     (block.role === "tool" || block.role === "reasoning") &&
     !block.agentRun &&
+    !block.inlineVisual &&
     !block.approval &&
     !block.interjection &&
     !block.plan &&
@@ -37,9 +39,14 @@ const isTurnStart = (entry: TranscriptEntry) => entry.kind === "message" && isTu
 
 /** Chrome a dropped entry carried (turn receipt) moves to the nearest kept entry of its turn. */
 function withFooter(out: TranscriptEntry[], dropped: TranscriptEntry) {
-  if (!dropped.footer) return;
+  if (!dropped.footer && !dropped.turnSummary) return;
   const last = out.at(-1);
-  if (last && !last.footer) out[out.length - 1] = { ...last, footer: dropped.footer };
+  if (!last) return;
+  const footer = dropped.footer && !last.footer ? dropped.footer : undefined;
+  // The turn's changed files and sources travel with its receipt.
+  const summary = dropped.turnSummary && !last.turnSummary ? dropped.turnSummary : undefined;
+  if (footer || summary)
+    out[out.length - 1] = { ...last, ...(footer ? { footer } : {}), ...(summary ? { turnSummary: summary } : {}) };
 }
 
 /**

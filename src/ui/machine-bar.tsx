@@ -1,6 +1,6 @@
 import { useMobileTheme } from "@/ui/theme";
 import { router } from "expo-router";
-import { Text, View } from "react-native";
+import { Text, View, useWindowDimensions } from "react-native";
 import { ScopePill } from "./scope-pill";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Laptop from "lucide-react-native/icons/laptop";
@@ -222,11 +222,40 @@ export function MachineConnectionStatus() {
   </View>;
 }
 
-/** Page title with a compact computer pill: one 48dp-tall row, no stacked subtitle. */
+/** System text scale from which header rows may wrap; the same threshold the session rows use. */
+export const LARGE_TEXT_SCALE = 1.35;
 
-/** `accessory` (the shared project scope) follows the computer selector in the same wrapping row. */
-export function MachinePill({ heading, subtitle, accessory, disabled = false }: {
-  heading?: string; subtitle?: string; accessory?: ReactNode;
+/** The context row stays on one line until large text, where a second line beats unreadable pills. */
+export function contextRowWraps(fontScale: number): boolean {
+  return fontScale >= LARGE_TEXT_SCALE;
+}
+
+/**
+ * The single context row under a tab title: scope pills side by side. Each slot shrinks (the pill
+ * label ellipsizes; its full name stays in the spoken label and picker), so the row never wraps
+ * awkwardly on a phone; at large text it may wrap so each pill keeps a readable name.
+ */
+export function ScopeContextRow({ children, stretch = true }: { children: ReactNode; stretch?: boolean }) {
+  const { fontScale } = useWindowDimensions();
+  return (
+    <View style={{ flexDirection: "row", flexWrap: contextRowWraps(fontScale) ? "wrap" : "nowrap", alignItems: "center",
+      columnGap: space.sm, rowGap: space.xs, minWidth: 0, flexShrink: 1, alignSelf: stretch ? "stretch" : "flex-start" }}>
+      {children}
+    </View>
+  );
+}
+
+/** One shrinking slot of the context row; a pill inside it is bounded by the slot. */
+function ContextSlot({ children }: { children: ReactNode }) {
+  return <View style={{ flexShrink: 1, minWidth: 0 }}>{children}</View>;
+}
+
+/**
+ * The switchable computer pill. `accessory` (the shared project scope) follows it in the same
+ * context row; with an accessory the row spans the page width (the tab context row).
+ */
+export function MachinePill({ accessory, disabled = false }: {
+  accessory?: ReactNode;
   /** The computer cannot change right now (a new session is being created on it); its status stays readable. */
   disabled?: boolean;
 } = {}) {
@@ -264,7 +293,7 @@ export function MachinePill({ heading, subtitle, accessory, disabled = false }: 
   // The shared scope pill: the project pill beside it has the same shape, label and chevron.
   const pill = (
           <ScopePill
-            accessibilityLabel={[heading, name, machine ? status : undefined, subtitle, copy("Bilgisayar seç", "Choose computer")]
+            accessibilityLabel={[name, machine ? status : undefined, copy("Bilgisayar seç", "Choose computer")]
               .filter(Boolean)
               .join(". ")}
             expanded={menuOpen && unlocked}
@@ -295,9 +324,8 @@ export function MachinePill({ heading, subtitle, accessory, disabled = false }: 
           />
   );
   return (
-    // The title keeps its full width; when title and pill no longer fit (large text), the pill wraps below it.
-    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space.sm, rowGap: space.xs, minWidth: 0, flexShrink: 1, alignSelf: heading ? "stretch" : "flex-start" }}>
-      {heading ? <Text accessibilityRole="header" style={[uiStyles.pageTitle, { flexShrink: 0, maxWidth: "100%" }]}>{heading}</Text> : null}
+    <ScopeContextRow stretch={!!accessory}>
+      <ContextSlot>
       {process.env.EXPO_OS === "web" ? (
         <Menu open={menuOpen && unlocked} onOpenChange={(next) => setMenuOpen(unlocked && next)}>
           <Menu.Trigger>
@@ -423,7 +451,8 @@ export function MachinePill({ heading, subtitle, accessory, disabled = false }: 
           </Sheet>
         </>
       )}
-      {accessory}
-    </View>
+      </ContextSlot>
+      {accessory ? <ContextSlot>{accessory}</ContextSlot> : null}
+    </ScopeContextRow>
   );
 }

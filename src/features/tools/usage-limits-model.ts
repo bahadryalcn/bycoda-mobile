@@ -167,6 +167,15 @@ export function resetCountdown(
   return unit(Math.max(1, minutes), "minute");
 }
 
+/** Short wall time without seconds; the date only when it is not today. */
+export function shortTime(at: number, now: number, locale: string): string {
+  const date = new Date(at);
+  const sameDay = date.toDateString() === new Date(now).toDateString();
+  return date.toLocaleString(locale, sameDay
+    ? { hour: "2-digit", minute: "2-digit" }
+    : { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
 /** Whole percent for display; a sliver is never rounded away to 0 or up to 100. */
 export function wholePercent(value: number): number {
   const rounded = Math.round(value);

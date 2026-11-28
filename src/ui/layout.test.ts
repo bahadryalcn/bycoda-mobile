@@ -66,15 +66,40 @@ describe("page identity and action ownership", () => {
     renderToStaticMarkup(createElement(Screen, { refreshState: { refreshing: true, onRefresh } }));
     expect(fixture.refresh.refreshing).toBe(true); expect(fixture.refresh.onRefresh).toBe(onRefresh);
   });
-  it("uses one combined page/computer identity without repeating title or subtitle", () => {
-    const identity = vi.fn(({ title, subtitle }: { title: string; subtitle?: string }) =>
-      createElement("button", null, title, " · Computer · ", subtitle));
+  it("puts a tab's title and actions on the first row and the navigator's context row below", () => {
+    const identity = vi.fn(() => createElement("nav", null, "Computer pill"));
     const html = renderToStaticMarkup(createElement(ScreenChromeProvider, { headerIdentity: identity },
       createElement(ScreenHeading, { title: "Projects", subtitle: "12 projects", actions: createElement("button", null, "Add") })));
     expect(html.match(/Projects/g)).toHaveLength(1);
     expect(html.match(/12 projects/g)).toHaveLength(1);
-    expect(html).toContain("Computer");
-    expect(html).toContain("Add");
+    expect(html).toContain('data-page-header="title"');
+    // Deterministic order: title, then the actions on its row, then the one context row.
+    expect(html.indexOf("Projects")).toBeLessThan(html.indexOf("Add"));
+    expect(html.indexOf("Add")).toBeLessThan(html.indexOf("Computer pill"));
+    expect(identity).toHaveBeenCalledWith(expect.objectContaining({ title: "Projects", showComputer: true }));
+  });
+
+  it("lets a tab opt out of the computer pill and leaves no context row when nothing remains", () => {
+    const identity = vi.fn(({ showComputer, scopeControl }: { showComputer: boolean; scopeControl?: unknown }) =>
+      showComputer ? createElement("nav", null, "Computer pill") : (scopeControl as never) ?? null);
+    const render = (props: Record<string, unknown>) => renderToStaticMarkup(createElement(ScreenChromeProvider, { headerIdentity: identity },
+      createElement(ScreenHeading, { title: "Settings", ...props })));
+    const titleOnly = render({ identity: "title" });
+    expect(identity).toHaveBeenLastCalledWith(expect.objectContaining({ showComputer: false }));
+    expect(titleOnly).not.toContain("Computer pill");
+    // Root > title row only: no empty context wrapper after the title row.
+    expect(titleOnly.match(/<div/g)).toHaveLength(4);
+    const withProject = render({ identity: "title", scopeControl: createElement("button", null, "Project pill") });
+    expect(withProject).toContain("Project pill");
+    expect(withProject).not.toContain("Computer pill");
+    expect(withProject.indexOf("Settings")).toBeLessThan(withProject.indexOf("Project pill"));
+  });
+
+  it("forwards the identity opt-out from Screen to the tab heading", () => {
+    const identity = vi.fn(() => null);
+    renderToStaticMarkup(createElement(ScreenChromeProvider, { headerIdentity: identity },
+      createElement(Screen, { title: "Settings", identity: "title" })));
+    expect(identity).toHaveBeenCalledWith(expect.objectContaining({ showComputer: false }));
   });
 
   it("native title ownership hides the repeated title but never the actions or context", () => {
@@ -230,7 +255,9 @@ describe("tab title row trailing command", () => {
     const html = renderToStaticMarkup(createElement(ScreenChromeProvider, { headerIdentity: identity, headerTrailing: createElement("button", null, "Voice assistant") },
       createElement(ScreenHeading, { title: "Inbox", actions: createElement("button", null, "Add") })));
     expect(html.indexOf("Add")).toBeLessThan(html.indexOf("Voice assistant"));
-    expect(html.indexOf("Inbox · bab")).toBeLessThan(html.indexOf("Add"));
+    expect(html.indexOf("Inbox")).toBeLessThan(html.indexOf("Add"));
+    // The context row (computer and project pills) sits below the title row, after its commands.
+    expect(html.indexOf("Voice assistant")).toBeLessThan(html.indexOf("Inbox · bab"));
     // A pushed page under a native title never shows it.
     const pushed = renderToStaticMarkup(createElement(ScreenChromeProvider, { nativeTitle: true, headerTrailing: createElement("button", null, "Voice assistant") },
       createElement(ScreenHeading, { title: "Tasks", actions: createElement("button", null, "Add") })));

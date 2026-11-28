@@ -11,7 +11,7 @@ import { RemoteHostError } from "@/remote/host-error";
 import { Notice, QueryState } from "@/ui/primitives";
 import { ChatToolbarAction } from "@/ui/chat-controls";
 import { useCopy } from "@/ui/copy";
-import { errorMessage } from "@/ui/error-message";
+import { errorMessage, translateErrorText } from "@/ui/error-message";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
 import {
@@ -26,6 +26,7 @@ import { ComposerModelMark } from "./composer-model-mark";
 import { ModelPicker } from "./model-picker";
 import { settingsSummary } from "./model-picker-model";
 import { settingLabels } from "./setting-labels";
+import { effortLabel, foldedVariant } from "./model-variants";
 import { choiceKey, providerChoices, selectedChoice } from "./provider-choices";
 import type { SessionCommand } from "./session-types";
 import type { HostSession, RuntimeMode } from "./wire";
@@ -34,6 +35,7 @@ import { composerAccessAvailable, unavailableAccessModes } from "./composer-acce
 import { ComposerContextSection } from "./composer-context-meter";
 import type { ComposerContextReading } from "./composer-context";
 import { useModelSheetRequest } from "./composer-model-sheet";
+import { recentModels, useRecentModels } from "./recent-models";
 
 /**
  * Composer toolbar chip: provider mark, model and effort of the session, always visible in the
@@ -64,6 +66,7 @@ export function ComposerModelChip({
   const machine = useActiveMachine();
   const catalog = useModelCatalog(session.projectId);
   const configure = useAsyncAction();
+  const recents = useRecentModels(machineId);
   const [open, setOpen] = useState(false);
   const draftOf = (value: HostSession) => ({
     provider: value.session.harness,
@@ -149,6 +152,18 @@ export function ComposerModelChip({
     if (saved === true) {
       form.markSaved(submitted);
       setOpen(false);
+      const before = reviewed.session;
+      if (
+        before.harness !== submitted.provider ||
+        (before.providerAccountId ?? undefined) !== (submitted.accountId ?? undefined) ||
+        before.model !== submitted.model
+      )
+        // The model left stays one tap away, the new one leads.
+        void recentModels.getState().record(
+          machineId,
+          { provider: submitted.provider, accountId: submitted.accountId ?? undefined, model: submitted.model },
+          ...(before.model ? [{ provider: before.harness, accountId: before.providerAccountId ?? undefined, model: before.model }] : []),
+        );
     }
   };
   const openSheet = () => {
@@ -168,12 +183,21 @@ export function ComposerModelChip({
   }, [requested, machineId, session.session.id]);
   const models = available.models[harness] ?? [];
   const { name, model: summaryModel } = activeSessionModel(session.session, available);
-  const summary = settingsSummary(summaryModel, session.session.modelSettings, settingLabels(copy));
-  const shown = summary ? `${name} · ${summary}` : name;
+  const labels = settingLabels(copy);
+  const summary = settingsSummary(summaryModel, session.session.modelSettings, labels);
+  // A model listed once per effort ("Gemini 4 Hydrogen (Low)") reads like any other model with an
+  // effort setting; like the picker, only a family with two or more listed variants folds.
+  const variant = foldedVariant(name, models, (entry) => entry.name);
+  const variantEffort = variant ? effortLabel(variant.variant) : "";
+  const baseName = variant ? `${variant.family} · ${labels[variantEffort] ?? variantEffort}` : name;
+  const shown = summary ? `${baseName} · ${summary}` : baseName;
   const accessShown = composerAccessAvailable(session);
   const fullAccess = accessShown && session.session.runtimeMode === "full-access";
+  // Accounts are told apart by colour on the chip; the spoken label names the account.
+  const sessionChoice = choices.find((entry) => entry.key === choiceKey(session.session.harness, session.session.providerAccountId));
+  const severalAccounts = choices.filter((entry) => entry.provider === session.session.harness).length > 1;
   const spoken = [
-    shown,
+    severalAccounts && sessionChoice ? `${shown}, ${sessionChoice.label}` : shown,
     accessShown ? `${copy("Erişim", "Access")}: ${accessModeLabel(session.session.runtimeMode as RuntimeMode, copy)}` : "",
   ].filter(Boolean).join(". ");
   const title = accessShown ? copy("Model ve erişim", "Model and access") : copy("Model", "Model");
@@ -235,6 +259,8 @@ export function ComposerModelChip({
         catalog={available}
         choices={choices}
         choice={choice}
+        recents={recents}
+        accountUsage
         unavailableAccount={unavailableAccount}
         onChooseProvider={(next) => {
           if (next.provider === harness)
@@ -317,7 +343,12 @@ export function ComposerModelChip({
               )}
             />
           ) : catalog.data?.errors?.[harness] ? (
-            <Notice tone="danger" message={catalog.data.errors[harness]} />
+            // The Host's own wording stays as the detail below a localized lead-in.
+            <Notice
+              tone="danger"
+              message={`${copy("Bu ajanın model listesi okunamadı.", "This agent's model list could not be read.")}\n\n${
+                translateErrorText(catalog.data.errors[harness], copy) ?? catalog.data.errors[harness]}`}
+            />
           ) : (
             <QueryState query={catalog} />
           )

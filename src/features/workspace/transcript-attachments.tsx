@@ -18,6 +18,7 @@ import { useReaderContentAccess, useReaderRetry, useReaderScope } from "@/ui/use
 import { space } from "@/ui/tokens";
 import { loopbackScopeKey } from "@/ui/loopback-link";
 import { FileChip } from "@/ui/file-chip";
+import { isPastedTextAttachment } from "./transcript-labels-model";
 import { MediaGrid, MediaTile, type MediaTileStatus } from "@/ui/media-grid";
 import { MEDIA_GRID_SLOTS, mediaGridLayout, rememberedMediaSize, rememberMediaSize, type MediaFrame, type MediaSize } from "@/ui/media-grid-layout";
 import { MediaGallery, type MediaGalleryItem } from "@/ui/media-viewer";
@@ -492,16 +493,18 @@ function AttachmentChip({ id, name, size, mimeType, context }: MessageFile & { c
   const tooLarge = attachmentPlan(kind, size) === "too-large";
   const sizeLabel = size !== undefined ? formatAttachmentSize(size) : "";
   const detail = [sizeLabel, tooLarge ? copy("Çok büyük", "Too large") : ""].filter(Boolean).join(" · ");
+  // Like desktop, a long paste reads as what it is; the reader still opens the file by its name.
+  const shown = isPastedTextAttachment({ name, mimeType }) ? copy("Yapıştırılan metin", "Pasted text") : name;
   return (
     <>
       <FileChip
         key={opening.key}
-        name={name}
+        name={shown}
         nameLines={1}
         detail={detail || undefined}
-        accessibilityLabel={copy("Dosyayı aç: {p0}", "Open file: {p0}", { p0: name })}
+        accessibilityLabel={copy("Dosyayı aç: {p0}", "Open file: {p0}", { p0: shown })}
         disabled={tooLarge || !opening.available}
-        onPress={() => confirmDownload(copy, { kind, name, size }, opening.open)}
+        onPress={() => confirmDownload(copy, { kind, name: shown, size }, opening.open)}
       />
       {opening.opened ? (
         <AttachmentReader id={id} name={name} mimeType={mimeType} context={context} onClose={opening.close} />

@@ -101,6 +101,16 @@ describe("session checkpoint and rewind review", () => {
       rewindCommand({ ...session, session: { ...session.session, worktreeCwd: "/other" } }, review),
     ).toThrow("changed");
   });
+  it("restores the whole prompt, never the Host's cut preview", () => {
+    const blocks = session.session.blocks.map((block) =>
+      block.id === "turn" ? { ...block, text: "cut…", remoteContent: { revision: 3, bytes: 40_000 } } : block);
+    const previewed = { ...session, session: { ...session.session, blocks } } as HostSession;
+    expect(() => reviewRewind(previewed, "turn")).toThrow("Load the full message");
+    expect(() => reviewRewind(previewed, "turn", { id: "before", role: "user", text: "other" })).toThrow("Load the full message");
+    const review = reviewRewind(previewed, "turn", { id: "turn", role: "user", text: "whole prompt" });
+    expect(review.prompt).toBe("whole prompt");
+    expect(rewindCommand(previewed, review)).toMatchObject({ type: "rewind", blockId: "turn" });
+  });
   it("requires status and file preview from the same captured checkpoint", () => {
     const status = { files: [file], expectedCheckpoint: "a".repeat(64) };
     const diff = validateCheckpointDiff(

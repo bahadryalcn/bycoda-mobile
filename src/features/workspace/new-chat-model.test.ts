@@ -105,6 +105,7 @@ describe("send attempts", () => {
     for (const change of [
       { text: "Fix the tests" }, { projectId: "beta" }, { machineId: "pc-2" }, { cwd: "/work/alpha-feature" },
       { model: "other" }, { runtimeMode: "full-access" as const }, { settings: { effort: "low" } }, { firstTurn: false },
+      { attachments: ["file-1"] },
     ]) {
       const next = newChatAttempt(first, newChatAttemptKey({ ...payload, ...change }), make);
       expect(next.createId).not.toBe(first.createId);
@@ -112,8 +113,36 @@ describe("send attempts", () => {
     }
   });
 
+  it("keeps the IDs for the same attachments and renews them for a changed set", () => {
+    const make = ids();
+    const withFiles = { ...payload, attachments: ["file-1", "file-2"] };
+    const first = newChatAttempt(undefined, newChatAttemptKey(withFiles), make);
+    expect(newChatAttempt(first, newChatAttemptKey({ ...withFiles, attachments: ["file-1", "file-2"] }), make)).toBe(first);
+    expect(newChatAttempt(first, newChatAttemptKey({ ...withFiles, attachments: ["file-1"] }), make)).not.toBe(first);
+    // No attachments reads the same as an empty list.
+    expect(newChatAttemptKey({ ...payload, attachments: [] })).toBe(newChatAttemptKey(payload));
+  });
+
   it("builds the nested first turn the Host contract accepts", () => {
     expect(newChatFirstTurn("Hello", "turn-1")).toEqual({ type: "send", commandId: "turn-1", sessionId: "", text: "Hello" });
+    expect(newChatFirstTurn("Hello", "turn-1", [])).toEqual({ type: "send", commandId: "turn-1", sessionId: "", text: "Hello" });
+  });
+
+  it("carries uploaded attachments in the first turn", () => {
+    const file = { id: "f-1", name: "shot.png", mimeType: "image/png", kind: "image" as const, size: 12 };
+    expect(newChatFirstTurn("", "turn-1", [file])).toEqual({
+      type: "send", commandId: "turn-1", sessionId: "", text: "", attachments: [file],
+    });
+  });
+
+  it("produces a create the shared Host contract accepts, attachments included", async () => {
+    const { CommandDispatchParamsSchema } = await import("../../../../src/shared/model/host-contracts/session-commands");
+    const file = { id: "f-1", name: "notes.md", mimeType: "text/markdown", kind: "file" as const, size: 3 };
+    const create = {
+      type: "create", commandId: "create-1", projectId: "alpha", harness: "codex", model: "gpt", runtimeMode: "supervised",
+      firstTurn: newChatFirstTurn("Read this", "turn-1", [file]),
+    };
+    expect(CommandDispatchParamsSchema.parse(create)).toEqual(create);
   });
 });
 
@@ -126,6 +155,15 @@ describe("newChatSendState", () => {
     expect(newChatSendState({ ...ready, canStart: false }).reason).toBe("model");
     expect(newChatSendState({ ...ready, connected: false }).reason).toBe("offline");
     expect(newChatSendState({ ...ready, locked: true }).reason).toBe("busy");
+  });
+
+  it("sends attachments without words, as an open session does, but never while they upload", () => {
+    expect(newChatSendState({ ...ready, text: "", attachments: 1 })).toEqual({ enabled: true });
+    expect(newChatSendState({ ...ready, text: "", attachments: 0 }).reason).toBe("empty");
+    expect(newChatSendState({ ...ready, attachments: 1, uploading: true })).toEqual({ enabled: false, reason: "busy" });
+    // Attachment-only sends still need a project and a model.
+    expect(newChatSendState({ ...ready, text: "", attachments: 1, canStart: false }).reason).toBe("model");
+    expect(newChatSendState({ ...ready, text: "", attachments: 1, project: false }).reason).toBe("project");
   });
 
   it("holds Send for input only an open session can resolve", () => {

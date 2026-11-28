@@ -6,7 +6,7 @@
     "NSCameraUsageDescription": "Permite que Bycoda escanee el código QR de emparejamiento de tu ordenador.",
     "NSFaceIDUsageDescription": "Usa Face ID para acceder de forma segura a tus ordenadores de Bycoda.",
     "NSPhotoLibraryUsageDescription": "Permite que Bycoda acceda a tus fotos para adjuntarlas a tus mensajes.",
-    "NSPhotoLibraryAddUsageDescription": "Permite guardar imágenes en tus fotos.",
+    "NSPhotoLibraryAddUsageDescription": "Guarda imágenes de tus conversaciones de Bycoda en tu fototeca.",
     "Localizable.strings": {
       "Active sessions": "Sesiones activas",
       "Needs attention": "Requiere atención",

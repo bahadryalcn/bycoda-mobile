@@ -220,10 +220,10 @@ export function FieldError({ message }: FieldErrorProps) {
   );
 }
 
-export function ErrorText({ error, message }: ErrorTextProps) {
+export function ErrorText({ error, message, read }: ErrorTextProps) {
   const copy = useCopy();
   if (!error) return null;
-  return <FieldError message={errorMessage(error, copy, message)} />;
+  return <FieldError message={errorMessage(error, copy, message, read ? { read } : undefined)} />;
 }
 
 export function ErrorNotice({ error, onRetry, retryLabel, retrying, message, action, children }: ErrorNoticeProps) {

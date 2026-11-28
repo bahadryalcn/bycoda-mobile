@@ -274,8 +274,8 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos",
-          "savePhotosPermission": "Allow $(PRODUCT_NAME) to save images to your photos",
+          "photosPermission": "Choose photos to attach to your Bycoda messages.",
+          "savePhotosPermission": "Save images from your Bycoda conversations to your photo library.",
           "granularPermissions": []
         }
       ],

@@ -14,6 +14,9 @@ import { useLocale } from "@/i18n";
 import { useMobileTheme } from "@/ui/theme";
 import { space } from "@/ui/tokens";
 import { providerName } from "./provider-choices";
+import { ProviderIcon } from "@/ui/provider-identity";
+import type { RemoteProvider } from "@/domain/types";
+import { SystemFailureCard } from "./system-failure-card";
 import {
   formatMessageTime,
   hasTurnMetrics,
@@ -51,6 +54,48 @@ export function ModelSwitchDivider({ from, to, count = 1 }: { from: SwitchState;
       <ArrowLeftRight size={13} color={colors.muted} />
       <Body muted numberOfLines={1} style={[uiStyles.caption, { flexShrink: 1 }]}>
         {count > 1 ? `${title} (${count})` : title}
+      </Body>
+      <View style={{ flex: 1, height: 1, backgroundColor: colors.separator }} />
+    </View>
+  );
+}
+
+/**
+ * Desktop's handoff divider: the agent the conversation continued with, as one quiet line between
+ * turns. The handoff brief is the receiving agent's input, never transcript content.
+ */
+export function HandoffDivider({ block }: { block: Block }) {
+  const copy = useCopy();
+  const { colors, uiStyles } = useMobileTheme();
+  const meta = block.handoff;
+  if (!meta) return null;
+  // A failed switch is one failure notice, not a divider.
+  if (meta.status === "failed")
+    return <SystemFailureCard id={block.id} text={meta.error || copy("Son tur başarısız oldu", "The last turn failed")} />;
+  const to = providerName(meta.to);
+  const preparing = meta.status === "preparing";
+  const cancelled = meta.status === "cancelled";
+  const label = preparing
+    ? copy("Devir hazırlanıyor", "Preparing a handoff")
+    : cancelled
+      ? `${to} · ${copy("İptal edildi", "Cancelled")}`
+      : to;
+  return (
+    <View
+      accessible
+      accessibilityLabel={
+        preparing
+          ? copy("{p0} için devir hazırlanıyor", "Preparing a handoff to {p0}", { p0: to })
+          : cancelled
+            ? `${copy("Devir", "Handoff")} · ${label}`
+            : copy("{p0} ile devam edildi", "Continued with {p0}", { p0: to })
+      }
+      style={{ flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: space.sm }}
+    >
+      <View style={{ flex: 1, height: 1, backgroundColor: colors.separator }} />
+      {preparing || cancelled ? null : <ProviderIcon provider={meta.to as RemoteProvider} size={14} />}
+      <Body muted numberOfLines={1} style={[uiStyles.caption, { flexShrink: 1 }]}>
+        {label}
       </Body>
       <View style={{ flex: 1, height: 1, backgroundColor: colors.separator }} />
     </View>

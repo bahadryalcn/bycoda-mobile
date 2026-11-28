@@ -6,7 +6,14 @@ import { Surface } from "panelui-native/components/surface";
 import type { UIMessage } from "ai";
 import type { MessageContext } from "./media-policy";
 import { MessageText } from "./message-text";
-import { radii, space, type MobileColors } from "./tokens";
+import { fontSize, lineHeight, metrics, radii, space, type MobileColors } from "./tokens";
+import ChevronRight from "lucide-react-native/icons/chevron-right";
+import FileMinus from "lucide-react-native/icons/file-minus";
+import FilePen from "lucide-react-native/icons/file-pen";
+import FilePlus from "lucide-react-native/icons/file-plus";
+import { useMobileTheme } from "./theme";
+import { Body } from "./typography";
+import { LifecycleButton as PanelButton } from "./busy-indicator";
 
 /** Product facade keeps transcript semantics while PanelUI owns presentation. */
 export const ChatMessage = React.memo(function ChatMessage({
@@ -77,4 +84,100 @@ export function chatUserBubbleStyle(colors: MobileColors) {
     paddingHorizontal: space.md + space.xxs,
     paddingVertical: space.sm + space.xxs,
   };
+}
+
+/**
+ * One file a turn changed (desktop's changed-files strip): type-of-change glyph, the file name ahead
+ * of its folder, an Added/Deleted mark and the line delta in the activity steps' colors. A row with
+ * `onPress` opens the turn's edits of that file; without it the row is a plain record.
+ */
+export function ChatChangedFile({
+  name,
+  folder,
+  status,
+  statusLabel,
+  counts,
+  accessibilityLabel,
+  onPress,
+}: {
+  name: string;
+  folder?: string;
+  status?: "added" | "deleted" | "modified";
+  /** Localized Added/Deleted mark; a modified file shows none, like desktop. */
+  statusLabel?: string;
+  counts?: { additions: number; deletions: number };
+  accessibilityLabel: string;
+  onPress?: () => void;
+}) {
+  const { colors } = useMobileTheme();
+  const deleted = status === "deleted";
+  const Glyph = status === "added" ? FilePlus : deleted ? FileMinus : FilePen;
+  const glyphColor = status === "added" ? colors.success : deleted ? colors.danger : colors.muted;
+  const caption = { fontSize: fontSize.caption, lineHeight: lineHeight.caption };
+  const content = (
+    <>
+      <View accessible={false} style={{ width: 20, alignItems: "center" }}>
+        <Glyph size={16} color={glyphColor} />
+      </View>
+      <Body
+        mono
+        selectable={false}
+        numberOfLines={1}
+        style={{
+          flexShrink: 1,
+          fontSize: fontSize.small,
+          lineHeight: lineHeight.small,
+          fontWeight: "500",
+          ...(deleted ? { textDecorationLine: "line-through" as const, color: colors.muted } : {}),
+        }}
+      >
+        {name}
+      </Body>
+      {folder ? (
+        <Body muted mono selectable={false} numberOfLines={1} ellipsizeMode="head" style={[caption, { flex: 1, minWidth: 0 }]}>
+          {folder}
+        </Body>
+      ) : <View style={{ flex: 1 }} />}
+      {statusLabel ? (
+        <Body selectable={false} numberOfLines={1} style={[caption, { flexShrink: 0, color: deleted ? colors.danger : colors.success }]}>
+          {statusLabel}
+        </Body>
+      ) : null}
+      {counts ? (
+        <Body mono selectable={false} numberOfLines={1} style={[caption, { flexShrink: 0, fontVariant: ["tabular-nums"] }]}>
+          <Body mono style={[caption, { color: colors.success }]}>{`+${counts.additions}`}</Body>
+          {" "}
+          <Body mono style={[caption, { color: colors.danger }]}>{`−${counts.deletions}`}</Body>
+        </Body>
+      ) : null}
+      {onPress ? <ChevronRight size={15} color={colors.subtle} /> : null}
+    </>
+  );
+  const rowStyle = {
+    minHeight: metrics.touchTarget,
+    paddingVertical: space.xs,
+    paddingHorizontal: space.sm,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: space.sm,
+    borderRadius: radii.control,
+  };
+  if (!onPress)
+    return (
+      <View accessible accessibilityLabel={accessibilityLabel} style={rowStyle}>
+        {content}
+      </View>
+    );
+  return (
+    <PanelButton
+      variant="ghost"
+      pressScale={1}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+      style={{ ...rowStyle, backgroundColor: "transparent" }}
+    >
+      {content}
+    </PanelButton>
+  );
 }

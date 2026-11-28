@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { assertApprovalCommand, captureApprovalCommand } from "./approval-command";
+import { ApprovalCommandRefused, assertApprovalCommand, canAllowForSession, captureApprovalCommand } from "./approval-command";
 import { dispatchCommand, UncertainCommand } from "../features/workspace/commands";
 import type { HostTransport } from "../remote/transport";
 
@@ -81,4 +81,21 @@ it("retains the original occurrence, choice, authority and machine through uncer
     authorityGeneration: 2,
   });
   expect(request.mock.calls[1][1]).toEqual({ commandId: "same-command" });
+});
+
+it("offers and sends Allow for this session only for a Host-scoped request on a Host with grants", () => {
+  const grants = [...caps, "sessions.approvalGrants.v1"];
+  const scoped = { occurrenceId: a, sessionApprovalScope: "claude:Glob:workspace-filename-search" };
+  expect(canAllowForSession(grants, scoped)).toBe(true);
+  expect(canAllowForSession(caps, scoped)).toBe(false);
+  expect(canAllowForSession(grants, { occurrenceId: a })).toBe(false);
+  expect(canAllowForSession(grants, { ...scoped, occurrenceId: "request-7" })).toBe(false);
+  expect(canAllowForSession(grants, { ...scoped, decided: "allow" })).toBe(false);
+
+  const command = captureApprovalCommand("session", "run", { requestId: 7, occurrenceId: a }, "allow", true);
+  expect(command).toMatchObject({ decision: "allow", allowForSession: true });
+  expect(captureApprovalCommand("session", "run", { requestId: 7, occurrenceId: a }, "deny", true)).not.toHaveProperty("allowForSession");
+  expect(() => assertApprovalCommand(grants, command)).not.toThrow();
+  expect(() => assertApprovalCommand(caps, command)).toThrow(ApprovalCommandRefused);
+  expect(() => assertApprovalCommand(grants, { ...command, decision: "deny" })).toThrow("whole session");
 });

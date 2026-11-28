@@ -5,6 +5,7 @@ import {
 } from "../../../../src/features/sessions/model/turnInterruption";
 import type { Block, HostSession } from "./wire";
 import { providerName } from "./provider-choices";
+import { sameTurnSummary, turnSummary, type TurnSummary } from "./transcript-turn-summary";
 
 /** Display names never replace provider IDs retained in transcript authorship. */
 export function transcriptSenderName(author?: string): string {
@@ -30,6 +31,8 @@ type TurnChrome = {
   foldTurn?: Block;
   /** The receipt repeats the turn's duration because no visible fold row of the turn shows it. */
   footerDuration?: boolean;
+  /** A settled turn's changed files and web sources, shown after its last entry like desktop. */
+  turnSummary?: TurnSummary;
 };
 export type TranscriptEntry =
   | ({ id: string; kind: "message"; block: Block; author?: string; /** Identical failures folded into this card. */ repeat?: number } & TurnChrome)
@@ -68,6 +71,8 @@ export function isTransientActivity(block: Block) {
   return (
     ["tool", "reasoning", "system"].includes(block.role) &&
     !block.agentRun &&
+    !block.inlineVisual &&
+    !block.branchOrigin &&
     !block.notice &&
     !block.approval &&
     !block.draft &&
@@ -88,6 +93,8 @@ export function isQuietActivity(block: Block) {
   return (
     ["tool", "reasoning", "system"].includes(block.role) &&
     !block.agentRun &&
+    !block.inlineVisual &&
+    !block.branchOrigin &&
     activityState(block) !== "failed" &&
     !block.notice &&
     !block.approval &&
@@ -125,6 +132,19 @@ export function canCollapseToolFailure(block: Block) {
     !block.handoff
   );
 }
+/** Desktop's `isHandoffCoveredBySwitch`: a ready handoff whose target the previous switch row shows. */
+export function isHandoffCoveredBySwitch(blocks: readonly Block[], index: number): boolean {
+  const handoff = blocks[index]?.handoff;
+  if (blocks[index]?.role !== "handoff" || !handoff || handoff.status !== "ready") return false;
+  for (let at = index - 1; at >= 0; at -= 1) {
+    const block = blocks[at]!;
+    if (block.role === "handoff") return false;
+    const step = block.modelSwitch?.steps.at(-1);
+    if (step) return step.harness === handoff.to;
+  }
+  return false;
+}
+
 /** A plain system failure card (no tool, approval or structured content). */
 export const isSystemFailure = (block: Block) =>
   block.role === "system" && block.notice === "error" && !block.tool && !block.approval && !block.attachments?.length;
@@ -212,16 +232,24 @@ export function transcriptEntries(
   let previousReply = context.replyAuthor;
   // The turn's folded work row; like desktop, it carries the settled turn's duration.
   let turnFold: Extract<TranscriptEntry, { kind: "activity" }> | undefined;
+  // The blocks of the turn being read, for its changed files and sources (desktop's per-turn strip).
+  let turnBlocks: Block[] = [];
   // Like desktop, a settled turn ends with its receipt; the running turn has none yet.
+  // A queued draft is not part of the turn it follows, so the receipt skips past it.
   const closeTurn = (last: boolean) => {
-    const entry = entries.at(-1);
-    if (turnUser?.durationMs != null && entry && !(last && presentation?.running)) {
+    const entry = entries.findLast((item) => !(item.kind === "message" && item.block.draft));
+    const settled = !(last && presentation?.running);
+    if (turnUser?.durationMs != null && entry && settled) {
       entry.footer = turnUser;
       if (turnFold) turnFold.foldTurn = turnUser;
       else entry.footerDuration = true;
     }
+    const summary = entry && settled && turnBlocks.length ? turnSummary(turnBlocks) : undefined;
+    // The settled turn's whole work replaces anything an earlier close attached to the same row.
+    if (summary && entry) entry.turnSummary = summary;
     turnUser = undefined;
     turnFold = undefined;
+    turnBlocks = [];
   };
   // Queued drafts and internal steering do not start a new visible provider turn; work after the
   // latest user message (a steer included) is the part still unfolding.
@@ -240,6 +268,8 @@ export function transcriptEntries(
   let turnAgents: Extract<TranscriptEntry, { kind: "agents" }> | undefined;
   for (const [index, block] of blocks.entries()) {
     if (block.internal) continue;
+    // Like desktop, a finished handoff the switch row above already names gets no divider of its own.
+    if (isHandoffCoveredBySwitch(blocks, index)) continue;
     if (
       presentation?.view === "messages" &&
       isFoldedOwnerStop(blocks[index - 1], block) &&
@@ -248,8 +278,9 @@ export function transcriptEntries(
       continue;
     if (block.modelSwitch) switched = true;
     if (block.role === "user") {
-      // A steer stays inside its turn, so the turn's receipt still follows the turn's end.
-      if (!isSteer(block)) closeTurn(false);
+      // A steer or queued draft stays inside its turn (work keeps arriving after a queued
+      // follow-up), so the turn's receipt and changed files still follow the turn's end.
+      if (!isSteer(block) && !block.draft) closeTurn(false);
       lastAssistant = undefined;
     }
     if (block.modelSwitch) lastAssistant = undefined;
@@ -259,6 +290,7 @@ export function transcriptEntries(
     }
     if (block.role === "user" && block.turnModel) author = block.turnModel.harness;
     let chrome: TurnChrome = {};
+    turnBlocks.push(block);
     if (isTurnStart(block)) {
       turnUser = block;
       if (block.turnModel && previousModel && !switched && !sameModel(previousModel, block.turnModel))
@@ -289,12 +321,16 @@ export function transcriptEntries(
       }
       continue;
     }
-    if (
-      presentation?.view === "messages" &&
-      isTransientActivity(block) &&
-      activityState(block) !== "failed" &&
-      !(presentation.running && index > turnStart && activityState(block) === "running")
-    ) {
+    if (presentation?.view === "messages" && isTransientActivity(block) && activityState(block) !== "failed") {
+      // Like T3 Code's work log, the live turn keeps each step where it happened: consecutive steps
+      // share one growing row whose id never changes, so a finished step neither vanishes nor moves
+      // to the top of the turn. The settled turn folds into one row below, as on desktop.
+      if (presentation.running && index > turnStart) {
+        const previous = entries.at(-1);
+        if (previous?.kind === "activity" && !previous.footer && previous.id.startsWith("live:")) previous.blocks.push(block);
+        else entries.push({ id: `live:${block.id}`, kind: "activity", blocks: [block], author });
+        continue;
+      }
       if (turnWork) turnWork.blocks.push(block);
       else {
         turnWork = { id: `work:${block.id}`, kind: "activity", blocks: [block], author };
@@ -330,6 +366,8 @@ function sameEntry(previous: TranscriptEntry, next: TranscriptEntry) {
       const left = a as readonly Block[] | undefined;
       const right = b as readonly Block[] | undefined;
       if (!left || !right || left.length !== right.length || left.some((block, index) => block !== right[index])) return false;
+    } else if (key === "turnSummary") {
+      if (!sameTurnSummary(a as TurnSummary | undefined, b as TurnSummary | undefined)) return false;
     } else if (key === "modelChange") {
       const left = a as TurnChrome["modelChange"];
       const right = b as TurnChrome["modelChange"];
@@ -525,7 +563,10 @@ export function completeResponseText(blocks: readonly Block[], id: string) {
   for (let position = start; position < blocks.length; position++) {
     const block = blocks[position]!;
     if (block.role === "user") break;
-    if (block.role === "assistant" && block.text) text.push(block.text);
+    if (block.role !== "assistant" || !block.text) continue;
+    // A long block is only a 32 KiB preview here; a cut response is never offered as complete.
+    if (block.remoteContent) return undefined;
+    text.push(block.text);
   }
   return text.join("\n\n");
 }
@@ -648,8 +689,12 @@ export function withoutOfferedInterruption(entries: TranscriptEntry[]): Transcri
   if (last?.kind !== "message" || !isTurnInterruptionNotice(last.block)) return entries;
   const out = entries.slice(0, -1);
   const previous = out.at(-1);
-  if (last.footer && previous && !previous.footer)
-    out[out.length - 1] = { ...previous, footer: last.footer, ...(last.footerDuration ? { footerDuration: true } : {}) };
+  if (previous && ((last.footer && !previous.footer) || (last.turnSummary && !previous.turnSummary)))
+    out[out.length - 1] = {
+      ...previous,
+      ...(last.footer && !previous.footer ? { footer: last.footer, ...(last.footerDuration ? { footerDuration: true } : {}) } : {}),
+      ...(last.turnSummary && !previous.turnSummary ? { turnSummary: last.turnSummary } : {}),
+    };
   return out;
 }
 

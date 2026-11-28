@@ -129,8 +129,17 @@ it("names managed, worktree and linked pull request identity like desktop rows",
   expect(label).toContain("Managed session");
   expect(label).toContain("Worktree: feat");
   expect(label).toContain("Pull request #42");
+  // The standard row keeps the linked work item beside project and branch; compact draws neither,
+  // and the spoken label keeps every fact.
   expect(container.textContent).toContain("#42");
-  await render({ session: { ...base, branch: "feat", managedBy: { assistant: true, managedAt: 1, jobId: "job", detachedAt: 2 } } });
+  expect(container.textContent).toContain("feat");
+  await render({ density: "detailed" });
+  expect(container.textContent).toContain("#42");
+  await render({ density: "compact" });
+  expect(container.textContent).not.toContain("feat");
+  expect(container.textContent).not.toContain("#42");
+  expect(container.querySelector("button")?.getAttribute("aria-label")).toContain("Pull request #42");
+  await render({ density: "standard", session: { ...base, branch: "feat", managedBy: { assistant: true, managedAt: 1, jobId: "job", detachedAt: 2 } } });
   expect(container.querySelector("button")?.getAttribute("aria-label")).toContain("Branch: feat");
   expect(container.querySelector("button")?.getAttribute("aria-label")).not.toContain("Managed session");
 });

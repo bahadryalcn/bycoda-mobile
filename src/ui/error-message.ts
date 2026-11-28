@@ -243,10 +243,15 @@ export function errorMessage(error: unknown, copy: ErrorCopy, override?: string,
             "Bilgisayardaki bycoda hangi isteği yanıtladığını doğrulayamıyor. Yanıtlamadan önce onu güncelle.",
             "This Host cannot verify which request you are answering. Update the Host before responding.",
           )
-        : copy(
-            "Bu istek doğrulanamıyor. Oturumu yenile veya isteği başlatan uygulamayı güncelle.",
-            "This request cannot be verified. Refresh the session or update its execution client.",
-          )
+        : error.reason === "sessionGrant"
+          ? copy(
+              "Bu istek tüm oturum için onaylanamıyor. Bir kez izin ver.",
+              "This request cannot be allowed for the whole session. Allow it once instead.",
+            )
+          : copy(
+              "Bu istek doğrulanamıyor. Oturumu yenile veya isteği başlatan uygulamayı güncelle.",
+              "This request cannot be verified. Refresh the session or update its execution client.",
+            )
       : error instanceof RemoteHostError
         ? remoteMessage(error, copy) || fallback()
         : error instanceof Error

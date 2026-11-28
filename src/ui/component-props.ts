@@ -1,4 +1,5 @@
 import type { PageScope } from "./scope-line";
+import type { ScreenIdentity } from "./screen-chrome";
 import type { ComponentType, PropsWithChildren, ReactNode, RefObject, Ref } from "react";
 import type {
   StyleProp,
@@ -62,6 +63,8 @@ export type ScreenProps = PropsWithChildren<{
    * A page bound to one computer leaves it off and shows `scope.computer` read-only.
    */
   computerSwitch?: boolean;
+  /** Tab pages only: `title` drops the computer pill from the context row under the tab title. */
+  identity?: ScreenIdentity;
   /** Current task scope in the shared heading, preserved under a native title. */
   context?: ReactNode;
   /** The shared project scope control (`ProjectScopePill`): one compact pill in the page identity row. */
@@ -213,7 +216,12 @@ export type LoadingProps = {
   delayed?: boolean;
 };
 
-export type ErrorTextProps = { error: unknown; message?: string };
+export type ErrorTextProps = {
+  error: unknown;
+  message?: string;
+  /** The failed request only read: it applied nothing, so no "may have been applied" caution. */
+  read?: boolean;
+};
 
 export type ErrorNoticeProps = PropsWithChildren<{
   error: unknown;

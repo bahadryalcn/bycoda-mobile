@@ -15,3 +15,15 @@ it("blocks attachment cleanup on a corrupt outbox", async () => {
   const storage = { getItem: async () => "invalid", setItem: async () => {} };
   await expect(retainedAttachmentFiles(storage, "m", "s", "e")).rejects.toThrow();
 });
+
+it("retains the phone-wide new-session draft's files staged for this computer only", async () => {
+  const { NEW_CHAT_ATTACHMENT_SESSION, NEW_CHAT_DRAFT_KEY } = await import("./new-chat-attachments");
+  const { encodeComposerDraft } = await import("./composer-draft");
+  const here = "8ca190f8-9e1b-477d-9565-2fb1283ac578", there = "9ca190f8-9e1b-477d-9565-2fb1283ac578";
+  const staged = (id: string, scope: string) => ({ id, claimId: id, uri: `file:///docs/chat-drafts/${encodeURIComponent(scope)}/${id}`, name: "f", mimeType: "text/plain", kind: "file" as const, size: 1 });
+  const draft = encodeComposerDraft({ ...emptyComposerDraft(), attachments: [staged(here, "m:new:draft"), staged(there, "other:new:draft")] });
+  const storage = { getItem: async (key: string) => key === NEW_CHAT_DRAFT_KEY ? draft : null, setItem: async () => {} };
+  const ids = (await retainedAttachmentFiles(storage, "m", NEW_CHAT_ATTACHMENT_SESSION, "e")).map((file) => file.id);
+  expect(ids).toEqual([here]);
+  expect(await retainedAttachmentFiles(storage, "m", "s", "e")).toEqual([]);
+});

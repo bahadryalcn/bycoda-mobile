@@ -11,6 +11,7 @@ import { Disclosure } from "@/ui/primitives";
 import { useCopy } from "@/ui/copy";
 import { friendlyProviderFailure } from "@/ui/error-message";
 import { space } from "@/ui/tokens";
+import { useFailureRecovery } from "./failure-recovery";
 
 /** Provider limit codes desktop's presentation does not phrase as a sentence. */
 const USAGE_LIMIT_CODE =
@@ -97,9 +98,11 @@ function NoticeLine({ block }: { block: NoticeBlock }) {
  * Provider/system failure as one quiet status line (the shared turn-status presentation); identical
  * repeats fold into one line with a count. The full sentence and the raw text stay behind
  * "Details". A usage limit is a wait, not a fault, so it reads in warning tone as on desktop.
+ * The latest failed turn carries its recovery: Retry on the line, or the usage-limit actions.
  */
-export function SystemFailureCard({ text, repeat }: { text: string; repeat?: number }) {
+export function SystemFailureCard({ id, text, repeat }: { id?: string; text: string; repeat?: number }) {
   const copy = useCopy();
+  const recovery = useFailureRecovery(id);
   const presentation = sessionErrorPresentation(text);
   const usageLimit = !!presentation.usageLimit || USAGE_LIMIT_CODE.test(text);
   const message = presentation.usageLimit
@@ -108,17 +111,25 @@ export function SystemFailureCard({ text, repeat }: { text: string; repeat?: num
   const headline = failureHeadline(message);
   const count = repeat && repeat > 1 ? ` ×${repeat}` : "";
   const more = headline !== message.trim() || message !== text;
+  const details = more ? (
+    <Disclosure label={copy("Ayrıntılar", "Details")}>
+      <View style={{ gap: space.xs }}>
+        {headline !== message.trim() ? <Body selectable>{message}</Body> : null}
+        {message !== text ? <Body mono selectable>{text}</Body> : null}
+      </View>
+    </Disclosure>
+  ) : null;
+  if (recovery.usageLimit) return <View accessibilityRole="alert">{recovery.usageLimit(details)}</View>;
+  const retry = recovery.retry;
   return (
     <View accessibilityRole="alert" style={{ gap: space.xxs }}>
-      <StatusLine tone={usageLimit ? "warning" : "danger"} label={`${headline}${count}`} />
-      {more ? (
-        <Disclosure label={copy("Ayrıntılar", "Details")}>
-          <View style={{ gap: space.xs }}>
-            {headline !== message.trim() ? <Body selectable>{message}</Body> : null}
-            {message !== text ? <Body mono selectable>{text}</Body> : null}
-          </View>
-        </Disclosure>
-      ) : null}
+      <StatusLine
+        tone={usageLimit ? "warning" : "danger"}
+        label={`${headline}${count}`}
+        busy={retry?.pending}
+        action={retry && !retry.pending ? { label: copy("Tekrar dene", "Retry"), onPress: retry.onRetry } : undefined}
+      />
+      {details}
     </View>
   );
 }

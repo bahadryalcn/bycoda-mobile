@@ -6,7 +6,7 @@
     "NSCameraUsageDescription": "Autorisez Bycoda à scanner le QR code d’appairage sur votre ordinateur.",
     "NSFaceIDUsageDescription": "Utilisez Face ID pour accéder en toute sécurité à vos ordinateurs Bycoda.",
     "NSPhotoLibraryUsageDescription": "Autorisez Bycoda à accéder à vos photos pour les joindre à vos messages.",
-    "NSPhotoLibraryAddUsageDescription": "Autorisez l’enregistrement d’images dans vos photos.",
+    "NSPhotoLibraryAddUsageDescription": "Enregistrez les images de vos conversations Bycoda dans votre photothèque.",
     "Localizable.strings": {
       "Active sessions": "Séances actives",
       "Needs attention": "Action requise",

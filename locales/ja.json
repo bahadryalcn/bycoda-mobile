@@ -6,7 +6,7 @@
     "NSCameraUsageDescription": "ペアリング用の QR コードをコンピュータでスキャンするために Bycoda がカメラを使用します。",
     "NSFaceIDUsageDescription": "Face ID で Bycoda コンピュータに安全にアクセスするために使用します。",
     "NSPhotoLibraryUsageDescription": "Bycoda のメッセージに添付する写真にアクセスするために使用します。",
-    "NSPhotoLibraryAddUsageDescription": "画像を写真に保存するために使用します。",
+    "NSPhotoLibraryAddUsageDescription": "Bycoda の会話に含まれる画像を写真ライブラリに保存するために使用します。",
     "Localizable.strings": {
       "Active sessions": "アクティブなセッション",
       "Needs attention": "要対応",

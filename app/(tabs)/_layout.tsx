@@ -1,7 +1,7 @@
 import { Tabs, usePathname } from "expo-router";
 import { View, type ColorValue } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { MachineHealthMonitor, MachinePill } from "../../src/ui/machine-bar";
+import { MachineHealthMonitor, MachinePill, ScopeContextRow } from "../../src/ui/machine-bar";
 import { PreferenceSaveToast } from "../../src/features/connections/preference-save-toast";
 import { setToastClearance } from "../../src/ui/provider";
 import { useCopy } from "../../src/ui/copy";
@@ -26,8 +26,13 @@ import { AssistantEntryButton } from "@/features/assistant/assistant-entry-butto
 import { useEffect, useState, type ComponentProps } from "react";
 
 type IconProps = { color: ColorValue; focused: boolean };
-function ComputerPageIdentity({ title, subtitle, scopeControl }: HeaderIdentityProps) {
-  return <MachinePill heading={title} subtitle={subtitle} accessory={scopeControl} />;
+/**
+ * The tab's context row under its title: the computer pill, then the page's project pill. Called
+ * as a plain function by `ScreenHeading`, so it stays hook-free and returns null for an empty row.
+ */
+function ComputerPageIdentity({ scopeControl, showComputer }: HeaderIdentityProps) {
+  if (showComputer) return <MachinePill accessory={scopeControl} />;
+  return scopeControl ? <ScopeContextRow>{scopeControl}</ScopeContextRow> : null;
 }
 const icon = (name: DockIconName) =>
   function TabIcon({ color }: IconProps) {

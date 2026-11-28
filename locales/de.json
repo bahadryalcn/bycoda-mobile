@@ -6,7 +6,7 @@
     "NSCameraUsageDescription": "Erlauben Sie Bycoda, den Kopplungs-QR-Code auf Ihrem Computer zu scannen.",
     "NSFaceIDUsageDescription": "Verwenden Sie Face ID, um sicher auf Ihre Bycoda-Computer zuzugreifen.",
     "NSPhotoLibraryUsageDescription": "Erlauben Sie Bycoda den Zugriff auf Ihre Fotos, um sie an Ihre Nachrichten anzuhängen.",
-    "NSPhotoLibraryAddUsageDescription": "Erlauben Sie, Bilder in Ihren Fotos zu speichern.",
+    "NSPhotoLibraryAddUsageDescription": "Speichern Sie Bilder aus Ihren Bycoda-Unterhaltungen in Ihrer Fotomediathek.",
     "Localizable.strings": {
       "Active sessions": "Aktive Sitzungen",
       "Needs attention": "Aufmerksamkeit nötig",
