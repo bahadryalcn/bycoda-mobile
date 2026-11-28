@@ -3,6 +3,8 @@ import type { RuntimeMode } from "./creation-selection";
 import { composerCrewHandles } from "./composer-crew-delivery";
 import { ACCESS_MODES } from "./composer-access-model";
 import type { NewChatAttachmentReference } from "./new-chat-attachments";
+import { activeComposerMode, stripComposerMode } from "./composer-mode";
+import type { ComposerSuggestion } from "./composer-catalog-model";
 
 /** Route of the empty new-session screen. It sits beside `/session/[id]`; a static segment wins. */
 export const NEW_CHAT_ROUTE_ID = "new";
@@ -21,15 +23,51 @@ export function newChatDraftWasSent(current: string, sent: string): boolean {
 }
 
 /**
- * Input the session composer turns into something other than a plain message: its own leading
- * commands (`/compact`, `/plan`, `/draft`, `/btw`) and `@crew:` delegations. A first turn carries
- * plain text only, so these wait until the session exists. Provider slash commands pass through.
+ * Input only an open session can resolve: its own leading commands that act on an existing
+ * conversation (`/compact`, `/btw`) and `@crew:` delegations. These wait until the session exists.
+ * Plan mode and Save as draft travel with the first turn (see `newChatTurn`); provider slash
+ * commands pass through as text.
  */
 export type NewChatSessionOnly = "command" | "crew";
 export function newChatSessionOnlyInput(text: string): NewChatSessionOnly | undefined {
-  if (/^\s*\/(?:compact|plan|draft|btw)(?=\s|$)/i.test(text)) return "command";
+  if (/^\s*\/(?:compact|btw)(?=\s|$)/i.test(text)) return "command";
   if (composerCrewHandles(text).length) return "crew";
   return undefined;
+}
+
+/**
+ * How the first turn is delivered: a plain send, a send with the Host's `intent: "plan"`, or the
+ * Host `draft` command (saved without starting the agent). The mode is the draft's leading
+ * `/plan` or `/draft`, exactly as on an open session (`composer-mode.ts`); `body` is the text
+ * without it.
+ */
+export type NewChatTurnKind = "send" | "plan" | "draft";
+export function newChatTurn(text: string): { kind: NewChatTurnKind; body: string } {
+  const mode = activeComposerMode(text);
+  return { kind: mode ?? "send", body: (mode ? stripComposerMode(text) : text).trim() };
+}
+
+/**
+ * The open session's suggestions as a new session can use them. Project files, folders, trackers,
+ * notes, skills, Claude commands and templates need only the project and folder. What acts on an
+ * existing conversation (compact, side question, history import, moving into a folder) and crew
+ * delegations stay listed but unavailable with the reason; "New session" is this screen, so it goes.
+ */
+export function newChatSuggestions(
+  items: readonly ComposerSuggestion[],
+  reasons: { command: string; crew: string },
+): ComposerSuggestion[] {
+  return items.flatMap((item) => {
+    if (item.id === "app:new") return [];
+    if (item.unavailable) return [item];
+    const crew = item.kind === "crew" || item.kind === "agent" || item.id === "source:crews";
+    const command = item.action === "side-question" || item.action === "resume" || item.action === "move-to-folder" ||
+      item.id === "app:compact";
+    if (!crew && !command) return [item];
+    // Unavailable rows never act, so the action that needs a session is dropped with it.
+    const { action: _action, ...rest } = item;
+    return [{ ...rest, unavailable: crew ? reasons.crew : reasons.command }];
+  });
 }
 
 /** What the owner picked in the hero: a project belongs to the computer it was picked on. */
@@ -95,8 +133,11 @@ export function newChatWorktreeCwd(project: ProjectLike | undefined, checkout: {
   return cwd && trimPath(cwd) !== trimPath(project.cwd) ? cwd : undefined;
 }
 
-/** One send attempt. The same payload keeps its command IDs, so a retry after a lost reply is idempotent. */
-export type NewChatAttempt = { key: string; createId: string; turnId: string };
+/**
+ * One send attempt. The same payload keeps its command IDs, so a retry after a lost reply is
+ * idempotent. The reference context resolved for it is kept too, so a resend never re-reads it.
+ */
+export type NewChatAttempt = { key: string; createId: string; turnId: string; contextReplay?: string };
 
 export type NewChatPayload = {
   machineId: string;
@@ -109,8 +150,12 @@ export type NewChatPayload = {
   runtimeMode: RuntimeMode;
   text: string;
   firstTurn: boolean;
+  /** Plain send, Plan mode or Save as draft; a changed mode is a different first turn. */
+  turn?: NewChatTurnKind;
   /** Staged attachment IDs, in order; a changed set is a different first turn. */
   attachments?: readonly string[];
+  /** Resolved `@notes:` and issue/PR reference data the first turn carries beside its words. */
+  contextReplay?: string;
 };
 
 /** Order-independent identity of everything the Host would receive. */
@@ -128,6 +173,8 @@ export function newChatAttemptKey(payload: NewChatPayload) {
     payload.text,
     payload.firstTurn,
     payload.attachments ?? [],
+    payload.turn ?? "send",
+    payload.contextReplay ?? "",
   ]);
 }
 
@@ -136,27 +183,78 @@ export function newChatAttemptKey(payload: NewChatPayload) {
  * receipt of a command it already accepted and refuses a changed payload under the same ID);
  * any change gets fresh IDs.
  */
-export function newChatAttempt(previous: NewChatAttempt | undefined, key: string, makeId: () => string): NewChatAttempt {
-  return previous && previous.key === key ? previous : { key, createId: makeId(), turnId: makeId() };
+export function newChatAttempt(
+  previous: NewChatAttempt | undefined,
+  key: string,
+  makeId: () => string,
+  contextReplay?: string,
+): NewChatAttempt {
+  return previous && previous.key === key
+    ? previous
+    : { key, createId: makeId(), turnId: makeId(), ...(contextReplay ? { contextReplay } : {}) };
+}
+
+/**
+ * The reference context an unchanged payload already resolved. A resend after a lost reply reuses
+ * it, so the same command IDs never carry different context (the Host would refuse the changed
+ * payload); undefined means the context has to be resolved for this payload.
+ */
+export function newChatPinnedContext(
+  previous: NewChatAttempt | undefined,
+  payload: NewChatPayload,
+): { contextReplay?: string } | undefined {
+  if (!previous || previous.key !== newChatAttemptKey({ ...payload, contextReplay: previous.contextReplay })) return undefined;
+  return previous.contextReplay ? { contextReplay: previous.contextReplay } : {};
+}
+
+/**
+ * Which reference sources the first turn resolves into `contextReplay`, as an open session's
+ * composer does at send: plain and Plan sends with an `@` mention (never Save as draft or a
+ * provider slash command, whose arguments belong to the provider), each source only when the
+ * computer offers it. Both need only the project, so a new session resolves them before create.
+ */
+export function newChatContextSources(
+  text: string,
+  kind: NewChatTurnKind,
+  capabilities: readonly string[] | undefined,
+): { workItems: boolean; notes: boolean } {
+  const eligible = kind !== "draft" && text.includes("@") && (!/^\s*\//.test(text) || kind === "plan");
+  return {
+    workItems: eligible && !!capabilities?.includes("inbox.providers.desktop"),
+    notes: eligible && !!capabilities?.includes("sessions.noteContext.v1"),
+  };
 }
 
 /**
  * The prompt as the Host's nested first turn; it inherits the new session's ID. Uploaded
  * attachments travel with it, so the session and its first message with files are one command.
+ * Plan mode sends with `intent: "plan"`; Save as draft is the Host `draft` command
+ * (`CreateFirstTurnSchema` accepts both). `text` is the body without its mode command.
+ * Resolved reference data rides on sends as `contextReplay`, outside the visible message; the Host
+ * draft command has no such field, so a draft never carries it.
  */
-export function newChatFirstTurn(text: string, commandId: string, attachments: readonly NewChatAttachmentReference[] = []) {
+export function newChatFirstTurn(
+  text: string,
+  commandId: string,
+  attachments: readonly NewChatAttachmentReference[] = [],
+  kind: NewChatTurnKind = "send",
+  contextReplay?: string,
+) {
   return {
-    type: "send" as const,
+    type: kind === "draft" ? ("draft" as const) : ("send" as const),
     commandId,
     sessionId: "" as const,
     text,
+    ...(kind === "plan" ? { intent: "plan" as const } : {}),
     ...(attachments.length ? { attachments: [...attachments] } : {}),
+    ...(contextReplay && kind !== "draft" ? { contextReplay } : {}),
   };
 }
 
 /**
  * Sends need words or attachments (as an open session's composer), a project, a resolved model
- * and no create or upload in flight or awaiting recovery.
+ * and no create or upload in flight or awaiting recovery. A mode command alone is not words: Plan
+ * mode needs something to plan, and Save as draft needs words or a file (as on an open session).
  */
 export function newChatSendState({
   text,
@@ -183,7 +281,8 @@ export function newChatSendState({
   if (locked || uploading) return { enabled: false, reason: "busy" };
   if (!connected) return { enabled: false, reason: "offline" };
   if (!project) return { enabled: false, reason: "project" };
-  if (!text.trim() && !attachments) return { enabled: false, reason: "empty" };
+  const turn = newChatTurn(text);
+  if (!turn.body && (turn.kind === "plan" || !attachments)) return { enabled: false, reason: "empty" };
   if (sessionOnly && text.trim()) return { enabled: false, reason: sessionOnly };
   if (!canStart) return { enabled: false, reason: "model" };
   return { enabled: true };

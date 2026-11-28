@@ -322,7 +322,7 @@ export function transcriptEntries(
       continue;
     }
     if (presentation?.view === "messages" && isTransientActivity(block) && activityState(block) !== "failed") {
-      // Like T3 Code's work log, the live turn keeps each step where it happened: consecutive steps
+      // Like a work log, the live turn keeps each step where it happened: consecutive steps
       // share one growing row whose id never changes, so a finished step neither vanishes nor moves
       // to the top of the turn. The settled turn folds into one row below, as on desktop.
       if (presentation.running && index > turnStart) {

@@ -27,6 +27,7 @@ import {
 import { useComposerSuggestions } from "./use-composer-suggestions";
 import { useComposerDelivery } from "./use-composer-delivery";
 import { useComposerAttachments } from "./use-composer-attachments";
+import { COMPOSER_FIELD_LIMIT, DRAFT_TEXT_LIMIT, takeLongPaste } from "./long-paste-model";
 import { useDraftAppend } from "./use-draft-append";
 import { useDictation } from "./use-dictation";
 import { ComposerDictationButton } from "./composer-dictation";
@@ -47,7 +48,8 @@ import {
 } from "./attachment-ownership";
 import { ChatCircleAction } from "@/ui/chat-controls";
 import { ComposerModeChip } from "./composer-mode-controls";
-import { activeComposerMode, setComposerMode, type ComposerMode } from "./composer-mode";
+import { activeComposerMode, setComposerMode, shellModeActive, stripShellMode, type ComposerMode } from "./composer-mode";
+import { useShellFollowUp } from "./shell-follow-up";
 import { ChatComposer } from "@/ui/chat-composer";
 import { ComposerModelChip } from "./composer-model-chip";
 import { ComposerActionsProvider } from "@/ui/composer-actions";
@@ -56,6 +58,8 @@ import { haptic } from "@/ui/motion";
 import {
   composerCommand,
   queuedComposerMessage,
+  SESSION_SHELL_CAPABILITY,
+  shellComposerCommand,
   validateNoteDelivery,
   type ComposerDelivery,
 } from "./composer-delivery";
@@ -178,7 +182,11 @@ export function SessionComposer({
   selectionRef.current = selection;
   const links = useMemo(() => composerLinks(prompt), [prompt]);
   const activeMode = activeComposerMode(prompt);
-  const hasPrefix = !!(value.noteCard || value.attachments.length || links.length || activeMode);
+  const shellMode = shellModeActive(prompt);
+  const hasPrefix = !!(value.noteCard || value.attachments.length || links.length || activeMode || shellMode);
+  const trackShellRun = useShellFollowUp(session, onCommand, (cause) => {
+    if (mounted.current) setLocalError(cause);
+  });
   const prefixMaximum = composerPrefixMaximum(
     windowHeight, availableHeight, fontScale, operationsHeight, footerHeight, toolbarHeight,
   );
@@ -343,11 +351,45 @@ export function SessionComposer({
     ? composerInputLimits(windowHeight, availableHeight, fontScale,
         measuredPrefix + operationsHeight + suggestionPrefix + dictationNoticeHeight + space.xs, footerHeight, toolbarHeight).maximum
     : maximumInputHeight;
+  // A `!command` is not a turn: no outbox, queue, steer or retry, and a refusal keeps the draft.
+  const runShellEntry = async () => {
+    const submitted = valueRef.current;
+    if (!submitted || !client || !session) return;
+    let command: Record<string, unknown>;
+    try {
+      if (client.machine.id !== scope.machineId || useMachines.getState().activeId !== scope.machineId) return;
+      command = shellComposerCommand(session, submitted.text, {
+        supported: !!client.machine.capabilities?.includes(SESSION_SHELL_CAPABILITY),
+        attachments: submitted.attachments.length,
+        noteCard: !!submitted.noteCard,
+      });
+    } catch (cause) {
+      setLocalError(cause);
+      return;
+    }
+    submission.current = true;
+    setLocalError(null);
+    try {
+      const receipt = await onCommand(command);
+      trackShellRun({ commandId: receipt.commandId, authorityGeneration: session.authorityGeneration });
+      if (!mounted.current) return;
+      if (sameComposerContent(valueRef.current, submitted)) {
+        setValue(emptyComposerDraft());
+        setSelection({ start: 0, end: 0 });
+      }
+      await persist();
+    } catch (cause) {
+      if (mounted.current) setLocalError(cause);
+    } finally {
+      submission.current = false;
+    }
+  };
   const submit = async (override?: ComposerDelivery) => {
     // Draft mode saves the message on the Host, whatever the delivery mode is.
     const sendMode =
       activeComposerMode(valueRef.current?.text ?? "") === "draft" ? "send" : (override ?? mode);
     if (!ready || blocked || busy || uploading || submission.current || !client || !session) return;
+    if (shellModeActive(valueRef.current?.text ?? "")) return runShellEntry();
     if (sendMode === "queue" && (!queue.supported || (!!queue.error && !client.machine.capabilities?.includes(OUTBOX_CAPABILITY)) || queue.changing)) return;
     const currentDraft = valueRef.current;
     if (
@@ -668,9 +710,11 @@ export function SessionComposer({
     !!noteError ||
     unavailable ||
     (target === "queue" && (!queue.supported || (!!queue.error && !client?.machine.capabilities?.includes(OUTBOX_CAPABILITY)))) ||
-    (target === "send" && running) ||
+    (target === "send" && running && !shellMode) ||
     (target === "steer" && !canSteer);
-  const sendDisabled = sendDisabledFor(mode);
+  // A `!command` runs beside a turn on the Host, so it always shows as a plain Send.
+  const deliveryMode: ComposerDelivery = shellMode ? "send" : mode;
+  const sendDisabled = sendDisabledFor(deliveryMode);
   const keyboardActive = routeFocused && inputFocused && !palette.visible && !picker && !templatePicker && !draftDetailsOpen;
   // While dictating, the recording row has replaced Send: a hardware Enter must not send the draft
   // underneath it (the recognized words would then land in an emptied or still-sending draft).
@@ -777,7 +821,7 @@ export function SessionComposer({
     setDraftDetailsOpen(true);
   };
   const noteErrorMessage = noteError ? (composerDeliveryError(noteError, copy) ?? noteError.message) : undefined;
-  const trailing = composerTrailingAction({ canStop, hasContent, mode, alternate });
+  const trailing = composerTrailingAction({ canStop, hasContent, mode: deliveryMode, alternate });
   const stopButton = (
     <ChatCircleAction
       label={stopping ? copy("Durduruluyor", "Stopping") : copy("Durdur", "Stop")}
@@ -799,7 +843,17 @@ export function SessionComposer({
           onRemove={() => setValue((current) => current ? { ...current, noteCard: undefined } : current)}
         />
       ) : null}
-      {activeMode ? (
+      {shellMode ? (
+        <ComposerModeChip
+          mode="shell"
+          disabled={unavailable}
+          onRemove={() => {
+            const text = stripShellMode(valueRef.current?.text ?? prompt);
+            setValue((current) => ({ ...(current ?? emptyComposerDraft()), text }));
+            setSelection({ start: text.length, end: text.length });
+          }}
+        />
+      ) : activeMode ? (
         <ComposerModeChip mode={activeMode} disabled={unavailable} onRemove={() => chooseMode(activeMode)} />
       ) : null}
       {links.length ? <ComposerLinks links={links} /> : null}
@@ -888,6 +942,25 @@ export function SessionComposer({
               suggestions.close();
               return;
             }
+            // A long paste becomes a "Pasted text" attachment, as on the desktop, never cut text. A
+            // `!command` carries no attachments, so its paste stays text there.
+            const paste = uploading || picking || shellMode ? undefined : takeLongPaste(prompt, text, selection.start);
+            if (paste) {
+              setValue((current) => ({ ...(current ?? emptyComposerDraft()), text: paste.text }));
+              setSelection({ start: paste.caret, end: paste.caret });
+              void uploads.attachPastedText(paste.pasted).then((attached) => {
+                // Not attached (limit, storage): the paste returns while the draft is unchanged.
+                const current = valueRef.current;
+                if (attached || !mounted.current || !current || current.text !== paste.text) return;
+                if (text.length <= DRAFT_TEXT_LIMIT) setValue({ ...current, text });
+              });
+              return;
+            }
+            if (text.length > DRAFT_TEXT_LIMIT) {
+              setValue((current) => ({ ...(current ?? emptyComposerDraft()), text: text.slice(0, DRAFT_TEXT_LIMIT) }));
+              setLocalError(new Error(copy("Mesaj çok uzun.", "The message is too long.")));
+              return;
+            }
             const templates = useTemplates.getState();
             const expanded =
               templates.hydrated && !templates.error
@@ -973,7 +1046,7 @@ export function SessionComposer({
             onKeyPress: suggestions.onKeyPress,
             disableFullscreenUI: true,
             submitBehavior: "newline",
-            maxLength: 256_000,
+            maxLength: COMPOSER_FIELD_LIMIT,
             placeholder: copy("Mesaj", "Message"),
             style: { maxHeight: fieldMaximum },
           }}

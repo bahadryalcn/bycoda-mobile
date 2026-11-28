@@ -110,6 +110,8 @@ export type ProjectGroupHeader = {
   key: `project:${string}`;
   project: ShelfEntry["project"];
   count: number;
+  /** Members whose run is in flight; the header marks the group live even while it is folded. */
+  running: number;
   expanded: boolean;
 };
 export type SessionSectionRow = GlobalSessionRow | ProjectGroupHeader;
@@ -208,7 +210,8 @@ export function projectGroupedSessionRows(directory: readonly ShelfEntry[], opti
       const project = members[0]!.project;
       const key = projectCollapseKey(project.id);
       const expanded = searching || reveals(members, options.reveal) || !collapsed[key];
-      const header: ProjectGroupHeader = { kind: "project", key, project, count: members.length, expanded };
+      const running = members.filter(({ session }) => session.status === "running").length;
+      const header: ProjectGroupHeader = { kind: "project", key, project, count: members.length, running, expanded };
       if (!expanded) return [header];
       const rows = [...members].sort((a, b) =>
         urgencyRank(a.session, settledIds) - urgencyRank(b.session, settledIds) || byActivity(a, b));

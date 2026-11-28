@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  currentUsageLimit,
   limitedTarget,
   limitedTargetLabel,
   usageLimitActions,
@@ -59,5 +60,40 @@ describe("limited target", () => {
         usageLimit: { recoveryFrom: { harness: "claude", model: "opus", providerAccountId: "work" } },
       }),
     ).toEqual({ provider: "claude", accountId: "work" });
+  });
+});
+
+describe("current usage limit", () => {
+  const limited = {
+    harness: "claude" as const,
+    model: "claude:opus",
+    providerAccountId: "work",
+    usageLimit: { resetsAt: now + 60_000 },
+    blocks: [
+      { id: "u1", role: "user" as const, text: "Work", turnModel: { harness: "claude" as const, id: "claude:opus", name: "Opus" } },
+      { id: "e1", role: "system" as const, text: "Usage limit reached" },
+    ],
+  };
+
+  it("keeps the limit while the session is still on the limited model", () => {
+    expect(currentUsageLimit(limited)).toBe(limited.usageLimit);
+    expect(usageLimitPhase(currentUsageLimit(limited)!, now)).toBe("waiting");
+  });
+
+  it("continues now after a model change on the same account an older Host did not record", () => {
+    const moved = currentUsageLimit({ ...limited, model: "claude:sonnet" })!;
+    expect(moved.recoveryFrom).toEqual({ harness: "claude", model: "claude:opus", providerAccountId: "work" });
+    expect(usageLimitPhase(moved, now)).toBe("ready");
+    expect(limitedTarget({ harness: "claude", providerAccountId: "work", usageLimit: moved })).toEqual({
+      provider: "claude",
+      accountId: "work",
+    });
+  });
+
+  it("trusts the Host's recorded origin and leaves no limit alone", () => {
+    const recorded = { ...limited.usageLimit, recoveryFrom: { harness: "claude" as const, model: "claude:haiku" } };
+    expect(currentUsageLimit({ ...limited, model: "claude:sonnet", usageLimit: recorded })).toBe(recorded);
+    expect(currentUsageLimit({ ...limited, usageLimit: undefined })).toBeUndefined();
+    expect(currentUsageLimit({ ...limited, model: "claude:sonnet", blocks: [] })).toBe(limited.usageLimit);
   });
 });

@@ -231,7 +231,10 @@ export function ModelPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [catalog, providerIds, locale, agentsAllowed],
   );
-  const images = useMemo(() => (agentsAllowed ? imageChoices(providerIds) : []), [providerIds, agentsAllowed]);
+  const images = useMemo(
+    () => (agentsAllowed ? imageChoices(providerIds, catalog) : []),
+    [providerIds, catalog, agentsAllowed],
+  );
   // bycoda's own delegation replaces the provider-native advisor and subagent model.
   const ownAgents = !!catalog && agentsAllowed && (candidates.length > 0 || images.length > 0);
   const delegationItems = ownAgents

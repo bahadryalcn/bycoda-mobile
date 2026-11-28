@@ -31,6 +31,28 @@ describe("delegation candidates", () => {
   it("skips providers that are not connected", () => {
     expect(delegationCandidates(catalog, ["grok"])).toHaveLength(1);
   });
+  it("leaves out signed-out and disabled accounts and providers turned off on the desktop", () => {
+    const statuses = {
+      ...catalog,
+      accounts: {
+        codex: [{ id: "default", label: "Default", status: "signed-out" }],
+        claude: [
+          { id: "default", label: "Personal", status: "ready" },
+          { id: "w", label: "Work", status: "disabled" },
+          { id: "x", label: "Other", status: "signed-out" },
+        ],
+      },
+      models: { ...catalog.models, grok: [] },
+    } as unknown as HostModelCatalog;
+    expect(delegationCandidates(statuses, ["codex", "claude", "grok"]).map((item) => item.label)).toEqual(["Sonnet · Personal"]);
+  });
+  it("leaves out the Host's own profile when the desktop names another default account", () => {
+    const named = {
+      ...catalog,
+      accounts: { claude: [{ id: "default", label: "Host default", status: "ready" }, { id: "p", label: "Personal", isDefault: true, status: "ready" }] },
+    } as unknown as HostModelCatalog;
+    expect(delegationCandidates(named, ["claude"]).map((item) => item.label)).toEqual(["Sonnet · Personal"]);
+  });
 });
 
 describe("advisor and subagents", () => {
@@ -56,6 +78,10 @@ describe("image models", () => {
   it("offers only generators of connected providers", () => {
     expect(offered.map((item) => item.id)).toEqual(["codex"]);
     expect(imageChoices(["codex", "antigravity"]).map((item) => item.id)).toEqual(["codex", "antigravity"]);
+  });
+  it("offers no generator for a provider without models in the catalogue", () => {
+    const off = { models: { codex: [], antigravity: [{ id: "a", name: "A" }] }, errors: {} } as unknown as HostModelCatalog;
+    expect(imageChoices(["codex", "antigravity"], off).map((item) => item.id)).toEqual(["antigravity"]);
   });
   it("is automatic until a list is stored", () => {
     expect(effectiveImages({}, offered)).toEqual(["codex"]);

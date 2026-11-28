@@ -7,15 +7,20 @@ import {
   newChatRouteKey,
   newChatRuntimeMode,
   newChatAttemptKey,
+  newChatContextSources,
   newChatDraftWasSent,
   newChatFirstTurn,
+  newChatPinnedContext,
   newChatSendState,
   newChatSessionOnlyInput,
+  newChatSuggestions,
+  newChatTurn,
   seededNewChatText,
   newChatWorktreeCwd,
   resolveNewChatProject,
   type NewChatPayload,
 } from "./new-chat-model";
+import type { ComposerSuggestion } from "./composer-catalog-model";
 
 const alpha = { id: "alpha", cwd: "/work/alpha" };
 const beta = { id: "beta", cwd: "/work/beta" };
@@ -105,7 +110,7 @@ describe("send attempts", () => {
     for (const change of [
       { text: "Fix the tests" }, { projectId: "beta" }, { machineId: "pc-2" }, { cwd: "/work/alpha-feature" },
       { model: "other" }, { runtimeMode: "full-access" as const }, { settings: { effort: "low" } }, { firstTurn: false },
-      { attachments: ["file-1"] },
+      { attachments: ["file-1"] }, { turn: "plan" as const }, { turn: "draft" as const },
     ]) {
       const next = newChatAttempt(first, newChatAttemptKey({ ...payload, ...change }), make);
       expect(next.createId).not.toBe(first.createId);
@@ -121,6 +126,18 @@ describe("send attempts", () => {
     expect(newChatAttempt(first, newChatAttemptKey({ ...withFiles, attachments: ["file-1"] }), make)).not.toBe(first);
     // No attachments reads the same as an empty list.
     expect(newChatAttemptKey({ ...payload, attachments: [] })).toBe(newChatAttemptKey(payload));
+  });
+
+  it("renews the IDs when only the mode changes, so Send again never replays a different turn", () => {
+    const make = ids();
+    // The screen keys the trimmed draft and its mode; the mode is what tells the turns apart.
+    const plain = { ...payload, text: "Fix the build" };
+    const first = newChatAttempt(undefined, newChatAttemptKey({ ...plain, turn: "plan" }), make);
+    expect(newChatAttempt(first, newChatAttemptKey({ ...plain, turn: "plan" }), make)).toBe(first);
+    expect(newChatAttempt(first, newChatAttemptKey({ ...plain, turn: "draft" }), make)).not.toBe(first);
+    expect(newChatAttempt(first, newChatAttemptKey({ ...plain, turn: "send" }), make)).not.toBe(first);
+    // No mode reads the same as a plain send.
+    expect(newChatAttemptKey({ ...plain, turn: "send" })).toBe(newChatAttemptKey(plain));
   });
 
   it("builds the nested first turn the Host contract accepts", () => {
@@ -143,6 +160,114 @@ describe("send attempts", () => {
       firstTurn: newChatFirstTurn("Read this", "turn-1", [file]),
     };
     expect(CommandDispatchParamsSchema.parse(create)).toEqual(create);
+  });
+
+  it("sends Plan mode with the plan intent and Save as draft as the Host draft command", () => {
+    expect(newChatFirstTurn("Add a cache", "turn-1", [], "plan")).toEqual({
+      type: "send", commandId: "turn-1", sessionId: "", text: "Add a cache", intent: "plan",
+    });
+    const file = { id: "f-1", name: "shot.png", mimeType: "image/png", kind: "image" as const, size: 12 };
+    expect(newChatFirstTurn("Later", "turn-1", [file], "draft")).toEqual({
+      type: "draft", commandId: "turn-1", sessionId: "", text: "Later", attachments: [file],
+    });
+    expect(newChatFirstTurn("Go", "turn-1", [], "send")).toEqual(newChatFirstTurn("Go", "turn-1"));
+  });
+
+  it("produces plan and draft creates the shared Host contract accepts", async () => {
+    const { CommandDispatchParamsSchema } = await import("../../../../src/shared/model/host-contracts/session-commands");
+    const base = { type: "create", commandId: "create-1", projectId: "alpha", harness: "claude", model: "opus", runtimeMode: "supervised" };
+    for (const kind of ["plan", "draft"] as const) {
+      const create = { ...base, firstTurn: newChatFirstTurn("Add a cache", "turn-1", [], kind) };
+      expect(CommandDispatchParamsSchema.parse(create)).toEqual(create);
+    }
+  });
+});
+
+describe("first-turn reference context", () => {
+  const payload: NewChatPayload = {
+    machineId: "pc-1", projectId: "alpha", provider: "codex", model: "gpt", settings: {},
+    runtimeMode: "supervised", text: "Fix @github:#12 per @notes:plan", firstTurn: true,
+  };
+  const context = 'REFERENCED NOTES (reference data):\n{"mention":"@notes:plan"}';
+  const ids = () => {
+    let next = 0;
+    return () => `id-${++next}`;
+  };
+  const both = ["inbox.providers.desktop", "sessions.noteContext.v1"];
+
+  it("resolves notes and work items for plain and Plan sends the computer supports", () => {
+    expect(newChatContextSources("Fix @github:#12", "send", both)).toEqual({ workItems: true, notes: true });
+    expect(newChatContextSources("/plan Fix @notes:plan", "plan", both)).toEqual({ workItems: true, notes: true });
+    expect(newChatContextSources("Fix @notes:plan", "send", ["sessions.noteContext.v1"])).toEqual({ workItems: false, notes: true });
+    expect(newChatContextSources("Fix @github:#12", "send", ["inbox.providers.desktop"])).toEqual({ workItems: true, notes: false });
+    expect(newChatContextSources("Fix @github:#12", "send", undefined)).toEqual({ workItems: false, notes: false });
+  });
+
+  it("leaves drafts, provider slash commands and mention-free words unresolved", () => {
+    const none = { workItems: false, notes: false };
+    expect(newChatContextSources("/draft Fix @notes:plan", "draft", both)).toEqual(none);
+    expect(newChatContextSources("/review @notes:plan", "send", both)).toEqual(none);
+    expect(newChatContextSources("Fix the build", "send", both)).toEqual(none);
+  });
+
+  it("carries the context on plain and Plan first turns, never on a draft", () => {
+    expect(newChatFirstTurn("Fix it", "turn-1", [], "send", context)).toEqual({
+      type: "send", commandId: "turn-1", sessionId: "", text: "Fix it", contextReplay: context,
+    });
+    expect(newChatFirstTurn("Fix it", "turn-1", [], "plan", context)).toEqual({
+      type: "send", commandId: "turn-1", sessionId: "", text: "Fix it", intent: "plan", contextReplay: context,
+    });
+    expect(newChatFirstTurn("Later", "turn-1", [], "draft", context)).toEqual({
+      type: "draft", commandId: "turn-1", sessionId: "", text: "Later",
+    });
+    expect(newChatFirstTurn("Go", "turn-1", [], "send", "")).toEqual(newChatFirstTurn("Go", "turn-1"));
+  });
+
+  it("produces send and plan creates with context the shared Host contract accepts", async () => {
+    const { CommandDispatchParamsSchema } = await import("../../../../src/shared/model/host-contracts/session-commands");
+    const base = { type: "create", commandId: "create-1", projectId: "alpha", harness: "codex", model: "gpt", runtimeMode: "supervised" };
+    for (const kind of ["send", "plan"] as const) {
+      const create = { ...base, firstTurn: newChatFirstTurn("Fix it", "turn-1", [], kind, context) };
+      expect(CommandDispatchParamsSchema.parse(create)).toEqual(create);
+    }
+  });
+
+  it("keys the context, so different reference data never reuses the command IDs", () => {
+    const make = ids();
+    const first = newChatAttempt(undefined, newChatAttemptKey({ ...payload, contextReplay: context }), make, context);
+    expect(first.contextReplay).toBe(context);
+    expect(newChatAttemptKey({ ...payload, contextReplay: "" })).toBe(newChatAttemptKey(payload));
+    const other = newChatAttempt(first, newChatAttemptKey({ ...payload, contextReplay: `${context}!` }), make, `${context}!`);
+    expect(other.createId).not.toBe(first.createId);
+  });
+
+  it("pins the resolved context for a resend of the same payload, and re-resolves after a change", () => {
+    const make = ids();
+    expect(newChatPinnedContext(undefined, payload)).toBeUndefined();
+    const first = newChatAttempt(undefined, newChatAttemptKey({ ...payload, contextReplay: context }), make, context);
+    const pinned = newChatPinnedContext(first, payload);
+    expect(pinned).toEqual({ contextReplay: context });
+    // The resend keys the pinned context and gets the same attempt back.
+    expect(newChatAttempt(first, newChatAttemptKey({ ...payload, ...pinned }), make, pinned?.contextReplay)).toBe(first);
+    expect(newChatPinnedContext(first, { ...payload, text: "Fix @github:#13" })).toBeUndefined();
+    expect(newChatPinnedContext(first, { ...payload, projectId: "beta" })).toBeUndefined();
+    // A payload that resolved nothing is pinned as nothing, not resolved again.
+    const empty = newChatAttempt(undefined, newChatAttemptKey(payload), make);
+    expect(newChatPinnedContext(empty, payload)).toEqual({});
+  });
+});
+
+describe("newChatTurn", () => {
+  it("reads the leading mode command and strips it from the words sent", () => {
+    expect(newChatTurn("/plan  Add a cache ")).toEqual({ kind: "plan", body: "Add a cache" });
+    expect(newChatTurn("  /DRAFT later")).toEqual({ kind: "draft", body: "later" });
+    expect(newChatTurn("/plan")).toEqual({ kind: "plan", body: "" });
+    expect(newChatTurn(" Fix it ")).toEqual({ kind: "send", body: "Fix it" });
+  });
+
+  it("leaves look-alikes and mid-text commands as plain words", () => {
+    for (const text of ["/planning notes", "use /plan later", "/drafts"])
+      expect(newChatTurn(text)).toEqual({ kind: "send", body: text });
   });
 });
 
@@ -172,18 +297,68 @@ describe("newChatSendState", () => {
     // An empty draft still reads as empty, not as a blocked command.
     expect(newChatSendState({ ...ready, text: " ", sessionOnly: "command" }).reason).toBe("empty");
   });
+
+  it("needs something to plan, and words or a file to save as a draft", () => {
+    expect(newChatSendState({ ...ready, text: "/plan Add a cache" })).toEqual({ enabled: true });
+    expect(newChatSendState({ ...ready, text: "/plan " }).reason).toBe("empty");
+    expect(newChatSendState({ ...ready, text: "/plan", attachments: 1 }).reason).toBe("empty");
+    expect(newChatSendState({ ...ready, text: "/draft later" })).toEqual({ enabled: true });
+    expect(newChatSendState({ ...ready, text: "/draft" }).reason).toBe("empty");
+    expect(newChatSendState({ ...ready, text: "/draft", attachments: 1 })).toEqual({ enabled: true });
+  });
 });
 
 describe("session-only input", () => {
-  it("finds the session composer's own leading commands and crew delegations", () => {
-    for (const text of ["/compact", "  /plan add a cache", "/draft later", "/BTW why?"])
+  it("finds commands that act on an existing conversation, and crew delegations", () => {
+    for (const text of ["/compact", "  /compact now", "/BTW why?"])
       expect(newChatSessionOnlyInput(text)).toBe("command");
     expect(newChatSessionOnlyInput("Ask @crew:reviewers to check it")).toBe("crew");
+  });
+
+  it("lets Plan mode and Save as draft travel with the first turn", () => {
+    for (const text of ["  /plan add a cache", "/draft later", "/PLAN"])
+      expect(newChatSessionOnlyInput(text)).toBeUndefined();
+    // A crew delegation stays blocked inside a mode as well.
+    expect(newChatSessionOnlyInput("/plan ask @crew:reviewers")).toBe("crew");
   });
 
   it("passes plain words, provider commands and mid-text slashes through", () => {
     for (const text of ["Fix the build", "/review the diff", "/planning notes", "use a/plan b", "mail me@crew.dev"])
       expect(newChatSessionOnlyInput(text)).toBeUndefined();
+  });
+});
+
+describe("newChatSuggestions", () => {
+  const reasons = { command: "After start", crew: "Crew after start" };
+  const row = (id: string, extra: Partial<ComposerSuggestion> = {}): ComposerSuggestion => ({
+    id, name: id, label: id, detail: "", kind: "command", group: "commands", ...extra,
+  });
+
+  it("keeps what works with only a project and folder", () => {
+    const items = [
+      row("app:plan"), row("app:draft"), row("skill:review", { kind: "skill" }), row("command:init"),
+      row("template:t1", { kind: "template", template: "Body" }), row("src/app.ts", { kind: "file", path: "src/app.ts" }),
+      row("note:n1", { kind: "note" }), row("source:files", { kind: "source", action: "scope" }),
+    ];
+    expect(newChatSuggestions(items, reasons)).toEqual(items);
+  });
+
+  it("lists what needs a session as unavailable with its reason, and never as an action", () => {
+    const out = newChatSuggestions([
+      row("app:compact"), row("app:btw", { action: "side-question" }), row("app:resume", { action: "resume" }),
+      row("app:add-to-folder", { action: "move-to-folder" }), row("crew:c1", { kind: "crew" }), row("agent:a1", { kind: "agent" }),
+      row("source:crews", { kind: "source", action: "scope" }),
+    ], reasons);
+    expect(out.map((item) => [item.id, item.unavailable, item.action])).toEqual([
+      ["app:compact", "After start", undefined], ["app:btw", "After start", undefined], ["app:resume", "After start", undefined],
+      ["app:add-to-folder", "After start", undefined], ["crew:c1", "Crew after start", undefined],
+      ["agent:a1", "Crew after start", undefined], ["source:crews", "Crew after start", undefined],
+    ]);
+  });
+
+  it("drops New session (this screen) and keeps an existing reason", () => {
+    const desktop = row("app:clear", { unavailable: "Available on desktop" });
+    expect(newChatSuggestions([row("app:new", { action: "new-session" }), desktop], reasons)).toEqual([desktop]);
   });
 });
 

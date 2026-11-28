@@ -1,4 +1,13 @@
 {
+  "Update bycoda on this computer to run ! commands from the phone. Your draft is preserved.": "Actualiza bycoda en este ordenador para ejecutar comandos ! desde el teléfono. Tu borrador se conserva.",
+  "Remove the files and note to run a command, or delete the leading !.": "Quita los archivos y la nota para ejecutar un comando, o borra el ! inicial.",
+  "Type a command of at most 10,000 characters after !.": "Escribe un comando de 10.000 caracteres como máximo después de !.",
+  "Saved side questions": "Preguntas aparte guardadas",
+  "Side questions": "Preguntas aparte",
+  "Read-only questions asked about earlier turns. They did not change the session.": "Preguntas de solo lectura sobre turnos anteriores. No cambiaron la sesión.",
+  "About: {p0}": "Sobre: {p0}",
+  "Answering on the computer": "Respondiendo en el ordenador",
+  "This side question could not be answered.": "No se pudo responder esta pregunta aparte.",
   "Cancel sending": "Cancelar envío",
   "Diagnostic report ready": "El informe de diagnóstico está listo",
   "Review report": "Revisar informe",
@@ -4159,6 +4168,7 @@
   "Subagent model policy": "Política de modelo de subagente",
   "Auto-compact": "Compactación automática",
   "Auto-compact window": "Ventana de compactación automática",
+  "Automatically compact at this token count. Default follows your provider settings. The model's context window remains the limit.": "Compacta automáticamente al llegar a este número de tokens. Predeterminado sigue la configuración del proveedor. El límite sigue siendo la ventana de contexto del modelo.",
   "Claude default": "Predeterminado de Claude",
   "Agent's choice": "Elige el agente",
   "Component gallery": "Galería de componentes",
@@ -5377,7 +5387,6 @@
   "Optional spoken phrase that marks a correction, such as “scratch that”.": "Frase hablada opcional que marca una corrección, como «no, mejor».",
   "Group by project": "Agrupar por proyecto",
   "Quick filters": "Filtros rápidos",
-  "Reset project and status": "Restablecer proyecto y estado",
   "{p0} files changed": "{p0} archivos modificados",
   "1 file changed": "1 archivo modificado",
   "Show {p0} more file": "Mostrar {p0} archivo más",
@@ -5432,5 +5441,8 @@
   "Preparing a handoff": "Preparando el traspaso",
   "Preparing a handoff to {p0}": "Preparando el traspaso a {p0}",
   "The last turn failed": "El último turno falló",
-  "This file was not found on the computer. It may have been moved or deleted.": "No se encontró este archivo en el ordenador. Puede que se haya movido o eliminado."
+  "This file was not found on the computer. It may have been moved or deleted.": "No se encontró este archivo en el ordenador. Puede que se haya movido o eliminado.",
+  "Paste image": "Pegar imagen",
+  "Turn on camera access for Bycoda in Settings to take a photo.": "Activa el acceso a la cámara para Bycoda en Ajustes para tomar una foto.",
+  "The clipboard has no image.": "No hay ninguna imagen en el portapapeles."
 }

@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useWindowDimensions, View } from "react-native";
+import Camera from "lucide-react-native/icons/camera";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
+import ClipboardPaste from "lucide-react-native/icons/clipboard-paste";
 import FileIcon from "lucide-react-native/icons/file";
 import FolderTree from "lucide-react-native/icons/folder-tree";
 import GitBranch from "lucide-react-native/icons/git-branch";
@@ -17,6 +19,7 @@ import { Body, NavigationGroup, NavigationRow, PressableArea, QueryState, RowIco
 import { ProviderAccountMark } from "@/ui/agent-avatar";
 import { useMobileTheme } from "@/ui/theme";
 import { metrics, space } from "@/ui/tokens";
+import type { AttachmentSource } from "./attachment-files";
 import { ComposerAccessField, accessModeLabel } from "./composer-access";
 import type { RuntimeMode } from "./creation-selection";
 import { ModelPicker } from "./model-picker";
@@ -28,6 +31,7 @@ import { settingLabels } from "./setting-labels";
 import { newChatCheckoutAvailable } from "./new-chat-model";
 import type { AgentModel } from "../../../../src/features/sessions/model/models";
 import { WorktreeCreate } from "./worktree-create";
+import { useClipboardImage } from "./use-clipboard-image";
 
 /**
  * The model slot of the new-session composer: the same toolbar chip and grouped model picker as an
@@ -280,35 +284,59 @@ export function NewChatCheckoutRow({
 }
 
 /**
- * "Add to message" on a new session: photos and files. Templates and turn modes belong to an open
- * session's composer, so they appear once the session exists.
+ * "Add to message" on a new session: photos, camera, files and a clipboard image. The screen adds
+ * its further content rows (templates) to the same group through `moreRows`, and the turn modes
+ * for this message (Plan mode, Save as draft) below it as `children`, as an open session's sheet.
  */
 export function NewChatAttachSheet({
   visible,
   onClose,
   onChoose,
+  moreRows,
+  children,
 }: {
   visible: boolean;
   onClose: () => void;
-  onChoose: (kind: "photo" | "document") => void;
+  onChoose: (kind: AttachmentSource) => void;
+  moreRows?: ReactNode;
+  children?: ReactNode;
 }) {
   const copy = useCopy();
+  const clipboardImage = useClipboardImage(visible);
   return (
     <Sheet visible={visible} title={copy("Mesaja ekle", "Add to message")} size="compact" onClose={onClose}>
-      <NavigationGroup>
-        <NavigationRow
-          label={copy("Fotoğraflar", "Photos")}
-          intent="command"
-          icon={<RowIcon glyph={ImageIcon} />}
-          onPress={() => onChoose("photo")}
-        />
-        <NavigationRow
-          label={copy("Dosyalar", "Files")}
-          intent="command"
-          icon={<RowIcon glyph={FileIcon} />}
-          onPress={() => onChoose("document")}
-        />
-      </NavigationGroup>
+      <View style={{ gap: space.lg }}>
+        <NavigationGroup>
+          <NavigationRow
+            label={copy("Fotoğraflar", "Photos")}
+            intent="command"
+            icon={<RowIcon glyph={ImageIcon} />}
+            onPress={() => onChoose("photo")}
+          />
+          <NavigationRow
+            label={copy("Kamera", "Camera")}
+            intent="command"
+            icon={<RowIcon glyph={Camera} />}
+            onPress={() => onChoose("camera")}
+          />
+          <NavigationRow
+            label={copy("Dosyalar", "Files")}
+            intent="command"
+            icon={<RowIcon glyph={FileIcon} />}
+            onPress={() => onChoose("document")}
+          />
+          {clipboardImage ? (
+            <NavigationRow
+              label={copy("Görseli yapıştır", "Paste image")}
+              intent="command"
+              icon={<RowIcon glyph={ClipboardPaste} />}
+              onPress={() => onChoose("clipboard")}
+            />
+          ) : null}
+          {moreRows}
+        </NavigationGroup>
+        {children}
+      </View>
     </Sheet>
   );
 }

@@ -1,9 +1,10 @@
 import { useMobileTheme } from "@/ui/theme";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import { router } from "expo-router";
 import { Sheet } from "@/ui/primitives";
 import { SessionOptionsMenu } from "./session-options-menu";
+import { btwHistory } from "../side-chat/btw-history-model";
 import { useCopy } from "@/ui/copy";
 import type { TranscriptView } from "./transcript-model";
 import { ChatAction } from "@/ui/chat-controls";
@@ -61,6 +62,7 @@ export function SessionToolbar({
   const { colors } = useMobileTheme();
   const copy = useCopy();
   const session = query.data;
+  const btwThreads = useMemo(() => btwHistory(session?.session.blocks ?? []), [session?.session.blocks]);
   const [menu, setMenu] = useState(false);
   const [review, setReview] = useState(false);
   const [notes, setNotes] = useState(false);
@@ -104,6 +106,7 @@ export function SessionToolbar({
       detailed={view === "details"}
       sessionActions={sessionActions}
       modelDetail={session ? activeSessionModel(session.session).name : undefined}
+      btwThreads={btwThreads}
       onClose={() => setMenu(false)}
       actions={{
         find: onFind,

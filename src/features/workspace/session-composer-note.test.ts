@@ -24,6 +24,7 @@ const state = vi.hoisted(() => ({ activeId: "machine", supported: true, browserS
   receiver: null as null | ((request: ComposerTransfer) => void), renderDraft: null as null | (() => void),
   onCommand: vi.fn(async () => undefined), persist: vi.fn(async () => undefined), enqueue: vi.fn(), pause: vi.fn(async () => undefined), dismissKeyboard: vi.fn(),
   register: (receiver: (request: ComposerTransfer) => void) => { state.receiver = receiver; return () => { state.receiver = null; }; },
+  change: null as null | ((text: string) => void), stagePasted: vi.fn(), pick: vi.fn(), confirm: vi.fn(),
 }));
 vi.mock("./composer-model-chip", () => ({ ComposerModelChip: () => null }));
 vi.mock("./composer-mode-controls", () => ({
@@ -56,6 +57,8 @@ vi.mock("lucide-react-native/icons/square", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/plus", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/check", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/image", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/camera", () => ({ default: () => null }));
+vi.mock("lucide-react-native/icons/clipboard-paste", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/file", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/layout-template", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/clipboard-list", () => ({ default: () => null }));
@@ -91,7 +94,9 @@ vi.mock("./use-composer-catalog", () => ({ useComposerCatalog: () => ({ data: []
 vi.mock("./composer-suggestions", () => ({ ComposerSuggestions: () => null }));
 vi.mock("./composer-attachments", () => ({ ComposerAttachments: ({ files }: { files: { id: string; name: string }[] }) =>
   files.map((file) => createElement("span", { key: file.id }, file.name)) }));
-vi.mock("./attachment-files", () => ({ pickAttachments: vi.fn(), removeStagedFile: state.removeStaged, stageBrowserCapture: state.stageBrowser }));
+vi.mock("@/ui/confirm", () => ({ confirmAction: state.confirm }));
+vi.mock("./attachment-files", () => ({ pickAttachments: state.pick, removeStagedFile: state.removeStaged, stageBrowserCapture: state.stageBrowser, clipboardHasImage: async () => false, stagePastedText: state.stagePasted,
+  CameraPermissionBlockedError: class CameraPermissionBlockedError extends Error {} }));
 vi.mock("./attachment-transfer", () => ({ uploadAttachment: vi.fn() }));
 vi.mock("./attachment-ownership", () => ({ composerDraftKey: () => "key", supportsAttachmentOwnership: () => state.browserSupported,
   attachmentReleases: { stage: vi.fn(async () => undefined), flush: vi.fn(async () => undefined) } }));
@@ -113,12 +118,13 @@ vi.mock("@/ui/chat-controls", () => {
   const Button = ({ label, hint, disabled, onPress }: { label: string; hint?: string; disabled?: boolean; onPress: () => void }) => createElement("button", { disabled, onClick: onPress, title: hint }, label);
   return { ChatCircleAction: Button, ChatToolbarAction: Button, ChatAction: Button };
 });
-vi.mock("@/ui/chat-composer", () => ({ ChatComposer: ({ value, submit, leading, inlineLeading, field, top }: {
-  value: string; submit: ReactNode; leading: ReactNode; top?: ReactNode;
+vi.mock("@/ui/chat-composer", () => ({ ChatComposer: ({ value, onValueChange, submit, leading, inlineLeading, field, top }: {
+  value: string; onValueChange: (text: string) => void; submit: ReactNode; leading: ReactNode; top?: ReactNode;
   inlineLeading?: ReactNode;
   field: { selection: { start: number; end: number }; onSelectionChange: (event: unknown) => void; onFocus: () => void; onBlur: () => void };
 }) => {
   state.focusField = field.onFocus;
+  state.change = onValueChange;
   state.blurField = field.onBlur;
   state.selection = field.selection;
   state.select = (selection) => field.onSelectionChange({ nativeEvent: { selection } });
@@ -362,4 +368,54 @@ it("keeps Stop recoverable: a cancel that never settles does not lock it, and th
   await click("Stop");
   expect(state.onCommand).toHaveBeenCalledTimes(2);
   expect(state.onCommand).toHaveBeenLastCalledWith(expect.objectContaining({ type: "cancel", runId: "run-1", sessionId: "session" }));
+});
+
+it("keeps a long paste as a Pasted text attachment at the caret instead of cutting the draft", async () => {
+  state.draft = { ...emptyComposerDraft(), text: "See  please" };
+  const staged = { id: "pasted", name: "Pasted text.txt", mimeType: "text/plain", kind: "file" as const, size: 8_000, uri: "file:///staged/pasted" };
+  state.stagePasted.mockReturnValue(staged);
+  await mount();
+  await act(async () => state.select?.({ start: 4, end: 4 }));
+  const pasted = `log line${String.fromCharCode(10)}`.repeat(1_000);
+  await act(async () => state.change?.(`See ${pasted} please`));
+  expect(state.stagePasted).toHaveBeenCalledExactlyOnceWith(pasted, "machine:session");
+  expect(state.draft?.text).toBe("See  please");
+  expect(state.draft?.attachments).toEqual([staged]);
+  expect(state.selection).toEqual({ start: 4, end: 4 });
+});
+
+it("returns the paste to the draft when it cannot be attached", async () => {
+  state.draft = { ...emptyComposerDraft(), text: "" };
+  state.stagePasted.mockImplementation(() => { throw new Error("Disk full"); });
+  await mount();
+  const pasted = "x".repeat(8_000);
+  await act(async () => state.change?.(pasted));
+  expect(state.draft?.text).toBe(pasted);
+  expect(state.draft?.attachments).toEqual([]);
+  expect(container.textContent).toContain("Disk full");
+});
+
+it("keeps ordinary typing in the draft", async () => {
+  state.draft = { ...emptyComposerDraft(), text: "Hi" };
+  await mount();
+  await act(async () => state.change?.("Hi!"));
+  expect(state.stagePasted).not.toHaveBeenCalled();
+  expect(state.draft?.text).toBe("Hi!");
+});
+
+it("takes a photo from Add to message and offers camera settings when access is blocked", async () => {
+  const { CameraPermissionBlockedError } = await import("./attachment-files");
+  state.draft = { ...emptyComposerDraft(), text: "" };
+  const photo = { id: "shot", name: "shot.jpg", mimeType: "image/jpeg", kind: "image" as const, size: 3, uri: "file:///staged/shot" };
+  state.pick.mockResolvedValueOnce([photo]).mockRejectedValueOnce(new CameraPermissionBlockedError());
+  await mount();
+  await click("Add to message");
+  await click("Camera");
+  expect(state.pick).toHaveBeenLastCalledWith("camera", "machine:session");
+  expect(state.draft?.attachments).toEqual([photo]);
+  await click("Add to message");
+  await click("Camera");
+  expect(state.confirm).toHaveBeenCalledWith("Camera access needed", "Turn on camera access for Bycoda in Settings to take a photo.",
+    "Open camera settings", expect.any(Function), "Cancel", "default");
+  expect(state.draft?.attachments).toEqual([photo]);
 });

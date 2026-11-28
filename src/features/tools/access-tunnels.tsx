@@ -19,7 +19,7 @@ export function AccessTunnels({ computer, tunnel, onClose }: {
   return (
     <Sheet visible title={`${provider} · ${target}`} size="compact" onClose={onClose}>
       <ScopeLine scope={{ computer }} />
-      <StatusText label={copy(label[0], label[1])} tone={tone === "success" ? "live" : tone} />
+      <StatusText label={copy(label[0], label[1])} tone={tone === "success" ? "info" : tone} />
       {tunnel.publicUrl ? <>
         <Body mono selectable>{tunnel.publicUrl}</Body>
         <Body muted>{copy("Genel adres doğrulanmadı.", "Public address reachability is unverified.")}</Body>

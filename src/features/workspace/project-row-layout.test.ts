@@ -18,6 +18,7 @@ vi.mock("@/ui/primitives", () => ({
 }));
 vi.mock("@/ui/disclosure-motion", () => ({ DisclosureChevron: () => null }));
 vi.mock("@/ui/project-icon", () => ({ ProjectIcon: () => null }));
+vi.mock("@/ui/working-row-glow", () => ({ WorkingRowGlow: () => null }));
 vi.mock("@/ui/swipe-actions", () => ({ SwipeActions: ({ children }: PropsWithChildren) => children }));
 vi.mock("lucide-react-native/icons/corner-down-right", () => ({ default: () => null }));
 vi.mock("lucide-react-native/icons/ellipsis", () => ({ default: () => null }));

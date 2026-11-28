@@ -161,7 +161,7 @@ export function DevicesScreen({ project }: { project: HostProject }) {
           detail={system || undefined}
           detailLines={2}
           supporting={<Row>
-            <StatusText label={state} tone={device.booted ? "live" : starting.has(device.id) ? "active" : "default"} />
+            <StatusText label={state} tone={device.booted ? "success" : starting.has(device.id) ? "live" : "default"} />
             <Body muted style={[uiStyles.caption, { flexShrink: 1 }]}>{kind}</Body>
           </Row>}
           accessibilityLabel={[device.name, system, kind, state].filter(Boolean).join(". ")}

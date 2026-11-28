@@ -48,7 +48,12 @@ export function useCreateSession(
        * The first prompt, created atomically with the session (`sessions.createFirstTurn`), with
        * the attachments it already uploaded.
        */
-      firstTurn?: { type: "send"; commandId: string; sessionId: ""; text: string; attachments?: NewChatAttachmentReference[] };
+      firstTurn?: {
+        type: "send" | "draft"; commandId: string; sessionId: ""; text: string; intent?: "plan";
+        attachments?: NewChatAttachmentReference[];
+        /** Resolved reference data for a send, kept outside the visible message. */
+        contextReplay?: string;
+      };
     } = {},
   ): Promise<boolean> => {
     if (!canStart || !machine || !connection.isCurrent()) return Promise.resolve(false);

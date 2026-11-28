@@ -377,7 +377,7 @@ export function DeviceViewer({
           {device.booted ? touchHint.button : null}
           <StatusText
             label={device.booted ? copy("Hazır", "Ready") : booting ? copy("Başlatılıyor", "Starting") : copy("Kapalı", "Off")}
-            tone={device.booted ? "live" : booting ? "active" : "default"}
+            tone={device.booted ? "success" : booting ? "live" : "default"}
           />
         </Row>
         {sheet === "runtime" ? (

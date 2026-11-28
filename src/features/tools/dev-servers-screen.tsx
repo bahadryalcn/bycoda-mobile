@@ -143,7 +143,7 @@ function DevServersScreenBody({ project }: { project: HostProject }) {
             metadataLines={0}
             accessibilityLabel={[server.name, stateLabel, server.command, ports].filter(Boolean).join(". ")}
             icon={<RowIcon glyph={Server} />}
-            supporting={server.state === "error" ? <Badge label={stateLabel} tone="danger" /> : <StatusText label={stateLabel} tone={server.state === "running" ? "live" : "default"} />}
+            supporting={server.state === "error" ? <Badge label={stateLabel} tone="danger" /> : <StatusText label={stateLabel} tone={server.state === "running" ? "success" : server.state === "starting" || server.state === "stopping" ? "live" : "default"} />}
             onPress={() => setSelected(server)}
           />
           );

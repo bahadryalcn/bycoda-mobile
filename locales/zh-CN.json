@@ -3,7 +3,7 @@
     "NSLocalNetworkUsageDescription": "连接到你私有网络中的 Bycoda 电脑。",
     "NSMicrophoneUsageDescription": "与 Bycoda 助手对话并语音输入消息。音频在你连接的电脑上处理；如果你选择在手机上听写，则在这部手机上处理。",
     "NSSpeechRecognitionUsageDescription": "当你选择在手机上听写时，Bycoda 会使用语音识别将你说的话转换为文字。在支持的情况下，识别在这部手机上进行。",
-    "NSCameraUsageDescription": "允许 Bycoda 扫描电脑上的配对二维码。",
+    "NSCameraUsageDescription": "扫描电脑上的配对二维码，并拍摄照片添加到你的 Bycoda 消息中。",
     "NSFaceIDUsageDescription": "使用 Face ID 安全访问你的 Bycoda 电脑。",
     "NSPhotoLibraryUsageDescription": "允许 Bycoda 访问照片，以便将照片附加到消息中。",
     "NSPhotoLibraryAddUsageDescription": "将 Bycoda 对话中的图片保存到你的照片图库。",

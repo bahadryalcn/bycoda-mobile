@@ -1,4 +1,13 @@
 {
+  "Update bycoda on this computer to run ! commands from the phone. Your draft is preserved.": "Update bycoda on this computer to run ! commands from the phone. Your draft is preserved.",
+  "Remove the files and note to run a command, or delete the leading !.": "Remove the files and note to run a command, or delete the leading !.",
+  "Type a command of at most 10,000 characters after !.": "Type a command of at most 10,000 characters after !.",
+  "Saved side questions": "Saved side questions",
+  "Side questions": "Side questions",
+  "Read-only questions asked about earlier turns. They did not change the session.": "Read-only questions asked about earlier turns. They did not change the session.",
+  "About: {p0}": "About: {p0}",
+  "Answering on the computer": "Answering on the computer",
+  "This side question could not be answered.": "This side question could not be answered.",
   "Cancel sending": "Cancel sending",
   "Diagnostic report ready": "Diagnostic report ready",
   "Review report": "Review report",
@@ -4159,6 +4168,7 @@
   "Subagent model policy": "Subagent model policy",
   "Auto-compact": "Auto-compact",
   "Auto-compact window": "Auto-compact window",
+  "Automatically compact at this token count. Default follows your provider settings. The model's context window remains the limit.": "Automatically compact at this token count. Default follows your provider settings. The model's context window remains the limit.",
   "Claude default": "Claude default",
   "Agent's choice": "Agent's choice",
   "Component gallery": "Component gallery",
@@ -5377,7 +5387,6 @@
   "Optional spoken phrase that marks a correction, such as “scratch that”.": "Optional spoken phrase that marks a correction, such as “scratch that”.",
   "Group by project": "Group by project",
   "Quick filters": "Quick filters",
-  "Reset project and status": "Reset project and status",
   "{p0} files changed": "{p0} files changed",
   "1 file changed": "1 file changed",
   "Show {p0} more file": "Show {p0} more file",
@@ -5432,5 +5441,8 @@
   "Preparing a handoff": "Preparing a handoff",
   "Preparing a handoff to {p0}": "Preparing a handoff to {p0}",
   "The last turn failed": "The last turn failed",
-  "This file was not found on the computer. It may have been moved or deleted.": "This file was not found on the computer. It may have been moved or deleted."
+  "This file was not found on the computer. It may have been moved or deleted.": "This file was not found on the computer. It may have been moved or deleted.",
+  "Paste image": "Paste image",
+  "Turn on camera access for Bycoda in Settings to take a photo.": "Turn on camera access for Bycoda in Settings to take a photo.",
+  "The clipboard has no image.": "The clipboard has no image."
 }

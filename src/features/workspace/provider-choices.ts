@@ -100,8 +100,16 @@ function offeredAccounts(provider: RemoteProvider, accounts: HostModelCatalog["a
   return provider === "claude" || provider === "codex" ? accounts?.[provider] : undefined;
 }
 
-/** Ready accounts, plus the default login while its state is unknown. */
-function usableAccount(account: CatalogAccount, offered: readonly CatalogAccount[]): boolean {
+/**
+ * Ready accounts, plus the default login while its state is unknown. The Host always lists its own
+ * profile as "default"; once the desktop names another account its default, that profile is not one
+ * of the desktop's accounts and is left out, as on the desktop.
+ */
+export function usableAccount(account: CatalogAccount, offered: readonly CatalogAccount[]): boolean {
+  if (
+    account.id === DEFAULT_ACCOUNT_ID && account.isDefault !== true &&
+    offered.some((entry) => entry.id !== DEFAULT_ACCOUNT_ID && entry.isDefault === true)
+  ) return false;
   return account.status === undefined || account.status === "ready" ||
     (account.status === "unknown" && (account.isDefault === true ||
       (account.id === DEFAULT_ACCOUNT_ID && !offered.some((entry) => entry.isDefault))));

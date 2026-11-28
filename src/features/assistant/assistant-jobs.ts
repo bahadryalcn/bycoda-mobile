@@ -28,6 +28,7 @@ const HOLD: Record<AssistantJobHoldReason, Copy> = {
   limits: ["Bekliyor: model limitleri", "Waiting: model limits"],
   noModel: ["Bekliyor: kullanılabilir model yok", "Waiting: no usable model"],
   dependency: ["Bekliyor: önceki iş", "Waiting: earlier job"],
+  permission: ["Bekliyor: izin düzeyi buna izin vermiyor", "Waiting: permission level"],
 };
 export const jobStatusCopy = (status: AssistantJobStatus): Copy => STATUS[status];
 export const jobHoldCopy = (reason: AssistantJobHoldReason): Copy => HOLD[reason];

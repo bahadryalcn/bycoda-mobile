@@ -18,7 +18,7 @@ import {
   type ImageModelId,
 } from "../../../../src/shared/model/host-contracts/image-models";
 import type { HostModelCatalog, RemoteProvider } from "./wire";
-import { accountName } from "./provider-choices";
+import { accountName, usableAccount } from "./provider-choices";
 
 /**
  * bycoda's own cross-provider delegation as the phone edits it: one advisor, several subagent
@@ -77,16 +77,23 @@ function accountLabel(
   return shared ? `${name} · ${account.id}` : name;
 }
 
-/** Every model of every connected provider, one entry per account for Claude and Codex. */
+/**
+ * Every model the computer offers, one entry per usable account for Claude and Codex. Signed-out
+ * and disabled accounts are left out, as in the provider choices; a provider the desktop turned
+ * off arrives with no models.
+ */
 export function delegationCandidates(
   catalog: HostModelCatalog | undefined,
   providers: readonly RemoteProvider[],
   defaultAccountLabel = "Default account",
 ): DelegateCandidate[] {
   return providers.flatMap((provider) => {
-    const accounts = ACCOUNT_PROVIDERS.includes(provider)
-      ? (catalog?.accounts?.[provider as "codex" | "claude"] ?? [])
-      : [];
+    const offered = ACCOUNT_PROVIDERS.includes(provider)
+      ? catalog?.accounts?.[provider as "codex" | "claude"]
+      : undefined;
+    const accounts = offered?.filter((account) => usableAccount(account, offered)) ?? [];
+    // Listed accounts that are all unusable leave the provider without candidates.
+    if (offered?.length && !accounts.length) return [];
     return (catalog?.models[provider] ?? []).flatMap((model): DelegateCandidate[] => {
       if (!accounts.length) {
         const ref: DelegateModelRef = { harness: provider, model: model.id };
@@ -117,11 +124,19 @@ export function delegationCandidates(
   });
 }
 
-/** Image generators the session may pick: those tied to a connected provider. */
-export function imageChoices(providers: readonly RemoteProvider[]): ImageChoice[] {
+/**
+ * Image generators the session may pick: those tied to a connected provider. With the catalogue,
+ * only providers that list models count, so a provider turned off on the desktop offers none.
+ */
+export function imageChoices(
+  providers: readonly RemoteProvider[],
+  catalog?: HostModelCatalog,
+): ImageChoice[] {
   return IMAGE_MODEL_IDS.flatMap((id) => {
     const harness = IMAGE_MODEL_INFO[id].harness;
-    return harness && providers.includes(harness) ? [{ id, name: IMAGE_MODEL_INFO[id].name }] : [];
+    const active = !!harness && providers.includes(harness) &&
+      (!catalog || !!catalog.models[harness]?.length || !!catalog.pending?.includes(harness));
+    return active ? [{ id, name: IMAGE_MODEL_INFO[id].name }] : [];
   });
 }
 

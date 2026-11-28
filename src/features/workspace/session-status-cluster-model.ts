@@ -38,7 +38,7 @@ export function activeSessionGoal(
 }
 
 /**
- * Which segments the floating cluster shows. Like T3 Code, the transcript's live row owns the turn
+ * Which segments the floating cluster shows. The transcript's live row owns the turn
  * clock whenever it is rendered, so one timer is ever visible and scrolling never makes the capsule
  * appear or vanish; the capsule says Working or Stopping only when no live row is rendered. States
  * the live row does not say (waiting on agents, needs you, background, done) always show here.

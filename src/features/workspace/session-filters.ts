@@ -68,7 +68,3 @@ export function effectiveSessionProject(projectId: string | null, projects: read
   return !directoryReady || projects.some((project) => project.id === projectId) ? projectId : null;
 }
 
-/** The header row's reset mark appears once a project or status chip narrows the list. */
-export function sessionQuickFiltersActive(projectId: string | null, status: SessionStatusFilter, archived: boolean): boolean {
-  return !!projectId || (!archived && status !== "all");
-}

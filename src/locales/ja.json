@@ -1,4 +1,13 @@
 {
+  "Update bycoda on this computer to run ! commands from the phone. Your draft is preserved.": "スマートフォンから ! コマンドを実行するには、このコンピューターの bycoda を更新してください。下書きは保持されます。",
+  "Remove the files and note to run a command, or delete the leading !.": "コマンドを実行するには、ファイルとメモを削除するか、先頭の ! を削除してください。",
+  "Type a command of at most 10,000 characters after !.": "! の後に 10,000 文字以内のコマンドを入力してください。",
+  "Saved side questions": "保存されたサイド質問",
+  "Side questions": "サイド質問",
+  "Read-only questions asked about earlier turns. They did not change the session.": "以前のターンについての読み取り専用の質問です。セッションは変更されていません。",
+  "About: {p0}": "対象: {p0}",
+  "Answering on the computer": "コンピューターで回答中",
+  "This side question could not be answered.": "このサイド質問には回答できませんでした。",
   "Cancel sending": "送信をキャンセル",
   "Diagnostic report ready": "診断レポートを確認できます",
   "Review report": "レポートを確認",
@@ -4159,6 +4168,7 @@
   "Subagent model policy": "サブエージェントのモデル方針",
   "Auto-compact": "自動圧縮",
   "Auto-compact window": "自動圧縮のウィンドウ",
+  "Automatically compact at this token count. Default follows your provider settings. The model's context window remains the limit.": "このトークン数で自動的に圧縮します。デフォルトはプロバイダーの設定に従います。上限は引き続きモデルのコンテキストウィンドウです。",
   "Claude default": "Claude のデフォルト",
   "Agent's choice": "エージェントが選択",
   "Component gallery": "コンポーネントギャラリー",
@@ -5377,7 +5387,6 @@
   "Optional spoken phrase that marks a correction, such as “scratch that”.": "訂正を示す任意の言い回し（例:「いや、そうじゃなくて」）。",
   "Group by project": "プロジェクトでグループ化",
   "Quick filters": "クイックフィルター",
-  "Reset project and status": "プロジェクトと状態をリセット",
   "{p0} files changed": "{p0} 件のファイルを変更",
   "1 file changed": "1 件のファイルを変更",
   "Show {p0} more file": "{p0} 個のファイルをさらに表示",
@@ -5432,5 +5441,8 @@
   "Pasted text": "貼り付けたテキスト",
   "Branched from {p0}": "{p0} から分岐",
   "Generating image…": "画像を生成しています…",
-  "Could not generate image.": "画像を生成できませんでした。"
+  "Could not generate image.": "画像を生成できませんでした。",
+  "Paste image": "画像を貼り付け",
+  "Turn on camera access for Bycoda in Settings to take a photo.": "写真を撮るには、設定で Bycoda のカメラへのアクセスをオンにしてください。",
+  "The clipboard has no image.": "クリップボードに画像がありません。"
 }

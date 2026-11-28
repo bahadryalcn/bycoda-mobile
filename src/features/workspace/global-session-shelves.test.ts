@@ -104,6 +104,8 @@ it("groups by project under Pinned, ordering projects by activity and rows urgen
     .toEqual(["pinned:1", "a:a-pin", "project:b:2", "b:b-run", "b:b-new", "project:a:3", "a:a-ask", "a:a-old", "a:a-settled"]);
   const folded = projectGroupedSessionRows(directory, { settledIds, now: 10, collapsed: { "project:b": true, "shelf:pinned": true } });
   expect(folded.map((row) => row.key)).toEqual(["shelf:pinned", "project:b", "project:a", "a:a-ask", "a:a-old", "a:a-settled"]);
+  // A folded group still reports its runs in flight, so its header can show activity.
+  expect(folded.flatMap((row) => row.kind === "project" ? [`${row.project.id}:${row.running}`] : [])).toEqual(["b:1", "a:0"]);
   expect(projectGroupedSessionRows(directory, { settledIds, now: 10, searching: true, collapsed: { "project:b": true } })
     .map((row) => row.key)).toContain("b:b-new");
 });

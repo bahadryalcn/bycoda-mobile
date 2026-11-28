@@ -3,6 +3,7 @@ import { Text, View, useWindowDimensions } from "react-native";
 import CornerDownRight from "lucide-react-native/icons/corner-down-right";
 import { DisclosureChevron } from "@/ui/disclosure-motion";
 import { ProjectIcon } from "@/ui/project-icon";
+import { WorkingRowGlow } from "@/ui/working-row-glow";
 import { PressableCard, StatusText } from "@/ui/primitives";
 import { gapIcon, iconSize, metrics, space } from "@/ui/tokens";
 import { useCopy } from "@/ui/copy";
@@ -76,6 +77,9 @@ export const ProjectRow = memo(function ProjectRow({
     : running ? <StatusText label={runningLabel} tone="live" />
     : since ? <Text style={[uiStyles.caption, { flexShrink: 1 }]}>{since}</Text> : null;
   const row = (
+    <View>
+    {/* Desktop's working-row tint and pulse: a project with a run in flight reads at a glance. */}
+    {running && !opening && !needsYou ? <WorkingRowGlow /> : null}
     <PressableCard
       label={[context ? `${name} (${context})` : name, kindLabel, path, opening ? openingLabel : needsYou ? needsLabel : running ? runningLabel : "", since].filter(Boolean).join(". ")}
       disabled={disabled && !opening}
@@ -119,6 +123,7 @@ export const ProjectRow = memo(function ProjectRow({
         </View>
       )}
     </PressableCard>
+    </View>
   );
   // Rows never swipe; New session and the other actions live in the long-press options sheet.
   const swipeable = (

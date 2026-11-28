@@ -3,7 +3,7 @@
     "NSLocalNetworkUsageDescription": "Verbinden Sie sich über Ihr privates Netzwerk mit Ihrem Bycoda-Computer.",
     "NSMicrophoneUsageDescription": "Sprechen Sie mit Ihrem Bycoda-Assistenten und diktieren Sie Nachrichten. Audio wird auf Ihrem verbundenen Computer verarbeitet oder auf diesem Telefon, wenn Sie das Diktieren auf dem Telefon wählen.",
     "NSSpeechRecognitionUsageDescription": "Wenn Sie das Diktieren auf dem Telefon wählen, nutzt Bycoda die Spracherkennung, um Gesprochenes in Text umzuwandeln. Sie läuft auf diesem Telefon, sofern unterstützt.",
-    "NSCameraUsageDescription": "Erlauben Sie Bycoda, den Kopplungs-QR-Code auf Ihrem Computer zu scannen.",
+    "NSCameraUsageDescription": "Scannen Sie den Kopplungs-QR-Code auf Ihrem Computer und nehmen Sie Fotos auf, um sie an Ihre Bycoda-Nachrichten anzuhängen.",
     "NSFaceIDUsageDescription": "Verwenden Sie Face ID, um sicher auf Ihre Bycoda-Computer zuzugreifen.",
     "NSPhotoLibraryUsageDescription": "Erlauben Sie Bycoda den Zugriff auf Ihre Fotos, um sie an Ihre Nachrichten anzuhängen.",
     "NSPhotoLibraryAddUsageDescription": "Speichern Sie Bilder aus Ihren Bycoda-Unterhaltungen in Ihrer Fotomediathek.",

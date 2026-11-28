@@ -1,0 +1,70 @@
+name: Mobile CI
+
+# Source checks only: no EAS request, signing, upload or device acceptance.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # The app imports shared contracts from the parent bycoda repository (../src, ../packages/core,
+      # ../host) and its scripts read parent files, so this repository cannot build alone. The parent
+      # is checked out at its main tip and this commit is laid into its gitignored mobile/ folder,
+      # the same layout the internal preview workflow uses. A mobile change that needs unmerged
+      # parent work fails here until that parent work lands on main.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # verified official actions/checkout commit
+        with:
+          repository: bahadryalcn/bycoda
+          ref: main
+          path: ci-parent
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # verified official actions/checkout commit
+        with:
+          path: ci-parent/mobile
+          persist-credentials: false
+      - name: Record the parent commit these checks ran against
+        working-directory: ci-parent
+        run: echo "Parent bycoda commit $(git rev-parse HEAD)"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # verified official actions/setup-node commit
+        with:
+          node-version: "26.13.1"
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # verified official pnpm/action-setup commit
+        with:
+          package_json_file: ci-parent/mobile/package.json
+          run_install: false
+      # Shared parent sources resolve their own packages (zod, noble, ...) from the parent's
+      # node_modules for Vitest and tsc. Lifecycle scripts are not needed for that resolution.
+      # The parent sets pmOnFail: ignore, so this install runs on mobile's pinned pnpm, which
+      # satisfies the parent's engines range.
+      - name: Install the parent's frozen dependency graph for shared sources
+        working-directory: ci-parent
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install the mobile frozen dependency graph
+        working-directory: ci-parent/mobile
+        run: pnpm install --frozen-lockfile
+      # expo-env.d.ts is gitignored and normally written by the Expo CLI; it is the only file that
+      # pulls in expo/types, without which tsc reports implicit-any errors in shared host files.
+      - name: Write expo-env.d.ts
+        working-directory: ci-parent/mobile
+        run: echo '/// <reference types="expo/types" />' > expo-env.d.ts
+      - name: Typecheck (theme, UI, runtime and locale checks, then tsc-rs)
+        working-directory: ci-parent/mobile
+        run: pnpm typecheck
+      - name: Unit tests
+        working-directory: ci-parent/mobile
+        run: pnpm vitest run --config vitest.config.ts
+      - name: Store source configuration (no build, upload or store acceptance)
+        working-directory: ci-parent/mobile
+        run: pnpm check:release

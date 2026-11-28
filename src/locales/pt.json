@@ -1,4 +1,13 @@
 {
+  "Update bycoda on this computer to run ! commands from the phone. Your draft is preserved.": "Atualize o bycoda neste computador para executar comandos ! pelo telefone. Seu rascunho está preservado.",
+  "Remove the files and note to run a command, or delete the leading !.": "Remova os arquivos e a nota para executar um comando, ou apague o ! inicial.",
+  "Type a command of at most 10,000 characters after !.": "Digite um comando de no máximo 10.000 caracteres após o !.",
+  "Saved side questions": "Perguntas paralelas salvas",
+  "Side questions": "Perguntas paralelas",
+  "Read-only questions asked about earlier turns. They did not change the session.": "Perguntas somente leitura sobre turnos anteriores. Elas não alteraram a sessão.",
+  "About: {p0}": "Sobre: {p0}",
+  "Answering on the computer": "Respondendo no computador",
+  "This side question could not be answered.": "Não foi possível responder a esta pergunta paralela.",
   "Cancel sending": "Cancelar envio",
   "Diagnostic report ready": "Relatório de diagnóstico pronto",
   "Review report": "Revisar relatório",
@@ -4159,6 +4168,7 @@
   "Subagent model policy": "Política de modelo de subagente",
   "Auto-compact": "Compactação automática",
   "Auto-compact window": "Janela de compactação automática",
+  "Automatically compact at this token count. Default follows your provider settings. The model's context window remains the limit.": "Compacta automaticamente ao atingir este número de tokens. Padrão segue as configurações do provedor. O limite continua sendo a janela de contexto do modelo.",
   "Claude default": "Padrão do Claude",
   "Agent's choice": "Escolha do agente",
   "Component gallery": "Galeria de componentes",
@@ -5377,7 +5387,6 @@
   "Optional spoken phrase that marks a correction, such as “scratch that”.": "Frase falada opcional que marca uma correção, como “não, melhor”.",
   "Group by project": "Agrupar por projeto",
   "Quick filters": "Filtros rápidos",
-  "Reset project and status": "Redefinir projeto e status",
   "{p0} files changed": "{p0} arquivos alterados",
   "1 file changed": "1 arquivo alterado",
   "Show {p0} more file": "Mostrar mais {p0} arquivo",
@@ -5432,5 +5441,8 @@
   "Pasted text": "Texto colado",
   "Branched from {p0}": "Ramificada de {p0}",
   "Generating image…": "Gerando imagem…",
-  "Could not generate image.": "Não foi possível gerar a imagem."
+  "Could not generate image.": "Não foi possível gerar a imagem.",
+  "Paste image": "Colar imagem",
+  "Turn on camera access for Bycoda in Settings to take a photo.": "Ative o acesso à câmera para o Bycoda nos Ajustes para tirar uma foto.",
+  "The clipboard has no image.": "Não há imagem na área de transferência."
 }

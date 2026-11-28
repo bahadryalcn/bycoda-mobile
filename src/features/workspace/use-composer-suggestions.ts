@@ -3,18 +3,17 @@ import type { TextInputKeyPressEvent } from "react-native";
 import { insertTemplate } from "@/features/management/templates/template-model";
 import { emptyComposerDraft, type ComposerDraft } from "./composer-draft";
 import { composerTokenAt, moveSuggestionSelection, replaceComposerToken } from "./composer-tokens";
-import { useComposerCatalog, type ComposerSuggestion } from "./use-composer-catalog";
+import { useComposerCatalog, type ComposerCatalogTarget, type ComposerSuggestion } from "./use-composer-catalog";
 import { isComposerNavigationAction, type ComposerNavigationAction } from "./composer-command-catalog";
 import type { useLocalDraft } from "./use-local-draft";
-import type { HostSession } from "./wire";
 
 type Selection = { start: number; end: number };
 
 /** Owns the active token and applies a choice to the original draft and caret. */
 export function useComposerSuggestions({
-  session, prompt, selection, setSelection, setValue, focused, onSideQuestion, onNavigate,
+  session, prompt, selection, setSelection, setValue, focused, onSideQuestion, onNavigate, adapt,
 }: {
-  session: HostSession | undefined;
+  session: ComposerCatalogTarget | undefined;
   prompt: string;
   selection: Selection;
   setSelection: (selection: Selection) => void;
@@ -23,15 +22,18 @@ export function useComposerSuggestions({
   onSideQuestion: (question: string) => boolean;
   /** Opens the phone's destination for /new, /resume or /add-to-folder; false keeps the draft as typed. */
   onNavigate?: (action: ComposerNavigationAction) => boolean;
+  /** Adjusts the rows before selection (a new session marks what needs a session unavailable). */
+  adapt?: (items: ComposerSuggestion[]) => ComposerSuggestion[];
 }) {
   const [dismissed, setDismissed] = useState<string | null>(null);
   const detected = focused ? composerTokenAt(prompt, selection) : null;
   const tokenId = detected ? `${detected.start}:${detected.trigger}:${detected.query}` : "";
   const token = tokenId && tokenId !== dismissed ? detected : null;
   const catalog = useComposerCatalog(session, token);
-  const items = (catalog.data ?? []).filter((item) =>
+  const listed = (catalog.data ?? []).filter((item) =>
     item.action !== "side-question" || (token && !prompt.slice(0, token.start).trim() && !prompt.slice(token.end).trim()),
   );
+  const items = adapt ? adapt(listed) : listed;
   const selectable = items.filter((item) => !item.unavailable);
   const [pick, setPick] = useState<{ tokenId: string; id?: string }>();
   const selected = pick?.tokenId === tokenId ? selectable.findIndex((item) => item.id === pick.id) : -1;

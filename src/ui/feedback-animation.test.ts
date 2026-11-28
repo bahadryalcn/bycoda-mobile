@@ -31,6 +31,8 @@ vi.mock("./motion", () => ({ reveal: undefined }));
 vi.mock("./typography", () => ({ Body: ({ children }: PropsWithChildren) => createElement("span", null, children) }));
 vi.mock("./layout", () => ({ Row: "div" }));
 vi.mock("./state-view", () => ({ StateView: "div" }));
+// Live status uses the PanelUI shimmer, which this environment does not load.
+vi.mock("./text-sweep", () => ({ SweepLabel: ({ children }: { children: string }) => children }));
 vi.mock("./buttons", () => ({ Button: "button" }));
 vi.mock("./styles", () => ({ uiStyles: {} }));
 vi.mock("./tokens", () => ({ colors: {}, semanticColors: {}, space: {}, radii: {}, metrics: { rowHeightSession: 64 } }));

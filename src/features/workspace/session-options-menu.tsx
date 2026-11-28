@@ -2,6 +2,9 @@ import { useState, type ComponentType, type ReactNode } from "react";
 import { View } from "react-native";
 import MessageCircleQuestion from "lucide-react-native/icons/message-circle-question";
 import { SideChatSheet } from "@/features/side-chat/side-chat-sheet";
+import { BtwHistorySheet } from "@/features/side-chat/btw-history-sheet";
+import type { BtwHistoryEntry } from "@/features/side-chat/btw-history-model";
+import History from "lucide-react-native/icons/history";
 import ArrowRightLeft from "lucide-react-native/icons/arrow-right-left";
 import Bot from "lucide-react-native/icons/bot";
 import ClipboardCheck from "lucide-react-native/icons/clipboard-check";
@@ -72,6 +75,7 @@ export function SessionOptionsMenu({
   detailed,
   sessionActions,
   modelDetail,
+  btwThreads = [],
   actions,
   onClose,
 }: {
@@ -86,11 +90,14 @@ export function SessionOptionsMenu({
   sessionActions?: ReactNode;
   /** The current model, shown on the Model and access row. */
   modelDetail?: string;
+  /** Saved side questions of the loaded transcript; the history row appears only when there are some. */
+  btwThreads?: readonly BtwHistoryEntry[];
   actions: SessionOptionsActions;
   onClose: () => void;
 }) {
   const copy = useCopy();
   const [sideOpen, setSideOpen] = useState(false);
+  const [btwOpen, setBtwOpen] = useState(false);
   const [section, setSection] = useState<"agent" | "project" | null>(null);
   const icon = (Glyph: IconComponent, tone?: "danger"): ReactNode => <RowIcon glyph={Glyph} tone={tone} />;
   const go = (action: () => void) => () => {
@@ -112,6 +119,7 @@ export function SessionOptionsMenu({
   return (
     <>
       <SideChatSheet visible={sideOpen} sessionId={sessionId} onClose={() => setSideOpen(false)} />
+      <BtwHistorySheet visible={btwOpen && btwThreads.length > 0} threads={btwThreads} onClose={() => setBtwOpen(false)} />
       <Sheet visible={visible} title={copy("Oturum seçenekleri", "Session options")} onClose={onClose}>
         <NavigationGroup>
           <NavigationRow
@@ -170,6 +178,14 @@ export function SessionOptionsMenu({
             disabled={blocked}
             onPress={fromSection(() => setSideOpen(true))}
           />
+          {btwThreads.length ? (
+            <NavigationRow
+              icon={icon(History)}
+              label={copy("Kayıtlı yan sorular", "Saved side questions")}
+              detail={String(btwThreads.length)}
+              onPress={fromSection(() => setBtwOpen(true))}
+            />
+          ) : null}
           <NavigationRow
             icon={icon(ArrowRightLeft)}
             label={copy("Bağlamla devret", "Contextual handoff")}

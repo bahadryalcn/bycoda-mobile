@@ -20,7 +20,19 @@ import { crewReferenceLabel } from "./composer-crew-delivery";
 
 export type { ComposerSuggestion } from "./composer-catalog-model";
 
-export function useComposerCatalog(session: HostSession | undefined, token: ComposerToken | null) {
+/**
+ * What the catalog reads: an open session, or a new session's project, folder and agent before it
+ * exists (an empty `id`). Every `HostSession` satisfies it.
+ */
+export type ComposerCatalogTarget = {
+  projectId?: string;
+  session: Pick<HostSession["session"], "id" | "cwd"> & {
+    worktreeCwd?: string;
+    harness?: HostSession["session"]["harness"];
+  };
+};
+
+export function useComposerCatalog(session: ComposerCatalogTarget | undefined, token: ComposerToken | null) {
   const copy = useCopy();
   const client = useHostClient();
   const active = useHostReadActive();

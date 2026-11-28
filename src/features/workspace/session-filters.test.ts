@@ -75,12 +75,4 @@ describe("session quick filters", () => {
     expect(effectiveSessionProject("gone", [{ id: "a" }], true)).toBeNull();
     expect(effectiveSessionProject("a", [], false)).toBe("a");
   });
-
-  it("shows the reset mark for a project or status choice", async () => {
-    const { sessionQuickFiltersActive } = await import("./session-filters");
-    expect(sessionQuickFiltersActive(null, "all", false)).toBe(false);
-    expect(sessionQuickFiltersActive("a", "all", false)).toBe(true);
-    expect(sessionQuickFiltersActive(null, "reply", false)).toBe(true);
-    expect(sessionQuickFiltersActive(null, "reply", true)).toBe(false);
-  });
 });

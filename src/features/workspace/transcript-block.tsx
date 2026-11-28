@@ -99,8 +99,12 @@ export const TranscriptBlock = memo(function TranscriptBlock({
   const [open, setOpen] = useState(false);
   const [actions, setActions] = useState(false);
   const [requested, setRequested] = useState(false);
-  const readFullContent =
+  // Send draft, Copy and the options read the whole block for their action only; the row keeps
+  // showing its preview until the owner opens the full message.
+  const [actionRead, setActionRead] = useState(false);
+  const showFullContent =
     !!block.remoteContent && (requested || open || activityDetail || !!block.plan || !!block.taskList);
+  const readFullContent = showFullContent || (!!block.remoteContent && actionRead);
   const detail = useSessionBlock({
     scope,
     blockId: block.id,
@@ -108,7 +112,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
     digest: block.remoteContent?.digest,
     enabled: readFullContent,
   });
-  const value = detail.data ?? block;
+  const value = (showFullContent ? detail.data : undefined) ?? block;
   // Send draft, Copy and the message options act on the words; a long block first reads its whole
   // from the Host (the transcript holds a 32 KiB preview), and a failed read never falls back to it.
   const [loadingFull, setLoadingFull] = useState<"options" | "copy" | "draft">();
@@ -123,7 +127,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
       run(ready);
       return;
     }
-    setRequested(true);
+    setActionRead(true);
     setLoadingFull(action);
     void detail.refetch().then((result) => {
       if (!mounted.current) return;
@@ -185,16 +189,21 @@ export const TranscriptBlock = memo(function TranscriptBlock({
                     ? copy("Ajan devri", "Agent handoff")
                     // An unknown role is never shown as its raw wire id.
                     : copy("Etkinlik", "Activity");
-  const rawText = value.questionAnswers?.length
-    ? ""
-    : value.role === "user"
-      ? userPromptDisplay(value.text)
-      : value.text || value.tool?.detail || value.tool?.output || "";
+  const wordsOf = (source: Block) => {
+    const raw = source.questionAnswers?.length
+      ? ""
+      : source.role === "user"
+        ? userPromptDisplay(source.text)
+        : source.text || source.tool?.detail || source.tool?.output || "";
+    return source.role === "system" && isError ? friendlyProviderFailure(raw, copy) : raw;
+  };
   const turn = userTurn(value);
   const promptAuthor = userTurnAuthorLabel(value.author, copy);
-  const text =
-    value.role === "system" && isError ? friendlyProviderFailure(rawText, copy) : rawText;
+  const text = wordsOf(value);
   const toolResults = toolResultTexts(value);
+  // The actions' words: the whole block once read, even while the row still shows its preview.
+  const whole = fullContentBlock(block, detail.data) ?? value;
+  const wholeText = whole === value ? text : wordsOf(whole);
   // Like the desktop inspection panel: the first block is the command/input when a separate output follows it.
   const inputBlock = !!value.shell || (toolResults.length > 0 && !!(value.text || value.tool?.detail));
   const label =
@@ -220,10 +229,10 @@ export const TranscriptBlock = memo(function TranscriptBlock({
     !isError &&
     value.notice !== "interrupt";
   const actionText = [
-    text,
-    ...toolResults,
-    value.image?.name,
-    ...(value.attachments ?? []).map((file) => `[${file.name}]`),
+    wholeText,
+    ...(whole === value ? toolResults : toolResultTexts(whole)),
+    whole.image?.name,
+    ...(whole.attachments ?? []).map((file) => `[${file.name}]`),
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -279,7 +288,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           />
         ) : null}
       </Sheet>
-      {readFullContent ? <QueryState query={detail} loading="inline" compact /> : null}
+      {showFullContent ? <QueryState query={detail} loading="inline" compact /> : null}
       {value.inlineVisual && activityDetail ? <TranscriptInlineVisual visual={value.inlineVisual} scope={scope} /> : null}
       {text && value.role === "tool" && !value.agentRun ? (
         <MessageCode code={text} output compact error={isError} allowPreview={false} context={context} readerTitle={inputBlock ? copy("Komut", "Command") : undefined} copyLabel={inputBlock ? copy("Komutu kopyala", "Copy command") : undefined} />
@@ -330,7 +339,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
         <Button
           label={copy("Koordinasyon ayrıntıları", "Coordination details")}
           tone="quiet"
-          disabled={!!value.remoteContent && !detail.data}
+          disabled={!!value.remoteContent && !(showFullContent && detail.data)}
           onPress={() => setOrchestrationOpening({ key: proposalKey })}
         />
       ) : null}
@@ -361,7 +370,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
           messageId={value.id}
         />
       ) : null}
-      {value.remoteContent && !detail.data && conversational && !requested ? (
+      {value.remoteContent && !showFullContent && conversational ? (
         <Button
           label={copy("Tam mesajı aç", "Open full message")}
           density="compact"
@@ -635,7 +644,7 @@ export const TranscriptBlock = memo(function TranscriptBlock({
               ) : null}
               {canAct && text.trim() ? (
                 fullContentBlock(block, detail.data) ? (
-                  <UserCopyAction text={text} armed={copyRequested} onArmed={() => setCopyRequested(false)} />
+                  <UserCopyAction text={wholeText} armed={copyRequested} onArmed={() => setCopyRequested(false)} />
                 ) : (
                   <ChatAction
                     label={copy("Mesajı kopyala", "Copy message")}

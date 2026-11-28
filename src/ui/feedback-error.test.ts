@@ -17,6 +17,8 @@ vi.mock("expo-router", () => ({ router: { navigate: vi.fn() } }));
 vi.mock("./motion", () => ({ reveal: undefined }));
 vi.mock("./typography", () => ({ Body: "Body" }));
 vi.mock("./state-view", () => ({ StateView: "StateView" }));
+// Live status uses the PanelUI shimmer, which this environment does not load.
+vi.mock("./text-sweep", () => ({ SweepLabel: ({ children }: { children: string }) => children }));
 vi.mock("./toast", () => ({ showToast: vi.fn(), useToastAvailable: () => false }));
 vi.mock("./layout", () => ({ Row: "Row" }));vi.mock("./buttons", () => ({ Button: "Button" }));
 vi.mock("./styles", () => ({ uiStyles: {} }));

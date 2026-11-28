@@ -6,20 +6,26 @@ import type { ComposerMode } from "./composer-mode";
 
 /**
  * The active turn mode (chosen in "Add to message"), visible above the field; pressing it turns the
- * mode off. Plan mode and Save as draft are mutually exclusive.
+ * mode off. Plan mode and Save as draft are mutually exclusive. Shell is the leading `!` of a
+ * command run on the computer; turning it off removes the `!`.
  */
 export function ComposerModeChip({
   mode,
   disabled,
   onRemove,
 }: {
-  mode: ComposerMode;
+  mode: ComposerMode | "shell";
   disabled?: boolean;
   onRemove: () => void;
 }) {
   const { colors } = useMobileTheme();
   const copy = useCopy();
-  const label = mode === "plan" ? copy("Plan modu", "Plan mode") : copy("Taslak olarak kaydet", "Save as draft");
+  const label =
+    mode === "plan"
+      ? copy("Plan modu", "Plan mode")
+      : mode === "shell"
+        ? copy("Kabuk", "Shell")
+        : copy("Taslak olarak kaydet", "Save as draft");
   return (
     <Button
       label={label}

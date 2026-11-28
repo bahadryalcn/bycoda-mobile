@@ -1,6 +1,8 @@
 import type { ComponentProps, ReactNode } from "react";
 import { View } from "react-native";
 import ImageIcon from "lucide-react-native/icons/image";
+import Camera from "lucide-react-native/icons/camera";
+import ClipboardPaste from "lucide-react-native/icons/clipboard-paste";
 import File from "lucide-react-native/icons/file";
 import ClipboardList from "lucide-react-native/icons/clipboard-list";
 import CircleDashed from "lucide-react-native/icons/circle-dashed";
@@ -12,12 +14,14 @@ type RowGlyph = ComponentProps<typeof RowIcon>["glyph"];
 import { useCopy } from "@/ui/copy";
 import { space } from "@/ui/tokens";
 import { TemplateLibrary } from "@/features/management/templates/template-library";
+import type { AttachmentSource } from "./attachment-files";
 import type { ComposerMode } from "./composer-mode";
+import { useClipboardImage } from "./use-clipboard-image";
 import type { SessionScope } from "./session-types";
 
 /**
  * "Add to message" and its phone template sheet, opened from the composer's Add control. Content
- * (photos, files, templates) comes first; the turn modes for this message (Plan mode, Save as
+ * (photos, camera, files, a clipboard image when there is one, templates) comes first; the turn modes for this message (Plan mode, Save as
  * draft) follow as selection rows with their blocked reasons, so the toolbar needs no mode icon.
  */
 export function ComposerSheets({
@@ -47,7 +51,7 @@ export function ComposerSheets({
   templateOpen: boolean;
   onTemplateOpen: () => void;
   onTemplateClose: () => void;
-  onChoose: (kind: "photo" | "document") => void;
+  onChoose: (kind: AttachmentSource) => void;
   onInsertTemplate: (body: string) => void;
   /** Turn modes for this message; omitted where the composer has none. */
   modes?: {
@@ -57,6 +61,7 @@ export function ComposerSheets({
   };
 }) {
   const copy = useCopy();
+  const clipboardImage = useClipboardImage(pickerOpen);
   const contentsLabel = copy("Taslak içeriği", "Draft contents");
   const modeRow = (mode: ComposerMode, label: string, description: string, icon: RowGlyph) => {
     const blocked = modes?.active !== mode ? modes?.blockedReasons[mode] : undefined;
@@ -99,11 +104,25 @@ export function ComposerSheets({
               onPress={() => onChoose("photo")}
             />
             <NavigationRow
+              label={copy("Kamera", "Camera")}
+              intent="command"
+              icon={<RowIcon glyph={Camera} />}
+              onPress={() => onChoose("camera")}
+            />
+            <NavigationRow
               label={copy("Dosyalar", "Files")}
               intent="command"
               icon={<RowIcon glyph={File} />}
               onPress={() => onChoose("document")}
             />
+            {clipboardImage ? (
+              <NavigationRow
+                label={copy("Görseli yapıştır", "Paste image")}
+                intent="command"
+                icon={<RowIcon glyph={ClipboardPaste} />}
+                onPress={() => onChoose("clipboard")}
+              />
+            ) : null}
             <NavigationRow
               intent="navigate"
               label={copy("Şablonlar", "Templates")}

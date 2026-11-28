@@ -58,13 +58,13 @@ function NetworkRow({ icon, label, status, tone }: {
   );
 }
 
-/** A running tunnel reads as live status (it exposes the Host); only a failed or interrupted one is a tinted badge. */
+/** A running tunnel reads as steady info status (it exposes the Host); only a failed or interrupted one is a tinted badge. */
 function TunnelStatus({ state }: { state: AccessTunnel["state"] }) {
   const copy = useCopy();
   const { label, tone } = tunnelPresentation(state);
   return tone === "danger" || tone === "warning"
     ? <Badge label={copy(label[0], label[1])} tone={tone} />
-    : <StatusText label={copy(label[0], label[1])} tone={tone === "success" ? "live" : tone} />;
+    : <StatusText label={copy(label[0], label[1])} tone={tone === "success" ? "info" : tone} />;
 }
 
 type AccessRow =

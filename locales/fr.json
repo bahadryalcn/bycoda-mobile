@@ -3,7 +3,7 @@
     "NSLocalNetworkUsageDescription": "Connectez-vous à votre ordinateur Bycoda sur votre réseau privé.",
     "NSMicrophoneUsageDescription": "Parlez à votre assistant Bycoda et dictez vos messages. L’audio est traité sur votre ordinateur connecté, ou sur ce téléphone si vous choisissez la dictée sur le téléphone.",
     "NSSpeechRecognitionUsageDescription": "Si vous choisissez la dictée sur le téléphone, Bycoda utilise la reconnaissance vocale pour transformer vos paroles en texte. Elle fonctionne sur ce téléphone lorsque c’est possible.",
-    "NSCameraUsageDescription": "Autorisez Bycoda à scanner le QR code d’appairage sur votre ordinateur.",
+    "NSCameraUsageDescription": "Scannez le QR code d’appairage sur votre ordinateur et prenez des photos à joindre à vos messages Bycoda.",
     "NSFaceIDUsageDescription": "Utilisez Face ID pour accéder en toute sécurité à vos ordinateurs Bycoda.",
     "NSPhotoLibraryUsageDescription": "Autorisez Bycoda à accéder à vos photos pour les joindre à vos messages.",
     "NSPhotoLibraryAddUsageDescription": "Enregistrez les images de vos conversations Bycoda dans votre photothèque.",

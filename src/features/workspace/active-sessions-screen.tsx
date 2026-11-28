@@ -51,7 +51,6 @@ import { SessionFilterChip } from "./session-filter-chip";
 import { HierarchyFrame, HierarchyWidthProvider } from "@/ui/hierarchy-frame";
 import { ScrollView, View } from "react-native";
 import Plus from "lucide-react-native/icons/plus";
-import X from "lucide-react-native/icons/x";
 import { useScreenContentInsets } from "@/ui/screen-content-insets";
 import { IconButton } from "@/ui/primitives";
 import { useMobileTheme } from "@/ui/theme";
@@ -66,7 +65,6 @@ import {
   matchesSessionListFilters,
   matchesSessionStatus,
   sessionProviders,
-  sessionQuickFiltersActive,
   SESSION_TIME_FILTERS,
   type SessionListFilters,
   type SessionStatusFilter,
@@ -74,9 +72,10 @@ import {
 } from "./session-filters";
 
 /**
- * The list's quick filters, scrolled sideways inside the list header (never a second toolbar):
- * project, status and a reset mark once either narrows the list. It bleeds to the screen edge so
- * chips scroll under the gutter instead of being cut at it.
+ * The list's status quick filters, scrolled sideways inside the list header (never a second toolbar).
+ * The project scope lives in the page identity row beside the computer, like every other page, so
+ * this row holds one control family. It bleeds to the screen edge so chips scroll under the gutter
+ * instead of being cut at it.
  */
 function SessionQuickFilters({ label, children }: { label: string; children: ReactNode }) {
   const inset = useScreenContentInsets();
@@ -323,20 +322,13 @@ export function ActiveSessionsScreen({
   const olderSessions = windowed && visible.length > 0;
   // Nothing to narrow: an empty directory with no applied filter shows no filter controls.
   const filtersShown = !waitingForConnection && (directory.length > 0 || filterCount > 0 || filter !== "all" || !!projectFilter);
-  const quickActive = sessionQuickFiltersActive(projectFilter || null, filter, archived);
+  // "All" resets status and the project picker offers All projects, so no separate reset mark.
   const quickFilters = filtersShown ? (
     <SessionQuickFilters label={copy("Hızlı filtreler", "Quick filters")}>
-      <ProjectScopePill projectId={projectFilter || null} onChange={setProject} />
       {statusOptions.map((option) => (
         <SessionFilterChip key={option.value} label={option.label} selected={!archived && filter === option.value}
           disabled={archived} onPress={() => setFilter(option.value)} />
       ))}
-      {quickActive ? (
-        <IconButton label={copy("Proje ve durumu sıfırla", "Reset project and status")}
-          onPress={() => { setProject(null); setFilter("all"); }}>
-          <X size={iconSize.action} color={colors.muted} />
-        </IconButton>
-      ) : null}
     </SessionQuickFilters>
   ) : null;
   const emptyState = waitingForConnection ? (
@@ -373,6 +365,7 @@ export function ActiveSessionsScreen({
       grouped
       keyExtractor={(row) => row.key}
       title={title}
+      scopeControl={filtersShown ? <ProjectScopePill projectId={projectFilter || null} onChange={setProject} /> : undefined}
       // Page actions keep the shared order: search, filter, then create.
       actions={<>
         {collection.trigger}{filtersShown ? collection.filterTrigger : null}

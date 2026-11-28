@@ -16,6 +16,7 @@ import { Button } from "./buttons";
 import { lineHeight, metrics, radii, space } from "./tokens";
 import { useDelayedVisible } from "./use-delayed-visible";
 import { StateView } from "./state-view";
+import { SweepLabel } from "./text-sweep";
 import { useFeedbackAnimation } from "./use-feedback-animation";
 import { useCopy } from "./copy";
 import { errorMessage } from "./error-message";
@@ -71,14 +72,20 @@ export function Badge({ label, tone = "default", icon: Icon }: BadgeProps) {
 
 /**
  * Row status. The normal state is quiet muted text without a dot; other tones add their colour and a
- * 6dp dot. Use a tinted `Badge` only for an exception the user must notice (failed, needs you).
+ * 6dp dot. `live` is work in flight (running, planning, sending): its label carries the shared
+ * working sweep instead of a still dot, so progress reads as moving. A steady on/connected state is
+ * `success` or `info`, never `live`. Use a tinted `Badge` only for an exception the user must
+ * notice (failed, needs you).
  */
-export function StatusText({ label, tone = "default", dot = tone !== "default" }: {
+export function StatusText({ label, tone = "default", dot = tone !== "default" && tone !== "live" }: {
   label: string; tone?: "default" | SemanticTone | "live" | "active"; dot?: boolean;
 }) {
   const { colors, semanticColors, uiStyles } = useMobileTheme();
   const color = tone === "default" ? colors.muted
     : semanticColors[tone === "active" || tone === "live" ? "info" : tone].text;
+  if (tone === "live" && !dot) {
+    return <SweepLabel active color={color} style={uiStyles.statusText} frame={{ flexShrink: 1 }}>{label}</SweepLabel>;
+  }
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs + 2, flexShrink: 1 }}>
       {dot ? <View accessible={false} style={[uiStyles.statusDot, { backgroundColor: color }]} /> : null}

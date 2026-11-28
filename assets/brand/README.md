@@ -1,6 +1,6 @@
 # Native mobile brand assets
 
-These maintained PNGs are the self-contained Expo native icon inputs. They use the same six-lobed tea saucer, separate outlined rim drops and bold `</>` center as the shared product mark.
+These maintained PNGs are the self-contained Expo native icon inputs. They use the same six-lobed tea saucer, six filled teardrops hanging from the rim and bold `</>` center as the shared product mark.
 
 | Canonical mobile file | Generated counterpart in the parent checkout |
 | --- | --- |

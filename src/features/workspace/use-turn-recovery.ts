@@ -10,7 +10,13 @@ import { composerCommand } from "./composer-delivery";
 import { openModelSheet } from "./composer-model-sheet";
 import { failedTurnRetry, retryCommand, usageLimitFailureId } from "./failed-turn-retry";
 import type { FailureRecovery } from "./failure-recovery";
-import { limitedTarget, limitedTargetLabel, type UsageLimitAction } from "./usage-limit-model";
+import {
+  currentUsageLimit,
+  limitedTarget,
+  limitedTargetLabel,
+  limitedTurnModel,
+  type UsageLimitAction,
+} from "./usage-limit-model";
 import { UsageLimitNotice, type UsageLimitNoticeProps } from "./usage-limit-notice";
 import { useLatestCallback } from "./use-latest-callback";
 import type { SessionCommand, SessionScope } from "./session-types";
@@ -41,7 +47,18 @@ export function useTurnRecovery({
   onFailure: (cause: unknown) => void;
 }): { recovery: FailureRecovery | undefined; footerLimit: UsageLimitNoticeProps | undefined } {
   const copy = useCopy();
-  const limit = session?.session.usageLimit;
+  const hostLimit = session?.session.usageLimit;
+  const harness = session?.session.harness;
+  const model = session?.session.model;
+  const limitedTurn = hostLimit && session ? limitedTurnModel(session.session.blocks) : undefined;
+  // The limit as it stands for the current model: one kept across a model change continues now.
+  const limit = useMemo(
+    () => (session ? currentUsageLimit(session.session) : undefined),
+    // Keyed on what the reading depends on (not every block update), so the pending action's
+    // identity check below stays stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hostLimit, harness, model, session?.session.providerAccountId, limitedTurn?.harness, limitedTurn?.id],
+  );
   const catalog = useModelCatalog(session?.projectId ?? "", !!limit && !!session?.projectId);
 
   const retry = session && !blocked ? failedTurnRetry(session, { queued }) : null;
@@ -104,7 +121,11 @@ export function useTurnRecovery({
 
   const limitErrorId = limit && session ? usageLimitFailureId(session.session.blocks) : undefined;
   const target = session
-    ? limitedTargetLabel(limitedTarget(session.session), catalog.data?.accounts, copy("Varsayılan hesap", "Default account"))
+    ? limitedTargetLabel(
+        limitedTarget({ ...session.session, usageLimit: limit }),
+        catalog.data?.accounts,
+        copy("Varsayılan hesap", "Default account"),
+      )
     : "";
   const notice = useMemo<UsageLimitNoticeProps | undefined>(
     () =>

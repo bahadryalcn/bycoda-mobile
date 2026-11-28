@@ -14,7 +14,7 @@ import { attentionIcon, isUrgentAttention } from "./attention-groups";
 const icons = { approval: Approval, failure: Failure, review: Review, finished: Finished, question: Question, "pull-request": PullRequest };
 /** States the user must act on keep their tinted badge; progress and completion stay quiet text. */
 const exceptional = new Set(["failed", "blocked", "awaiting-approval", "needs-input", "review"]);
-const running = new Set(["running", "verifying", "planning", "active"]);
+const running = new Set(["running", "verifying", "planning"]);
 /** Status expresses required action; urgency never implies an unread state. */
 export function AttentionRow({ item, time, onPress }: { item: MobileInboxItem; time: string; onPress: () => void }) {
   const { uiStyles } = useMobileTheme();
@@ -35,7 +35,7 @@ export function AttentionRow({ item, time, onPress }: { item: MobileInboxItem; t
         <Row>
           {time ? <Body muted style={[uiStyles.caption, { flexShrink: 1 }]}>{time}</Body> : null}
           {item.status ? exceptional.has(item.status) ? <Status value={item.status} />
-            : <StatusText label={statusLabel(item.status, copy)} tone={running.has(item.status) ? "live" : "default"} /> : null}
+            : <StatusText label={statusLabel(item.status, copy)} tone={running.has(item.status) ? "live" : item.status === "active" ? "success" : "default"} /> : null}
         </Row>
       }
       onPress={onPress}

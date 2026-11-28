@@ -2,12 +2,17 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({
   picker: vi.fn(), photos: vi.fn(), copy: vi.fn(), deleted: vi.fn(), write: vi.fn(), id: 0,
+  camera: vi.fn(), cameraRead: vi.fn(), cameraAsk: vi.fn(), clipboardImage: vi.fn(),
   platform: { OS: "android" }, entries: [] as string[],
 }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
 vi.mock("react-native", () => ({ Platform: fixture.platform }));
 vi.mock("expo-document-picker", () => ({ getDocumentAsync: fixture.picker }));
-vi.mock("expo-image-picker", () => ({ launchImageLibraryAsync: fixture.photos }));
+vi.mock("expo-image-picker", () => ({
+  launchImageLibraryAsync: fixture.photos, launchCameraAsync: fixture.camera,
+  getCameraPermissionsAsync: fixture.cameraRead, requestCameraPermissionsAsync: fixture.cameraAsk,
+}));
+vi.mock("expo-clipboard", () => ({ getImageAsync: fixture.clipboardImage, hasImageAsync: async () => true }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => `file-${++fixture.id}` }));
 vi.mock("expo-file-system", () => {
   class Path {
@@ -27,7 +32,7 @@ vi.mock("expo-file-system", () => {
   return { File: Path, Directory: Path, Paths: { document: { uri: "file:///private" } } };
 });
 
-import { pickAttachments, stageBrowserCapture, clearAttachmentDraftFiles } from "./attachment-files";
+import { CameraPermissionBlockedError, pickAttachments, stageBrowserCapture, stagePastedText, clearAttachmentDraftFiles } from "./attachment-files";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -118,4 +123,44 @@ it("drains an in-progress copy before allowing the attachment sweep", async () =
   const picking = pickAttachments("document", "copying:session"); await vi.waitFor(() => expect(fixture.copy).toHaveBeenCalledOnce()); const sweep = vi.fn();
   const cleanup = withDraftStorageCleanup(disk, async retire => { retire(new Set()); sweep(); });
   expect(sweep).not.toHaveBeenCalled(); finish(); await picking; await cleanup; expect(sweep).toHaveBeenCalledOnce();
+});
+
+it("takes a camera photo once access is granted and stages it like a library photo", async () => {
+  fixture.cameraRead.mockResolvedValue({ granted: true, canAskAgain: true });
+  fixture.camera.mockResolvedValue({ canceled: false, assets: [{ uri: "file:///cache/ImagePicker/shot.jpg", fileName: "shot.jpg", mimeType: "image/jpeg" }] });
+  const files = await pickAttachments("camera", "machine:session");
+  expect(fixture.cameraAsk).not.toHaveBeenCalled();
+  expect(fixture.camera).toHaveBeenCalledWith({ mediaTypes: ["images"], quality: 1 });
+  expect(files).toMatchObject([{ name: "shot.jpg", kind: "image", mimeType: "image/jpeg", uri: "file:///private/chat-drafts/machine%3Asession/file-1" }]);
+  expect(fixture.copy).toHaveBeenCalledWith("file:///cache/ImagePicker/shot.jpg", files[0].uri);
+});
+it("asks for the camera and stays quiet when the owner refuses in the system prompt", async () => {
+  fixture.cameraRead.mockResolvedValue({ granted: false, canAskAgain: true });
+  fixture.cameraAsk.mockResolvedValue({ granted: false, canAskAgain: false });
+  expect(await pickAttachments("camera", "machine:session")).toEqual([]);
+  expect(fixture.cameraAsk).toHaveBeenCalledOnce();
+  expect(fixture.camera).not.toHaveBeenCalled();
+});
+it("reports an already blocked camera so the composer can offer Settings", async () => {
+  fixture.cameraRead.mockResolvedValue({ granted: false, canAskAgain: false });
+  await expect(pickAttachments("camera", "machine:session")).rejects.toBeInstanceOf(CameraPermissionBlockedError);
+  expect(fixture.cameraAsk).not.toHaveBeenCalled();
+  expect(fixture.camera).not.toHaveBeenCalled();
+});
+it("stages the clipboard image as a PNG from its data URL", async () => {
+  fixture.clipboardImage.mockResolvedValue({ data: "data:image/png;base64,YWJj", size: { width: 1, height: 1 } });
+  const files = await pickAttachments("clipboard", "machine:session");
+  expect(fixture.clipboardImage).toHaveBeenCalledWith({ format: "png" });
+  expect(files).toMatchObject([{ name: "Pasted image.png", kind: "image", mimeType: "image/png", size: 3, uri: "file:///private/chat-drafts/machine%3Asession/file-1" }]);
+  expect(fixture.write).toHaveBeenCalledWith(files[0].uri, new Uint8Array([97, 98, 99]));
+});
+it("refuses an empty clipboard without writing a file", async () => {
+  fixture.clipboardImage.mockResolvedValue(null);
+  await expect(pickAttachments("clipboard", "machine:session")).rejects.toThrow("The clipboard has no image.");
+  expect(fixture.write).not.toHaveBeenCalled();
+});
+it("keeps a long paste as the desktop's Pasted text attachment", () => {
+  const file = stagePastedText("héllo", "machine:session");
+  expect(file).toMatchObject({ name: "Pasted text.txt", mimeType: "text/plain", kind: "file", size: 6, uri: "file:///private/chat-drafts/machine%3Asession/file-1" });
+  expect(fixture.write).toHaveBeenCalledWith(file.uri, new TextEncoder().encode("héllo"));
 });

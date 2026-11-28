@@ -1,6 +1,6 @@
 import type { UsageLimit } from "../../../../src/features/sessions/model/session";
 import { accountName, providerName } from "./provider-choices";
-import type { HostModelCatalog, HostSession } from "./wire";
+import type { Block, HostModelCatalog, HostSession } from "./wire";
 
 /**
  * Where a provider usage limit stands, as desktop's UsageLimitNotice reads it:
@@ -50,6 +50,36 @@ export function usageLimitActions(phase: UsageLimitPhase): { primary?: UsageLimi
     case "unknown":
       return { primary: "resume", secondary: ["switch", "dismiss"] };
   }
+}
+
+/** The submitted user turn the limit stopped: the latest one, since any new turn clears the limit. */
+export function limitedTurnModel(blocks: readonly Block[]) {
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
+    const block = blocks[index]!;
+    if (block.role === "user" && !block.draft && !block.internal && !block.questionAnswers?.length)
+      return block.turnModel;
+  }
+  return undefined;
+}
+
+/**
+ * The session's limit as the notice should read it now. A Host clears the limit on an account or
+ * provider change and records `recoveryFrom` on a model change; an older Host keeps the limit
+ * unchanged after a model change on the same account, which would still offer to resume at the
+ * reset. The limited turn's recorded model then supplies the origin, so the notice offers to
+ * continue on the current model. Switching back to the limited model reads as limited again.
+ */
+export function currentUsageLimit(
+  session: Pick<HostSession["session"], "harness" | "model" | "providerAccountId" | "usageLimit" | "blocks">,
+): UsageLimit | undefined {
+  const limit = session.usageLimit;
+  if (!limit || limit.recoveryFrom) return limit;
+  const turn = limitedTurnModel(session.blocks);
+  if (!turn || (turn.harness === session.harness && turn.id === session.model)) return limit;
+  return {
+    ...limit,
+    recoveryFrom: { harness: turn.harness, model: turn.id, providerAccountId: session.providerAccountId ?? "default" },
+  };
 }
 
 /** The target that hit the limit: the retained origin after a switch, else the session's own. */

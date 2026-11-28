@@ -90,6 +90,8 @@ const pureContracts = new Set([
   "features/skills/model/cliCommandCatalog",
   "features/source-control/model/selectiveStage",
   "features/notes/noteContext",
+  // Shell-mode parsing and the follow-up prompt are pure string helpers (type-only imports).
+  "features/sessions/model/shellRun",
   // Note formatting transforms are dependency-free string edits shared with the desktop editor toolbar.
   "features/notes/markdownCommands",
   "shared/lib/browserAnnotation",

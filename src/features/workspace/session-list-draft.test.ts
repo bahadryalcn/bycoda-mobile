@@ -31,6 +31,7 @@ vi.mock("lucide-react-native/icons/pin", () => ({ default: () => h("i", { "data-
 vi.mock("@/ui/primitives", () => ({ Body: ({ children }: PropsWithChildren) => h("span", null, children),
   PressableCard: ({ children, label }: PropsWithChildren<{ label: string }>) => h("button", { "aria-label": label }, children), StatusText: ({ label }: { label: string }) => h("span", null, label) }));
 vi.mock("@/ui/project-icon", () => ({ ProjectIcon: () => null }));
+vi.mock("@/ui/working-row-glow", () => ({ WorkingRowGlow: () => null }));
 vi.mock("@/ui/provider-identity", () => ({ ProviderIcon: () => null }));
 vi.mock("@/ui/copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("@/ui/theme", () => ({ useMobileTheme: () => ({ colors: {}, uiStyles: {} }) }));

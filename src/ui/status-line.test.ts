@@ -28,6 +28,8 @@ vi.mock("./use-delayed-visible", () => ({ useDelayedVisible: () => true }));
 vi.mock("./copy", () => ({ useCopy: () => (_tr: string, en: string) => en }));
 vi.mock("./buttons", () => ({ Button: ({ label, onPress }: { label: string; onPress: () => void }) => h("button", { onClick: onPress }, label) }));
 vi.mock("./state-view", () => ({ StateView: () => null }));
+// Live status uses the PanelUI shimmer, which this environment does not load.
+vi.mock("./text-sweep", () => ({ SweepLabel: ({ children }: { children: string }) => children }));
 vi.mock("./error-message", () => ({ errorMessage: () => "" }));
 vi.mock("panelui-native/components/badge", () => ({ Badge: () => null }));
 vi.mock("panelui-native/components/spinner", () => ({ Spinner: () => h("i", null, "spinner") }));

@@ -3,7 +3,7 @@
     "NSLocalNetworkUsageDescription": "Özel ağınızdaki Bycoda bilgisayarınıza bağlanın.",
     "NSMicrophoneUsageDescription": "Bycoda asistanınızla konuşun ve mesajlarınızı sesle yazın. Ses, bağlı bilgisayarınızda ya da telefonda yazıya çevirmeyi seçerseniz bu telefonda işlenir.",
     "NSSpeechRecognitionUsageDescription": "Telefonda yazıya çevirmeyi seçtiğinizde Bycoda, söylediklerinizi metne çevirmek için konuşma tanımayı kullanır. Desteklendiğinde bu telefonda çalışır.",
-    "NSCameraUsageDescription": "Bycoda'nın bilgisayarınızdaki eşleştirme QR kodunu taramasına izin verin.",
+    "NSCameraUsageDescription": "Bilgisayarınızdaki eşleştirme QR kodunu tarayın ve Bycoda mesajlarınıza eklemek için fotoğraf çekin.",
     "NSFaceIDUsageDescription": "Bycoda bilgisayarlarınıza güvenle erişmek için Face ID kullanın.",
     "NSPhotoLibraryUsageDescription": "Mesajlarınıza fotoğraf eklemek için fotoğraflarınıza erişmesine izin verin.",
     "NSPhotoLibraryAddUsageDescription": "Bycoda konuşmalarınızdaki görselleri fotoğraf arşivinize kaydedin.",

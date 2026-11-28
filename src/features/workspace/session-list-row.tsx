@@ -4,6 +4,7 @@ import { stamp as dateStamp } from "../management/shared/format";
 import { useSessionDraftPresence } from "./use-session-draft-presence";
 import { memo, useEffect } from "react";
 import { View, useWindowDimensions } from "react-native";
+import { WorkingRowGlow } from "@/ui/working-row-glow";
 import GitBranch from "lucide-react-native/icons/git-branch";
 import FolderTree from "lucide-react-native/icons/folder-tree";
 import GitPullRequest from "lucide-react-native/icons/git-pull-request";
@@ -163,6 +164,8 @@ export const SessionListRow = memo(function SessionListRow({
     >
       {(openActions) => (
         <View>
+          {/* A run in flight carries desktop's working-row tint and pulse, so it stands out when scanning. */}
+          {kind === "working" && !selected ? <WorkingRowGlow /> : null}
           <PressableCard
             label={label}
             selected={selected}

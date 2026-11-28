@@ -1,6 +1,6 @@
 type Copy = (tr: string, en: string) => string;
 
-/** Localized names of the model settings and their common choices, keyed by the catalog's English label. */
+/** Localized names, choices and hints of the model settings, keyed by the catalog's English text. */
 export function settingLabels(copy: Copy): Record<string, string> {
   return {
     Reasoning: copy("Akıl yürütme", "Reasoning"),
@@ -22,5 +22,12 @@ export function settingLabels(copy: Copy): Record<string, string> {
     On: copy("Açık", "On"),
     Off: copy("Kapalı", "Off"),
     Standard: copy("Standart", "Standard"),
+    Default: copy("Varsayılan", "Default"),
+    "Auto-compact window": copy("Otomatik sıkıştırma penceresi", "Auto-compact window"),
+    "Automatically compact at this token count. Default follows your provider settings. The model's context window remains the limit.":
+      copy(
+        "Bu token sayısına ulaşınca otomatik sıkıştırır. Varsayılan, sağlayıcı ayarlarını izler. Üst sınır yine modelin bağlam penceresidir.",
+        "Automatically compact at this token count. Default follows your provider settings. The model's context window remains the limit.",
+      ),
   };
 }

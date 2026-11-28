@@ -1,6 +1,7 @@
 import { Directory, File, Paths } from "expo-file-system";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
+import * as Clipboard from "expo-clipboard";
 import { randomUUID } from "expo-crypto";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -8,18 +9,80 @@ import { createDraftStorageOwner } from "@/state/local-draft-storage";
 import { ATTACHMENT_COUNT, base64ToBytes, validateAttachment, type StagedAttachment } from "./attachment-model";
 import { readBrowserCapture, type BrowserCaptureScope } from "../tools/browser-annotation-model";
 import { parseBrowserAnnotation } from "../../../../src/shared/lib/browserAnnotation";
+import { PASTED_TEXT_FILENAME } from "./transcript-labels-model";
 
-export async function pickAttachments(kind: "photo" | "document", scope: string, custody: "composer" | "question" = "composer"): Promise<StagedAttachment[]> {
-  const owner = createDraftStorageOwner(AsyncStorage, custody === "question" ? `bycoda.mobile.question-attachments.v1:${scope}` : `bycoda.mobile.draft.v1:${scope}`);
+/** Where a composer attachment comes from: the photo library, files, a new camera photo or the clipboard image. */
+export type AttachmentSource = "photo" | "document" | "camera" | "clipboard";
+
+/** The phone refuses to ask again: only the system settings can turn the camera back on. */
+export class CameraPermissionBlockedError extends Error {
+  constructor() {
+    super("Camera access is turned off for Bycoda in Settings.");
+    this.name = "CameraPermissionBlockedError";
+  }
+}
+
+/**
+ * Asks once for the camera. A refusal in the system prompt is the owner's answer and stays quiet;
+ * a camera that was already blocked throws so the caller can offer the system settings.
+ */
+async function cameraAllowed() {
+  const current = await ImagePicker.getCameraPermissionsAsync();
+  if (current.granted) return true;
+  if (!current.canAskAgain) throw new CameraPermissionBlockedError();
+  return (await ImagePicker.requestCameraPermissionsAsync()).granted;
+}
+
+const stagingFolder = (custody: "composer" | "question") => custody === "question" ? "question-drafts" : "chat-drafts";
+const draftOwner = (scope: string, custody: "composer" | "question") =>
+  createDraftStorageOwner(AsyncStorage, custody === "question" ? `bycoda.mobile.question-attachments.v1:${scope}` : `bycoda.mobile.draft.v1:${scope}`);
+
+/** Writes bytes the app produced itself (clipboard image, pasted text) into the private staging folder. */
+function stageBytes(bytes: Uint8Array, meta: { name: string; mimeType: string; kind: StagedAttachment["kind"] }, scope: string, custody: "composer" | "question") {
+  const directory = new Directory(Paths.document, stagingFolder(custody), encodeURIComponent(scope));
+  const id = randomUUID();
+  const file: StagedAttachment = { id, ...meta, size: bytes.length, uri: new File(directory, id).uri };
+  validateAttachment(file);
+  try { directory.create({ idempotent: true, intermediates: true }); const local = new File(file.uri); local.create(); local.writeSync(bytes); return file; }
+  catch (error) { removeStagedFile(file); throw error; }
+}
+
+/** Whether the clipboard holds an image the composer can attach. Never reads the image itself. */
+export async function clipboardHasImage() {
+  return Clipboard.hasImageAsync().catch(() => false);
+}
+
+async function stageClipboardImage(scope: string, custody: "composer" | "question"): Promise<StagedAttachment[]> {
+  const owner = draftOwner(scope, custody);
+  const image = await Clipboard.getImageAsync({ format: "png" });
+  if (!image?.data) throw new Error("The clipboard has no image.");
+  const bytes = base64ToBytes(image.data.replace(/^data:image\/[a-z]+;base64,/i, ""));
+  return owner.runSync(() => [stageBytes(bytes, { name: "Pasted image.png", mimeType: "image/png", kind: "image" }, scope, custody)]);
+}
+
+/** A long paste as the desktop composer keeps it: a "Pasted text.txt" attachment instead of draft text. */
+export function stagePastedText(text: string, scope: string): StagedAttachment {
+  const bytes = new TextEncoder().encode(text);
+  return draftOwner(scope, "composer").runSync(() =>
+    stageBytes(bytes, { name: PASTED_TEXT_FILENAME, mimeType: "text/plain", kind: "file" }, scope, "composer"));
+}
+
+export async function pickAttachments(kind: AttachmentSource, scope: string, custody: "composer" | "question" = "composer"): Promise<StagedAttachment[]> {
+  if (kind === "clipboard") return stageClipboardImage(scope, custody);
+  if (kind === "camera" && !(await cameraAllowed())) return [];
+  const owner = draftOwner(scope, custody);
   const picked = kind === "photo"
     ? await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, selectionLimit: ATTACHMENT_COUNT, quality: 1 })
+    : kind === "camera"
+    // The camera result is a single photo in the picker's cache; it is staged like a library photo.
+    ? await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 1 })
     // Android's picker grants access to the content URI. Copy it directly into
     // our private draft directory; Expo Go's picker cache can be outside this
     // experience's readable FileSystem scope.
     : await DocumentPicker.getDocumentAsync({ multiple: true, copyToCacheDirectory: Platform.OS !== "android" });
   if (picked.canceled) return [];
   return owner.run(async () => {
-  const directory = new Directory(Paths.document, custody === "question" ? "question-drafts" : "chat-drafts", encodeURIComponent(scope));
+  const directory = new Directory(Paths.document, stagingFolder(custody), encodeURIComponent(scope));
   directory.create({ idempotent: true, intermediates: true });
   const files: StagedAttachment[] = [];
   try {

@@ -217,3 +217,28 @@ it("sends a long saved draft's whole text, never its preview, and sends nothing 
   await act(async () => send()!.click());
   expect(onCommand).toHaveBeenCalledWith({ type: "send", sessionId: "s", text: "whole draft", draftBlockId: "draft" });
 });
+
+it("keeps a long message's preview in the row after an action reads its whole text", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  root = createRoot(container);
+  const onCommand = vi.fn().mockResolvedValue(undefined);
+  const block: Block = { id: "draft", role: "user", text: "cut…", draft: true, remoteContent: { revision: 1, bytes: 40_000 } };
+  const whole = { ...block, text: "whole draft", remoteContent: undefined };
+  const render = () => act(() => root!.render(h(TranscriptBlock, {
+    block, scope: { machineId: "m", sessionId: "s" }, getRevision: () => undefined, disabled: false, onCommand,
+  } as TranscriptBlockProps)));
+  const button = (label: string) => [...container.querySelectorAll("button")].find((entry) => entry.textContent === label);
+  detail.query = { refetch: detail.refetch };
+  detail.refetch.mockResolvedValueOnce({ data: whole });
+  render();
+  await act(async () => button("Send draft")!.click());
+  expect(onCommand).toHaveBeenCalledWith({ type: "send", sessionId: "s", text: "whole draft", draftBlockId: "draft" });
+  // The read stays cached for the next action, but the row does not expand to it.
+  detail.query = { data: whole, refetch: detail.refetch };
+  render();
+  expect(container.textContent).toContain("cut…");
+  expect(container.textContent).not.toContain("whole draft");
+  act(() => button("Open full message")!.click());
+  expect(container.textContent).toContain("whole draft");
+});

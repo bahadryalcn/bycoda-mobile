@@ -1,4 +1,13 @@
 {
+  "Update bycoda on this computer to run ! commands from the phone. Your draft is preserved.": "Telefondan ! komutları çalıştırmak için bu bilgisayarda bycoda'yı güncelle. Taslağın korunuyor.",
+  "Remove the files and note to run a command, or delete the leading !.": "Komut çalıştırmak için dosyaları ve notu kaldır ya da baştaki !'i sil.",
+  "Type a command of at most 10,000 characters after !.": "! işaretinden sonra en fazla 10.000 karakterlik bir komut yaz.",
+  "Saved side questions": "Kayıtlı yan sorular",
+  "Side questions": "Yan sorular",
+  "Read-only questions asked about earlier turns. They did not change the session.": "Önceki turlar hakkında sorulmuş salt okunur sorular. Oturumu değiştirmediler.",
+  "About: {p0}": "Şu mesaj hakkında: {p0}",
+  "Answering on the computer": "Bilgisayarda yanıtlanıyor",
+  "This side question could not be answered.": "Bu yan soru yanıtlanamadı.",
   "Cancel sending": "Gönderimi iptal et",
   "Diagnostic report ready": "Tanılama raporu hazır",
   "Review report": "Raporu incele",
@@ -4159,6 +4168,7 @@
   "Subagent model policy": "Alt ajan model ilkesi",
   "Auto-compact": "Otomatik sıkıştırma",
   "Auto-compact window": "Otomatik sıkıştırma penceresi",
+  "Automatically compact at this token count. Default follows your provider settings. The model's context window remains the limit.": "Bu token sayısına ulaşınca otomatik sıkıştırır. Varsayılan, sağlayıcı ayarlarını izler. Üst sınır yine modelin bağlam penceresidir.",
   "Claude default": "Claude varsayılanı",
   "Agent's choice": "Ajan seçer",
   "Component gallery": "Bileşen galerisi",
@@ -5377,7 +5387,6 @@
   "Optional spoken phrase that marks a correction, such as “scratch that”.": "İsteğe bağlı. Kendini düzelttiğini belirten sözlü ifade, örneğin “yok, şöyle”.",
   "Group by project": "Projeye göre grupla",
   "Quick filters": "Hızlı filtreler",
-  "Reset project and status": "Proje ve durumu sıfırla",
   "{p0} files changed": "{p0} dosya değişti",
   "1 file changed": "1 dosya değişti",
   "Show {p0} more file": "{p0} dosya daha göster",
@@ -5432,5 +5441,8 @@
   "Preparing a handoff": "Devir hazırlanıyor",
   "Preparing a handoff to {p0}": "{p0} için devir hazırlanıyor",
   "The last turn failed": "Son tur başarısız oldu",
-  "This file was not found on the computer. It may have been moved or deleted.": "Bu dosya bilgisayarda bulunamadı. Taşınmış veya silinmiş olabilir."
+  "This file was not found on the computer. It may have been moved or deleted.": "Bu dosya bilgisayarda bulunamadı. Taşınmış veya silinmiş olabilir.",
+  "Paste image": "Görseli yapıştır",
+  "Turn on camera access for Bycoda in Settings to take a photo.": "Fotoğraf çekmek için Ayarlar'da Bycoda'ya kamera izni ver.",
+  "The clipboard has no image.": "Panoda görsel yok."
 }

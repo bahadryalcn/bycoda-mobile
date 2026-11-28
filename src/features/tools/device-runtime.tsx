@@ -139,7 +139,7 @@ export function DeviceRuntime({ projectId, deviceId, onClose }: { projectId: str
         {accessChanged ? <FormActions submitLabel={agentAccess ? copy("Ajan erişimini aç", "Turn on agent access") : copy("Ajan erişimini kapat", "Turn off agent access")} cancelLabel={copy("Vazgeç", "Cancel")} busy={busy}
           disabled={!confirmable("setup")} onSubmit={() => run("setup")} onCancel={() => setAgentAccess(currentAccess)} /> : null}
       </> : checks && !review ? <StatusRow label={copy("Ajan erişimi", "Agent access")}>
-        <StatusText label={checks.agentControl ? copy("Açık", "On") : copy("Kapalı", "Off")} tone={checks.agentControl ? "live" : "default"} />
+        <StatusText label={checks.agentControl ? copy("Açık", "On") : copy("Kapalı", "Off")} tone={checks.agentControl ? "success" : "default"} />
       </StatusRow> : null}
     </> : null}
     {!review ? <><MutationState mutation={setup} /><MutationState mutation={start} /><MutationState mutation={stop} /></> : null}

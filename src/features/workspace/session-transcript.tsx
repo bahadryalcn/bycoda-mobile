@@ -467,7 +467,7 @@ export function SessionTranscript({
     activity: activity.state,
     live: !!live,
     stopping,
-    // Like T3 Code, the transcript's live row alone carries the turn clock; the capsule says the run
+    // The transcript's live row alone carries the turn clock; the capsule says the run
     // state only when that row is not rendered. The provider-retry notice already says the turn is going.
     liveRowShown: retrying || liveRowShown,
     goal: activeSessionGoal(session?.session),

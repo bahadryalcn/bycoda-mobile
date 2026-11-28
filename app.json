@@ -139,7 +139,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Choose photos to attach to your Bycoda messages.",
-          "cameraPermission": "Allow Bycoda to scan the pairing QR code on your computer.",
+          "cameraPermission": "Scan the pairing QR code on your computer and take photos to attach to your Bycoda messages.",
           "microphonePermission": "Speak to your Bycoda assistant and dictate messages. Audio is processed on your connected computer, or on this phone if you choose phone dictation."
         }
       ],
@@ -152,7 +152,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Bycoda to scan the pairing QR code on your computer.",
+          "cameraPermission": "Scan the pairing QR code on your computer and take photos to attach to your Bycoda messages.",
           "microphonePermission": false,
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": true

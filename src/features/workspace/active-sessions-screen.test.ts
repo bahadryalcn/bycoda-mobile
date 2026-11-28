@@ -74,12 +74,13 @@ vi.mock("@/ui/primitives", () => ({
   SelectField: () => null,
   MultiSelectField: () => null,
   useCollapsibleSearch: () => ({ open: false, trigger: null, filterTrigger: null, sheet: null, field: null }),
-  ScreenList: ({ data, renderItem, header, actions }: {
+  ScreenList: ({ data, renderItem, header, actions, scopeControl }: {
     data: { key: string }[];
     renderItem: (entry: { item: { key: string } }) => ReactNode;
     header?: ReactNode;
     actions?: ReactNode;
-  }) => h("div", null, ...data.map((item) => h("div", { key: item.key }, renderItem({ item }))), h("div", { key: "header" }, header), h("div", { key: "actions" }, actions)),
+    scopeControl?: ReactNode;
+  }) => h("div", null, ...data.map((item) => h("div", { key: item.key }, renderItem({ item }))), h("div", { key: "scope" }, scopeControl), h("div", { key: "header" }, header), h("div", { key: "actions" }, actions)),
 }));
 vi.mock("@/ui/filter-sheet", () => ({ AppliedFilters: () => null, FilterButton: () => null, FilterChipRow: () => null, FilterSheet: () => null }));
 vi.mock("./project-scope-pill", () => ({
@@ -212,7 +213,8 @@ it("narrows to the Sessions project filter of this computer only and starts new 
   await act(async () => setComputer(secondComputer));
   expect(shownSessions()).toEqual([session.id, otherSession.id]);
   await act(async () => setComputer(firstComputer));
-  await act(async () => (container.querySelector("[aria-label='Reset project and status']") as HTMLButtonElement).click());
+  // The identity-row project picker's All projects choice clears the saved filter.
+  await act(async () => fixture.scopeChange!(null));
   expect(shownSessions()).toEqual([session.id, otherSession.id]);
   expect(fixture.prefs.getState().sessions.projectByMachine).toEqual({});
 });
@@ -221,7 +223,6 @@ it("ignores a saved project that is no longer on the computer", async () => {
   fixture.prefs.setState({ sessions: { density: "standard", groupByProject: false, projectByMachine: { first: "gone" }, collapsed: {} } });
   await act(async () => root.render(h(ActiveSessionsScreen, {})));
   expect(shownSessions()).toEqual([session.id]);
-  expect(container.querySelector("[aria-label='Reset project and status']")).toBeNull();
 });
 
 it("groups sessions under project headers ordered by latest activity", async () => {

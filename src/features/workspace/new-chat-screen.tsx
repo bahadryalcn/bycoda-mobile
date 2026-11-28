@@ -1,19 +1,35 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Keyboard, ScrollView, View } from "react-native";
+import { use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from "react";
+import { Keyboard, ScrollView, useWindowDimensions, View, type LayoutChangeEvent } from "react-native";
 import { router } from "expo-router";
 import { useIsFocused } from "expo-router/react-navigation";
 import * as Crypto from "expo-crypto";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
+import CircleDashed from "lucide-react-native/icons/circle-dashed";
+import LayoutTemplate from "lucide-react-native/icons/layout-template";
+import Lightbulb from "lucide-react-native/icons/lightbulb";
 import Plus from "lucide-react-native/icons/plus";
+import X from "lucide-react-native/icons/x";
 import type { HostProject } from "@/domain/types";
 import { useActiveMachine, useMachines } from "@/state/machines";
 import type { MobileMachine } from "@/remote/types";
 import { useHostClient, useHostMutation } from "@/state/queries";
 import { useModelCatalog } from "@/state/model-catalog";
 import { rememberOpenedProject, useProjectDirectoryPreferences } from "@/state/project-directory-preferences";
-import { Body, Button, ErrorNotice, PressableArea, RowIcon, Screen } from "@/ui/primitives";
+import {
+  Body,
+  Button,
+  ErrorNotice,
+  NavigationGroup,
+  NavigationRow,
+  PressableArea,
+  RowIcon,
+  Screen,
+  SectionHeader,
+  Sheet,
+} from "@/ui/primitives";
 import { ChatComposer } from "@/ui/chat-composer";
+import { composerSuggestionLimits } from "@/ui/chat-composer-model";
 import { ChatCircleAction } from "@/ui/chat-controls";
 import { showToast } from "@/ui/toast";
 import { MachinePill } from "@/ui/machine-bar";
@@ -28,28 +44,42 @@ import { useKeyCommand } from "../../../modules/bycoda-key-commands";
 import { useCommandPalette } from "@/features/keyboard/keyboard-context";
 import { useKeyboardPreferences, useKeyboardPreferenceHydration } from "@/features/keyboard/keyboard-preferences";
 import { launchFromParams, matchLaunchProject } from "../sharing/model/launch-request";
+import { TemplateLibrary } from "@/features/management/templates/template-library";
+import { expandTemplateTrigger, insertTemplate } from "@/features/management/templates/template-model";
+import { useTemplateHydration, useTemplates } from "@/features/management/templates/template-store";
 import { decodeComposerDraft, emptyComposerDraft, encodeComposerDraft } from "./composer-draft";
 import { registerWorkspaceDraft } from "./draft-guard";
 import { useLocalDraft } from "./use-local-draft";
 import { ComposerDictationButton } from "./composer-dictation";
 import { ComposerDictationNotice, ComposerRecordingRow } from "./composer-recording";
 import { ComposerSendButton } from "./composer-send-button";
+import { ComposerModeChip } from "./composer-mode-controls";
+import { activeComposerMode, setComposerMode, type ComposerMode } from "./composer-mode";
+import { ComposerSuggestions } from "./composer-suggestions";
+import { useComposerSuggestions } from "./use-composer-suggestions";
+import type { ComposerCatalogTarget } from "./use-composer-catalog";
 import { unavailableAccessModes } from "./composer-access-model";
 import type { CreationDraft, RuntimeMode } from "./creation-selection";
 import { insertDictation } from "./dictation-model";
 import { appendToDraft } from "./draft-append";
 import { lastCreationChoices, rememberedDraft, useLastCreationChoice, type LastCreationChoice } from "./last-creation-choice";
 import { recentModels, useRecentModels } from "./recent-models";
+import { composerWorkItemContext } from "./composer-work-item-context";
+import { composerNoteContext } from "./composer-note-context";
 import {
   NEW_CHAT_DRAFT_KEY,
   createNewChatSendGate,
   newChatAttempt,
   newChatAttemptKey,
+  newChatContextSources,
   newChatFirstTurn,
+  newChatPinnedContext,
   newChatRouteKey,
   newChatRuntimeMode,
   newChatSendState,
   newChatSessionOnlyInput,
+  newChatSuggestions,
+  newChatTurn,
   newChatWorktreeCwd,
   resolveNewChatProject,
   seededNewChatText,
@@ -78,7 +108,7 @@ import { latestProjectActivity } from "./project-summaries";
 import { selectedChoice } from "./provider-choices";
 import { orderProjectsByRecency } from "./recent-projects";
 import { SessionHeader } from "./session-header";
-import { SessionKeyboardFrame } from "./session-keyboard-frame";
+import { SessionKeyboardFrame, SessionKeyboardSpace } from "./session-keyboard-frame";
 import { CommandError } from "./shared";
 import { useCreateSession } from "./use-create-session";
 import { useDictation } from "./use-dictation";
@@ -97,9 +127,10 @@ const DICTATION_TARGET = "new-session-draft";
 
 /**
  * The empty new session: a centred "what should we build" hero whose project, working folder and
- * computer are switched in place, the normal composer (model and access in its model sheet, photos
- * and files behind +), and the first message creating the session (with that message and its
- * attachments as its first turn) before the route becomes `/session/[id]`.
+ * computer are switched in place, the normal composer (model and access in its model sheet, photos,
+ * files, templates and the turn modes behind +, and the open session's @ and / suggestions scoped
+ * to the chosen project and folder), and the first message creating the session (with that message,
+ * its mode and its attachments as its first turn) before the route becomes `/session/[id]`.
  * The typed draft lives here, above the computer-bound workspace, so switching computers keeps it;
  * it is saved on the phone, so Back or the app being closed keeps it too.
  */
@@ -299,8 +330,9 @@ function NewChatWorkspace({
   useEffect(() => {
     if (command.error && !uncertain) attempt.current = undefined;
   }, [command.error, uncertain]);
-  // A first turn is plain text; the session composer's own commands and crew delegations wait for
-  // the open session. Without a first turn the words land in that composer, which resolves them.
+  // A first turn carries words, Plan mode or Save as draft; commands that act on an existing
+  // conversation and crew delegations wait for the open session. Without a first turn the words
+  // (and their mode command) land in that composer, which resolves them.
   const sessionOnly = firstTurn ? newChatSessionOnlyInput(text) : undefined;
 
   // Attachments: staged on the phone for this computer, uploaded on Send and carried by the first
@@ -326,14 +358,17 @@ function NewChatWorkspace({
     () => attachSupported ? newChatAttachmentsHere(saved.attachments, stagedHere) : NO_ATTACHMENTS,
     [attachSupported, saved.attachments, stagedHere],
   );
+  // `@notes:` and issue/PR mentions are read into the first turn's context just before create.
+  const [resolvingContext, setResolvingContext] = useState(false);
   const attaching = uploads.uploading || uploads.picking;
-  // While files upload the create is already decided: its project, computer and model stay put.
-  const frozen = locked || uploads.uploading;
+  // While files upload or references resolve the create is already decided: its project, computer
+  // and model stay put.
+  const frozen = locked || uploads.uploading || resolvingContext;
 
   const sendState = newChatSendState({
     text,
     attachments: staged.length,
-    uploading: attaching,
+    uploading: attaching || resolvingContext,
     project: !!project,
     canStart,
     locked: locked || !saved.ready,
@@ -380,6 +415,8 @@ function NewChatWorkspace({
     command.reset();
     setAttachError(null);
     const prompt = text.trim();
+    // Plan mode and Save as draft are part of the first turn, and so of the attempt identity.
+    const turn = newChatTurn(prompt);
     const files = staged;
     const payload = {
       machineId: machine.id,
@@ -392,10 +429,12 @@ function NewChatWorkspace({
       runtimeMode,
       text: prompt,
       firstTurn,
+      turn: turn.kind,
       attachments: files.map((file) => file.id),
     };
-    const next = newChatAttempt(attempt.current, newChatAttemptKey(payload), () => Crypto.randomUUID());
-    attempt.current = next;
+    // A resend of the same payload reuses the context it resolved, and with it the command IDs.
+    const pinned = newChatPinnedContext(attempt.current, payload);
+    const sources = firstTurn ? newChatContextSources(prompt, turn.kind, machine.capabilities) : { workItems: false, notes: false };
     const target: Sent = {
       machineId: machine.id,
       projectId: project.id,
@@ -425,11 +464,36 @@ function NewChatWorkspace({
         }
         if (controller.signal.aborted || !mounted.current) return;
       }
+      // The same references an open session resolves at send, scoped to the chosen computer and
+      // project; a source that cannot be read leaves the mention as plain words.
+      let contextReplay = pinned?.contextReplay;
+      if (!pinned && (sources.workItems || sources.notes) && client?.machine.id === machine.id) {
+        const controller = new AbortController();
+        setResolvingContext(true);
+        try {
+          const inputs = [client, project.id, prompt, controller.signal] as const;
+          const resolved = await Promise.all([
+            sources.workItems ? composerWorkItemContext(...inputs) : undefined,
+            sources.notes ? composerNoteContext(...inputs) : undefined,
+          ]);
+          contextReplay = resolved.filter(Boolean).join("\n\n") || undefined;
+        } finally {
+          if (mounted.current) setResolvingContext(false);
+        }
+        if (!mounted.current) return;
+      }
+      const next = newChatAttempt(
+        attempt.current,
+        newChatAttemptKey({ ...payload, contextReplay }),
+        () => Crypto.randomUUID(),
+        contextReplay,
+      );
+      attempt.current = next;
       await create((sessionId) => opened(target, sessionId), {
         settings,
         runtimeMode,
         commandId: next.createId,
-        ...(firstTurn ? { firstTurn: newChatFirstTurn(prompt, next.turnId, references) } : {}),
+        ...(firstTurn ? { firstTurn: newChatFirstTurn(turn.body, next.turnId, references, turn.kind, contextReplay) } : {}),
       });
     })().finally(() => {
       submission.current = false;
@@ -444,8 +508,15 @@ function NewChatWorkspace({
     send();
   }, [resending, locked, send]);
 
+  // The caret is owned here (as in an open session's composer) so suggestions, templates and
+  // dictation insert at it; until the field reports one it sits at the end of the draft.
+  const [selectedRange, setSelection] = useState<{ start: number; end: number } | null>(null);
+  const caret = selectedRange
+    ? { start: Math.min(selectedRange.start, text.length), end: Math.min(selectedRange.end, text.length) }
+    : { start: text.length, end: text.length };
+  const selectionRef = useRef(caret);
+  selectionRef.current = caret;
   // Dictation writes into the same draft at the cursor; it never sends.
-  const selectionRef = useRef({ start: 0, end: 0 });
   const textRef = useRef(text);
   textRef.current = text;
   const dictation = useDictation({
@@ -456,7 +527,9 @@ function NewChatWorkspace({
       const base = textRef.current;
       const next = insertDictation(base, selectionRef.current, spoken);
       selectionRef.current = next.selection;
-      if (next.text !== base) onTextChange(next.text);
+      if (next.text === base) return;
+      onTextChange(next.text);
+      setSelection(next.selection);
     },
   });
 
@@ -470,10 +543,71 @@ function NewChatWorkspace({
   const routeFocused = useIsFocused();
   const palette = useCommandPalette();
   const [inputFocused, setInputFocused] = useState(false);
-  const keyboardActive = routeFocused && inputFocused && !palette.visible && !pickerOpen && !adding && !attachOpen;
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const keyboardActive =
+    routeFocused && inputFocused && !palette.visible && !pickerOpen && !adding && !attachOpen && !templatesOpen;
+
+  // @ and / suggestions from the open session's catalog, for the chosen project, folder and agent.
+  // There is no session yet: what needs one is listed as unavailable (`newChatSuggestions`).
+  useTemplateHydration();
+  const catalogTarget = useMemo((): ComposerCatalogTarget | undefined => project
+    ? { projectId: project.id, session: { id: "", cwd: project.cwd, worktreeCwd, harness: selectedProvider } }
+    : undefined, [project, worktreeCwd, selectedProvider]);
+  const sessionReasons = {
+    command: copy("Bu komut oturum açıldıktan sonra kullanılabilir.", "This command is available once the session has started."),
+    crew: copy(
+      "Ekip veya ajana görev vermek oturum açıldıktan sonra kullanılabilir.",
+      "Delegating to a crew or agent is available once the session has started.",
+    ),
+  };
+  const suggestions = useComposerSuggestions({
+    session: catalogTarget,
+    prompt: text,
+    selection: caret,
+    setSelection,
+    setValue: saved.store.setValue,
+    focused: keyboardActive && saved.ready && !frozen,
+    onSideQuestion: () => false,
+    onNavigate: () => false,
+    // Applied before selection, so keyboard picks skip what needs a session as taps do.
+    adapt: (items) => newChatSuggestions(items, sessionReasons),
+  });
+  const { token } = suggestions;
+  const [toolbarHeight, setToolbarHeight] = useState(0);
+  const measureToolbar = useCallback((event: LayoutChangeEvent) => {
+    const next = Math.ceil(event.nativeEvent.layout.height);
+    if (Number.isFinite(next) && next >= 0) setToolbarHeight((previous) => (previous === next ? previous : next));
+  }, []);
+
+  // Plan mode and Save as draft are the draft's leading command, as on an open session.
+  const activeMode = activeComposerMode(text);
+  const chooseMode = (next: ComposerMode) => {
+    if (!saved.ready || frozen || attaching) return;
+    const value = setComposerMode(saved.store.valueRef.current?.text ?? text, next);
+    onTextChange(value);
+    setSelection({ start: value.length, end: value.length });
+    setAttachOpen(false);
+  };
+  const insertTemplateBody = (body: string) => {
+    if (!saved.ready || frozen || attaching)
+      throw new Error(
+        copy(
+          "Bu oturuma şu anda ekleme yapılamıyor. Taslağın değişmedi.",
+          "This session is not available for insertion. Your draft is unchanged.",
+        ),
+      );
+    const current = saved.store.valueRef.current?.text ?? text;
+    const result = insertTemplate(current, selectionRef.current, body);
+    if (result.text.length > 256_000) throw new Error(copy("Mesaj çok uzun.", "The message is too long."));
+    onTextChange(result.text);
+    setSelection(result.selection);
+    suggestions.reopen();
+  };
+
   const hardwareSend = () => send();
   useKeyCommand({ key: "Enter", primary: true, title: copy("Gönder", "Send"), enabled: keyboardActive, textInput: true }, hardwareSend);
-  useKeyCommand({ key: "Enter", title: copy("Gönder", "Send"), enabled: keyboardActive && enterSends, textInput: true }, hardwareSend);
+  // While suggestions are open a plain Enter picks the highlighted one instead.
+  useKeyCommand({ key: "Enter", title: copy("Gönder", "Send"), enabled: keyboardActive && enterSends && !token, textInput: true }, hardwareSend);
   const openProject = useHostMutation<HostProject>("projects.open", ["projects"]);
   const openFolder = (cwd: string) => {
     if (openProject.isPending) return;
@@ -618,6 +752,22 @@ function NewChatWorkspace({
       ) : null}
       {attachError ? <ErrorNotice error={attachError} /> : null}
       {starting}
+      {token ? (
+        <NewChatSuggestionList
+          toolbar={toolbarHeight}
+          keyboardActive={keyboardActive}
+          items={suggestions.items}
+          loading={suggestions.catalog.isFetching}
+          error={suggestions.catalog.error}
+          trigger={token.trigger}
+          query={token.query}
+          selected={suggestions.selected}
+          onMove={suggestions.move}
+          onPick={suggestions.choose}
+          onRetry={() => { void suggestions.catalog.refetch(); }}
+          onClose={suggestions.close}
+        />
+      ) : null}
       {sessionOnly && text.trim() ? (
         <Body muted style={uiStyles.caption} accessibilityLiveRegion="polite">
           {sessionOnly === "crew"
@@ -630,19 +780,42 @@ function NewChatWorkspace({
       ) : null}
       <ChatComposer
         value={text}
-        onValueChange={onTextChange}
+        onValueChange={(next) => {
+          // A template's `;trigger` followed by a space expands it, as in an open session's composer.
+          const templates = useTemplates.getState();
+          const expanded = templates.hydrated && !templates.error
+            ? expandTemplateTrigger(text, next, caret, templates.rows)
+            : null;
+          onTextChange(expanded?.text ?? next);
+          if (expanded) setSelection(expanded.selection);
+          suggestions.reopen();
+        }}
         disabled={composerBlocked}
-        top={staged.length ? (
-          <ComposerAttachments
-            files={staged}
-            scope={attachmentScopeKey}
-            transfers={uploads.transfers}
-            disabled={composerBlocked}
-            onRetry={(file) => { void uploads.retry(file); }}
-            onRemove={uploads.remove}
-          />
+        onToolbarLayout={measureToolbar}
+        top={activeMode || staged.length ? (
+          <>
+            {activeMode ? (
+              <View style={{ paddingHorizontal: space.md, paddingTop: space.sm }}>
+                <ComposerModeChip mode={activeMode} disabled={composerBlocked} onRemove={() => chooseMode(activeMode)} />
+              </View>
+            ) : null}
+            {staged.length ? (
+              <ComposerAttachments
+                files={staged}
+                scope={attachmentScopeKey}
+                transfers={uploads.transfers}
+                disabled={composerBlocked}
+                onRetry={(file) => { void uploads.retry(file); }}
+                onRemove={uploads.remove}
+              />
+            ) : null}
+          </>
         ) : undefined}
-        leading={attachSupported ? (
+        leading={token ? (
+          <ChatCircleAction label={copy("Önerileri kapat", "Dismiss suggestions")} onPress={suggestions.close}>
+            <X size={19} strokeWidth={2.2} color={colors.text} />
+          </ChatCircleAction>
+        ) : attachSupported ? (
           <ChatCircleAction
             label={copy("Mesaja ekle", "Add to message")}
             disabled={composerBlocked}
@@ -700,7 +873,11 @@ function NewChatWorkspace({
           placeholder: copy("Mesaj", "Message"),
           onFocus: () => setInputFocused(true),
           onBlur: () => setInputFocused(false),
-          onSelectionChange: (event) => { selectionRef.current = event.nativeEvent.selection; },
+          selection: caret,
+          onSelectionChange: (event) => {
+            if (saved.ready) setSelection(event.nativeEvent.selection);
+          },
+          onKeyPress: suggestions.onKeyPress,
           disableFullscreenUI: true,
           submitBehavior: "newline",
           maxLength: 256_000,
@@ -784,8 +961,75 @@ function NewChatWorkspace({
           setAttachOpen(false);
           void uploads.choose(kind);
         }}
-      />
+        moreRows={(
+          <NavigationRow
+            intent="navigate"
+            label={copy("Şablonlar", "Templates")}
+            icon={<RowIcon glyph={LayoutTemplate} />}
+            onPress={() => {
+              setAttachOpen(false);
+              setTemplatesOpen(true);
+            }}
+          />
+        )}
+      >
+        <NewChatModeRows active={activeMode} onSelect={chooseMode} />
+      </NewChatAttachSheet>
+      {/* Phone templates; the computer's templates need an open session's scope. */}
+      <Sheet
+        visible={templatesOpen}
+        title={copy("Şablonlar", "Templates")}
+        size="full"
+        scroll={false}
+        onClose={() => setTemplatesOpen(false)}
+      >
+        {templatesOpen ? (
+          <TemplateLibrary onClose={() => setTemplatesOpen(false)} onInsert={insertTemplateBody} />
+        ) : null}
+      </Sheet>
       {adding ? <ProjectFolderBrowser onClose={() => setAdding(false)} mutation={openProject} onOpen={openFolder} /> : null}
     </Screen>
+  );
+}
+
+/** The suggestion list sized like an open session's: it reads the keyboard frame's free height. */
+function NewChatSuggestionList({
+  toolbar,
+  ...props
+}: Omit<ComponentProps<typeof ComposerSuggestions>, "maximumHeight"> & { toolbar: number }) {
+  const available = use(SessionKeyboardSpace);
+  const { height, fontScale } = useWindowDimensions();
+  const limits = composerSuggestionLimits(height, available, fontScale, 0, 0, toolbar);
+  return <ComposerSuggestions {...props} maximumHeight={limits.maximum} />;
+}
+
+/**
+ * "For this message" in the new session's Add to message sheet: the same Plan mode and Save as
+ * draft rows as an open session's (`ComposerSheets`); both travel with the first turn.
+ */
+function NewChatModeRows({ active, onSelect }: { active: ComposerMode | null; onSelect: (mode: ComposerMode) => void }) {
+  const copy = useCopy();
+  return (
+    <View>
+      <SectionHeader title={copy("Bu mesaj için", "For this message")} />
+      <NavigationGroup>
+        <NavigationRow
+          label={copy("Plan modu", "Plan mode")}
+          detail={copy("Yapmadan önce bir planı incele", "Review a plan before building")}
+          detailLines={2}
+          icon={<RowIcon glyph={Lightbulb} />}
+          selected={active === "plan"}
+          onPress={() => onSelect("plan")}
+        />
+        <NavigationRow
+          label={copy("Taslak olarak kaydet", "Save as draft")}
+          detail={copy("Ajanı başlatmadan kaydet", "Save this message without starting the agent")}
+          detailLines={2}
+          icon={<RowIcon glyph={CircleDashed} />}
+          selected={active === "draft"}
+          onPress={() => onSelect("draft")}
+        />
+      </NavigationGroup>
+    </View>
   );
 }

@@ -1,4 +1,13 @@
 {
+  "Update bycoda on this computer to run ! commands from the phone. Your draft is preserved.": "请在这台电脑上更新 bycoda，以便从手机运行 ! 命令。你的草稿已保留。",
+  "Remove the files and note to run a command, or delete the leading !.": "要运行命令，请移除文件和笔记，或删除开头的 !。",
+  "Type a command of at most 10,000 characters after !.": "请在 ! 之后输入不超过 10,000 个字符的命令。",
+  "Saved side questions": "已保存的旁支问题",
+  "Side questions": "旁支问题",
+  "Read-only questions asked about earlier turns. They did not change the session.": "关于之前轮次的只读问题。它们没有改变会话。",
+  "About: {p0}": "关于：{p0}",
+  "Answering on the computer": "正在电脑上回答",
+  "This side question could not be answered.": "无法回答这个旁支问题。",
   "Cancel sending": "取消发送",
   "Diagnostic report ready": "诊断报告已准备好",
   "Review report": "查看报告",
@@ -4159,6 +4168,7 @@
   "Subagent model policy": "子代理模型策略",
   "Auto-compact": "自动压缩",
   "Auto-compact window": "自动压缩窗口",
+  "Automatically compact at this token count. Default follows your provider settings. The model's context window remains the limit.": "达到此令牌数时自动压缩。默认值遵循提供方设置。上限仍是模型的上下文窗口。",
   "Claude default": "Claude 默认",
   "Agent's choice": "由代理选择",
   "Component gallery": "组件库",
@@ -5377,7 +5387,6 @@
   "Optional spoken phrase that marks a correction, such as “scratch that”.": "可选的口头短语，用于标记更正，例如“不对，应该是”。",
   "Group by project": "按项目分组",
   "Quick filters": "快速筛选",
-  "Reset project and status": "重置项目和状态",
   "{p0} files changed": "已更改 {p0} 个文件",
   "1 file changed": "已更改 1 个文件",
   "Show {p0} more file": "显示另外 {p0} 个文件",
@@ -5432,5 +5441,8 @@
   "Pasted text": "粘贴的文本",
   "Branched from {p0}": "分支自 {p0}",
   "Generating image…": "正在生成图像…",
-  "Could not generate image.": "无法生成图像。"
+  "Could not generate image.": "无法生成图像。",
+  "Paste image": "粘贴图片",
+  "Turn on camera access for Bycoda in Settings to take a photo.": "要拍照，请在“设置”中允许 Bycoda 访问相机。",
+  "The clipboard has no image.": "剪贴板中没有图片。"
 }

@@ -39,3 +39,17 @@ export function planModeActive(text: string): boolean {
 export function togglePlanMode(text: string): string {
   return setComposerMode(text, "plan");
 }
+
+/**
+ * A leading `!` runs the line in the computer's shell instead of sending a prompt (desktop
+ * `leadingModeCommand` in modeCommands.tsx). `![alt](url)` is a Markdown image, not a command.
+ * Offered only when the Host advertises `sessions.shell`; it is not one of the picker modes.
+ */
+export function shellModeActive(text: string): boolean {
+  return /^\s*!(?!\[)/.test(text);
+}
+
+/** The text without its leading `!`, which turns Shell mode off. */
+export function stripShellMode(text: string): string {
+  return shellModeActive(text) ? text.replace(/^\s*!\s*/, "") : text;
+}

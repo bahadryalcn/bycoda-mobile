@@ -25,6 +25,7 @@ for (const density of densities) {
   for (const relative of [
     ...names.map((name) => `mipmap-${density}/${name}`),
     `drawable-${density}/splashscreen_logo.png`,
+    `drawable-night-${density}/splashscreen_logo.png`,
   ]) {
     const target = path.join(resources, relative);
     const stat = await fs.lstat(target).catch((error) => {
@@ -43,14 +44,16 @@ if (!write || !existing.length) {
 }
 
 const splash = config.plugins.find((plugin) => Array.isArray(plugin) && plugin[0] === "expo-splash-screen")?.[1];
-if (!config.icon || !config.android?.adaptiveIcon?.foregroundImage || !splash?.image || splash.dark || splash.drawable)
-  throw new Error("Current icon and light-only splash image configuration is required; review adapter for other configurations.");
+if (!config.icon || !config.android?.adaptiveIcon?.foregroundImage || !splash?.image || (splash.dark && !splash.dark.image) || splash.drawable)
+  throw new Error("Current icon and splash image configuration is required; review adapter for other configurations.");
 const resolveInput = (input) => path.resolve(mobile, input);
 const icon = resolveInput(config.icon);
 const foregroundImage = resolveInput(config.android.adaptiveIcon.foregroundImage);
 const monochromeImage = resolveInput(config.android.adaptiveIcon.monochromeImage);
 const splashImage = resolveInput(splash.image);
-for (const input of [icon, foregroundImage, monochromeImage, splashImage]) {
+const darkSplashImage = splash.dark ? resolveInput(splash.dark.image) : null;
+const inputs = [icon, foregroundImage, monochromeImage, splashImage, ...(darkSplashImage ? [darkSplashImage] : [])];
+for (const input of inputs) {
   const stat = await fs.lstat(input);
   if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("Logo inputs must be regular files.");
 }
@@ -59,7 +62,7 @@ const stage = path.join(mobile, "temp/local/brand-android-sync", stamp);
 await fs.mkdir(stage, { recursive: true });
 await fs.writeFile(path.join(stage, "README.md"), "# Android logo staging\n\nGenerated from current Expo logo inputs using installed Expo image plugins. Only pre-existing Android logo rasters are copied back. No native project generation, build, installation, credentials, or publication. Retained for byte-level comparison.\n");
 const snapshots = new Map();
-for (const [index, input] of [icon, foregroundImage, monochromeImage, splashImage].entries()) {
+for (const [index, input] of inputs.entries()) {
   const bytes = await fs.readFile(input);
   const file = path.join(stage, `input-${index}.png`);
   await fs.writeFile(file, bytes);
@@ -84,6 +87,13 @@ await setSplashImageDrawablesForThemeAsync(
   stage,
   splash.imageWidth,
 );
+if (darkSplashImage)
+  await setSplashImageDrawablesForThemeAsync(
+    Object.fromEntries(densities.map((density) => [density, snapshots.get(darkSplashImage).file])),
+    "dark",
+    stage,
+    splash.imageWidth,
+  );
 const results = [];
 for (const [input, snapshot] of snapshots)
   if (hash(await fs.readFile(input)) !== snapshot.sha256)

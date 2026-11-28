@@ -84,7 +84,7 @@ export function AgentModelFields({
           label: labels[option.label] ?? option.label,
         })),
       ]}
-      hint={setting.description}
+      hint={setting.description && (labels[setting.description] ?? setting.description)}
       icon={<SettingIcon id={setting.id} />}
       disabled={disabled || unavailableAccount}
       onChange={(value) => onChange(model, { ...settings, [setting.id]: value })}

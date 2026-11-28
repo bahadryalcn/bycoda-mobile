@@ -7,6 +7,7 @@ import type { SharedQueue } from "../../../../src/features/connections/model/sha
 import type { NoteComposerCard } from "../../../../src/features/notes/notes";
 import { readNoteContext } from "../../../../src/features/notes/noteContext";
 import { captureSessionAuthority } from "@/domain/session-authority";
+import { parseShellCommand } from "../../../../src/features/sessions/model/shellRun";
 
 export type ComposerDelivery = "send" | "queue" | "steer";
 
@@ -59,6 +60,33 @@ function draftCommand(
     sessionId: session.session.id,
     text: body,
     attachments,
+  };
+}
+
+export const SESSION_SHELL_CAPABILITY = "sessions.shell";
+
+/**
+ * A `!command` runs on the Host in the session's folder without a model turn (Host `shell` command,
+ * desktop RemoteSession `runShell`). It is not queued, steered or retried, and the Host accepts it
+ * while a turn runs. Like desktop, a leading `!` is never sent to the agent as a prompt: an older
+ * Host refuses it with an update hint, and files or notes keep the draft instead of being dropped.
+ */
+export function shellComposerCommand(
+  session: HostSession,
+  text: string,
+  extras: { supported: boolean; attachments: number; noteCard: boolean },
+): Record<string, unknown> {
+  if (!extras.supported)
+    throw new Error("Update bycoda on this computer to run ! commands from the phone. Your draft is preserved.");
+  if (extras.attachments || extras.noteCard)
+    throw new Error("Remove the files and note to run a command, or delete the leading !.");
+  const line = parseShellCommand(text);
+  if (!line) throw new Error("Type a command of at most 10,000 characters after !.");
+  return {
+    type: "shell",
+    ...captureSessionAuthority(session),
+    sessionId: session.session.id,
+    line,
   };
 }
 

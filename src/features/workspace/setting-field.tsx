@@ -49,7 +49,7 @@ export function SettingField({ setting, value, unsetAllowed, disabled, onChange 
       label={title}
       value={current}
       options={[...(unsetAllowed ? [{ value: "", label: copy("Ürün varsayılanı", "Product default") }] : []), ...options]}
-      hint={setting.description}
+      hint={setting.description && (labels[setting.description] ?? setting.description)}
       icon={<SettingIcon id={setting.id} />}
       disabled={disabled}
       onChange={onChange}

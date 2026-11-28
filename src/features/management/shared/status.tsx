@@ -41,17 +41,19 @@ export function statusLabel(
 
 /**
  * Record status. Normal and progressing states are quiet `StatusText` (running/planning carry the
- * live tone and dot; finished work is muted); only states the user must act on or notice get a
+ * live working sweep, a steady "active" record the success dot; finished work is muted); only states the user must act on or notice get a
  * tinted `Badge`.
  */
-export function statusTone(value: string): "danger" | "warning" | "live" | "default" {
+export function statusTone(value: string): "danger" | "warning" | "live" | "success" | "default" {
   return ["failed", "blocked"].includes(value)
     ? "danger"
     : ["review", "awaiting-approval", "needs-input"].includes(value)
       ? "warning"
-      : ["running", "verifying", "planning", "active"].includes(value)
+      : ["running", "verifying", "planning"].includes(value)
         ? "live"
-        : "default";
+        : value === "active"
+          ? "success"
+          : "default";
 }
 
 export function Status({ value }: StatusProps) {

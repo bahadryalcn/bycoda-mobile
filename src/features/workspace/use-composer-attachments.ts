@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
+import { Linking } from "react-native";
+import { confirmAction } from "@/ui/confirm";
 import { useCopy } from "@/ui/copy";
 import type { useHostClient } from "@/state/queries";
 import { useMachines } from "@/state/machines";
 import { emptyComposerDraft, type ComposerDraft } from "./composer-draft";
-import { pickAttachments, removeStagedFile } from "./attachment-files";
+import { CameraPermissionBlockedError, pickAttachments, removeStagedFile, stagePastedText, type AttachmentSource } from "./attachment-files";
 import { exceedsAttachmentCount, type StagedAttachment, type TransferState } from "./attachment-model";
 import { attachmentReleases, supportsAttachmentOwnership } from "./attachment-ownership";
 import { uploadAttachment } from "./attachment-transfer";
@@ -49,14 +51,15 @@ export function useComposerAttachments({
     if (mounted.current) setUploading(false);
     transfer.current = null;
   };
-  const choose = async (kind: "photo" | "document") => {
+  /** Stages files from `produce` into the draft under the per-message limit; false when nothing was added. */
+  const stage = async (produce: () => Promise<StagedAttachment[]> | StagedAttachment[]) => {
     setPicking(true);
     setLocalError(null);
     try {
-      const files = await pickAttachments(kind, `${scope.machineId}:${scope.sessionId}`);
+      const files = await produce();
       if (!mounted.current) {
         files.forEach(removeStagedFile);
-        return;
+        return false;
       }
       const current = valueRef.current ?? emptyComposerDraft();
       if (exceedsAttachmentCount(current.attachments, files.length, counted)) {
@@ -66,12 +69,31 @@ export function useComposerAttachments({
         );
       }
       setValue({ ...current, attachments: [...current.attachments, ...files] });
+      return files.length > 0;
     } catch (cause) {
-      if (mounted.current) setLocalError(cause);
+      if (cause instanceof CameraPermissionBlockedError) {
+        confirmAction(
+          copy("Kamera izni gerekli", "Camera access needed"),
+          copy(
+            "Fotoğraf çekmek için Ayarlar'da Bycoda'ya kamera izni ver.",
+            "Turn on camera access for Bycoda in Settings to take a photo.",
+          ),
+          copy("Kamera ayarlarını aç", "Open camera settings"),
+          () => void Linking.openSettings().catch(() => undefined),
+          copy("Vazgeç", "Cancel"),
+          "default",
+        );
+      } else if (mounted.current) setLocalError(cause);
+      return false;
     } finally {
       if (mounted.current) setPicking(false);
     }
   };
+  const choose = (kind: AttachmentSource) =>
+    stage(() => pickAttachments(kind, `${scope.machineId}:${scope.sessionId}`));
+  /** Keeps a long paste as a "Pasted text" file attachment, as the desktop composer does. */
+  const attachPastedText = (text: string) =>
+    stage(() => [stagePastedText(text, `${scope.machineId}:${scope.sessionId}`)]);
   const upload = async (file: StagedAttachment, controller: AbortController) => {
     if (!client) throw new Error(copy("Bilgisayara bağlan.", "Connect to your computer."));
     const update = (state: TransferState) => {
@@ -163,6 +185,7 @@ export function useComposerAttachments({
     end,
     cancel: () => transfer.current?.abort(),
     choose,
+    attachPastedText,
     upload,
     retry,
     remove,
